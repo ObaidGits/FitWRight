@@ -1,0 +1,263 @@
+/* ============================================================
+   Atelier — FitWright's design language (Task 1.1)
+   ------------------------------------------------------------
+   NEW token layer that COEXISTS with the legacy Swiss tokens in
+   app/(default)/css/globals.css. Nothing is deleted.
+
+   Scoping strategy (engine isolation, Task 1.3):
+   - Atelier tokens are scoped under `.atelier` (applied to the new
+     app-shell / marketing / auth layouts), NOT `:root`.
+   - The legacy Swiss `:root` tokens are left untouched, so un-migrated
+     screens AND the resume-render engine (`components/resume/*`, `/print/*`)
+     keep their original values.
+   - Dark theme = `.dark .atelier`. Because the resume engine is never
+     wrapped in `.atelier`, the resume preview + PDF stay light regardless
+     of the app theme.
+
+   The existing `@theme inline` in globals.css already maps the Tailwind
+   utility color names (background/foreground/card/primary/border/...) to
+   these `--*` variables, so overriding the variables inside `.atelier`
+   re-themes shadcn/Tailwind utilities within the new UI subtree only.
+   ============================================================ */
+
+/* --- Net-new design-time tokens (radius + motion) --- */
+@theme {
+  --radius-at: 0.625rem; /* 10px base */
+  --radius-at-sm: calc(var(--radius-at) - 4px);
+  --radius-at-md: calc(var(--radius-at) - 2px);
+  --radius-at-lg: var(--radius-at);
+  --radius-at-xl: calc(var(--radius-at) + 6px);
+
+  --ease-at-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-at-in: cubic-bezier(0.4, 0, 1, 1);
+  --duration-at-fast: 120ms;
+  --duration-at-base: 180ms;
+  --duration-at-slow: 240ms;
+}
+
+/* --- Atelier LIGHT (default) --- */
+.atelier {
+  color-scheme: light;
+
+  /* Surfaces — warm, never stark white */
+  --background: #fbfaf8; /* app canvas */
+  --foreground: #1a1a17; /* warm near-black ink */
+
+  --card: #ffffff;
+  --card-foreground: #1a1a17;
+
+  --popover: #ffffff;
+  --popover-foreground: #1a1a17;
+
+  /* Accent — one confident indigo, used sparingly */
+  --primary: #4f46e5;
+  --primary-foreground: #ffffff;
+
+  --secondary: #f2f1ed;
+  --secondary-foreground: #1a1a17;
+
+  --muted: #f2f1ed;
+  --muted-foreground: #6b6b63;
+
+  --accent: #f0efea; /* subtle hover surface */
+  --accent-foreground: #1a1a17;
+
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+
+  /* Quiet hairline borders; soft inputs */
+  --border: #e7e5df;
+  --input: #e7e5df;
+  --ring: #4f46e5;
+
+  /* Extended Atelier semantics (used via arbitrary values / component styles) */
+  --at-surface-2: #f6f5f2;
+  --at-success: #15803d;
+  --at-success-foreground: #ffffff;
+  --at-warning: #b45309;
+  --at-warning-foreground: #ffffff;
+  --at-ai: #7c3aed; /* consistent "AI voice" accent */
+  --at-ai-surface: #f3effe;
+
+  /* Soft, low-spread elevation (Atelier — never hard offset) */
+  --shadow-at-e1: 0 1px 2px 0 rgb(23 22 19 / 0.06), 0 1px 3px 0 rgb(23 22 19 / 0.04);
+  --shadow-at-e2: 0 2px 8px -1px rgb(23 22 19 / 0.08), 0 2px 4px -2px rgb(23 22 19 / 0.05);
+  --shadow-at-e3: 0 12px 32px -8px rgb(23 22 19 / 0.14), 0 4px 12px -4px rgb(23 22 19 / 0.08);
+}
+
+/* --- Atelier DARK (warm charcoal, never pure black) --- */
+.dark .atelier,
+.atelier.dark {
+  color-scheme: dark;
+
+  --background: #17160f;
+  --foreground: #f2f0ea;
+
+  --card: #201f1a;
+  --card-foreground: #f2f0ea;
+
+  --popover: #201f1a;
+  --popover-foreground: #f2f0ea;
+
+  --primary: #6366f1;
+  --primary-foreground: #ffffff;
+
+  --secondary: #26251f;
+  --secondary-foreground: #f2f0ea;
+
+  --muted: #26251f;
+  --muted-foreground: #a5a294;
+
+  --accent: #2b2a22;
+  --accent-foreground: #f2f0ea;
+
+  --destructive: #f87171;
+  --destructive-foreground: #17160f;
+
+  --border: #302e26;
+  --input: #302e26;
+  --ring: #6366f1;
+
+  --at-surface-2: #1c1b15;
+  --at-success: #4ade80;
+  --at-success-foreground: #0f1a10;
+  --at-warning: #fbbf24;
+  --at-warning-foreground: #241a04;
+  --at-ai: #a78bfa;
+  --at-ai-surface: #211b33;
+
+  --shadow-at-e1: 0 1px 2px 0 rgb(0 0 0 / 0.4);
+  --shadow-at-e2: 0 2px 8px -1px rgb(0 0 0 / 0.5);
+  --shadow-at-e3: 0 12px 32px -8px rgb(0 0 0 / 0.6);
+}
+
+/* Atelier surfaces get rounded, soft geometry by default (opt-in per component).
+   Motion respects reduced-motion globally. */
+@media (prefers-reduced-motion: reduce) {
+  .atelier *,
+  .atelier *::before,
+  .atelier *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ============================================================
+   Engine isolation (Task 1.3 / Req 11.5, 22.2)
+   ------------------------------------------------------------
+   The resume-render engine (components/resume/*) and its live preview must
+   look identical to the printed PDF — i.e. always LIGHT, using the legacy
+   Swiss token values — even when rendered inside a dark `.atelier` subtree
+   (e.g. the Resume Editor preview pane in dark mode).
+
+   Wrap any on-screen resume preview in `.resume-scope`. It re-pins the token
+   values the resume components consume (via Tailwind utilities → var(--*)) to
+   the Swiss light palette and forces color-scheme: light. The `/print/*`
+   pages already force white/light via @media print in globals.css.
+   ============================================================ */
+.resume-scope {
+  color-scheme: light;
+
+  --background: #f0f0e8;
+  --foreground: #000000;
+  --card: #f0f0e8;
+  --card-foreground: #000000;
+  --popover: #f0f0e8;
+  --popover-foreground: #000000;
+  --primary: #1d4ed8;
+  --primary-foreground: #ffffff;
+  --secondary: #e5e5e0;
+  --secondary-foreground: #000000;
+  --muted: #e5e5e0;
+  --muted-foreground: #6b7280;
+  --accent: #e5e5e0;
+  --accent-foreground: #000000;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --border: #000000;
+  --input: #f0f0e8;
+  --ring: #1d4ed8;
+}
+
+/* ============================================================
+   Marketing / landing motion + decor (homepage enhancement)
+   ------------------------------------------------------------
+   Purely presentational helpers used by the (marketing) landing.
+   All animations sit under `.atelier`, so the global
+   prefers-reduced-motion block above neutralises them automatically.
+   ============================================================ */
+
+@keyframes at-fade-up {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes at-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+@keyframes at-float-sm {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+@keyframes at-blob-drift {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(3%, -4%) scale(1.06); }
+  66% { transform: translate(-3%, 3%) scale(0.96); }
+}
+@keyframes at-ring-fill {
+  from { stroke-dashoffset: var(--ring-circumference); }
+}
+@keyframes at-shimmer {
+  100% { background-position: 200% 0; }
+}
+
+/* Scroll-reveal: default hidden, JS adds .is-visible. <noscript> restores. */
+.atelier .reveal {
+  opacity: 0;
+  transform: translateY(18px);
+  transition:
+    opacity 0.6s var(--ease-at-out),
+    transform 0.6s var(--ease-at-out);
+  will-change: opacity, transform;
+}
+.atelier .reveal.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+.atelier .at-float {
+  animation: at-float 6s ease-in-out infinite;
+}
+.atelier .at-float-sm {
+  animation: at-float-sm 5s ease-in-out infinite;
+}
+.atelier .at-ring-track {
+  animation: at-ring-fill 1.4s var(--ease-at-out) forwards;
+}
+
+/* Soft animated gradient blobs behind the hero. */
+.atelier .at-blob {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(60px);
+  opacity: 0.5;
+  animation: at-blob-drift 18s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* Subtle dotted/grid backdrop. */
+.atelier .at-grid-bg {
+  background-image: radial-gradient(var(--border) 1px, transparent 1px);
+  background-size: 22px 22px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 40%, transparent 100%);
+  -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 40%, transparent 100%);
+}
+
+/* Glassy surface for floating mock cards. */
+.atelier .at-glass {
+  background: color-mix(in srgb, var(--card) 82%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
