@@ -35,6 +35,10 @@ export const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
+        // Portaled to document.body — `atelier` makes it resolve Atelier tokens
+        // instead of the legacy Swiss :root fallbacks (`.dark .atelier` still
+        // matches via the <html> dark class).
+        'atelier',
         'fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2',
         'rounded-[var(--radius-at-xl)] border border-[var(--border)] bg-[var(--card)] p-6 text-[var(--card-foreground)] shadow-[var(--shadow-at-e3)]',
         'data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95',

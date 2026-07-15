@@ -29,21 +29,30 @@ pytestmark = pytest.mark.unit
 
 
 def _local(**overrides) -> Settings:
-    return Settings(single_user_mode=True, **overrides)
+    # Hermetic provider defaults: pydantic-settings otherwise inherits the
+    # developer's real ``.env`` (which may set EMAIL_SMTP_HOST / EMAIL_FROM /
+    # EMAIL_API_KEY), which would make the "missing creds degrades to logging"
+    # tests machine-dependent (they pass in CI's clean env but fail locally).
+    # Clearing the provider creds here makes those tests deterministic; the
+    # "with creds" tests still win via explicit ``overrides``. Mirrors the
+    # hermetic-defaults pattern in ``tests/unit/test_auth_config.py``.
+    hermetic = {
+        "email_smtp_host": "",
+        "email_smtp_password": "",
+        "email_api_key": "",
+        "email_from": "",
+    }
+    return Settings(single_user_mode=True, **{**hermetic, **overrides})
 
 
 @pytest.fixture(autouse=True)
 def _reset_singletons():
-    """Reset the module-level singletons around each test."""
-    runtime._kvstore = None
-    runtime._email_sender = None
-    runtime._captcha_verifier = None
-    runtime._breached_password_check = None
+    """Reset the composition-root cache (adapters are owned there — Phase 3)."""
+    from app.platform import reset_container
+
+    reset_container()
     yield
-    runtime._kvstore = None
-    runtime._email_sender = None
-    runtime._captcha_verifier = None
-    runtime._breached_password_check = None
+    reset_container()
 
 
 class TestBuildKVStore:
@@ -175,8 +184,9 @@ class TestSingletons:
         # Default settings → local store, no engine needed.
         assert runtime.get_kvstore() is runtime.get_kvstore()
 
-    async def test_close_kvstore_resets_local_singleton(self):
+    async def test_close_kvstore_releases_local_singleton(self):
         store = runtime.get_kvstore()
         assert isinstance(store, LocalKVStore)
         await runtime.close_kvstore()
-        assert runtime._kvstore is None
+        # After close the container rebuilds a fresh instance on next access.
+        assert runtime.get_kvstore() is not store

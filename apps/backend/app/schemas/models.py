@@ -7,6 +7,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from app.profile.photo import PhotoConfig
+
 _TEXT_VALUE_KEYS = (
     "text",
     "summary",
@@ -119,7 +121,7 @@ class SectionType(str, Enum):
 
 # Resume Data Models (matching frontend types in resume-component.tsx)
 class PersonalInfo(BaseModel):
-    """Personal information section."""
+    """Personal information section (the resume header)."""
 
     name: str = ""
     title: str = ""
@@ -129,6 +131,12 @@ class PersonalInfo(BaseModel):
     website: str | None = None
     linkedin: str | None = None
     github: str | None = None
+    # Photo System: the URL rendered for this resume's header photo (resolved
+    # from the photo config's provenance) and the structured render+provenance
+    # config. Both optional so pre-photo resumes validate unchanged; ``photo``
+    # is imported lazily to avoid a schema import cycle.
+    avatarUrl: str | None = None
+    photo: PhotoConfig | None = None
 
 
 class Experience(BaseModel):
@@ -139,27 +147,51 @@ class Experience(BaseModel):
     company: str = ""
     location: str | None = None
     years: str = ""
+    # W-P2.2 additive fields (parity with ProfileExperience); optional so
+    # existing resumes are unaffected.
+    current: bool = False
+    tech: list[str] = Field(default_factory=list)
     description: list[str] = Field(default_factory=list)
 
-    @field_validator("description", mode="before")
+    @field_validator("description", "tech", mode="before")
     @classmethod
     def _normalize_description(cls, value: Any) -> list[str]:
         return _coerce_string_list(value)
 
 
 class Education(BaseModel):
-    """Education entry."""
+    """Education entry.
+
+    Extended (W-P2.1) with structured fields a modern resume needs. All new
+    fields are optional with safe defaults so existing resumes validate and
+    render unchanged (``years``/``description`` are kept for backward compat and
+    as the template display fallback).
+    """
 
     id: int = 0
     institution: str = ""
     degree: str = ""
     years: str = ""
     description: str | None = None
+    # W-P2.1 structured fields.
+    specialization: str = ""
+    location: str | None = None
+    startYear: str = ""
+    endYear: str = ""
+    currentlyStudying: bool = False
+    gradeType: Literal["cgpa", "gpa", "percentage"] | None = None
+    score: str = ""
+    achievements: list[str] = Field(default_factory=list)
 
     @field_validator("description", mode="before")
     @classmethod
     def _normalize_description(cls, value: Any) -> str | None:
         return _coerce_optional_text(value)
+
+    @field_validator("achievements", mode="before")
+    @classmethod
+    def _normalize_achievements(cls, value: Any) -> list[str]:
+        return _coerce_string_list(value)
 
 
 class Project(BaseModel):
@@ -171,9 +203,11 @@ class Project(BaseModel):
     years: str = ""
     github: str | None = None
     website: str | None = None
+    # W-P2.2 additive field (parity with ProfileProject).
+    tech: list[str] = Field(default_factory=list)
     description: list[str] = Field(default_factory=list)
 
-    @field_validator("description", mode="before")
+    @field_validator("description", "tech", mode="before")
     @classmethod
     def _normalize_description(cls, value: Any) -> list[str]:
         return _coerce_string_list(value)
@@ -417,6 +451,11 @@ class ResumeFetchData(BaseModel):
     interview_prep: InterviewPrepData | None = None
     parent_id: str | None = None  # For determining if resume is tailored
     title: str | None = None
+    # Persisted appearance (frontend TemplateSettings shape); None ⇒ app default.
+    template_settings: dict[str, Any] | None = None
+    # Optimistic-concurrency token (P4 R3.1). Clients read it here and echo it as
+    # the ``If-Match`` base_version on the next write so the server can CAS.
+    version: int | None = None
 
 
 class ResumeFetchResponse(BaseModel):
@@ -460,6 +499,42 @@ class JobUploadResponse(BaseModel):
     message: str
     job_id: list[str]
     request: dict[str, Any]
+
+
+class JobAnalyzeRequest(BaseModel):
+    """Request to analyze a job description for fit against a resume.
+
+    ``resume_id`` is optional: when omitted the response returns only the
+    extracted keyword breakdown (no matched/missing/fit comparison).
+    """
+
+    job_description: str
+    resume_id: str | None = None
+
+
+class JobAnalyzeKeywords(BaseModel):
+    """Structured keyword breakdown extracted from a job description."""
+
+    required_skills: list[str] = Field(default_factory=list)
+    preferred_skills: list[str] = Field(default_factory=list)
+    keywords: list[str] = Field(default_factory=list)
+    experience_requirements: list[str] = Field(default_factory=list)
+    seniority_level: str | None = None
+    experience_years: str | None = None
+
+
+class JobAnalyzeResponse(BaseModel):
+    """Response for pre-generation job fit analysis.
+
+    ``matched``/``missing``/``fit_score`` are populated only when a resume with
+    processed data is supplied; otherwise they default to empty/None so the
+    client can render the keyword breakdown on its own.
+    """
+
+    keywords: JobAnalyzeKeywords
+    matched: list[str] = Field(default_factory=list)
+    missing: list[str] = Field(default_factory=list)
+    fit_score: float | None = None
 
 
 # Improvement Models
@@ -671,6 +746,22 @@ class FeatureConfigResponse(BaseModel):
     enable_interview_prep: bool = False
 
 
+class ResilienceFlagsResponse(BaseModel):
+    """P4 resilience feature flags + streaming params (design §Deployment).
+
+    Consumed by the frontend to decide which durability paths to activate
+    (streaming vs non-stream, offline/SW, server autosave) and to size the
+    client-side stream heartbeat/timeouts to the server's guardrails.
+    """
+
+    streaming_ai: bool = False
+    offline_support: bool = False
+    advanced_autosave: bool = True
+    stream_max_concurrent_per_user: int = 3
+    stream_max_lifetime_seconds: int = 300
+    stream_heartbeat_seconds: int = 15
+
+
 class LanguageConfigRequest(BaseModel):
     """Request to update language settings."""
 
@@ -786,6 +877,53 @@ class UpdateTitleRequest(BaseModel):
     """Request to update resume title."""
 
     title: str
+
+
+class CreateResumeFromDataRequest(BaseModel):
+    """Create a new resume directly from structured data.
+
+    Powers "Use this sample" (from the Sample Library) and resume duplication:
+    the caller supplies ready `ResumeData` plus optional title and persisted
+    appearance. Never touches an existing resume — always creates a new one.
+    """
+
+    processed_data: ResumeData
+    title: str | None = None
+    template_settings: dict[str, Any] | None = None
+    as_master: bool = False
+    source: str | None = None  # provenance label, e.g. "sample:software-engineer"
+
+    @field_validator("template_settings")
+    @classmethod
+    def _bound_settings(cls, v: dict[str, Any] | None) -> dict[str, Any] | None:
+        if v is None:
+            return None
+        import json as _json
+
+        if len(_json.dumps(v)) > 8000:
+            raise ValueError("template settings payload too large")
+        return v
+
+
+class UpdateTemplateSettingsRequest(BaseModel):
+    """Request to persist a resume's appearance (template + customization).
+
+    ``settings`` is the frontend ``TemplateSettings`` object stored verbatim as
+    a rendering artifact (not resume content). Kept as a free-form mapping so
+    the frontend remains the single source of truth for the settings shape;
+    the backend only bounds its size.
+    """
+
+    settings: dict[str, Any]
+
+    @field_validator("settings")
+    @classmethod
+    def _bound_size(cls, v: dict[str, Any]) -> dict[str, Any]:
+        import json as _json
+
+        if len(_json.dumps(v)) > 8000:
+            raise ValueError("template settings payload too large")
+        return v
 
 
 class ResetDatabaseRequest(BaseModel):

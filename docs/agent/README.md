@@ -1,8 +1,8 @@
-# FitWright — Agent Documentation Index
+# FitWright — Developer Documentation
 
-> Project-specific reference for agents working in the FitWright codebase.
+> Contributor reference for the FitWright codebase.
 
-Generic, reusable guides (Swiss design system, Next.js performance) live in [`../portable/`](../portable/README.md) as standalone packs that can be lifted out of this repo and dropped into any project. This index covers only the docs that are tied to FitWright itself.
+Generic, reusable guides (Swiss design system, Next.js performance) live in [`../portable/`](../portable/README.md) as standalone packs that can be lifted out of this repo and dropped into any project. In-depth system/subsystem design lives in [`../architecture/`](../architecture/). This index covers the project-specific guides tied to FitWright itself.
 
 ## Quick Navigation
 
@@ -21,7 +21,16 @@ Generic, reusable guides (Swiss design system, Next.js performance) live in [`..
 | [backend-guide](architecture/backend-guide.md) | Module-by-module backend tour |
 | [frontend-architecture](architecture/frontend-architecture.md) | Components, pages, state |
 | [frontend-workflow](architecture/frontend-workflow.md) | User flows in the frontend |
-| [prompt-workflow-design](architecture/prompt-workflow-design.md) | Improver pipeline design (superseded — historical) |
+
+### System design (deep dives — `../architecture/`)
+| Doc | Purpose |
+|-----|---------|
+| [ARCHITECTURE](../architecture/ARCHITECTURE.md) | System-shape constitution: rings, ports, deployment profiles |
+| [PROFILE_SYSTEM_PLAN](../architecture/PROFILE_SYSTEM_PLAN.md) | Professional Profile data model and design |
+| [PHOTO_SYSTEM](../architecture/PHOTO_SYSTEM.md) | Profile photo storage, rendering, and rules |
+| [WYSIWYG_RENDERING](../architecture/WYSIWYG_RENDERING.md) | One-renderer preview = PDF export |
+| [TEMPLATE_LIBRARY](../architecture/TEMPLATE_LIBRARY.md) | Metadata-driven resume template catalog |
+| [PERSISTENT_ANALYSIS_CACHE](../architecture/PERSISTENT_ANALYSIS_CACHE.md) | Reuse of expensive AI results |
 
 ### APIs
 | Doc | Purpose |
@@ -51,7 +60,6 @@ Generic, reusable guides (Swiss design system, Next.js performance) live in [`..
 | [enrichment](features/enrichment.md) | AI enrichment flow |
 | [jd-match](features/jd-match.md) | Job description matching |
 | [i18n](features/i18n.md) | Internationalization |
-| [i18n-preparation](features/i18n-preparation.md) | i18n setup notes |
 
 ### LLM Integration
 | Doc | Purpose |
@@ -62,7 +70,7 @@ Generic, reusable guides (Swiss design system, Next.js performance) live in [`..
 | Pack | Purpose |
 |------|---------|
 | [swiss-design-system](../portable/swiss-design-system/README.md) | Full Swiss style design system — required reading for frontend work |
-| [nextjs-performance](../portable/nextjs-performance/README.md) | Next.js 15 performance optimizations — required reading for frontend work |
+| [nextjs-performance](../portable/nextjs-performance/README.md) | Next.js performance optimizations — required reading for frontend work |
 
 ## Project Structure
 

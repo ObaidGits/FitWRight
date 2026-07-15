@@ -62,6 +62,21 @@ describe('route-guard middleware', () => {
     expect(res.headers.get('location')).toBeNull();
   });
 
+  it('guards the advanced editor (/builder) like every other app route (hosted)', async () => {
+    const { middleware } = await loadMiddleware(false);
+    const res = middleware(request('/builder?id=abc'));
+    const url = new URL(res.headers.get('location')!);
+    expect(url.pathname).toBe('/login');
+    expect(url.searchParams.get('next')).toBe('/builder?id=abc');
+  });
+
+  it('passes /builder through when a session cookie is present (hosted)', async () => {
+    const { middleware } = await loadMiddleware(false);
+    const res = middleware(request('/builder?id=abc', '__Host-session=abc'));
+    expect(res.headers.get('location')).toBeNull();
+    expect(res.headers.get('x-middleware-next')).toBe('1');
+  });
+
   it('is a no-op in SINGLE_USER_MODE even without a cookie', async () => {
     const { middleware } = await loadMiddleware(true);
     const res = middleware(request('/home'));

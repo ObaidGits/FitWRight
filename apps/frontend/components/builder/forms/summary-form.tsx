@@ -1,8 +1,8 @@
 'use client';
 
 import React from 'react';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/atelier/label';
+import { Textarea } from '@/components/atelier/input';
 import { useTranslations } from '@/lib/i18n';
 
 interface SummaryFormProps {
@@ -23,10 +23,7 @@ export const SummaryForm: React.FC<SummaryFormProps> = ({ value, onChange }) => 
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <Label
-          htmlFor="summary"
-          className="font-mono text-xs uppercase tracking-wider text-steel-grey"
-        >
+        <Label htmlFor="summary" className="text-xs font-medium text-[var(--muted-foreground)]">
           {t('resume.sections.summary')}
         </Label>
         <Textarea
@@ -35,7 +32,7 @@ export const SummaryForm: React.FC<SummaryFormProps> = ({ value, onChange }) => 
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={t('builder.placeholders.summary')}
-          className="min-h-[150px] text-black rounded-none border-black focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-blue-700 bg-white"
+          className="min-h-[150px]"
         />
       </div>
     </div>

@@ -1,10 +1,10 @@
 'use client';
 
 import React from 'react';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/atelier/input';
+import { Label } from '@/components/atelier/label';
+import { Button } from '@/components/atelier/button';
+import { Textarea } from '@/components/atelier/input';
 import { Education } from '@/components/dashboard/resume-component';
 import { Plus, Trash2 } from 'lucide-react';
 import { useTranslations } from '@/lib/i18n';
@@ -29,6 +29,8 @@ interface EducationFormProps {
   data: Education[];
   onChange: (data: Education[]) => void;
 }
+
+const labelCls = 'text-xs font-medium text-[var(--muted-foreground)]';
 
 export const EducationForm: React.FC<EducationFormProps> = ({ data, onChange }) => {
   const { t } = useTranslations();
@@ -89,28 +91,18 @@ export const EducationForm: React.FC<EducationFormProps> = ({ data, onChange }) 
   return (
     <div className="space-y-6">
       <div className="flex justify-end">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleAdd}
-          className="rounded-none border-black hover:bg-black hover:text-white transition-colors"
-        >
-          <Plus className="w-4 h-4 mr-2" /> {t('builder.forms.education.addSchool')}
+        <Button variant="outline" size="sm" onClick={handleAdd}>
+          <Plus className="mr-2 h-4 w-4" /> {t('builder.forms.education.addSchool')}
         </Button>
       </div>
 
       {data.length === 0 ? (
-        <div className="text-center py-12 bg-paper-tint border border-dashed border-black">
-          <p className="font-mono text-sm text-steel-grey mb-4">
+        <div className="rounded-[var(--radius-at-lg)] border border-dashed border-[var(--border)] bg-[var(--card)] py-12 text-center">
+          <p className="mb-4 text-sm text-[var(--muted-foreground)]">
             {t('builder.genericItemForm.noEntries', { label: t('resume.sections.education') })}
           </p>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleAdd}
-            className="rounded-none border-black"
-          >
-            <Plus className="w-4 h-4 mr-2" /> {t('builder.forms.education.addFirstSchool')}
+          <Button variant="outline" size="sm" onClick={handleAdd}>
+            <Plus className="mr-2 h-4 w-4" /> {t('builder.forms.education.addFirstSchool')}
           </Button>
         </div>
       ) : (
@@ -122,62 +114,59 @@ export const EducationForm: React.FC<EducationFormProps> = ({ data, onChange }) 
             <div className="space-y-8">
               {data.map((item) => (
                 <DraggableListItem key={item.id} id={item.id}>
-                  <div className="p-6 border border-black bg-paper-tint relative group">
+                  <div className="group relative rounded-[var(--radius-at-lg)] border border-[var(--border)] bg-[var(--card)] p-6">
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive hover:bg-destructive/10"
+                      className="absolute right-2 top-2 text-[var(--destructive)] opacity-0 transition-opacity hover:bg-[var(--destructive)]/10 group-hover:opacity-100"
                       onClick={() => handleRemove(item.id)}
                       aria-label={t('a11y.removeItem')}
                       title={t('a11y.removeItem')}
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="h-4 w-4" />
                     </Button>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 pr-8">
+                    <div className="mb-4 grid grid-cols-1 gap-4 pr-8 md:grid-cols-2">
                       <div className="space-y-2">
-                        <Label className="font-mono text-xs uppercase tracking-wider text-steel-grey">
+                        <Label className={labelCls}>
                           {t('builder.forms.education.fields.institution')}
                         </Label>
                         <Input
                           value={item.institution || ''}
                           onChange={(e) => handleChange(item.id, 'institution', e.target.value)}
                           placeholder={t('builder.forms.education.placeholders.institution')}
-                          className="rounded-none border-black bg-white"
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label className="font-mono text-xs uppercase tracking-wider text-steel-grey">
+                        <Label className={labelCls}>
                           {t('builder.forms.education.fields.degree')}
                         </Label>
                         <Input
                           value={item.degree || ''}
                           onChange={(e) => handleChange(item.id, 'degree', e.target.value)}
                           placeholder={t('builder.forms.education.placeholders.degree')}
-                          className="rounded-none border-black bg-white"
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label className="font-mono text-xs uppercase tracking-wider text-steel-grey">
+                        <Label className={labelCls}>
                           {t('builder.genericItemForm.fields.years')}
                         </Label>
                         <Input
                           value={item.years || ''}
                           onChange={(e) => handleChange(item.id, 'years', e.target.value)}
                           placeholder={t('builder.forms.education.placeholders.years')}
-                          className="rounded-none border-black bg-white"
                         />
                       </div>
                     </div>
 
                     <div className="space-y-2">
-                      <Label className="font-mono text-xs uppercase tracking-wider text-steel-grey">
+                      <Label className={labelCls}>
                         {t('builder.forms.education.fields.descriptionOptional')}
                       </Label>
                       <Textarea
                         value={item.description || ''}
                         onChange={(e) => handleChange(item.id, 'description', e.target.value)}
-                        className="min-h-[60px] text-black text-sm rounded-none border-black bg-white"
+                        className="min-h-[60px] text-sm"
                         placeholder={t('builder.forms.education.placeholders.description')}
                       />
                     </div>

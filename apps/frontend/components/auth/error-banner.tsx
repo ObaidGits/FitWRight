@@ -18,6 +18,8 @@ export function describeAuthError(err: unknown): string {
         return 'That email is unavailable.';
       case 'account_disabled':
         return 'This account is disabled. Contact support if you think this is a mistake.';
+      case 'email_unverified':
+        return 'Please verify your email before logging in. Check your inbox for the confirmation link, or request a new one.';
       case 'rate_limited':
         return err.retryAfter
           ? `Too many attempts. Try again in about ${err.retryAfter}s.`

@@ -466,7 +466,12 @@
       "outreachSaveFailed": "Impossible d'enregistrer le message de contact. Veuillez réessayer.",
       "coverLetterGenerateFailed": "Impossible de générer la lettre de motivation : {error}",
       "outreachGenerateFailed": "Impossible de générer le message de contact : {error}",
-      "interviewPrepGenerateFailed": "Impossible de générer la préparation d'entretien : {error}"
+      "interviewPrepGenerateFailed": "Impossible de générer la préparation d'entretien : {error}",
+      "aiRequiresConnection": "La génération par IA nécessite une connexion internet. Reconnectez-vous et réessayez.",
+      "aiStreaming": "Génération par IA…",
+      "draftQuarantined": "Un brouillon local enregistré était illisible et a été mis de côté pour protéger votre travail. Votre contenu actuel est en sécurité.",
+      "storageDegraded": "Le stockage local est indisponible ; les modifications ne sont conservées qu'en mémoire pour cette session. Enregistrez sur le serveur pour ne pas les perdre.",
+      "openRecoveryCenter": "Ouvrir le centre de récupération"
     }
   },
   "enrichment": {

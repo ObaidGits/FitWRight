@@ -14,6 +14,7 @@ from app.schemas import (
     LLMConfigResponse,
     FeatureConfigRequest,
     FeatureConfigResponse,
+    ResilienceFlagsResponse,
     FeaturePromptsRequest,
     FeaturePromptsResponse,
     LanguageConfigRequest,
@@ -237,6 +238,27 @@ async def get_feature_config() -> FeatureConfigResponse:
         enable_cover_letter=stored.get("enable_cover_letter", False),
         enable_outreach_message=stored.get("enable_outreach_message", False),
         enable_interview_prep=stored.get("enable_interview_prep", False),
+    )
+
+
+@router.get("/flags", response_model=ResilienceFlagsResponse)
+async def get_resilience_flags() -> ResilienceFlagsResponse:
+    """Return the P4 resilience feature flags + streaming params (R6.4).
+
+    The frontend reads this once on load to decide which durability paths to
+    activate: streaming AI vs the non-stream fallback, whether to register the
+    service worker / offline outbox, and whether to run server autosave. Flags
+    are ADR-14 config values (no separate code path); flipping a flag off makes
+    the client degrade gracefully (streaming→non-stream, offline→local-draft
+    only, autosave→manual save + local draft).
+    """
+    return ResilienceFlagsResponse(
+        streaming_ai=settings.streaming_ai_enabled,
+        offline_support=settings.offline_support_enabled,
+        advanced_autosave=settings.advanced_autosave_enabled,
+        stream_max_concurrent_per_user=settings.stream_max_concurrent_per_user,
+        stream_max_lifetime_seconds=settings.stream_max_lifetime_seconds,
+        stream_heartbeat_seconds=settings.stream_heartbeat_seconds,
     )
 
 

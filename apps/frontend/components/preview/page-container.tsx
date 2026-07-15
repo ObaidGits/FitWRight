@@ -55,7 +55,7 @@ export function PageContainer({
     <div className="relative flex flex-col items-center">
       {/* Page wrapper with scale transform */}
       <div
-        className="relative bg-white border-2 border-black shadow-sw-card origin-top"
+        className="relative origin-top border border-[var(--border)] bg-white shadow-[var(--shadow-at-e2)]"
         style={{
           width: pageWidthPx,
           height: pageHeightPx,
@@ -72,14 +72,14 @@ export function PageContainer({
               left: marginLeftPx,
               width: contentWidth,
               height: maxContentHeight,
-              border: '1px dashed rgba(29, 78, 216, 0.5)',
+              border: '1px dashed color-mix(in srgb, var(--primary) 50%, transparent)',
             }}
           >
             {/* Corner markers */}
-            <div className="absolute -top-1 -left-1 w-2 h-2 border-t border-l border-blue-500" />
-            <div className="absolute -top-1 -right-1 w-2 h-2 border-t border-r border-blue-500" />
-            <div className="absolute -bottom-1 -left-1 w-2 h-2 border-b border-l border-blue-500" />
-            <div className="absolute -bottom-1 -right-1 w-2 h-2 border-b border-r border-blue-500" />
+            <div className="absolute -top-1 -left-1 h-2 w-2 border-l border-t border-[var(--primary)]" />
+            <div className="absolute -top-1 -right-1 h-2 w-2 border-r border-t border-[var(--primary)]" />
+            <div className="absolute -bottom-1 -left-1 h-2 w-2 border-b border-l border-[var(--primary)]" />
+            <div className="absolute -bottom-1 -right-1 h-2 w-2 border-b border-r border-[var(--primary)]" />
           </div>
         )}
 
@@ -107,7 +107,7 @@ export function PageContainer({
 
         {/* Page number indicator */}
         <div
-          className="absolute bottom-2 right-3 font-mono text-[10px] text-steel-grey uppercase tracking-wider"
+          className="absolute bottom-2 right-3 text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]"
           style={{ transform: `scale(${1 / scale})`, transformOrigin: 'bottom right' }}
         >
           Page {pageNumber} of {totalPages}

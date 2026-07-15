@@ -1,0 +1,10 @@
+{
+  "info": {
+    "title": "Senior Backend Engineer",
+    "descriptionHtml": "<p>We are looking for a Senior Backend Engineer to join our platform team.</p><h2>Responsibilities</h2><ul><li>Design and build scalable APIs using Python and FastAPI.</li><li>Lead migration from monolith to microservices.</li><li>Mentor junior engineers.</li></ul><h2>Requirements</h2><ul><li>5+ years of backend experience.</li><li>Strong Python and distributed systems knowledge.</li></ul>",
+    "location": "Berlin, Germany",
+    "employmentType": "FullTime",
+    "team": "Platform",
+    "organizationName": "Weave"
+  }
+}

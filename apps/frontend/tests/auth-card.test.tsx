@@ -98,6 +98,21 @@ describe('AuthCard', () => {
     expect(signupMock).not.toHaveBeenCalled();
   });
 
+  it('routes an unverified login to the verify/resend page (email prefilled)', async () => {
+    loginMock.mockRejectedValue(
+      new AuthApiError('email_unverified', 'Please verify your email before logging in.', 403)
+    );
+    render(<AuthCard mode="login" />);
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'unv@example.com' } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secretpw123' } });
+    fireEvent.click(screen.getByRole('button', { name: /sign in/i }));
+    await waitFor(() =>
+      expect(replaceMock).toHaveBeenCalledWith(
+        expect.stringContaining('/verify?email=unv%40example.com')
+      )
+    );
+  });
+
   it('routes to /verify when signup is pending verification', async () => {
     signupMock.mockResolvedValue({ user: null, pendingVerification: true });
     render(<AuthCard mode="signup" />);

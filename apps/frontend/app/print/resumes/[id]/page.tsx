@@ -34,6 +34,7 @@ type PageProps = {
     showContactIcons?: string;
     accentColor?: string;
     lang?: string;
+    print_token?: string;
   }>;
 };
 
@@ -76,10 +77,25 @@ function parseBoolean(value: string | undefined, defaultValue: boolean): boolean
   return defaultValue;
 }
 
-async function fetchResumeData(id: string): Promise<ResumeData> {
-  const res = await fetch(`${API_BASE}/resumes?resume_id=${encodeURIComponent(id)}`, {
-    cache: 'no-store',
-  });
+async function fetchResumeData(id: string, printToken?: string): Promise<ResumeData> {
+  // Server-side render (headless Chromium during PDF export, or direct view).
+  // The browser carries no session cookie for the internal render, so we
+  // authenticate with the short-lived signed print token minted by the export
+  // endpoint. For a direct in-browser view (no token) we forward the incoming
+  // request cookies so hosted-mode auth still resolves.
+  let url: string;
+  const init: RequestInit = { cache: 'no-store' };
+  if (printToken) {
+    url = `${API_BASE}/resumes/print-data?resume_id=${encodeURIComponent(id)}&token=${encodeURIComponent(printToken)}`;
+  } else {
+    url = `${API_BASE}/resumes?resume_id=${encodeURIComponent(id)}`;
+    const { headers } = await import('next/headers');
+    const cookie = (await headers()).get('cookie');
+    if (cookie) {
+      init.headers = { cookie };
+    }
+  }
+  const res = await fetch(url, init);
   if (!res.ok) {
     throw new Error(`Failed to load resume (status ${res.status}).`);
   }
@@ -158,7 +174,7 @@ function parsePageSize(value: string | undefined): PageSize {
 export default async function PrintResumePage({ params, searchParams }: PageProps) {
   const resolvedParams = await params;
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
-  const resumeData = await fetchResumeData(resolvedParams.id);
+  const resumeData = await fetchResumeData(resolvedParams.id, resolvedSearchParams?.print_token);
   const locale = resolveLocale(resolvedSearchParams?.lang);
   const t = (key: string, params?: Record<string, string | number>) =>
     translate(locale, key, params);

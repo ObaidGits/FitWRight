@@ -10,6 +10,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.auth import get_effective_user_id, require_verified_user_id
+from app.llm_ratelimit import llm_rate_limit_dep
 from app.config_cache import get_content_language
 from app.database import db
 from app.llm import complete_json
@@ -85,7 +86,11 @@ def _extract_item_from_resume(processed_data: dict, item_id: str) -> dict:
     return {}
 
 
-@router.post("/analyze/{resume_id}", response_model=AnalysisResponse)
+@router.post(
+    "/analyze/{resume_id}",
+    response_model=AnalysisResponse,
+    dependencies=[Depends(llm_rate_limit_dep)],
+)
 async def analyze_resume(
     resume_id: str,
     user_id: str = Depends(require_verified_user_id),
@@ -173,7 +178,11 @@ async def analyze_resume(
         )
 
 
-@router.post("/enhance", response_model=EnhancementPreview)
+@router.post(
+    "/enhance",
+    response_model=EnhancementPreview,
+    dependencies=[Depends(llm_rate_limit_dep)],
+)
 async def generate_enhancements(
     request: EnhanceRequest,
     user_id: str = Depends(require_verified_user_id),
@@ -494,7 +503,11 @@ async def _regenerate_skills(
     )
 
 
-@router.post("/regenerate", response_model=RegenerateResponse)
+@router.post(
+    "/regenerate",
+    response_model=RegenerateResponse,
+    dependencies=[Depends(llm_rate_limit_dep)],
+)
 async def regenerate_items(
     request: RegenerateRequest,
     user_id: str = Depends(require_verified_user_id),

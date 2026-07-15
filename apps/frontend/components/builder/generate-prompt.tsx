@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Button } from '@/components/ui/button';
+import { Button } from '@/components/atelier/button';
 import { Sparkles, Loader2, FileText, Mail, MessagesSquare, ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTranslations } from '@/lib/i18n';
@@ -41,22 +41,22 @@ export function GeneratePrompt({
     return (
       <div
         className={cn(
-          'flex flex-col items-center justify-center min-h-[400px] p-12 text-center',
+          'flex min-h-[400px] flex-col items-center justify-center p-12 text-center',
           className
         )}
       >
-        <div className="w-16 h-16 border-2 border-steel-grey bg-paper-tint flex items-center justify-center mb-6">
-          <Icon className="w-8 h-8 text-steel-grey" />
+        <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-[var(--secondary)] text-[var(--muted-foreground)]">
+          <Icon className="h-8 w-8" />
         </div>
-        <h3 className="font-mono text-sm font-bold uppercase tracking-wider text-ink-soft mb-3">
+        <h3 className="mb-3 text-base font-semibold text-[var(--foreground)]">
           {t('builder.generatePrompt.notAvailableTitle', { title })}
         </h3>
-        <p className="font-mono text-xs text-steel-grey max-w-md mb-6 leading-relaxed">
+        <p className="mb-6 max-w-md text-sm leading-relaxed text-[var(--muted-foreground)]">
           {t('builder.generatePrompt.notAvailableDescription', { title })}
         </p>
-        <div className="flex items-center gap-2 text-blue-700 font-mono text-xs">
+        <div className="flex items-center gap-2 text-sm text-[var(--primary)]">
           <span>{t('builder.generatePrompt.goToDashboard')}</span>
-          <ArrowRight className="w-4 h-4" />
+          <ArrowRight className="h-4 w-4" />
         </div>
       </div>
     );
@@ -65,17 +65,17 @@ export function GeneratePrompt({
   return (
     <div
       className={cn(
-        'flex flex-col items-center justify-center min-h-[400px] p-12 text-center',
+        'flex min-h-[400px] flex-col items-center justify-center p-12 text-center',
         className
       )}
     >
-      <div className="w-16 h-16 border-2 border-blue-700 bg-blue-50 flex items-center justify-center mb-6">
-        <Icon className="w-8 h-8 text-blue-700" />
+      <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-[var(--primary)]/12 text-[var(--primary)]">
+        <Icon className="h-8 w-8" />
       </div>
-      <h3 className="font-mono text-sm font-bold uppercase tracking-wider mb-3">
+      <h3 className="mb-3 text-base font-semibold text-[var(--foreground)]">
         {t('builder.generatePrompt.generateTitle', { title })}
       </h3>
-      <p className="font-mono text-xs text-ink-soft max-w-md mb-6 leading-relaxed">
+      <p className="mb-6 max-w-md text-sm leading-relaxed text-[var(--muted-foreground)]">
         {isInterviewPrep
           ? t('builder.generatePrompt.interviewPrepDescription')
           : isOutreach
@@ -85,17 +85,17 @@ export function GeneratePrompt({
       <Button onClick={onGenerate} disabled={isGenerating} className="gap-2">
         {isGenerating ? (
           <>
-            <Loader2 className="w-4 h-4 animate-spin" />
+            <Loader2 className="h-4 w-4 animate-spin" />
             {t('common.generating')}
           </>
         ) : (
           <>
-            <Sparkles className="w-4 h-4" />
+            <Sparkles className="h-4 w-4" />
             {t('builder.generatePrompt.generateButton', { title })}
           </>
         )}
       </Button>
-      <p className="font-mono text-xs text-steel-grey mt-4">
+      <p className="mt-4 text-xs text-[var(--muted-foreground)]">
         {isInterviewPrep
           ? t('builder.generatePrompt.interviewPrepFooter')
           : isOutreach

@@ -41,6 +41,9 @@ export const SelectContent = React.forwardRef<
       ref={ref}
       position={position}
       className={cn(
+        // Portaled to document.body — must carry `atelier` so it uses the
+        // Atelier tokens rather than the legacy Swiss :root fallbacks.
+        'atelier',
         'z-50 min-w-[8rem] overflow-hidden rounded-[var(--radius-at-lg)] border border-[var(--border)] bg-[var(--popover)] text-[var(--popover-foreground)] shadow-[var(--shadow-at-e2)]',
         'data-[state=open]:animate-in data-[state=open]:fade-in-0',
         position === 'popper' && 'data-[side=bottom]:translate-y-1',

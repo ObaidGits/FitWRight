@@ -117,19 +117,22 @@ export function EnrichmentModal({ resumeId, isOpen, onClose, onComplete }: Enric
 
       {/* Modal container - 80% viewport with padding */}
       <div className="absolute inset-0 flex items-center justify-center p-5 sm:p-10">
-        <div className="relative w-full h-full max-w-[1200px] bg-white border-2 border-black shadow-sw-lg flex flex-col overflow-hidden">
+        <div className="relative flex h-full w-full max-w-[1200px] flex-col overflow-hidden rounded-[var(--radius-at-xl)] border border-[var(--border)] bg-[var(--card)] shadow-[var(--shadow-at-e3)]">
           {/* Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b-2 border-black bg-paper-tint">
+          <div className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--secondary)]/40 px-6 py-4">
             <div className="flex items-center gap-3">
-              <Sparkles className="w-5 h-5" />
-              <h1 className="font-mono text-lg font-bold uppercase tracking-wider">
+              <Sparkles className="h-5 w-5 text-[var(--primary)]" />
+              <h1 className="text-lg font-semibold text-[var(--foreground)]">
                 {t('enrichment.title')}
               </h1>
             </div>
             {/* Only show close button in non-loading states */}
             {!['analyzing', 'generating', 'applying'].includes(state.step) && (
-              <button onClick={handleClose} className="p-1 hover:bg-paper-tint transition-colors">
-                <XIcon className="w-5 h-5" />
+              <button
+                onClick={handleClose}
+                className="rounded-[var(--radius-at-sm)] p-1 text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
+              >
+                <XIcon className="h-5 w-5" />
                 <span className="sr-only">{t('common.close')}</span>
               </button>
             )}

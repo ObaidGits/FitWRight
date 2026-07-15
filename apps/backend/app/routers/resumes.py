@@ -6,22 +6,45 @@ import hashlib
 import json
 import logging
 import unicodedata
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any, NoReturn
+from urllib.parse import quote
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
-from fastapi.responses import Response
+import time
+
+from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, Request, UploadFile
+from fastapi.responses import Response, StreamingResponse
 from pydantic import ValidationError
 
 from app.auth import get_effective_user_id, require_verified_user_id
+from app.auth.ratelimit import RateLimitRule, get_rate_limiter
 from app.config_cache import get_content_language, load_config as _load_config
 from app.database import db
+from app.errors import ApiError
 from app.pdf import render_resume_pdf, PDFRenderError
+from app.llm_ratelimit import llm_rate_limit_dep
 from app.config import settings
+from app.resilience import get_idempotency_cache, get_stream_registry
+from app.resilience.metrics import get_resilience_metrics
+from app.llm import (
+    StreamResult,
+    get_llm_config,
+    get_model_name,
+    provider_supports_streaming,
+    stream_complete,
+)
+from app import analysis_cache
+from app.services.cover_letter import (
+    COVER_LETTER_SYSTEM_PROMPT,
+    OUTREACH_SYSTEM_PROMPT,
+    build_cover_letter_prompt,
+    build_outreach_prompt,
+)
 
 logger = logging.getLogger(__name__)
+from app.versions import service as version_service
 from app.schemas import (
     ATSScore,
     ATSSubScores,
@@ -44,9 +67,11 @@ from app.schemas import (
     RawResume,
     UpdateCoverLetterRequest,
     UpdateOutreachMessageRequest,
+    UpdateTemplateSettingsRequest,
     UpdateTitleRequest,
     normalize_resume_data,
 )
+from app.schemas import CreateResumeFromDataRequest
 from app.services.parser import parse_document, parse_resume_to_json, restore_dates_from_markdown
 from app.services.improver import (
     MONTH_PATTERN,
@@ -111,6 +136,152 @@ def _get_default_prompt_id() -> str:
 
 def _hash_job_content(content: str) -> str:
     return hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+
+# --- PDF appearance resolution (Bug #1: PDF must use the stored template) -----
+# The export must render the resume's PERSISTED template even when no query
+# params are supplied (e.g. a share/deep link or any non-editor caller); an
+# explicit query param still overrides the stored value, and anything malformed
+# falls back to the documented default. This keeps preview == PDF == print.
+
+_PDF_DEFAULTS: dict[str, Any] = {
+    "template": "swiss-single",
+    "pageSize": "A4",
+    "marginTop": 10,
+    "marginBottom": 10,
+    "marginLeft": 10,
+    "marginRight": 10,
+    "sectionSpacing": 3,
+    "itemSpacing": 2,
+    "lineHeight": 3,
+    "fontSize": 3,
+    "headerScale": 3,
+    "headerFont": "serif",
+    "bodyFont": "sans-serif",
+    "compactMode": False,
+    "showContactIcons": False,
+    "accentColor": "blue",
+}
+
+_PDF_ENUMS: dict[str, set[str]] = {
+    "template": {
+        "swiss-single",
+        "swiss-two-column",
+        "modern",
+        "modern-two-column",
+        "latex",
+        "clean",
+        "vivid",
+    },
+    "pageSize": {"A4", "LETTER"},
+    "headerFont": {"serif", "sans-serif", "mono"},
+    "bodyFont": {"serif", "sans-serif", "mono"},
+    "accentColor": {"blue", "green", "orange", "red"},
+}
+
+_PDF_INT_BOUNDS: dict[str, tuple[int, int]] = {
+    "marginTop": (5, 25),
+    "marginBottom": (5, 25),
+    "marginLeft": (5, 25),
+    "marginRight": (5, 25),
+    "sectionSpacing": (1, 5),
+    "itemSpacing": (1, 5),
+    "lineHeight": (1, 5),
+    "fontSize": (1, 5),
+    "headerScale": (1, 5),
+}
+
+
+def _flatten_stored_template(stored: Any) -> dict[str, Any]:
+    """Flatten a persisted ``TemplateSettings`` dict to the PDF param names."""
+    if not isinstance(stored, dict):
+        return {}
+    margins = stored.get("margins") if isinstance(stored.get("margins"), dict) else {}
+    spacing = stored.get("spacing") if isinstance(stored.get("spacing"), dict) else {}
+    font = stored.get("fontSize") if isinstance(stored.get("fontSize"), dict) else {}
+    candidate = {
+        "template": stored.get("template"),
+        "pageSize": stored.get("pageSize"),
+        "marginTop": margins.get("top"),
+        "marginBottom": margins.get("bottom"),
+        "marginLeft": margins.get("left"),
+        "marginRight": margins.get("right"),
+        "sectionSpacing": spacing.get("section"),
+        "itemSpacing": spacing.get("item"),
+        "lineHeight": spacing.get("lineHeight"),
+        "fontSize": font.get("base"),
+        "headerScale": font.get("headerScale"),
+        "headerFont": font.get("headerFont"),
+        "bodyFont": font.get("bodyFont"),
+        "compactMode": stored.get("compactMode"),
+        "showContactIcons": stored.get("showContactIcons"),
+        "accentColor": stored.get("accentColor"),
+    }
+    return {k: v for k, v in candidate.items() if v is not None}
+
+
+def _resolve_pdf_settings(
+    stored: Any, overrides: dict[str, Any]
+) -> dict[str, Any]:
+    """Resolve final PDF appearance: query override → stored → default.
+
+    Every value is validated/clamped so a malformed stored blob or override can
+    never produce an invalid render request.
+    """
+    flat = _flatten_stored_template(stored)
+    resolved: dict[str, Any] = {}
+    for key, default in _PDF_DEFAULTS.items():
+        val = overrides.get(key)
+        if val is None:
+            val = flat.get(key, default)
+        if key in _PDF_ENUMS:
+            if val not in _PDF_ENUMS[key]:
+                val = default
+        elif isinstance(default, bool):
+            val = bool(val)
+        elif isinstance(default, int):
+            lo, hi = _PDF_INT_BOUNDS[key]
+            try:
+                val = int(val)
+            except (TypeError, ValueError):
+                val = default
+            val = max(lo, min(hi, val))
+        resolved[key] = val
+    return resolved
+
+
+async def _parse_resume_cached(user_id: str, markdown: str) -> dict[str, Any]:
+    """Parse resume markdown → structured JSON, reusing a cached result.
+
+    Content-addressed via the persistent analysis cache: re-parsing identical
+    resume text (a duplicate upload or a ``retry-processing`` on unchanged
+    content) under an unchanged prompt+model returns the stored structured data
+    instead of spending another LLM call — while a genuinely new resume, or a
+    prompt/model change, still parses fresh. Scoped per user.
+    """
+    try:
+        model_name = get_model_name(get_llm_config())
+    except Exception:  # noqa: BLE001 - only used to key the cache; parse will surface real errors
+        model_name = None
+    checksum = analysis_cache.checksum_text(markdown)
+    version = analysis_cache.version_key(analysis_cache.ARTIFACT_RESUME_PARSE, model_name)
+    result, _from_cache = await analysis_cache.get_or_compute(
+        user_id=user_id,
+        artifact_type=analysis_cache.ARTIFACT_RESUME_PARSE,
+        source_id=checksum,
+        checksum=checksum,
+        version=version,
+        compute=lambda: parse_resume_to_json(markdown),
+    )
+    # --- Feature usage metric (daily aggregate, fire-and-forget) ---
+    try:
+        from datetime import datetime, timezone
+        from app.admin.metric_store import get_metric_store
+        from app.admin.metric_registry import FEAT_PARSER
+        await get_metric_store().add(datetime.now(timezone.utc).strftime("%Y-%m-%d"), FEAT_PARSER, 1)
+    except Exception:
+        pass  # metrics never break user operations
+    return result
 
 
 def _normalize_payload(value: Any) -> Any:
@@ -576,8 +747,16 @@ async def _generate_auxiliary_messages(
     generation_tasks: list[Awaitable[str | InterviewPrepData]] = []
     task_labels: list[str] = []
 
-    # Title generation is always on (no feature flag)
-    generation_tasks.append(generate_resume_title(job_content, language))
+    # Title generation is always on (no feature flag). Pass the candidate's
+    # name so the title reads "<Name> — <Role @ Company>" rather than a bare
+    # (and sometimes sentence-long) job descriptor.
+    personal_info = improved_data.get("personalInfo")
+    candidate_name = (
+        personal_info.get("name") if isinstance(personal_info, dict) else None
+    )
+    generation_tasks.append(
+        generate_resume_title(job_content, language, candidate_name)
+    )
     task_labels.append("title")
 
     if enable_cover_letter:
@@ -622,6 +801,44 @@ async def _generate_auxiliary_messages(
 
 router = APIRouter(prefix="/resumes", tags=["Resumes"])
 
+
+async def _capture_version(
+    user_id: str,
+    resume_id: str,
+    processed_data: Any,
+    source: str,
+    *,
+    label: str | None = None,
+) -> None:
+    """Best-effort version snapshot (P3 §A). Never fails the user's request.
+
+    Version capture is a decoupled side effect: a snapshot write must never
+    break upload/save/tailor. Gated by the ``VERSION_HISTORY`` flag; dedupe +
+    debounce happen inside the service.
+    """
+    if not settings.version_history_enabled or not processed_data:
+        return
+    try:
+        await version_service.capture_snapshot(
+            user_id, resume_id, processed_data, source, label=label
+        )
+    except Exception:  # pragma: no cover - snapshot is best-effort
+        logger.warning("Version snapshot (%s) failed for resume %s", source, resume_id, exc_info=True)
+
+
+async def _emit_event(event_type, payload: dict[str, Any], *, user_id: str | None) -> None:
+    """Best-effort domain-event emission to the outbox. Never fails the request.
+
+    Async consumers (notifier, search indexer) pick these up decoupled from the
+    write path, so a consumer/outbox hiccup never breaks upload/save/tailor.
+    """
+    try:
+        from app.events import emit
+
+        await emit(event_type, payload, user_id=user_id)
+    except Exception:  # pragma: no cover - event emission is best-effort
+        logger.warning("Outbox emit (%s) failed", event_type, exc_info=True)
+
 ALLOWED_TYPES = {
     "application/pdf",
     "application/msword",
@@ -633,6 +850,10 @@ ALLOWED_TYPES = {
 # valid resumes to be refused before parsing, so we also accept known extensions.
 ALLOWED_EXTENSIONS = {".pdf", ".doc", ".docx"}
 MAX_FILE_SIZE = 4 * 1024 * 1024  # 4MB
+# Slack over MAX_FILE_SIZE for multipart framing (boundaries + part headers)
+# when doing the early Content-Length reject, so a valid max-size file isn't
+# refused for its envelope overhead.
+_MULTIPART_OVERHEAD = 64 * 1024  # 64KB
 
 
 def _is_allowed_upload(content_type: str | None, filename: str | None) -> bool:
@@ -649,8 +870,13 @@ def _is_allowed_upload(content_type: str | None, filename: str | None) -> bool:
     return False
 
 
-@router.post("/upload", response_model=ResumeUploadResponse)
+@router.post(
+    "/upload",
+    response_model=ResumeUploadResponse,
+    dependencies=[Depends(llm_rate_limit_dep)],
+)
 async def upload_resume(
+    request: Request,
     file: UploadFile = File(...),
     user_id: str = Depends(get_effective_user_id),
 ) -> ResumeUploadResponse:
@@ -667,8 +893,18 @@ async def upload_resume(
             detail="Invalid file type. Allowed: PDF, DOC, DOCX",
         )
 
-    # Read and validate size
-    content = await file.read()
+    # Fail fast on a declared body larger than the cap (+ multipart overhead
+    # margin) BEFORE reading anything — cheap DoS guard for the honest-large case.
+    declared = request.headers.get("content-length")
+    if declared and declared.isdigit() and int(declared) > MAX_FILE_SIZE + _MULTIPART_OVERHEAD:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large. Maximum size: {MAX_FILE_SIZE // (1024 * 1024)}MB",
+        )
+
+    # Bounded read: never buffer more than the cap (+1 byte to detect overflow),
+    # so a missing/lying Content-Length or a chunked body can't exhaust memory.
+    content = await file.read(MAX_FILE_SIZE + 1)
     if len(content) > MAX_FILE_SIZE:
         raise HTTPException(
             status_code=413,
@@ -710,7 +946,7 @@ async def upload_resume(
 
     # Try to parse to structured JSON (optional, may fail if LLM not configured)
     try:
-        processed_data = await parse_resume_to_json(markdown_content)
+        processed_data = await _parse_resume_cached(user_id, markdown_content)
         await db.update_resume(
             user_id,
             resume["resume_id"],
@@ -721,13 +957,47 @@ async def upload_resume(
         )
         resume["processed_data"] = processed_data
         resume["processing_status"] = "ready"
+        # Capture the initial parse as the retained ``original`` snapshot (R1.1).
+        await _capture_version(user_id, resume["resume_id"], processed_data, "original")
+        from app.events import EventType
+
+        await _emit_event(
+            EventType.RESUME_PARSED,
+            {"resume_id": resume["resume_id"]},
+            user_id=user_id,
+        )
     except Exception as e:
         # LLM parsing failed, update status to failed
         logger.warning(f"Resume parsing to JSON failed for {file.filename}: {e}")
         await db.update_resume(user_id, resume["resume_id"], {"processing_status": "failed"})
         resume["processing_status"] = "failed"
+        from app.events import EventType
+
+        await _emit_event(
+            EventType.RESUME_PARSE_FAILED,
+            {"resume_id": resume["resume_id"]},
+            user_id=user_id,
+        )
 
     # Return accurate status to client (API-001 fix)
+    # --- Feature usage metric (daily aggregate, fire-and-forget) ---
+    try:
+        from datetime import datetime, timezone
+        from app.admin.metric_store import get_metric_store
+        from app.admin.metric_registry import FEAT_IMPORT
+        await get_metric_store().add(datetime.now(timezone.utc).strftime("%Y-%m-%d"), FEAT_IMPORT, 1)
+    except Exception:
+        pass  # metrics never break user operations
+
+    # --- Resume source metric (daily aggregate, fire-and-forget) ---
+    try:
+        from datetime import datetime, timezone
+        from app.admin.metric_store import get_metric_store
+        from app.admin.metric_registry import RESUMES_IMPORTED
+        await get_metric_store().add(datetime.now(timezone.utc).strftime("%Y-%m-%d"), RESUMES_IMPORTED, 1)
+    except Exception:
+        pass  # metrics never break user operations
+
     return ResumeUploadResponse(
         message=(
             f"File {file.filename} uploaded successfully"
@@ -738,6 +1008,163 @@ async def upload_resume(
         resume_id=resume["resume_id"],
         processing_status=resume["processing_status"],
         is_master=resume.get("is_master", False),
+    )
+
+
+def _validate_upload_bytes(request: Request, file: UploadFile, content: bytes) -> None:
+    """Shared upload validation (type/size/empty) → JSON 4xx before any streaming."""
+    if not _is_allowed_upload(file.content_type, file.filename):
+        raise HTTPException(status_code=400, detail="Invalid file type. Allowed: PDF, DOC, DOCX")
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large. Maximum size: {MAX_FILE_SIZE // (1024 * 1024)}MB",
+        )
+    if len(content) == 0:
+        raise HTTPException(status_code=400, detail="Empty file")
+
+
+@router.post("/upload/stream", dependencies=[Depends(llm_rate_limit_dep)])
+async def upload_resume_stream(
+    request: Request,
+    file: UploadFile = File(...),
+    user_id: str = Depends(get_effective_user_id),
+) -> StreamingResponse:
+    """Upload + parse a resume, emitting HONEST per-stage SSE progress.
+
+    Progress events map 1:1 to the REAL pipeline boundaries — never a fabricated
+    bar: ``received`` → ``extracting`` (``parse_document``) → ``structuring``
+    (``parse_resume_to_json``) → ``done`` (carrying the same payload the
+    non-stream ``/upload`` returns). All validation (type/size/empty) happens as
+    a normal JSON 4xx BEFORE the stream opens. Gated by ``streaming_ai_enabled``
+    so the client transparently falls back to ``/upload`` when disabled.
+
+    Events: ``stage`` ({stage, status}), ``done`` ({result}), ``error`` ({code, message}).
+    """
+    if not settings.streaming_ai_enabled:
+        raise ApiError(
+            status_code=409,
+            code="streaming_disabled",
+            message="Streaming is disabled; use the standard upload.",
+        )
+
+    # Read + validate up front so failures are plain JSON, not SSE error events.
+    declared = request.headers.get("content-length")
+    if declared and declared.isdigit() and int(declared) > MAX_FILE_SIZE + _MULTIPART_OVERHEAD:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large. Maximum size: {MAX_FILE_SIZE // (1024 * 1024)}MB",
+        )
+    content = await file.read(MAX_FILE_SIZE + 1)
+    _validate_upload_bytes(request, file, content)
+    filename = file.filename or "resume.pdf"
+
+    async def event_gen():
+        from app.events import EventType
+
+        try:
+            yield _sse("stage", {"stage": "received", "status": "done"})
+
+            # Stage 1: extract text (real boundary).
+            yield _sse("stage", {"stage": "extracting", "status": "active"})
+            try:
+                markdown = await parse_document(content, filename)
+            except Exception as e:  # noqa: BLE001
+                logger.error("Streaming upload: document parse failed: %s", e)
+                yield _sse(
+                    "error",
+                    {
+                        "code": "parse_failed",
+                        "message": "Failed to parse document. Please upload a valid PDF or DOCX.",
+                    },
+                )
+                return
+            if not markdown or not markdown.strip():
+                yield _sse(
+                    "error",
+                    {
+                        "code": "empty_text",
+                        "message": "Could not extract text — the file may be scanned/image-based.",
+                    },
+                )
+                return
+            yield _sse("stage", {"stage": "extracting", "status": "done"})
+
+            resume = await db.create_resume_atomic_master(
+                user_id,
+                content=markdown,
+                content_type="md",
+                filename=file.filename,
+                processed_data=None,
+                processing_status="processing",
+                original_markdown=markdown,
+            )
+
+            # Stage 2: structure with the LLM (real boundary).
+            yield _sse("stage", {"stage": "structuring", "status": "active"})
+            try:
+                processed_data = await _parse_resume_cached(user_id, markdown)
+                await db.update_resume(
+                    user_id,
+                    resume["resume_id"],
+                    {"processed_data": processed_data, "processing_status": "ready"},
+                )
+                resume["processing_status"] = "ready"
+                await _capture_version(user_id, resume["resume_id"], processed_data, "original")
+                await _emit_event(
+                    EventType.RESUME_PARSED, {"resume_id": resume["resume_id"]}, user_id=user_id
+                )
+            except Exception as e:  # noqa: BLE001
+                logger.warning("Streaming upload: JSON parse failed for %s: %s", filename, e)
+                await db.update_resume(
+                    user_id, resume["resume_id"], {"processing_status": "failed"}
+                )
+                resume["processing_status"] = "failed"
+                await _emit_event(
+                    EventType.RESUME_PARSE_FAILED,
+                    {"resume_id": resume["resume_id"]},
+                    user_id=user_id,
+                )
+            yield _sse("stage", {"stage": "structuring", "status": "done"})
+
+            yield _sse(
+                "done",
+                {
+                    "result": {
+                        "resume_id": resume["resume_id"],
+                        "processing_status": resume["processing_status"],
+                        "is_master": resume.get("is_master", False),
+                        "message": (
+                            "Resume uploaded successfully"
+                            if resume["processing_status"] == "ready"
+                            else "Resume uploaded but parsing failed"
+                        ),
+                    }
+                },
+            )
+
+            # --- Feature usage metric (daily aggregate, fire-and-forget) ---
+            try:
+                from datetime import datetime, timezone
+                from app.admin.metric_store import get_metric_store
+                from app.admin.metric_registry import FEAT_IMPORT
+                await get_metric_store().add(datetime.now(timezone.utc).strftime("%Y-%m-%d"), FEAT_IMPORT, 1)
+            except Exception:
+                pass  # metrics never break user operations
+        except asyncio.CancelledError:  # pragma: no cover - client disconnect
+            raise
+        except Exception as e:  # noqa: BLE001 - defensive
+            logger.exception("Streaming upload failed: %s", e)
+            yield _sse("error", {"code": "stream_error", "message": "Upload failed; please retry."})
+
+    return StreamingResponse(
+        event_gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
     )
 
 
@@ -757,6 +1184,43 @@ async def get_resume(
     if not resume:
         raise HTTPException(status_code=404, detail="Resume not found")
 
+    await _reresolve_canonical_photo(resume, user_id)
+    return _build_get_resume_response(resume_id, resume)
+
+
+async def _reresolve_canonical_photo(resume: dict, owner_id: str) -> None:
+    """Re-point a resume's header photo at the *live* profile photo (Photo System).
+
+    Photo provenance rule (single source: ``app.profile.photo.resolve_photo_url``):
+    a resume with ``photo.ref == "canonical"`` tracks the user's current profile
+    photo, so replacing the profile photo is reflected here on next read. A
+    ``snapshot`` resume is pinned and left untouched. Best-effort: any lookup
+    failure leaves the stored ``avatarUrl`` as-is (never breaks a read).
+    """
+    processed = resume.get("processed_data")
+    if not isinstance(processed, dict):
+        return
+    personal = processed.get("personalInfo")
+    if not isinstance(personal, dict):
+        return
+    photo = personal.get("photo")
+    if not isinstance(photo, dict) or not photo.get("show") or photo.get("ref") != "canonical":
+        return
+    try:
+        from app.auth.accounts import get_by_id
+
+        record = await get_by_id(owner_id)
+        personal["avatarUrl"] = record.avatar_url if record else None
+    except Exception:  # pragma: no cover - defensive; render still works with stored url
+        logger.debug("Canonical photo re-resolution failed", exc_info=True)
+
+
+def _build_get_resume_response(resume_id: str, resume: dict) -> ResumeFetchResponse:
+    """Shape a facade resume dict into the standard fetch response.
+
+    Shared by the session-authenticated ``GET /resumes`` and the print-token
+    authenticated ``GET /resumes/print-data`` so both return an identical shape.
+    """
     # Get processing status (default to "pending" for old records)
     processing_status = resume.get("processing_status", "pending")
 
@@ -794,8 +1258,36 @@ async def get_resume(
             ),
             parent_id=resume.get("parent_id"),
             title=resume.get("title"),
+            template_settings=resume.get("template_settings"),
+            version=resume.get("version"),
         ),
     )
+
+
+@router.get("/print-data", response_model=ResumeFetchResponse)
+async def get_resume_print_data(
+    resume_id: str = Query(...),
+    token: str = Query(...),
+) -> ResumeFetchResponse:
+    """Read-only resume fetch for server-side PDF rendering (print-token auth).
+
+    Authenticated by a short-lived signed print token (NOT the user session), so
+    the headless-Chromium render of the ``/print`` route can load the resume in
+    hosted mode. The token is bound to ``(user_id, resume_id)`` and expires in
+    minutes; it only ever exposes the resume it was minted for.
+    """
+    from app.pdf_token import verify_print_token
+
+    owner_id = verify_print_token(token, resume_id)
+    if not owner_id:
+        raise HTTPException(status_code=401, detail="invalid_or_expired_print_token")
+
+    resume = await db.get_resume(owner_id, resume_id)
+    if not resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+
+    await _reresolve_canonical_photo(resume, owner_id)
+    return _build_get_resume_response(resume_id, resume)
 
 
 @router.get("/list", response_model=ResumeListResponse)
@@ -827,7 +1319,11 @@ async def list_resumes(
     return ResumeListResponse(request_id=str(uuid4()), data=summaries)
 
 
-@router.post("/improve/preview", response_model=ImproveResumeResponse)
+@router.post(
+    "/improve/preview",
+    response_model=ImproveResumeResponse,
+    dependencies=[Depends(llm_rate_limit_dep)],
+)
 async def improve_resume_preview_endpoint(
     request: ImproveResumeRequest,
     user_id: str = Depends(require_verified_user_id),
@@ -881,6 +1377,187 @@ async def improve_resume_preview_endpoint(
         _raise_improve_error("preview", stage, e, detail)
 
 
+class _TailorStreamCancelled(Exception):
+    """Raised inside the preview flow when the client cancels a streamed tailor.
+
+    Distinct from :class:`asyncio.CancelledError` so the streaming endpoint can
+    emit a clean ``cancelled`` done-event (and persist nothing) rather than
+    treating it as a hard failure that triggers a client fallback.
+    """
+
+
+@router.post("/improve/preview/stream")
+async def stream_improve_preview_endpoint(
+    request_body: ImproveResumeRequest,
+    request: Request,
+    request_id: str = Query(default="", max_length=100),
+    user_id: str = Depends(require_verified_user_id),
+) -> StreamingResponse:
+    """Stream the tailor pipeline as *stage-progress* SSE (not token streaming).
+
+    The tailor flow is a sequence of discrete stages (extract keywords → plan
+    skills → rewrite → refine → score), so honest progress means emitting a
+    ``stage`` event at each real boundary — never a fabricated progress bar. The
+    final ``done`` event carries the complete ``ImproveResumeResponse`` (same
+    shape the non-stream endpoint returns), so the client renders identical
+    results. On cancellation nothing is persisted beyond the preview-hash the
+    non-stream path also writes; on any error the client falls back to
+    ``POST /resumes/improve/preview`` transparently.
+
+    Events: ``stage`` ({stage, status}), ``heartbeat`` (liveness), ``done``
+    ({result} | {cancelled: true}), ``error`` ({code, message} → fallback).
+
+    NOTE: this route is defined *before* ``/{resume_id}/{kind}/stream`` so its
+    static path wins over the parameterized token-stream route (Starlette
+    matches in registration order).
+    """
+    if len(request_id) < 8:
+        raise HTTPException(status_code=422, detail="request_id must be at least 8 chars")
+
+    # Flag gate (ADR-14): off → client transparently uses the non-stream path.
+    if not settings.streaming_ai_enabled:
+        raise ApiError(
+            status_code=409, code="streaming_disabled",
+            message="Streaming is disabled; use the standard generation.",
+        )
+
+    # Validate ownership + existence BEFORE opening the stream so a 404 is a
+    # normal JSON error (not an SSE error event).
+    resume = await db.get_resume(user_id, request_body.resume_id)
+    if not resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+    job = await db.get_job(user_id, request_body.job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job description not found")
+
+    language = get_content_language()
+    prompt_id = request_body.prompt_id or _get_default_prompt_id()
+
+    # Rate-limit stream starts (ADR-8), shared with token streams.
+    limiter = get_rate_limiter()
+    rl = await limiter.check("stream", user_id, _STREAM_START_RULE, fail_closed=False)
+    if not rl.allowed:
+        raise ApiError(
+            status_code=429, code="rate_limited",
+            message="Too many streams started; please wait a moment.",
+            headers={"Retry-After": str(rl.retry_after)},
+        )
+
+    registry = get_stream_registry()
+    heartbeat_ttl = settings.stream_heartbeat_seconds * 4
+    ok = await registry.try_register(
+        user_id, request_id,
+        max_concurrent=settings.stream_max_concurrent_per_user,
+        heartbeat_ttl=heartbeat_ttl,
+    )
+    metrics = get_resilience_metrics()
+    if not ok:
+        metrics.stream_rejected_cap()
+        raise ApiError(
+            status_code=429, code="stream_limit_reached",
+            message="You have too many active generations; cancel one and retry.",
+            headers={"Retry-After": "5"},
+        )
+
+    heartbeat_seconds = settings.stream_heartbeat_seconds
+
+    async def event_gen():
+        queue: asyncio.Queue[tuple[str, dict[str, Any] | None]] = asyncio.Queue()
+        SENTINEL = "__done__"
+
+        async def emit_stage(stage: str, status: str) -> None:
+            await queue.put(("stage", {"stage": stage, "status": status}))
+
+        async def cancel_check() -> bool:
+            try:
+                if await request.is_disconnected():
+                    return True
+            except Exception:  # pragma: no cover
+                pass
+            return await registry.is_cancelled(user_id, request_id)
+
+        async def run_flow() -> None:
+            try:
+                result = await asyncio.wait_for(
+                    _improve_preview_flow(
+                        user_id=user_id,
+                        request=request_body,
+                        resume=resume,
+                        job=job,
+                        language=language,
+                        prompt_id=prompt_id,
+                        emit_stage=emit_stage,
+                        cancel_check=cancel_check,
+                    ),
+                    timeout=settings.request_timeout_seconds,
+                )
+                await queue.put(("done", {"result": result.model_dump(mode="json")}))
+            except _TailorStreamCancelled:
+                await queue.put(("cancelled", None))
+            except asyncio.TimeoutError:
+                await queue.put((
+                    "error",
+                    {"code": "stream_timeout", "message": "Tailoring took too long and was stopped."},
+                ))
+            except Exception:
+                logger.exception(
+                    "Streaming improve preview failed for resume %s / job %s",
+                    request_body.resume_id, request_body.job_id,
+                )
+                await queue.put((
+                    "error",
+                    {"code": "stream_error", "message": "Tailoring failed; falling back."},
+                ))
+            finally:
+                await queue.put((SENTINEL, None))
+
+        metrics.stream_started()
+        task = asyncio.create_task(run_flow())
+        try:
+            # Kick off with a heartbeat so a cold dyno shows liveness immediately.
+            yield _sse("heartbeat", {"request_id": request_id})
+            while True:
+                try:
+                    kind, payload = await asyncio.wait_for(
+                        queue.get(), timeout=heartbeat_seconds
+                    )
+                except TimeoutError:
+                    yield _sse("heartbeat", {"request_id": request_id})
+                    await registry.heartbeat(
+                        user_id, request_id, heartbeat_ttl=heartbeat_ttl
+                    )
+                    continue
+                if kind == SENTINEL:
+                    break
+                if kind == "stage":
+                    yield _sse("stage", payload or {})
+                elif kind == "done":
+                    yield _sse("done", payload or {})
+                elif kind == "cancelled":
+                    metrics.stream_cancelled()
+                    yield _sse("done", {"cancelled": True})
+                elif kind == "error":
+                    metrics.stream_error()
+                    yield _sse("error", payload or {})
+        except asyncio.CancelledError:  # pragma: no cover - server shutdown
+            raise
+        finally:
+            if not task.done():
+                task.cancel()
+            metrics.stream_ended()
+            await registry.unregister(user_id, request_id)
+
+    return StreamingResponse(
+        event_gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
+
+
 async def _improve_preview_flow(
     *,
     user_id: str,
@@ -889,8 +1566,29 @@ async def _improve_preview_flow(
     job: dict[str, Any],
     language: str,
     prompt_id: str,
+    emit_stage: Callable[[str, str], Awaitable[None]] | None = None,
+    cancel_check: Callable[[], Awaitable[bool]] | None = None,
 ) -> ImproveResumeResponse:
-    """Inner flow for improve/preview, extracted so it can be wrapped in wait_for."""
+    """Inner flow for improve/preview, extracted so it can be wrapped in wait_for.
+
+    When ``emit_stage`` is provided (streaming path), it is awaited at each real
+    pipeline boundary with ``(stage_name, "start"|"done")`` so the client can
+    render honest, non-fabricated progress. ``cancel_check`` is polled at stage
+    starts; returning True raises :class:`_TailorStreamCancelled` to abort the
+    pipeline before the next (possibly expensive) LLM call. Both default to
+    ``None`` so the non-streaming endpoint is byte-for-byte unchanged.
+    """
+
+    async def _emit(stage: str, status: str) -> None:
+        if emit_stage is not None:
+            await emit_stage(stage, status)
+
+    async def _guard() -> None:
+        if cancel_check is not None and await cancel_check():
+            raise _TailorStreamCancelled()
+
+    await _guard()
+    await _emit("keywords", "start")
     job_keywords = job.get("job_keywords")
     job_keywords_hash = job.get("job_keywords_hash")
     content_hash = _hash_job_content(job["content"])
@@ -929,12 +1627,15 @@ async def _improve_preview_flow(
                 request.job_id,
                 e,
             )
+    await _emit("keywords", "done")
     original_resume_data = _get_original_resume_data(resume)
     # Collect warnings throughout the process
     response_warnings: list[str] = []
 
     # Diff-based improvement: generate targeted changes, apply with verification
     if original_resume_data:
+        await _guard()
+        await _emit("plan", "start")
         skill_targets: list[dict[str, Any]] = []
         try:
             raw_skill_plan = await generate_skill_target_plan(
@@ -965,6 +1666,9 @@ async def _improve_preview_flow(
             logger.warning("Skill target planning failed, continuing without it: %s", e)
             response_warnings.append("Skill target planning failed")
 
+        await _emit("plan", "done")
+        await _guard()
+        await _emit("rewrite", "start")
         diff_result = await generate_resume_diffs(
             original_resume=resume["content"],
             job_description=job["content"],
@@ -1000,7 +1704,10 @@ async def _improve_preview_flow(
             len(rejected_changes),
             len(diff_warnings),
         )
+        await _emit("rewrite", "done")
     else:
+        await _guard()
+        await _emit("rewrite", "start")
         # Fallback to full-output mode when no structured data available
         improved_data = await improve_resume(
             original_resume=resume["content"],
@@ -1010,6 +1717,7 @@ async def _improve_preview_flow(
             prompt_id=prompt_id,
             original_resume_data=original_resume_data,
         )
+        await _emit("rewrite", "done")
 
     # Safety nets (defense in depth — should rarely activate with diff-based flow)
     improved_data, preserve_warnings = _preserve_personal_info(
@@ -1026,6 +1734,8 @@ async def _improve_preview_flow(
     improved_data = _protect_custom_sections(original_resume_data, improved_data)
 
     # Multi-pass refinement: keyword injection, AI phrase removal, alignment validation
+    await _guard()
+    await _emit("refine", "start")
     refinement_stats: RefinementStats | None = None
     refinement_result = None
     refinement_attempted = False
@@ -1082,6 +1792,8 @@ async def _improve_preview_flow(
         if refinement_attempted:
             response_warnings.append(f"Refinement failed: {str(e)}")
 
+    await _emit("refine", "done")
+    await _emit("score", "start")
     improved_text = json.dumps(improved_data, indent=2)
     preview_hash = _hash_improved_data(improved_data)
     preview_hashes = job.get("preview_hashes")
@@ -1114,6 +1826,7 @@ async def _improve_preview_flow(
     if diff_error:
         response_warnings.append(f"Could not calculate changes: {diff_error}")
     improvements = generate_improvements(job_keywords)
+    await _emit("score", "done")
 
     request_id = str(uuid4())
     return ImproveResumeResponse(
@@ -1151,7 +1864,11 @@ async def _improve_preview_flow(
     )
 
 
-@router.post("/improve/confirm", response_model=ImproveResumeResponse)
+@router.post(
+    "/improve/confirm",
+    response_model=ImproveResumeResponse,
+    dependencies=[Depends(llm_rate_limit_dep)],
+)
 async def improve_resume_confirm_endpoint(
     request: ImproveResumeConfirmRequest,
     user_id: str = Depends(require_verified_user_id),
@@ -1257,6 +1974,10 @@ async def improve_resume_confirm_endpoint(
             outreach_message=outreach_message,
             interview_prep=_serialize_interview_prep(interview_prep),
             title=title,
+            # Preserve the source resume's appearance on the tailored copy so a
+            # tailored resume opens in the same template (Phase 5). The user can
+            # still switch it in the editor afterwards.
+            template_settings=resume.get("template_settings"),
         )
 
         improvements_payload = [imp.model_dump() for imp in request.improvements]
@@ -1270,6 +1991,19 @@ async def improve_resume_confirm_endpoint(
             improvements=improvements_payload,
         )
 
+        # Capture the accepted AI generation as an ``ai`` snapshot (R1.1) and
+        # emit the done event (→ notification, decoupled from this request).
+        await _capture_version(
+            user_id, tailored_resume["resume_id"], improved_data, "ai"
+        )
+        from app.events import EventType
+
+        await _emit_event(
+            EventType.AI_GENERATION_DONE,
+            {"resume_id": tailored_resume["resume_id"]},
+            user_id=user_id,
+        )
+
         await _auto_create_tracker_application(
             user_id=user_id,
             job_id=request.job_id,
@@ -1278,6 +2012,24 @@ async def improve_resume_confirm_endpoint(
             job=job,
             title=title,
         )
+
+        # --- Feature usage metric (daily aggregate, fire-and-forget) ---
+        try:
+            from datetime import datetime, timezone
+            from app.admin.metric_store import get_metric_store
+            from app.admin.metric_registry import FEAT_TAILOR
+            await get_metric_store().add(datetime.now(timezone.utc).strftime("%Y-%m-%d"), FEAT_TAILOR, 1)
+        except Exception:
+            pass  # metrics never break user operations
+
+        # --- Resume source metric (daily aggregate, fire-and-forget) ---
+        try:
+            from datetime import datetime, timezone
+            from app.admin.metric_store import get_metric_store
+            from app.admin.metric_registry import RESUMES_TAILORED
+            await get_metric_store().add(datetime.now(timezone.utc).strftime("%Y-%m-%d"), RESUMES_TAILORED, 1)
+        except Exception:
+            pass  # metrics never break user operations
 
         return ImproveResumeResponse(
             request_id=request_id,
@@ -1303,7 +2055,11 @@ async def improve_resume_confirm_endpoint(
         _raise_improve_error("confirm", stage, e, detail)
 
 
-@router.post("/improve", response_model=ImproveResumeResponse)
+@router.post(
+    "/improve",
+    response_model=ImproveResumeResponse,
+    dependencies=[Depends(llm_rate_limit_dep)],
+)
 async def improve_resume_endpoint(
     request: ImproveResumeRequest,
     user_id: str = Depends(require_verified_user_id),
@@ -1517,6 +2273,19 @@ async def improve_resume_endpoint(
             improvements=improvements,
         )
 
+        # Capture the accepted AI generation as an ``ai`` snapshot (R1.1) and
+        # emit the done event (→ notification, decoupled from this request).
+        await _capture_version(
+            user_id, tailored_resume["resume_id"], improved_data, "ai"
+        )
+        from app.events import EventType
+
+        await _emit_event(
+            EventType.AI_GENERATION_DONE,
+            {"resume_id": tailored_resume["resume_id"]},
+            user_id=user_id,
+        )
+
         await _auto_create_tracker_application(
             user_id=user_id,
             job_id=request.job_id,
@@ -1525,6 +2294,24 @@ async def improve_resume_endpoint(
             job=job,
             title=title,
         )
+
+        # --- Feature usage metric (daily aggregate, fire-and-forget) ---
+        try:
+            from datetime import datetime, timezone
+            from app.admin.metric_store import get_metric_store
+            from app.admin.metric_registry import FEAT_TAILOR
+            await get_metric_store().add(datetime.now(timezone.utc).strftime("%Y-%m-%d"), FEAT_TAILOR, 1)
+        except Exception:
+            pass  # metrics never break user operations
+
+        # --- Resume source metric (daily aggregate, fire-and-forget) ---
+        try:
+            from datetime import datetime, timezone
+            from app.admin.metric_store import get_metric_store
+            from app.admin.metric_registry import RESUMES_TAILORED
+            await get_metric_store().add(datetime.now(timezone.utc).strftime("%Y-%m-%d"), RESUMES_TAILORED, 1)
+        except Exception:
+            pass  # metrics never break user operations
 
         return ImproveResumeResponse(
             request_id=request_id,
@@ -1569,34 +2356,27 @@ async def improve_resume_endpoint(
         )
 
 
-@router.patch("/{resume_id}", response_model=ResumeFetchResponse)
-async def update_resume_endpoint(
-    resume_id: str,
-    resume_data: ResumeData,
-    user_id: str = Depends(get_effective_user_id),
-) -> ResumeFetchResponse:
-    """Update a resume with new structured data."""
-    existing = await db.get_resume(user_id, resume_id)
-    if not existing:
-        raise HTTPException(status_code=404, detail="Resume not found")
+def _parse_if_match(if_match: str | None) -> int | None:
+    """Parse an ``If-Match`` header value into a base version, or ``None``.
 
-    updated_data = resume_data.model_dump()
-    updated_content = json.dumps(updated_data, indent=2)
+    Accepts a bare integer (``42``) or a quoted ETag-style value (``"42"``) so
+    the client may use standard ETag semantics. Non-integer / malformed values
+    are treated as absent (a normal, non-CAS write) rather than erroring, so a
+    stray header never blocks a save.
+    """
+    if if_match is None:
+        return None
+    value = if_match.strip().strip('"').strip()
+    if not value:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
-    updated = await db.update_resume(
-        user_id,
-        resume_id,
-        {
-            "content": updated_content,
-            "content_type": "json",
-            "processed_data": updated_data,
-            "processing_status": "ready",
-        },
-    )
 
-    if not updated:
-        raise HTTPException(status_code=500, detail="Failed to update resume")
-
+def _resume_fetch_response(resume_id: str, updated: dict[str, Any]) -> ResumeFetchResponse:
+    """Build the standard resume-fetch response from a facade resume dict."""
     raw_resume = RawResume(
         id=None,
         content=updated["content"],
@@ -1604,13 +2384,11 @@ async def update_resume_endpoint(
         created_at=updated["created_at"],
         processing_status=updated.get("processing_status", "pending"),
     )
-
     processed_resume = (
         ResumeData.model_validate(updated.get("processed_data"))
         if updated.get("processed_data")
         else None
     )
-
     return ResumeFetchResponse(
         request_id=str(uuid4()),
         data=ResumeFetchData(
@@ -1625,82 +2403,200 @@ async def update_resume_endpoint(
             ),
             parent_id=updated.get("parent_id"),
             title=updated.get("title"),
+            version=updated.get("version"),
         ),
     )
+
+
+@router.patch("/{resume_id}", response_model=ResumeFetchResponse)
+async def update_resume_endpoint(
+    resume_id: str,
+    resume_data: ResumeData,
+    user_id: str = Depends(get_effective_user_id),
+    if_match: str | None = Header(default=None, alias="If-Match"),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+) -> ResumeFetchResponse:
+    """Update a resume with new structured data (P4 version CAS — R3.1/3.4).
+
+    Optimistic concurrency: when an ``If-Match: <version>`` header is present the
+    write is applied atomically **only if** the stored ``version`` still equals
+    that base (Property 1). A stale base returns **409** with the ADR-7 envelope
+    carrying ``{your_base_version, current_version, current_data}`` so the client
+    can drive the explicit conflict flow (keep-mine / take-latest / field-merge);
+    the server never silently overwrites a newer version (R3.3).
+
+    Idempotent retries: an ``Idempotency-Key`` header lets a retried autosave (the
+    client couldn't tell whether the first attempt landed) dedupe server-side —
+    an identical replayed request returns the cached result rather than applying
+    the write twice (R4.2, Property 4). When neither header is present the write
+    is a normal (non-CAS) update — preserving the pre-P4 client contract — but it
+    still bumps ``version`` so other tabs observe a fresh token.
+    """
+    updated_data = resume_data.model_dump()
+    updated_content = json.dumps(updated_data, indent=2)
+    base_version = _parse_if_match(if_match)
+
+    # Fingerprint pins an idempotency key to *this* operation so a key reused for
+    # different content is treated as a new write, not a false replay hit.
+    idem = get_idempotency_cache()
+    fingerprint = hashlib.sha256(
+        f"{resume_id}:{base_version}:{updated_content}".encode("utf-8")
+    ).hexdigest()
+    if idempotency_key:
+        cached = await idem.get(user_id, idempotency_key)
+        if cached is not None and cached.fingerprint == fingerprint:
+            # Replay of an already-applied save — return the stored result
+            # without touching the database (dedupe).
+            return ResumeFetchResponse.model_validate(cached.result)
+
+    updates = {
+        "content": updated_content,
+        "content_type": "json",
+        "processed_data": updated_data,
+        "processing_status": "ready",
+    }
+
+    if base_version is not None:
+        status, resume = await db.update_resume_cas(
+            user_id, resume_id, updates, base_version=base_version
+        )
+        if status == "not_found":
+            raise HTTPException(status_code=404, detail="Resume not found")
+        if status == "conflict":
+            assert resume is not None
+            raise ApiError(
+                status_code=409,
+                code="version_conflict",
+                message="This resume was changed elsewhere; resolve the conflict to continue.",
+                details={
+                    "your_base_version": base_version,
+                    "current_version": resume.get("version"),
+                    "current_data": resume.get("processed_data"),
+                },
+                headers={"ETag": str(resume.get("version"))},
+            )
+        updated = resume
+    else:
+        existing = await db.get_resume(user_id, resume_id)
+        if not existing:
+            raise HTTPException(status_code=404, detail="Resume not found")
+        updated = await db.update_resume(user_id, resume_id, updates)
+
+    if not updated:
+        raise HTTPException(status_code=500, detail="Failed to update resume")
+
+    # Capture a debounced/deduped ``manual`` snapshot of the saved state (R1.1/1.2).
+    await _capture_version(user_id, resume_id, updated_data, "manual")
+
+    response = _resume_fetch_response(resume_id, updated)
+
+    if idempotency_key:
+        await idem.store(
+            user_id,
+            idempotency_key,
+            fingerprint=fingerprint,
+            result=response.model_dump(mode="json"),
+        )
+
+    return response
 
 
 @router.get("/{resume_id}/pdf")
 async def download_resume_pdf(
     resume_id: str,
-    template: str = Query("swiss-single"),
-    pageSize: str = Query("A4", pattern="^(A4|LETTER)$"),
-    marginTop: int = Query(10, ge=5, le=25),
-    marginBottom: int = Query(10, ge=5, le=25),
-    marginLeft: int = Query(10, ge=5, le=25),
-    marginRight: int = Query(10, ge=5, le=25),
-    sectionSpacing: int = Query(3, ge=1, le=5),
-    itemSpacing: int = Query(2, ge=1, le=5),
-    lineHeight: int = Query(3, ge=1, le=5),
-    fontSize: int = Query(3, ge=1, le=5),
-    headerScale: int = Query(3, ge=1, le=5),
-    headerFont: str = Query("serif", pattern="^(serif|sans-serif|mono)$"),
-    bodyFont: str = Query("sans-serif", pattern="^(serif|sans-serif|mono)$"),
-    compactMode: bool = Query(False),
-    showContactIcons: bool = Query(False),
-    accentColor: str = Query("blue", pattern="^(blue|green|orange|red)$"),
+    template: str | None = Query(None),
+    pageSize: str | None = Query(None, pattern="^(A4|LETTER)$"),
+    marginTop: int | None = Query(None, ge=5, le=25),
+    marginBottom: int | None = Query(None, ge=5, le=25),
+    marginLeft: int | None = Query(None, ge=5, le=25),
+    marginRight: int | None = Query(None, ge=5, le=25),
+    sectionSpacing: int | None = Query(None, ge=1, le=5),
+    itemSpacing: int | None = Query(None, ge=1, le=5),
+    lineHeight: int | None = Query(None, ge=1, le=5),
+    fontSize: int | None = Query(None, ge=1, le=5),
+    headerScale: int | None = Query(None, ge=1, le=5),
+    headerFont: str | None = Query(None, pattern="^(serif|sans-serif|mono)$"),
+    bodyFont: str | None = Query(None, pattern="^(serif|sans-serif|mono)$"),
+    compactMode: bool | None = Query(None),
+    showContactIcons: bool | None = Query(None),
+    accentColor: str | None = Query(None, pattern="^(blue|green|orange|red)$"),
     lang: str | None = Query(None, pattern="^[a-z]{2}(-[A-Z]{2})?$"),
     user_id: str = Depends(get_effective_user_id),
 ) -> Response:
     """Generate a PDF for a resume using headless Chromium.
 
-    Accepts template settings for customization:
-    - template: swiss-single, swiss-two-column, modern, modern-two-column, latex, clean, or vivid
-    - pageSize: A4 or LETTER
-    - marginTop/Bottom/Left/Right: page margins in mm (5-25)
-    - sectionSpacing: gap between sections (1-5)
-    - itemSpacing: gap between items (1-5)
-    - lineHeight: text line height (1-5)
-    - fontSize: base font size (1-5)
-    - headerScale: header size scale (1-5)
-    - headerFont: serif, sans-serif, or mono
-    - bodyFont: serif, sans-serif, or mono
-    - compactMode: enable tighter spacing
-    - showContactIcons: show icons in contact info
-    - lang: locale used for print page translations
+    Appearance resolution (WYSIWYG guarantee): each setting is taken from the
+    query param when supplied, else from the resume's PERSISTED
+    ``template_settings``, else the documented default. So a bare
+    ``GET /resumes/{id}/pdf`` renders in the resume's own stored template — the
+    export matches the editor preview even for non-editor callers — while the
+    editor can still override any setting via query params.
+
+    Settings: template (swiss-single|swiss-two-column|modern|modern-two-column|
+    latex|clean|vivid), pageSize (A4|LETTER), margin{Top,Bottom,Left,Right} mm
+    (5-25), sectionSpacing/itemSpacing/lineHeight/fontSize/headerScale (1-5),
+    headerFont/bodyFont (serif|sans-serif|mono), compactMode, showContactIcons,
+    accentColor (blue|green|orange|red), lang (print-page locale).
     """
     resume = await db.get_resume(user_id, resume_id)
     if not resume:
         raise HTTPException(status_code=404, detail="Resume not found")
 
-    # Build print URL with all settings
+    overrides = {
+        "template": template,
+        "pageSize": pageSize,
+        "marginTop": marginTop,
+        "marginBottom": marginBottom,
+        "marginLeft": marginLeft,
+        "marginRight": marginRight,
+        "sectionSpacing": sectionSpacing,
+        "itemSpacing": itemSpacing,
+        "lineHeight": lineHeight,
+        "fontSize": fontSize,
+        "headerScale": headerScale,
+        "headerFont": headerFont,
+        "bodyFont": bodyFont,
+        "compactMode": compactMode,
+        "showContactIcons": showContactIcons,
+        "accentColor": accentColor,
+    }
+    s = _resolve_pdf_settings(resume.get("template_settings"), overrides)
+
+    # Build print URL from the RESOLVED settings so the headless render uses the
+    # stored template even when the caller passed no params.
     params = (
-        f"template={template}"
-        f"&pageSize={pageSize}"
-        f"&marginTop={marginTop}"
-        f"&marginBottom={marginBottom}"
-        f"&marginLeft={marginLeft}"
-        f"&marginRight={marginRight}"
-        f"&sectionSpacing={sectionSpacing}"
-        f"&itemSpacing={itemSpacing}"
-        f"&lineHeight={lineHeight}"
-        f"&fontSize={fontSize}"
-        f"&headerScale={headerScale}"
-        f"&headerFont={headerFont}"
-        f"&bodyFont={bodyFont}"
-        f"&compactMode={str(compactMode).lower()}"
-        f"&showContactIcons={str(showContactIcons).lower()}"
-        f"&accentColor={accentColor}"
+        f"template={s['template']}"
+        f"&pageSize={s['pageSize']}"
+        f"&marginTop={s['marginTop']}"
+        f"&marginBottom={s['marginBottom']}"
+        f"&marginLeft={s['marginLeft']}"
+        f"&marginRight={s['marginRight']}"
+        f"&sectionSpacing={s['sectionSpacing']}"
+        f"&itemSpacing={s['itemSpacing']}"
+        f"&lineHeight={s['lineHeight']}"
+        f"&fontSize={s['fontSize']}"
+        f"&headerScale={s['headerScale']}"
+        f"&headerFont={s['headerFont']}"
+        f"&bodyFont={s['bodyFont']}"
+        f"&compactMode={str(s['compactMode']).lower()}"
+        f"&showContactIcons={str(s['showContactIcons']).lower()}"
+        f"&accentColor={s['accentColor']}"
     )
     if lang:
         params = f"{params}&lang={lang}"
+    # Mint a short-lived signed print token so the headless render can load the
+    # resume in hosted mode (the browser has no user session cookie).
+    from app.pdf_token import make_print_token
+    print_token = make_print_token(user_id, resume_id)
+    params = f"{params}&print_token={quote(print_token, safe='')}"
     url = f"{settings.frontend_base_url}/print/resumes/{resume_id}?{params}"
 
-    # Use the exact margins provided; compact mode only affects spacing.
+    # Use the resolved margins; compact mode only affects spacing.
     pdf_margins = {
-        "top": marginTop,
-        "right": marginRight,
-        "bottom": marginBottom,
-        "left": marginLeft,
+        "top": s["marginTop"],
+        "right": s["marginRight"],
+        "bottom": s["marginBottom"],
+        "left": s["marginLeft"],
     }
 
     # Render PDF with margins applied to every page
@@ -1722,10 +2618,23 @@ async def delete_resume(
     if not await db.delete_resume(user_id, resume_id):
         raise HTTPException(status_code=404, detail="Resume not found")
 
+    # --- Resume source metric (daily aggregate, fire-and-forget) ---
+    try:
+        from datetime import datetime, timezone
+        from app.admin.metric_store import get_metric_store
+        from app.admin.metric_registry import RESUMES_DELETED
+        await get_metric_store().add(datetime.now(timezone.utc).strftime("%Y-%m-%d"), RESUMES_DELETED, 1)
+    except Exception:
+        pass  # metrics never break user operations
+
     return {"message": "Resume deleted successfully"}
 
 
-@router.post("/{resume_id}/retry-processing", response_model=ResumeUploadResponse)
+@router.post(
+    "/{resume_id}/retry-processing",
+    response_model=ResumeUploadResponse,
+    dependencies=[Depends(llm_rate_limit_dep)],
+)
 async def retry_processing(
     resume_id: str,
     user_id: str = Depends(get_effective_user_id),
@@ -1753,7 +2662,7 @@ async def retry_processing(
         )
 
     try:
-        processed_data = await parse_resume_to_json(markdown_content)
+        processed_data = await _parse_resume_cached(user_id, markdown_content)
         await db.update_resume(
             user_id,
             resume_id,
@@ -1827,11 +2736,105 @@ async def update_title(
     return {"message": "Title updated successfully"}
 
 
+@router.patch("/{resume_id}/template-settings")
+async def update_template_settings(
+    resume_id: str,
+    request: UpdateTemplateSettingsRequest,
+    user_id: str = Depends(get_effective_user_id),
+) -> dict:
+    """Persist a resume's appearance (chosen template + customization).
+
+    This is a rendering artifact, not resume content, so it does NOT bump the
+    optimistic-concurrency ``version`` (see ``db.update_resume``) — persisting a
+    template change never conflicts with an in-flight content edit.
+    """
+    resume = await db.get_resume(user_id, resume_id)
+    if not resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+    await db.update_resume(user_id, resume_id, {"template_settings": request.settings})
+    return {"message": "Template settings updated successfully"}
+
+
+@router.post("/from-data", response_model=ResumeUploadResponse)
+async def create_resume_from_data(
+    request: CreateResumeFromDataRequest,
+    user_id: str = Depends(require_verified_user_id),
+) -> ResumeUploadResponse:
+    """Create a new resume from structured data (Sample Library "Use", duplicate).
+
+    Persists ready ``ResumeData`` (validated/normalized) as a brand-new resume
+    with the given title + appearance. Never mutates an existing resume. Honors
+    the single-master invariant via the atomic master path when ``as_master``.
+    """
+    normalized = normalize_resume_data(request.processed_data.model_dump())
+    content = json.dumps(normalized, indent=2)
+    title = (request.title or "").strip()[:80] or None
+
+    if request.as_master:
+        created = await db.create_resume_atomic_master(
+            user_id,
+            content=content,
+            content_type="json",
+            processed_data=normalized,
+            processing_status="ready",
+            title=title,
+            template_settings=request.template_settings,
+        )
+    else:
+        created = await db.create_resume(
+            user_id,
+            content=content,
+            content_type="json",
+            processed_data=normalized,
+            processing_status="ready",
+            title=title,
+            template_settings=request.template_settings,
+        )
+
+    # Capture the initial state as the retained ``original`` snapshot (R1.1) and
+    # emit the parsed event (decoupled → search index / notifications).
+    await _capture_version(user_id, created["resume_id"], normalized, "original")
+    from app.events import EventType
+
+    await _emit_event(
+        EventType.RESUME_UPSERTED, {"resume_id": created["resume_id"]}, user_id=user_id
+    )
+
+    # --- Feature usage metric (daily aggregate, fire-and-forget) ---
+    try:
+        from datetime import datetime, timezone
+        from app.admin.metric_store import get_metric_store
+        from app.admin.metric_registry import FEAT_BUILDER
+        await get_metric_store().add(datetime.now(timezone.utc).strftime("%Y-%m-%d"), FEAT_BUILDER, 1)
+    except Exception:
+        pass  # metrics never break user operations
+
+    # --- Resume source metric (daily aggregate, fire-and-forget) ---
+    try:
+        from datetime import datetime, timezone
+        from app.admin.metric_store import get_metric_store
+        from app.admin.metric_registry import RESUMES_GENERATED
+        await get_metric_store().add(datetime.now(timezone.utc).strftime("%Y-%m-%d"), RESUMES_GENERATED, 1)
+    except Exception:
+        pass  # metrics never break user operations
+
+    return ResumeUploadResponse(
+        message="Resume created",
+        request_id=str(uuid4()),
+        resume_id=created["resume_id"],
+        processing_status="ready",
+        is_master=created.get("is_master", False),
+    )
+
+
 @router.post(
-    "/{resume_id}/generate-cover-letter", response_model=GenerateContentResponse
+    "/{resume_id}/generate-cover-letter",
+    response_model=GenerateContentResponse,
+    dependencies=[Depends(llm_rate_limit_dep)],
 )
 async def generate_cover_letter_endpoint(
     resume_id: str,
+    regenerate: bool = False,
     user_id: str = Depends(require_verified_user_id),
 ) -> GenerateContentResponse:
     """Generate a cover letter on-demand for an existing tailored resume.
@@ -1840,11 +2843,23 @@ async def generate_cover_letter_endpoint(
     tailored, without needing to re-tailor the entire resume. It requires:
     - The resume must be a tailored resume (has parent_id)
     - The resume must have an associated job context in the improvements table
+
+    Persistent reuse: a previously generated cover letter is returned as-is
+    unless ``regenerate=true``, so opening the resume again (or after a refresh)
+    never spends another LLM call reproducing content we already stored.
     """
     # Get the resume
     resume = await db.get_resume(user_id, resume_id)
     if not resume:
         raise HTTPException(status_code=404, detail="Resume not found")
+
+    # Reuse the stored copy unless the user explicitly asks to regenerate.
+    existing = resume.get("cover_letter")
+    if existing and not regenerate:
+        return GenerateContentResponse(
+            content=existing,
+            message="Loaded your saved cover letter",
+        )
 
     # Check if it's a tailored resume (has parent_id)
     if not resume.get("parent_id"):
@@ -1897,15 +2912,29 @@ async def generate_cover_letter_endpoint(
     # Save to resume record
     await db.update_resume(user_id, resume_id, {"cover_letter": cover_letter_content})
 
+    # --- Feature usage metric (daily aggregate, fire-and-forget) ---
+    try:
+        from datetime import datetime, timezone
+        from app.admin.metric_store import get_metric_store
+        from app.admin.metric_registry import FEAT_COVER_LETTER
+        await get_metric_store().add(datetime.now(timezone.utc).strftime("%Y-%m-%d"), FEAT_COVER_LETTER, 1)
+    except Exception:
+        pass  # metrics never break user operations
+
     return GenerateContentResponse(
         content=cover_letter_content,
         message="Cover letter generated successfully",
     )
 
 
-@router.post("/{resume_id}/generate-outreach", response_model=GenerateContentResponse)
+@router.post(
+    "/{resume_id}/generate-outreach",
+    response_model=GenerateContentResponse,
+    dependencies=[Depends(llm_rate_limit_dep)],
+)
 async def generate_outreach_endpoint(
     resume_id: str,
+    regenerate: bool = False,
     user_id: str = Depends(require_verified_user_id),
 ) -> GenerateContentResponse:
     """Generate an outreach message on-demand for an existing tailored resume.
@@ -1914,11 +2943,22 @@ async def generate_outreach_endpoint(
     has been tailored. It requires:
     - The resume must be a tailored resume (has parent_id)
     - The resume must have an associated job context in the improvements table
+
+    Persistent reuse: a previously generated outreach message is returned as-is
+    unless ``regenerate=true`` (no wasted LLM call on reopen/refresh).
     """
     # Get the resume
     resume = await db.get_resume(user_id, resume_id)
     if not resume:
         raise HTTPException(status_code=404, detail="Resume not found")
+
+    # Reuse the stored copy unless the user explicitly asks to regenerate.
+    existing = resume.get("outreach_message")
+    if existing and not regenerate:
+        return GenerateContentResponse(
+            content=existing,
+            message="Loaded your saved outreach message",
+        )
 
     # Check if it's a tailored resume (has parent_id)
     if not resume.get("parent_id"):
@@ -1980,15 +3020,29 @@ async def generate_outreach_endpoint(
 @router.post(
     "/{resume_id}/generate-interview-prep",
     response_model=GenerateInterviewPrepResponse,
+    dependencies=[Depends(llm_rate_limit_dep)],
 )
 async def generate_interview_prep_endpoint(
     resume_id: str,
+    regenerate: bool = False,
     user_id: str = Depends(require_verified_user_id),
 ) -> GenerateInterviewPrepResponse:
-    """Generate interview preparation on-demand for an existing tailored resume."""
+    """Generate interview preparation on-demand for an existing tailored resume.
+
+    Persistent reuse: previously generated interview prep is returned as-is
+    unless ``regenerate=true`` (no wasted LLM call on reopen/refresh).
+    """
     resume = await db.get_resume(user_id, resume_id)
     if not resume:
         raise HTTPException(status_code=404, detail="Resume not found")
+
+    # Reuse the stored copy unless the user explicitly asks to regenerate.
+    existing_prep = _parse_interview_prep(resume.get("interview_prep"), resume_id=resume_id)
+    if existing_prep is not None and not regenerate:
+        return GenerateInterviewPrepResponse(
+            interview_prep=existing_prep,
+            message="Loaded your saved interview preparation",
+        )
 
     if not resume.get("parent_id"):
         raise HTTPException(
@@ -2044,6 +3098,240 @@ async def generate_interview_prep_endpoint(
         interview_prep=interview_prep,
         message="Interview preparation generated successfully",
     )
+
+
+# ---------------------------------------------------------------------------
+# Streaming AI (P4 Resilience — R1). SSE relay of LiteLLM chunks with a
+# cross-worker task registry (cap + cancel + reap) and transparent fallback.
+# ---------------------------------------------------------------------------
+
+# Rate rule for stream *starts* (ADR-8) — blunts cancel-abuse / task exhaustion
+# on top of the per-user concurrent-stream cap.
+_STREAM_START_RULE = RateLimitRule(limit=20, window_seconds=60)
+
+# Supported streaming generation kinds → (prompt builder, system prompt).
+_STREAM_KINDS = {
+    "cover-letter": (build_cover_letter_prompt, COVER_LETTER_SYSTEM_PROMPT, 2048),
+    "outreach": (build_outreach_prompt, OUTREACH_SYSTEM_PROMPT, 1024),
+}
+
+
+async def _load_ai_generation_context(
+    user_id: str, resume_id: str
+) -> tuple[dict[str, Any], str, str]:
+    """Load (resume_data, job_content, language) for an AI generation.
+
+    Shared by the streaming and non-streaming generation paths so the ownership,
+    tailored-resume, and job-context checks never drift. Raises ``HTTPException``
+    with the same status/detail the non-stream endpoints use.
+    """
+    resume = await db.get_resume(user_id, resume_id)
+    if not resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+    if not resume.get("parent_id"):
+        raise HTTPException(
+            status_code=400,
+            detail="This can only be generated for tailored resumes. "
+            "Please tailor this resume to a job description first.",
+        )
+    improvement = await db.get_improvement_by_tailored_resume(user_id, resume_id)
+    if not improvement:
+        raise HTTPException(
+            status_code=400,
+            detail="No job context found for this resume.",
+        )
+    job = await db.get_job(user_id, improvement["job_id"])
+    if not job:
+        raise HTTPException(
+            status_code=404, detail="The associated job description was not found."
+        )
+    resume_data = resume.get("processed_data")
+    if not resume_data:
+        raise HTTPException(
+            status_code=400,
+            detail="Resume has no processed data. Please re-upload the resume.",
+        )
+    return resume_data, job["content"], get_content_language()
+
+
+def _sse(event: str, data: dict[str, Any]) -> str:
+    """Frame a Server-Sent Event: ``event: <name>\\ndata: <json>\\n\\n``."""
+    return f"event: {event}\ndata: {json.dumps(data)}\n\n"
+
+
+@router.post("/{resume_id}/{kind}/stream")
+async def stream_generation_endpoint(
+    resume_id: str,
+    kind: str,
+    request: Request,
+    request_id: str = Query(default="", max_length=100),
+    user_id: str = Depends(require_verified_user_id),
+) -> StreamingResponse:
+    """Stream an AI generation (cover letter / outreach) as SSE (R1.1–R1.6).
+
+    Events: ``token`` (delta), ``heartbeat`` (liveness/keep-warm), ``done`` (final
+    text + token usage for cost accounting), ``error`` (terminal → client falls
+    back to the non-stream path). Cancellation (client close, explicit
+    ``/cancel``, or lifetime/heartbeat reaping) aborts the provider call and
+    persists nothing — streamed text is a preview until explicit accept (R1.4).
+    """
+    if kind not in _STREAM_KINDS:
+        raise HTTPException(status_code=404, detail="Unknown streaming kind")
+    if len(request_id) < 8:
+        raise HTTPException(status_code=422, detail="request_id must be at least 8 chars")
+
+    # Flag gate (R6.4 / ADR-14): off → the client transparently uses the
+    # non-stream path. Signalled as a typed 409 so `useStream` falls back.
+    if not settings.streaming_ai_enabled:
+        raise ApiError(
+            status_code=409, code="streaming_disabled",
+            message="Streaming is disabled; use the standard generation.",
+        )
+
+    # Capability probe (R1.3): a provider that can't stream → fall back.
+    if not provider_supports_streaming():
+        raise ApiError(
+            status_code=409, code="streaming_unsupported",
+            message="The active provider does not support streaming.",
+        )
+
+    # Rate-limit stream starts (ADR-8).
+    limiter = get_rate_limiter()
+    rl = await limiter.check("stream", user_id, _STREAM_START_RULE, fail_closed=False)
+    if not rl.allowed:
+        raise ApiError(
+            status_code=429, code="rate_limited",
+            message="Too many streams started; please wait a moment.",
+            headers={"Retry-After": str(rl.retry_after)},
+        )
+
+    # Load + validate the generation context BEFORE opening the stream so a
+    # 400/404 is a normal JSON error (not an SSE error event).
+    resume_data, job_content, language = await _load_ai_generation_context(
+        user_id, resume_id
+    )
+    builder, system_prompt, max_tokens = _STREAM_KINDS[kind]
+    prompt = builder(resume_data, job_content, language)
+
+    # Enforce the per-user concurrent-stream cap (R1.5) across workers.
+    registry = get_stream_registry()
+    heartbeat_ttl = settings.stream_heartbeat_seconds * 4
+    ok = await registry.try_register(
+        user_id, request_id,
+        max_concurrent=settings.stream_max_concurrent_per_user,
+        heartbeat_ttl=heartbeat_ttl,
+    )
+    metrics = get_resilience_metrics()
+    if not ok:
+        metrics.stream_rejected_cap()
+        raise ApiError(
+            status_code=429, code="stream_limit_reached",
+            message="You have too many active generations; cancel one and retry.",
+            headers={"Retry-After": "5"},
+        )
+
+    max_lifetime = settings.stream_max_lifetime_seconds
+    heartbeat_seconds = settings.stream_heartbeat_seconds
+
+    async def event_gen():
+        metrics.stream_started()
+        start = time.monotonic()
+        first = False
+        last_hb = start
+        result = StreamResult()
+
+        async def cancel_check() -> bool:
+            try:
+                if await request.is_disconnected():
+                    return True
+            except Exception:  # pragma: no cover
+                pass
+            return await registry.is_cancelled(user_id, request_id)
+
+        try:
+            # Kick off with a heartbeat so the client (and a cold free-tier dyno)
+            # sees liveness before the first token.
+            yield _sse("heartbeat", {"request_id": request_id})
+            async with asyncio.timeout(max_lifetime):
+                async for piece in stream_complete(
+                    prompt, result,
+                    system_prompt=system_prompt,
+                    max_tokens=max_tokens,
+                    cancel_check=cancel_check,
+                ):
+                    now = time.monotonic()
+                    if not first:
+                        metrics.record_first_token_ms((now - start) * 1000)
+                        first = True
+                    yield _sse("token", {"text": piece})
+                    if now - last_hb >= heartbeat_seconds:
+                        yield _sse("heartbeat", {"request_id": request_id})
+                        await registry.heartbeat(
+                            user_id, request_id, heartbeat_ttl=heartbeat_ttl
+                        )
+                        last_hb = now
+            usage = {
+                "prompt_tokens": result.usage.prompt_tokens,
+                "completion_tokens": result.usage.completion_tokens,
+                "total_tokens": result.usage.total_tokens,
+            }
+            metrics.record_tokens(result.usage.total_tokens)
+            if result.cancelled:
+                metrics.stream_cancelled()
+            yield _sse("done", {
+                "cancelled": result.cancelled,
+                "text": result.text,
+                "usage": usage,
+            })
+        except TimeoutError:
+            # Max-lifetime reaper: bound abandoned/runaway streams (R1.5).
+            metrics.stream_reaped()
+            metrics.record_tokens(result.usage.total_tokens)
+            yield _sse("error", {
+                "code": "stream_timeout",
+                "message": "The generation took too long and was stopped.",
+                "text": result.text,
+            })
+        except asyncio.CancelledError:  # pragma: no cover - server shutdown
+            raise
+        except Exception:
+            logger.exception("Streaming generation failed for %s", resume_id)
+            metrics.stream_error()
+            # Terminal error → client transparently falls back (R1.3). Any
+            # partial text is surfaced as a discardable preview.
+            yield _sse("error", {
+                "code": "stream_error",
+                "message": "Generation failed; falling back.",
+                "text": result.text,
+            })
+        finally:
+            metrics.stream_ended()
+            await registry.unregister(user_id, request_id)
+
+    return StreamingResponse(
+        event_gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",  # disable proxy buffering (nginx/render)
+            "Connection": "keep-alive",
+        },
+    )
+
+
+@router.post("/stream/{request_id}/cancel")
+async def cancel_stream_endpoint(
+    request_id: str,
+    user_id: str = Depends(require_verified_user_id),
+) -> dict[str, Any]:
+    """Signal cancellation of an in-flight stream (R1.2), cross-worker.
+
+    Sets a cancel flag the streaming loop polls between chunks; the loop aborts
+    the provider call and closes. Idempotent — cancelling an already-finished or
+    unknown stream is a harmless no-op.
+    """
+    await get_stream_registry().request_cancel(user_id, request_id)
+    return {"cancelled": True, "request_id": request_id}
 
 
 @router.get("/{resume_id}/job-description")
@@ -2119,6 +3407,11 @@ async def download_cover_letter_pdf(
     url = f"{settings.frontend_base_url}/print/cover-letter/{resume_id}?pageSize={pageSize}"
     if lang:
         url = f"{url}&lang={lang}"
+    # Short-lived signed print token → lets the headless render authenticate in
+    # hosted mode (browser has no user session cookie).
+    from app.pdf_token import make_print_token
+    print_token = make_print_token(user_id, resume_id)
+    url = f"{url}&print_token={quote(print_token, safe='')}"
 
     # Render PDF with cover letter selector
     try:

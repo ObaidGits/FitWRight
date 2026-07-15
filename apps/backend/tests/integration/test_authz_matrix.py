@@ -57,10 +57,12 @@ pytestmark = pytest.mark.integration
 OWNED_ENDPOINTS: list[tuple[str, str]] = [
     # resumes
     ("POST", "/api/v1/resumes/upload"),
+    ("POST", "/api/v1/resumes/upload/stream"),
     ("GET", "/api/v1/resumes?resume_id=x"),
     ("GET", "/api/v1/resumes/list"),
     ("POST", "/api/v1/resumes/improve"),
     ("POST", "/api/v1/resumes/improve/preview"),
+    ("POST", "/api/v1/resumes/improve/preview/stream"),
     ("POST", "/api/v1/resumes/improve/confirm"),
     ("PATCH", "/api/v1/resumes/rid"),
     ("GET", "/api/v1/resumes/rid/pdf"),
@@ -69,14 +71,30 @@ OWNED_ENDPOINTS: list[tuple[str, str]] = [
     ("PATCH", "/api/v1/resumes/rid/cover-letter"),
     ("PATCH", "/api/v1/resumes/rid/outreach-message"),
     ("PATCH", "/api/v1/resumes/rid/title"),
+    ("PATCH", "/api/v1/resumes/rid/template-settings"),
+    ("POST", "/api/v1/resumes/from-data"),
     ("POST", "/api/v1/resumes/rid/generate-cover-letter"),
     ("POST", "/api/v1/resumes/rid/generate-outreach"),
     ("POST", "/api/v1/resumes/rid/generate-interview-prep"),
+    # P4 streaming AI (SSE relay + cancel).
+    ("POST", "/api/v1/resumes/rid/{kind}/stream"),
+    ("POST", "/api/v1/resumes/stream/{request_id}/cancel"),
     ("GET", "/api/v1/resumes/rid/job-description"),
     ("GET", "/api/v1/resumes/rid/cover-letter/pdf"),
+    # version history (P3 §A)
+    ("GET", "/api/v1/resumes/rid/versions"),
+    ("POST", "/api/v1/resumes/rid/versions"),
+    ("GET", "/api/v1/resumes/rid/versions/compare?a=x&b=y"),
+    ("GET", "/api/v1/resumes/rid/versions/{version_id}"),
+    ("POST", "/api/v1/resumes/rid/versions/{version_id}/restore"),
+    ("POST", "/api/v1/resumes/rid/undo-last-ai"),
     # jobs
     ("POST", "/api/v1/jobs/upload"),
+    ("POST", "/api/v1/jobs/analyze"),
     ("GET", "/api/v1/jobs/jid"),
+    ("POST", "/api/v1/jobs/fetch-url"),
+    ("POST", "/api/v1/jobs/extract-rendered"),
+    ("GET", "/api/v1/jobs/jd/adapter-health"),
     # applications
     ("GET", "/api/v1/applications"),
     ("POST", "/api/v1/applications"),
@@ -85,6 +103,30 @@ OWNED_ENDPOINTS: list[tuple[str, str]] = [
     ("PATCH", "/api/v1/applications/aid"),
     ("DELETE", "/api/v1/applications/aid"),
     ("POST", "/api/v1/applications/bulk-delete"),
+    # reminders + interviews + agenda (P3 §E/§F/§G)
+    ("GET", "/api/v1/applications/aid/reminders"),
+    ("POST", "/api/v1/applications/aid/reminders"),
+    ("PATCH", "/api/v1/applications/aid/reminders/{reminder_id}"),
+    ("POST", "/api/v1/applications/aid/reminders/{reminder_id}/snooze"),
+    ("DELETE", "/api/v1/applications/aid/reminders/{reminder_id}"),
+    ("GET", "/api/v1/applications/aid/interviews"),
+    ("POST", "/api/v1/applications/aid/interviews"),
+    ("PATCH", "/api/v1/applications/aid/interviews/{interview_id}"),
+    ("DELETE", "/api/v1/applications/aid/interviews/{interview_id}"),
+    ("GET", "/api/v1/interviews/{interview_id}.ics"),
+    ("GET", "/api/v1/agenda"),
+    # notifications (P3 §B)
+    ("GET", "/api/v1/notifications"),
+    ("GET", "/api/v1/notifications/unread-count"),
+    ("POST", "/api/v1/notifications/{notification_id}/read"),
+    ("POST", "/api/v1/notifications/read-all"),
+    ("DELETE", "/api/v1/notifications/{notification_id}"),
+    ("POST", "/api/v1/notifications/dismiss-group"),
+    ("GET", "/api/v1/notifications/prefs"),
+    ("PUT", "/api/v1/notifications/prefs"),
+    # search (P3 §C)
+    ("GET", "/api/v1/search?q=x"),
+    ("POST", "/api/v1/search/reindex"),
     # enrichment
     ("POST", "/api/v1/enrichment/analyze/rid"),
     ("POST", "/api/v1/enrichment/enhance"),
@@ -100,9 +142,34 @@ OWNED_ENDPOINTS: list[tuple[str, str]] = [
     ("DELETE", "/api/v1/config/api-keys"),
     ("DELETE", "/api/v1/config/api-keys/prov"),
     ("POST", "/api/v1/config/reset"),
-    # resume wizard (turn is provider-cost — the previously-unscoped route)
+    # resume wizard (turn/assist are provider-cost — previously-unscoped routes)
     ("POST", "/api/v1/resume-wizard/turn"),
+    ("POST", "/api/v1/resume-wizard/assist"),
     ("POST", "/api/v1/resume-wizard/finalize"),
+    # professional profile (docs/architecture/PROFILE_SYSTEM_PLAN.md)
+    ("GET", "/api/v1/profile"),
+    ("PATCH", "/api/v1/profile"),
+    ("GET", "/api/v1/profile/completeness"),
+    ("POST", "/api/v1/profile/generate-resume"),
+    ("GET", "/api/v1/profile/versions"),
+    ("GET", "/api/v1/profile/versions/{version_id}"),
+    ("POST", "/api/v1/profile/versions/{version_id}/restore"),
+    # profile P3–P6: import/merge, sync, AI, public projection
+    ("POST", "/api/v1/profile/import/preview"),
+    ("POST", "/api/v1/profile/import/apply"),
+    ("GET", "/api/v1/profile/sync/rid"),
+    ("POST", "/api/v1/profile/sync/rid"),
+    ("PUT", "/api/v1/profile/ai-memory"),
+    ("POST", "/api/v1/profile/ai/suggest"),
+    ("GET", "/api/v1/profile/skills/suggest"),
+    ("GET", "/api/v1/profile/public"),
+    ("GET", "/api/v1/profile/portfolio"),
+    ("GET", "/api/v1/profile/export/json-resume"),
+    ("GET", "/api/v1/profile/publication"),
+    ("POST", "/api/v1/profile/publish"),
+    ("POST", "/api/v1/profile/unpublish"),
+    ("GET", "/api/v1/profile/search"),
+    ("GET", "/api/v1/profile/analytics"),
 ]
 
 # Provider-cost actions gated behind email verification (R5.6). These must 403
@@ -111,6 +178,7 @@ OWNED_ENDPOINTS: list[tuple[str, str]] = [
 PROVIDER_COST_ENDPOINTS: list[tuple[str, str]] = [
     ("POST", "/api/v1/resumes/improve"),
     ("POST", "/api/v1/resumes/improve/preview"),
+    ("POST", "/api/v1/resumes/improve/preview/stream"),
     ("POST", "/api/v1/resumes/improve/confirm"),
     ("POST", "/api/v1/resumes/rid/generate-cover-letter"),
     ("POST", "/api/v1/resumes/rid/generate-outreach"),
@@ -119,6 +187,8 @@ PROVIDER_COST_ENDPOINTS: list[tuple[str, str]] = [
     ("POST", "/api/v1/enrichment/enhance"),
     ("POST", "/api/v1/enrichment/regenerate"),
     ("POST", "/api/v1/resume-wizard/turn"),
+    ("POST", "/api/v1/resume-wizard/assist"),
+    ("POST", "/api/v1/jobs/analyze"),
 ]
 
 

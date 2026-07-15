@@ -5,8 +5,11 @@ import * as React from 'react';
 import Link from 'next/link';
 import Menu from 'lucide-react/dist/esm/icons/menu';
 import X from 'lucide-react/dist/esm/icons/x';
+import LayoutDashboard from 'lucide-react/dist/esm/icons/layout-dashboard';
 import { Button } from '@/components/atelier/button';
 import { ThemeToggle } from '@/components/theme/theme-toggle';
+import { AccountMenu } from '@/components/layout/account-menu';
+import { useSession } from '@/lib/context/session';
 
 /**
  * Anchor links use absolute `/#id` so they scroll correctly even from other
@@ -15,11 +18,20 @@ import { ThemeToggle } from '@/components/theme/theme-toggle';
 const NAV_LINKS: { href: string; label: string }[] = [
   { href: '/#how', label: 'How it works' },
   { href: '/#features', label: 'Features' },
+  { href: '/resume-tailoring', label: 'Tailoring' },
   { href: '/#faq', label: 'FAQ' },
+  { href: '/connect', label: 'Connect' },
+  { href: '/contact', label: 'Contact' },
 ];
 
 export function PublicTopBar() {
   const [open, setOpen] = React.useState(false);
+  // Auth-aware: a signed-in visitor sees a "Dashboard" shortcut + their profile
+  // menu (never Sign in/Sign up). A guest sees the auth entry points. During the
+  // brief hydration window we render neither, to avoid flashing the wrong state.
+  const { status } = useSession();
+  const authed = status === 'authenticated';
+  const resolved = status !== 'loading';
 
   return (
     <header className="sticky top-0 z-40 border-b border-[var(--border)] bg-[var(--background)]/80 backdrop-blur">
@@ -57,9 +69,26 @@ export function PublicTopBar() {
 
         <div className="flex items-center gap-2">
           <ThemeToggle />
-          <Button asChild size="sm" className="hidden sm:inline-flex">
-            <Link href="/home">Get Started</Link>
-          </Button>
+          {resolved &&
+            (authed ? (
+              <>
+                <Button asChild size="sm" className="hidden sm:inline-flex">
+                  <Link href="/home">
+                    <LayoutDashboard className="h-4 w-4" /> Dashboard
+                  </Link>
+                </Button>
+                <AccountMenu />
+              </>
+            ) : (
+              <>
+                <Button asChild size="sm" variant="ghost" className="hidden sm:inline-flex">
+                  <Link href="/login">Sign in</Link>
+                </Button>
+                <Button asChild size="sm" className="hidden sm:inline-flex">
+                  <Link href="/signup">Sign up</Link>
+                </Button>
+              </>
+            ))}
           {/* Mobile menu toggle */}
           <Button
             variant="ghost"
@@ -100,11 +129,34 @@ export function PublicTopBar() {
             >
               GitHub
             </a>
-            <Button asChild className="mt-2">
-              <Link href="/home" onClick={() => setOpen(false)}>
-                Get Started
-              </Link>
-            </Button>
+            {resolved &&
+              (authed ? (
+                <div className="mt-2 flex flex-col gap-2">
+                  <Button asChild>
+                    <Link href="/home" onClick={() => setOpen(false)}>
+                      <LayoutDashboard className="h-4 w-4" /> Go to dashboard
+                    </Link>
+                  </Button>
+                  <Button asChild variant="outline">
+                    <Link href="/settings" onClick={() => setOpen(false)}>
+                      Settings
+                    </Link>
+                  </Button>
+                </div>
+              ) : (
+                <div className="mt-2 flex flex-col gap-2">
+                  <Button asChild variant="outline">
+                    <Link href="/login" onClick={() => setOpen(false)}>
+                      Sign in
+                    </Link>
+                  </Button>
+                  <Button asChild>
+                    <Link href="/signup" onClick={() => setOpen(false)}>
+                      Sign up
+                    </Link>
+                  </Button>
+                </div>
+              ))}
           </div>
         </nav>
       )}

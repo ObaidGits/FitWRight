@@ -39,12 +39,14 @@ export const SheetContent = React.forwardRef<
     <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/40 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0" />
     <DialogPrimitive.Content
       ref={ref}
-      className={cn(sheetVariants({ side }), className)}
+      // Portaled to document.body — `atelier` makes the sheet resolve Atelier
+      // tokens instead of the legacy Swiss :root fallbacks.
+      className={cn('atelier', sheetVariants({ side }), className)}
       {...props}
     >
       {children}
       <DialogPrimitive.Close
-        className="absolute right-4 top-4 rounded-[var(--radius-at-sm)] p-1 text-[var(--muted-foreground)] hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+        className="absolute right-3 top-3 rounded-[var(--radius-at-sm)] p-2 text-[var(--muted-foreground)] hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
         aria-label="Close"
       >
         <X className="size-4" />

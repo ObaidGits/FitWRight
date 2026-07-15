@@ -1,0 +1,9 @@
+{
+  "text": "Product Designer",
+  "categories": {"location": "New York, NY", "team": "Design", "commitment": "Full-time"},
+  "lists": [
+    {"text": "What you'll do", "content": "<li>Own end-to-end design for our mobile app.</li><li>Run user research and usability tests.</li>"},
+    {"text": "What we're looking for", "content": "<li>4+ years of product design experience.</li><li>Strong portfolio of shipped work.</li>"}
+  ],
+  "additional": "<p>We offer competitive salary and equity.</p>"
+}

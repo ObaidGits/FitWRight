@@ -51,7 +51,6 @@ from app.config import (
     _CAPTCHA_DISABLED_ALIASES,
     _EMAIL_DEFAULT_ALIASES,
     Settings,
-    settings,
 )
 
 logger = logging.getLogger(__name__)
@@ -188,58 +187,53 @@ def build_breached_password_check(config: Settings) -> BreachedPasswordCheck:
 
 
 # ---------------------------------------------------------------------------
-# Process singletons + dependency callables
+# Dependency callables — thin delegates to the composition root (Phase 3).
 # ---------------------------------------------------------------------------
-
-_kvstore: KVStore | None = None
-_email_sender: EmailSender | None = None
-_captcha_verifier: CaptchaVerifier | None = None
-_breached_password_check: BreachedPasswordCheck | None = None
+#
+# Construction + caching of these adapters lives ONLY in the composition root
+# (``app.platform.composition.Container``), which calls the pure ``build_*``
+# functions above. These ``get_*`` functions remain as the stable call surface
+# the rest of the app already imports, now delegating to the container so there
+# is a single instantiation site (ARCHITECTURE §2/§10; IMPLEMENTATION_PLAN
+# Phase 3). The ``build_*`` functions above take an explicit ``Settings``
+# argument (passed by the container); they no longer read the module-level
+# ``settings`` singleton.
 
 
 def get_kvstore() -> KVStore:
-    """Return the process-wide ``KVStore`` singleton (built on first use)."""
-    global _kvstore
-    if _kvstore is None:
-        _kvstore = build_kvstore(settings)
-    return _kvstore
+    """Return the process-wide ``KVStore`` (owned by the composition root)."""
+    from app.platform import get_container
+
+    return get_container().kvstore()
 
 
 def get_email_sender() -> EmailSender:
-    """Return the process-wide ``EmailSender`` singleton (built on first use)."""
-    global _email_sender
-    if _email_sender is None:
-        _email_sender = build_email_sender(settings)
-    return _email_sender
+    """Return the process-wide ``EmailSender`` (owned by the composition root)."""
+    from app.platform import get_container
+
+    return get_container().email_sender()
 
 
 def get_captcha_verifier() -> CaptchaVerifier:
-    """Return the process-wide ``CaptchaVerifier`` singleton (built on first use)."""
-    global _captcha_verifier
-    if _captcha_verifier is None:
-        _captcha_verifier = build_captcha_verifier(settings)
-    return _captcha_verifier
+    """Return the process-wide ``CaptchaVerifier`` (owned by the composition root)."""
+    from app.platform import get_container
+
+    return get_container().captcha_verifier()
 
 
 def get_breached_password_check() -> BreachedPasswordCheck:
-    """Return the process-wide ``BreachedPasswordCheck`` singleton (built on first use)."""
-    global _breached_password_check
-    if _breached_password_check is None:
-        _breached_password_check = build_breached_password_check(settings)
-    return _breached_password_check
+    """Return the process-wide ``BreachedPasswordCheck`` (owned by the composition root)."""
+    from app.platform import get_container
+
+    return get_container().breached_password_check()
 
 
 async def close_kvstore() -> None:
-    """Release the KVStore singleton's resources on shutdown.
+    """Release the KVStore's resources on shutdown (delegates to the container).
 
     The DB-backed adapter shares the app's async engine (disposed by
-    ``Database.close``), so it is intentionally left for the database layer to
-    close — closing it here would dispose the shared engine out from under the
-    rest of the app.
+    ``Database.close``), so the container closes only a non-DB store.
     """
-    global _kvstore
-    if _kvstore is None:
-        return
-    if not url_needs_db_engine(settings.kvstore_url):
-        await _kvstore.close()
-    _kvstore = None
+    from app.platform import get_container
+
+    await get_container().aclose()

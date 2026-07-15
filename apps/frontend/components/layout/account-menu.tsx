@@ -4,6 +4,7 @@ import * as React from 'react';
 import Link from 'next/link';
 import Settings from 'lucide-react/dist/esm/icons/settings';
 import LogOut from 'lucide-react/dist/esm/icons/log-out';
+import Shield from 'lucide-react/dist/esm/icons/shield';
 import { useSession } from '@/lib/context/session';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/atelier/misc';
 import {
@@ -23,7 +24,7 @@ function initials(name: string): string {
 import { SINGLE_USER_MODE } from '@/lib/config/auth';
 
 export function AccountMenu() {
-  const { user, signOut } = useSession();
+  const { user, signOut, isAdmin } = useSession();
   const name = user?.name ?? 'You';
 
   return (
@@ -45,6 +46,13 @@ export function AccountMenu() {
             <Settings className="h-4 w-4" /> Settings
           </Link>
         </DropdownMenuItem>
+        {isAdmin && (
+          <DropdownMenuItem asChild>
+            <Link href="/admin" className="flex items-center gap-2">
+              <Shield className="h-4 w-4" /> Admin
+            </Link>
+          </DropdownMenuItem>
+        )}
         {!SINGLE_USER_MODE && (
           <DropdownMenuItem destructive onSelect={() => void signOut()}>
             <LogOut className="h-4 w-4" /> Log out

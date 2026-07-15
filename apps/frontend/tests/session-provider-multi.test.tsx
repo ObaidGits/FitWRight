@@ -45,7 +45,7 @@ const USER = {
   status: 'active',
   emailVerified: true,
   aal: 'aal1',
-};
+} as const;
 
 function Probe() {
   const { status, user } = useSession();

@@ -1,0 +1,76 @@
+'use client';
+
+import React from 'react';
+import { Editor } from '@tiptap/react';
+import { Bold, Italic, Underline, Link } from 'lucide-react';
+import { Button } from '@/components/atelier/button';
+import { cn } from '@/lib/utils';
+
+interface RichTextToolbarProps {
+  editor: Editor;
+  onLinkClick: () => void;
+}
+
+/**
+ * Rich Text Toolbar — Atelier-styled formatting toolbar (B/I/U/Link).
+ * Active states use the primary accent.
+ */
+export const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ editor, onLinkClick }) => {
+  const tools = [
+    {
+      icon: Bold,
+      label: 'Bold',
+      action: () => editor.chain().focus().toggleBold().run(),
+      isActive: editor.isActive('bold'),
+      shortcut: 'Ctrl+B',
+    },
+    {
+      icon: Italic,
+      label: 'Italic',
+      action: () => editor.chain().focus().toggleItalic().run(),
+      isActive: editor.isActive('italic'),
+      shortcut: 'Ctrl+I',
+    },
+    {
+      icon: Underline,
+      label: 'Underline',
+      action: () => editor.chain().focus().toggleUnderline().run(),
+      isActive: editor.isActive('underline'),
+      shortcut: 'Ctrl+U',
+    },
+    {
+      icon: Link,
+      label: 'Link',
+      action: onLinkClick,
+      isActive: editor.isActive('link'),
+      shortcut: 'Ctrl+K',
+    },
+  ];
+
+  return (
+    <div className="flex items-center gap-1 rounded-[var(--radius-at-md)] border border-[var(--border)] bg-[var(--secondary)] p-1">
+      {tools.map((tool) => (
+        <Button
+          key={tool.label}
+          type="button"
+          variant="ghost"
+          size="icon"
+          onClick={(e: React.MouseEvent) => {
+            e.preventDefault();
+            tool.action();
+          }}
+          aria-label={tool.label}
+          aria-pressed={tool.isActive}
+          title={`${tool.label} (${tool.shortcut})`}
+          className={cn(
+            'h-7 w-7',
+            tool.isActive &&
+              'bg-[var(--primary)] text-[var(--primary-foreground)] hover:bg-[var(--primary)] hover:text-[var(--primary-foreground)]'
+          )}
+        >
+          <tool.icon className="h-4 w-4" />
+        </Button>
+      ))}
+    </div>
+  );
+};

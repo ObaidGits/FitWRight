@@ -4,7 +4,7 @@
 # ============================================
 # Stage 1: Build Frontend
 # ============================================
-FROM node:22-bookworm AS frontend-builder
+FROM node:24-bookworm AS frontend-builder
 
 # Build argument for API URL (allows customization at build time)
 # Default routes requests through Next.js rewrites on the same origin.
@@ -61,6 +61,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libcairo2 \
     libatspi2.0-0 \
     libgtk-3-0 \
+    # Optional OCR for scanned PDFs (§20). Only used when JD_OCR_ENABLED=true and
+    # the `ocr` Python extra is installed. Kept lightweight; comment out to slim
+    # the image if OCR is not needed.
+    tesseract-ocr \
+    poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -73,6 +78,11 @@ COPY --from=frontend-builder /usr/local/bin/node /usr/local/bin/node
 # ============================================
 COPY apps/backend/pyproject.toml /app/backend/
 COPY apps/backend/app /app/backend/app
+# Alembic config + migration scripts are REQUIRED at runtime: the app runs
+# `alembic upgrade head` at startup on hosted Postgres (see app.migrations_runtime).
+# Without these the container fails to boot on Postgres.
+COPY apps/backend/alembic.ini /app/backend/
+COPY apps/backend/alembic /app/backend/alembic
 
 WORKDIR /app/backend
 

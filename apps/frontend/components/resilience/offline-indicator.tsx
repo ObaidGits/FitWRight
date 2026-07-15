@@ -9,11 +9,17 @@
 import * as React from 'react';
 import WifiOff from 'lucide-react/dist/esm/icons/wifi-off';
 
-export function OfflineIndicator() {
-  const [offline, setOffline] = React.useState(false);
+/**
+ * @param offline When provided (P4), reflects the real reachability probe
+ * (source of truth, R2.6) rather than the advisory `navigator.onLine`. When
+ * omitted it falls back to `navigator.onLine` for standalone use.
+ */
+export function OfflineIndicator({ offline: offlineProp }: { offline?: boolean } = {}) {
+  const [navOffline, setNavOffline] = React.useState(false);
 
   React.useEffect(() => {
-    const update = () => setOffline(!navigator.onLine);
+    if (offlineProp !== undefined) return; // parent controls it via the probe
+    const update = () => setNavOffline(!navigator.onLine);
     update();
     window.addEventListener('online', update);
     window.addEventListener('offline', update);
@@ -21,8 +27,9 @@ export function OfflineIndicator() {
       window.removeEventListener('online', update);
       window.removeEventListener('offline', update);
     };
-  }, []);
+  }, [offlineProp]);
 
+  const offline = offlineProp ?? navOffline;
   if (!offline) return null;
 
   return (

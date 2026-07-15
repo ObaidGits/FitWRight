@@ -8,6 +8,7 @@ import type {
 import { getSortedSections } from '@/lib/utils/section-helpers';
 import { formatDateRange } from '@/lib/utils';
 import { SafeHtml } from './safe-html';
+import { PhotoFrame, resolveResumePhoto } from './photo-frame';
 import baseStyles from './styles/_base.module.css';
 import styles from './styles/clean.module.css';
 
@@ -37,6 +38,9 @@ export const ResumeClean: React.FC<ResumeCleanProps> = ({
   const { personalInfo, summary, workExperience, education, personalProjects, additional } = data;
 
   const sortedSections = getSortedSections(data);
+
+  // Photo System: resolve the header photo (Clean places it beside the name).
+  const cleanPhoto = resolveResumePhoto(data, 'clean');
 
   const contactIcons: Record<string, React.ReactNode> = {
     Email: <Mail size={12} />,
@@ -289,23 +293,30 @@ export const ResumeClean: React.FC<ResumeCleanProps> = ({
   return (
     <div className={styles.container}>
       {personalInfo && (
-        <header className={`text-center ${baseStyles['resume-header']}`}>
-          {personalInfo.name && <h1 className={`${styles.name} mb-1`}>{personalInfo.name}</h1>}
-          {personalInfo.title && (
-            <div className={`${styles.tagline} mb-1`}>{personalInfo.title}</div>
+        <header
+          className={`${cleanPhoto ? `flex items-center justify-center gap-4 ${cleanPhoto.slot === 'header-left' ? '' : 'flex-row-reverse'}` : 'text-center'} ${baseStyles['resume-header']}`}
+        >
+          {cleanPhoto && (
+            <PhotoFrame url={cleanPhoto.url} config={cleanPhoto.config} name={cleanPhoto.name} />
           )}
-          {contactItems.length > 0 && (
-            <div
-              className={`flex flex-wrap justify-center items-center gap-x-2 gap-y-1 ${styles.contactRow}`}
-            >
-              {contactItems.map((item, index) => (
-                <React.Fragment key={index}>
-                  {index > 0 && <span className={styles.sep}>|</span>}
-                  {item}
-                </React.Fragment>
-              ))}
-            </div>
-          )}
+          <div className={cleanPhoto ? 'text-left' : 'w-full'}>
+            {personalInfo.name && <h1 className={`${styles.name} mb-1`}>{personalInfo.name}</h1>}
+            {personalInfo.title && (
+              <div className={`${styles.tagline} mb-1`}>{personalInfo.title}</div>
+            )}
+            {contactItems.length > 0 && (
+              <div
+                className={`flex flex-wrap justify-center items-center gap-x-2 gap-y-1 ${styles.contactRow}`}
+              >
+                {contactItems.map((item, index) => (
+                  <React.Fragment key={index}>
+                    {index > 0 && <span className={styles.sep}>|</span>}
+                    {item}
+                  </React.Fragment>
+                ))}
+              </div>
+            )}
+          </div>
         </header>
       )}
 

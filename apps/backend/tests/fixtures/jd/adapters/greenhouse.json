@@ -1,0 +1,7 @@
+{
+  "title": "Staff Software Engineer",
+  "content": "&lt;p&gt;About the role&lt;/p&gt;<p>We are hiring a Staff Software Engineer to lead our infrastructure team.</p><h3>What you'll do</h3><ul><li>Own the reliability of our core services.</li><li>Design multi-region failover.</li><li>Set engineering standards across teams.</li></ul><h3>What we look for</h3><ul><li>8+ years building distributed systems.</li><li>Deep expertise in Go or Rust.</li></ul>",
+  "company": {"name": "Acme Corp"},
+  "departments": [{"name": "Engineering"}],
+  "offices": [{"name": "San Francisco, CA"}, {"name": "Remote (US)"}]
+}

@@ -9,12 +9,13 @@ import {
   DialogDescription,
   DialogFooter,
   DialogClose,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+} from '@/components/atelier/dialog';
+import { Button } from '@/components/atelier/button';
+import { Input } from '@/components/atelier/input';
+import { Label } from '@/components/atelier/label';
 import { Plus, FileText, List, ListOrdered } from 'lucide-react';
 import type { SectionType } from '@/components/dashboard/resume-component';
+import { cn } from '@/lib/utils';
 import { useTranslations } from '@/lib/i18n';
 
 interface AddSectionDialogProps {
@@ -64,39 +65,35 @@ export const AddSectionDialog: React.FC<AddSectionDialogProps> = ({
     {
       type: 'text',
       label: t('builder.customSections.sectionTypes.textBlockLabel'),
-      icon: <FileText className="w-5 h-5" />,
+      icon: <FileText className="h-5 w-5" />,
       description: t('builder.customSections.sectionTypes.textBlockDescription'),
     },
     {
       type: 'itemList',
       label: t('builder.customSections.sectionTypes.itemListLabel'),
-      icon: <ListOrdered className="w-5 h-5" />,
+      icon: <ListOrdered className="h-5 w-5" />,
       description: t('builder.customSections.sectionTypes.itemListDescription'),
     },
     {
       type: 'stringList',
       label: t('builder.customSections.sectionTypes.stringListLabel'),
-      icon: <List className="w-5 h-5" />,
+      icon: <List className="h-5 w-5" />,
       description: t('builder.customSections.sectionTypes.stringListDescription'),
     },
   ];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px] p-0 gap-0 rounded-none">
-        <DialogHeader className="p-6 pb-4 border-b border-black">
-          <DialogTitle className="font-serif text-xl font-bold uppercase tracking-tight">
-            {t('builder.customSections.dialogTitle')}
-          </DialogTitle>
-          <DialogDescription className="font-mono text-xs text-ink-soft mt-2">
-            {t('builder.customSections.dialogDescription')}
-          </DialogDescription>
+      <DialogContent className="sm:max-w-[500px]">
+        <DialogHeader>
+          <DialogTitle>{t('builder.customSections.dialogTitle')}</DialogTitle>
+          <DialogDescription>{t('builder.customSections.dialogDescription')}</DialogDescription>
         </DialogHeader>
 
-        <div className="p-6 space-y-6">
+        <div className="space-y-6">
           {/* Section Name */}
           <div className="space-y-2">
-            <Label className="font-mono text-xs uppercase tracking-wider text-steel-grey">
+            <Label className="text-xs font-medium text-[var(--muted-foreground)]">
               {t('builder.customSections.sectionNameLabel')}
             </Label>
             <Input
@@ -104,14 +101,13 @@ export const AddSectionDialog: React.FC<AddSectionDialogProps> = ({
               onChange={(e) => setDisplayName(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder={t('builder.customSections.sectionNamePlaceholder')}
-              className="rounded-none border-black"
               autoFocus
             />
           </div>
 
           {/* Section Type */}
           <div className="space-y-3">
-            <Label className="font-mono text-xs uppercase tracking-wider text-steel-grey">
+            <Label className="text-xs font-medium text-[var(--muted-foreground)]">
               {t('builder.customSections.sectionTypeLabel')}
             </Label>
             <div className="space-y-2">
@@ -120,30 +116,34 @@ export const AddSectionDialog: React.FC<AddSectionDialogProps> = ({
                   key={item.type}
                   type="button"
                   onClick={() => setSectionType(item.type)}
-                  className={`w-full p-4 border text-left transition-colors ${
+                  className={cn(
+                    'w-full rounded-[var(--radius-at-md)] border p-4 text-left transition-colors',
                     sectionType === item.type
-                      ? 'border-black bg-paper-tint shadow-sw-sm'
-                      : 'border-steel-grey hover:border-steel-grey'
-                  }`}
+                      ? 'border-[var(--primary)] bg-[var(--accent)]'
+                      : 'border-[var(--border)] hover:bg-[var(--accent)]'
+                  )}
                 >
                   <div className="flex items-start gap-3">
                     <div
-                      className={`p-2 border ${
+                      className={cn(
+                        'flex h-9 w-9 items-center justify-center rounded-[var(--radius-at-md)]',
                         sectionType === item.type
-                          ? 'border-black bg-white'
-                          : 'border-steel-grey bg-paper-tint'
-                      }`}
+                          ? 'bg-[var(--primary)]/12 text-[var(--primary)]'
+                          : 'bg-[var(--secondary)] text-[var(--muted-foreground)]'
+                      )}
                     >
                       {item.icon}
                     </div>
                     <div className="flex-1">
-                      <div className="font-sans font-medium text-sm">{item.label}</div>
-                      <div className="font-mono text-xs text-steel-grey mt-0.5">
+                      <div className="text-sm font-medium text-[var(--foreground)]">
+                        {item.label}
+                      </div>
+                      <div className="mt-0.5 text-xs text-[var(--muted-foreground)]">
                         {item.description}
                       </div>
                     </div>
                     {sectionType === item.type && (
-                      <div className="w-4 h-4 border-2 border-black bg-black" />
+                      <div className="mt-0.5 h-4 w-4 rounded-full bg-[var(--primary)]" />
                     )}
                   </div>
                 </button>
@@ -152,14 +152,12 @@ export const AddSectionDialog: React.FC<AddSectionDialogProps> = ({
           </div>
         </div>
 
-        <DialogFooter className="p-4 bg-background border-t border-black flex-row justify-end gap-3">
+        <DialogFooter>
           <DialogClose asChild>
-            <Button variant="outline" className="rounded-none border-black">
-              {t('common.cancel')}
-            </Button>
+            <Button variant="outline">{t('common.cancel')}</Button>
           </DialogClose>
-          <Button onClick={handleSubmit} disabled={!displayName.trim()} className="rounded-none">
-            <Plus className="w-4 h-4 mr-2" />
+          <Button onClick={handleSubmit} disabled={!displayName.trim()}>
+            <Plus className="mr-2 h-4 w-4" />
             {t('builder.addSection')}
           </Button>
         </DialogFooter>
@@ -186,9 +184,9 @@ export const AddSectionButton: React.FC<AddSectionButtonProps> = ({ onAdd }) => 
       <Button
         variant="outline"
         onClick={() => setOpen(true)}
-        className="w-full rounded-none border-dashed border-2 border-black py-6 hover:bg-paper-tint hover:border-solid transition-all"
+        className="w-full border-2 border-dashed py-6 hover:border-solid"
       >
-        <Plus className="w-5 h-5 mr-2" />
+        <Plus className="mr-2 h-5 w-5" />
         {t('builder.customSections.addCustomSectionButton')}
       </Button>
       <AddSectionDialog open={open} onOpenChange={setOpen} onAdd={onAdd} />

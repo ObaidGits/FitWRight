@@ -29,6 +29,7 @@ dependencies = [
     "authlib>=1.7.2",
     "itsdangerous>=2.2.0",
     "redis>=8.0.1",
+    "pillow==11.3.0",
 ]
 
 [project.scripts]
@@ -44,6 +45,14 @@ dev = [
 e2e-monitor = [
     "pypdf>=4.0.0",  # PDF text probe for the non-blank render check
     "httpx>=0.28.0",
+]
+# Optional OCR for scanned/image-only PDFs (§20). Enabled at runtime via
+# JD_OCR_ENABLED=true. Requires the system `tesseract-ocr` + `poppler-utils`
+# binaries (add to the Docker image). Native-text PDF extraction works WITHOUT
+# this group via the always-present pdfminer.six dependency.
+ocr = [
+    "pytesseract>=0.3.10",
+    "pdf2image>=1.17.0",
 ]
 
 [build-system]

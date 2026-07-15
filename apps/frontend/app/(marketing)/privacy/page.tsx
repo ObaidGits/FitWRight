@@ -1,10 +1,26 @@
 import type { Metadata } from 'next';
+import { JsonLd } from '@/lib/seo/json-ld';
+import { buildMetadata } from '@/lib/seo/metadata';
+import { KEYWORDS } from '@/lib/seo/page-keywords';
+import { breadcrumbSchema } from '@/lib/seo/structured-data';
 
-export const metadata: Metadata = { title: 'Privacy Policy — FitWright' };
+export const metadata: Metadata = buildMetadata({
+  title: 'Privacy Policy',
+  description:
+    'How FitWright handles your data: resumes stay in your own database, your AI provider API key is encrypted at rest, and you can delete everything at any time.',
+  path: '/privacy',
+  keywords: KEYWORDS.privacy,
+});
 
 export default function PrivacyPage() {
   return (
     <article className="mx-auto w-full max-w-3xl px-4 py-16 md:px-8">
+      <JsonLd
+        data={breadcrumbSchema([
+          { name: 'Home', path: '/' },
+          { name: 'Privacy Policy', path: '/privacy' },
+        ])}
+      />
       <h1 className="text-3xl font-semibold">Privacy Policy</h1>
       <p className="mt-2 text-sm text-[var(--muted-foreground)]">
         Last updated {new Date().getFullYear()}

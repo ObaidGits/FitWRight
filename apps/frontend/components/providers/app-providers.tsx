@@ -14,6 +14,7 @@ import { ToastProvider } from '@/components/atelier/toast';
 import { TooltipProvider } from '@/components/atelier/misc';
 import { CommandPaletteProvider } from '@/components/command/command-palette';
 import { StepUpProvider } from '@/components/auth/step-up-modal';
+import { RateLimitListener } from '@/components/providers/rate-limit-listener';
 import type { SafeUser } from '@/lib/api/auth';
 
 export function AppProviders({
@@ -28,6 +29,7 @@ export function AppProviders({
       <ThemeProvider>
         <SessionProvider initialUser={initialUser}>
           <ToastProvider>
+            <RateLimitListener />
             <TooltipProvider delayDuration={200}>
               <StepUpProvider>
                 <CommandPaletteProvider>{children}</CommandPaletteProvider>

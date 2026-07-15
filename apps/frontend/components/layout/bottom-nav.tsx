@@ -32,7 +32,14 @@ function NavTab({ item, active }: { item: NavItem; active: boolean }) {
 export function BottomNav() {
   const pathname = usePathname();
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
-  const [home, resumes, applications] = [PRIMARY_NAV[0], PRIMARY_NAV[1], PRIMARY_NAV[2]];
+  // Home · Resumes · [Tailor FAB] · Applications · Agenda — every primary
+  // destination is reachable on mobile (Agenda was previously dropped).
+  const [home, resumes, applications, agenda] = [
+    PRIMARY_NAV[0],
+    PRIMARY_NAV[1],
+    PRIMARY_NAV[2],
+    PRIMARY_NAV[3],
+  ];
 
   return (
     <nav
@@ -44,6 +51,7 @@ export function BottomNav() {
       <Link
         href={TAILOR_HREF}
         aria-label="Tailor to a job"
+        aria-current={isActive(TAILOR_HREF) ? 'page' : undefined}
         className="mx-1 flex flex-col items-center justify-center"
       >
         <span className="-mt-5 flex h-12 w-12 items-center justify-center rounded-full bg-[var(--primary)] text-[var(--primary-foreground)] shadow-[var(--shadow-at-e2)]">
@@ -52,6 +60,7 @@ export function BottomNav() {
         <span className="text-[11px] font-medium text-[var(--muted-foreground)]">Tailor</span>
       </Link>
       <NavTab item={applications} active={isActive(applications.href)} />
+      <NavTab item={agenda} active={isActive(agenda.href)} />
     </nav>
   );
 }

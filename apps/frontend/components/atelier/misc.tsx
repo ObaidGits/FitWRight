@@ -20,6 +20,9 @@ export const TooltipContent = React.forwardRef<
       ref={ref}
       sideOffset={sideOffset}
       className={cn(
+        // Portaled to document.body — `atelier` ensures the tooltip uses the
+        // Atelier tokens, not the legacy Swiss :root fallbacks.
+        'atelier',
         'z-50 rounded-[var(--radius-at-md)] bg-[var(--foreground)] px-2.5 py-1.5 text-xs text-[var(--background)] shadow-[var(--shadow-at-e2)]',
         'data-[state=delayed-open]:animate-in data-[state=delayed-open]:fade-in-0',
         className

@@ -1,9 +1,91 @@
 """Shared test fixtures for FitWright backend tests."""
 
+# ---------------------------------------------------------------------------
+# Hermetic test environment (MUST run before ``app.config`` is imported).
+#
+# ``Settings`` is a module-level singleton built at import from os.environ + the
+# ``.env`` file. A developer who has populated ``.env`` for a real deployment
+# (e.g. SINGLE_USER_MODE=false + a Postgres DATABASE_URL + provider secrets)
+# would otherwise see that config bleed into the unit/integration suite, causing
+# spurious failures that do NOT reproduce in CI (which has no ``.env``). We pin
+# the settings-relevant variables to their zero-config defaults here — os.environ
+# takes precedence over ``.env`` in pydantic-settings, and explicit
+# ``Settings(...)`` kwargs in hosted-mode tests still override these — so the
+# suite is hermetic and ``pytest`` behaves identically locally and in CI.
+# ---------------------------------------------------------------------------
+import os as _os
+
+_HERMETIC_ENV = {
+    "SINGLE_USER_MODE": "true",
+    "DEPLOYMENT_PROFILE": "",
+    "DATABASE_URL": "",
+    "MIGRATION_DATABASE_URL": "",
+    "DB_SSL": "",
+    "KVSTORE_URL": "",
+    "STORAGE_PROVIDER": "local",
+    "CLOUDINARY_CLOUD_NAME": "",
+    "CLOUDINARY_API_KEY": "",
+    "CLOUDINARY_API_SECRET": "",
+    "GOOGLE_CLIENT_ID": "",
+    "GOOGLE_CLIENT_SECRET": "",
+    "OAUTH_REDIRECT_URI": "",
+    "EMAIL_VERIFICATION": "",
+    "EMAIL_PROVIDER": "",
+    "INTERNAL_JOB_TOKEN": "",
+    "SESSION_SECRET": "",
+    "IP_HASH_SECRET": "",
+    "SCHEDULER_MODE": "external_cron",
+}
+for _key, _value in _HERMETIC_ENV.items():
+    _os.environ[_key] = _value
+
 import copy
 import importlib
 
 import pytest
+
+
+@pytest.fixture(autouse=True)
+def _hermetic_jd_robots(monkeypatch):
+    """Keep the JD robots.txt check hermetic (no network) across the suite.
+
+    The v2 orchestrator runs a robots.txt policy check before fetching (§26).
+    That check performs its OWN network fetch (separate from the mocked
+    ``orchestrator.fetch_url_safely``), which would make otherwise-hermetic tests
+    hit the network. We force the robots fetch to fail here, which the checker
+    treats as fail-OPEN (allow) — exactly the production behavior when robots.txt
+    is unreachable. Phase-3 robots tests override this by patching the same
+    symbol or by exercising the pure parser/decision functions directly.
+    """
+    import app.jd.robots as _robots_mod
+
+    async def _no_network(_url, *a, **k):
+        raise _robots_mod.SsrfError("test_no_network")
+
+    monkeypatch.setattr(_robots_mod, "fetch_url_safely", _no_network)
+    # Reset orchestrator singletons so leftover instances from a prior test don't
+    # retain a real-KV robots checker.
+    try:
+        import app.jd.orchestrator as _orch
+        monkeypatch.setattr(_orch, "_robots", None)
+    except Exception:
+        pass
+    yield
+
+
+@pytest.fixture(autouse=True)
+def _reset_status_llm_health_cache():
+    """Clear the /status LLM-health probe cache before each test.
+
+    The endpoint caches its LLM-health probe (short TTL, single-flight) to avoid
+    a live provider round-trip per public /status call. That cache is
+    module-level, so it must be reset between tests or a result from one test
+    would leak into another sharing the same provider/model/key fingerprint.
+    """
+    from app.routers.health import reset_status_llm_health_cache
+
+    reset_status_llm_health_cache()
+    yield
 
 
 # ---------------------------------------------------------------------------
@@ -208,6 +290,8 @@ async def isolated_db(tmp_path, monkeypatch):
         "health",
         "applications",
         "resume_wizard",
+        "versions",
+        "notifications",
     ):
         try:
             module = importlib.import_module(f"app.routers.{router_name}")

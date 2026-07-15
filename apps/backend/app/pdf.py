@@ -38,6 +38,26 @@ _init_lock = asyncio.Lock()  # Lock to prevent race condition during initializat
 _subprocess_lock = asyncio.Lock()
 _subprocess_supported = True
 
+# Bounded concurrency for PDF rendering. Headless Chromium is memory/CPU-heavy,
+# so unbounded concurrent renders can exhaust the host (resource DoS). We gate
+# every render behind a semaphore sized from ``settings.pdf_max_concurrency``;
+# a request that can't get a slot within the queue timeout fails fast (503) via
+# PDFRenderError rather than piling up. The semaphore is created lazily on the
+# running loop and rebuilt if the configured size changes (tests/hot-reload).
+_render_semaphore: Optional[asyncio.Semaphore] = None
+_render_semaphore_size: int = 0
+
+
+def _get_render_semaphore() -> asyncio.Semaphore:
+    global _render_semaphore, _render_semaphore_size
+    from app.config import settings
+
+    size = max(1, int(settings.pdf_max_concurrency))
+    if _render_semaphore is None or _render_semaphore_size != size:
+        _render_semaphore = asyncio.Semaphore(size)
+        _render_semaphore_size = size
+    return _render_semaphore
+
 
 async def init_pdf_renderer() -> None:
     """Initialize the Playwright browser instance.
@@ -156,6 +176,15 @@ async def _render_page_to_pdf(
     await page.wait_for_function(
         "() => document.fonts.ready.then(() => true)", timeout=_NAV_TIMEOUT_MS
     )
+    # Ensure every image (e.g. the profile photo) has finished loading+decoding
+    # before we snapshot, so the PDF never captures a half-loaded/missing photo.
+    # `complete` covers cached + freshly-loaded images; `naturalWidth > 0` guards
+    # against broken sources so one bad image can't hang the whole render.
+    await page.wait_for_function(
+        "() => Array.from(document.images).every((img) => img.complete && "
+        "(img.naturalWidth > 0 || img.getAttribute('src') === null))",
+        timeout=_NAV_TIMEOUT_MS,
+    )
     return await page.pdf(
         format=pdf_format,
         print_background=True,
@@ -246,8 +275,8 @@ def _raise_playwright_error(error: PlaywrightError, url: str) -> NoReturn:
         ) from error
     # Catch-all: the raw Playwright message can carry internal navigation URLs
     # and a full call log. Log it server-side; return a generic message to the
-    # client (CLAUDE.md rule 5 — and it stops the verbose trace from overflowing
-    # the client error modal, #811).
+    # client (detailed errors stay server-side — and this stops the verbose
+    # trace from overflowing the client error modal, #811).
     logger.error("PDF rendering failed for %s: %s", url, error_msg)
     raise PDFRenderError(
         "PDF rendering failed. Please try again, or try a simpler resume or a "
@@ -277,6 +306,36 @@ async def close_pdf_renderer() -> None:
 
 
 async def render_resume_pdf(
+    url: str,
+    page_size: str = "A4",
+    selector: str = ".resume-print",
+    margins: Optional[dict] = None,
+) -> bytes:
+    """Concurrency-gated PDF render (public entry point).
+
+    Acquires one of ``settings.pdf_max_concurrency`` render slots, waiting at most
+    ``settings.pdf_render_queue_timeout_seconds`` for a slot before failing fast
+    with :class:`PDFRenderError` (→ 503) so a burst of exports applies
+    backpressure instead of exhausting host memory/CPU.
+    """
+    from app.config import settings
+
+    sem = _get_render_semaphore()
+    timeout = max(1, int(settings.pdf_render_queue_timeout_seconds))
+    try:
+        await asyncio.wait_for(sem.acquire(), timeout=timeout)
+    except asyncio.TimeoutError as exc:
+        raise PDFRenderError(
+            "The PDF service is busy (too many concurrent exports). "
+            "Please try again in a moment."
+        ) from exc
+    try:
+        return await _render_resume_pdf_impl(url, page_size, selector, margins)
+    finally:
+        sem.release()
+
+
+async def _render_resume_pdf_impl(
     url: str,
     page_size: str = "A4",
     selector: str = ".resume-print",

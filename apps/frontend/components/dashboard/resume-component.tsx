@@ -15,6 +15,7 @@ import {
   settingsToCssVars,
 } from '@/lib/types/template-settings';
 import baseStyles from '@/components/resume/styles/_base.module.css';
+import type { PhotoConfig } from '@/lib/types/photo';
 
 export interface PersonalInfo {
   name?: string;
@@ -25,6 +26,10 @@ export interface PersonalInfo {
   website?: string;
   linkedin?: string;
   github?: string;
+  // Photo System: resolved header photo URL (provenance-aware) + the structured
+  // per-resume photo config. Both optional so pre-photo resumes are unchanged.
+  avatarUrl?: string | null;
+  photo?: PhotoConfig | null;
 }
 
 export interface Experience {
@@ -33,6 +38,8 @@ export interface Experience {
   company?: string;
   location?: string;
   years?: string;
+  current?: boolean;
+  tech?: string[];
   description?: string[];
 }
 
@@ -42,6 +49,15 @@ export interface Education {
   degree?: string;
   years?: string;
   description?: string;
+  // W-P2.1 structured fields (all optional; existing resumes unaffected).
+  specialization?: string;
+  location?: string;
+  startYear?: string;
+  endYear?: string;
+  currentlyStudying?: boolean;
+  gradeType?: 'cgpa' | 'gpa' | 'percentage' | null;
+  score?: string;
+  achievements?: string[];
 }
 
 export interface Project {
@@ -51,6 +67,7 @@ export interface Project {
   years?: string;
   github?: string;
   website?: string;
+  tech?: string[];
   description?: string[];
 }
 

@@ -15,8 +15,9 @@ Only :class:`~app.schemas.auth.SafeUser` is ever returned for a user (R7.5).
 from __future__ import annotations
 
 import logging
+from uuid import uuid4
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, File, Request, UploadFile
 
 from app.auth import (
     Principal,
@@ -29,8 +30,10 @@ from app.auth.accounts import (
     email_exists,
     get_by_id,
     normalize_email,
+    set_avatar,
     set_email,
     update_name,
+    update_profile,
 )
 from app.auth.audit import AuditEvent, get_audit_service
 from app.auth.email import build_email_change_email
@@ -49,6 +52,12 @@ from app.schemas.auth import (
     SessionListResponse,
     SessionSummary,
     UpdateProfileRequest,
+)
+from app.schemas.profile import (
+    AvatarResponse,
+    ProfileLink,
+    ProfileResponse,
+    ProfileUpdateRequest,
 )
 
 logger = logging.getLogger(__name__)
@@ -97,6 +106,157 @@ async def update_me(
         )
     assert record is not None
     return _safe_user(record, aal=principal.aal)
+
+
+@router.get("/me/profile", response_model=ProfileResponse)
+async def get_profile(principal: Principal = Depends(require_session)) -> ProfileResponse:
+    """Return the caller's extended profile (R14.1)."""
+    record = await get_by_id(principal.user_id)
+    if record is None:  # pragma: no cover - live session implies live user
+        raise ApiError(401, "unauthorized", "Account not found.")
+    return ProfileResponse(
+        headline=record.headline,
+        location=record.location,
+        links=[ProfileLink(**link) for link in (record.links or [])],
+        avatar_url=record.avatar_url,
+    )
+
+
+@router.patch("/me/profile", response_model=ProfileResponse)
+async def update_my_profile(
+    payload: ProfileUpdateRequest,
+    principal: Principal = Depends(require_session),
+) -> ProfileResponse:
+    """Update the caller's reusable profile fields (validated) — R14.1."""
+    links = [link.model_dump() for link in payload.links] if payload.links is not None else None
+    record = await update_profile(
+        principal.user_id,
+        headline=(payload.headline or None),
+        location=(payload.location or None),
+        links=links,
+    )
+    if record is None:  # pragma: no cover
+        raise ApiError(401, "unauthorized", "Account not found.")
+    return ProfileResponse(
+        headline=record.headline,
+        location=record.location,
+        links=[ProfileLink(**link) for link in (record.links or [])],
+        avatar_url=record.avatar_url,
+    )
+
+
+@router.post("/me/avatar", response_model=AvatarResponse)
+async def upload_avatar(
+    file: UploadFile = File(...),
+    principal: Principal = Depends(require_session),
+) -> AvatarResponse:
+    """Upload → canonical master → store → set url+metadata (Photo System).
+
+    Pipeline (``app.storage.image``): magic-byte sniff (no SVG/polyglot), byte +
+    pixel caps, decompression-bomb guard, EXIF-orientation normalize, EXIF/GPS
+    strip, aspect-ratio-preserving downscale, canonical WebP re-encode. The
+    original is never mutated; all crops/shapes/responsive variants are derived
+    later. Content-addressed **dedup**: if the same bytes were already stored we
+    skip the CDN write. The url is set only *after* a successful store; the
+    replaced object is garbage-collected. Never trusts the client MIME/extension.
+    """
+    from app.storage.image import ImageError, process_profile_image
+    from app.storage.provider import get_storage_provider
+    from app.productivity.metrics import get_productivity_metrics
+
+    metrics = get_productivity_metrics()
+    raw = await file.read()
+    try:
+        processed = process_profile_image(raw)
+    except ImageError:
+        # Opaque: the precise reason (bad magic, bomb, dimensions) stays server-side.
+        metrics.avatar_upload("rejected")
+        raise ApiError(
+            422,
+            "invalid_file",
+            "That image couldn't be processed. Use a JPEG, PNG, WebP, AVIF, or HEIC photo.",
+        )
+
+    # Content-addressed dedup: identical bytes → reuse the current master, no
+    # wasted CDN write (ABSOLUTE RULE: never duplicate image storage).
+    current = await get_by_id(principal.user_id)
+    if current and current.avatar_checksum == processed.checksum and current.avatar_url:
+        metrics.avatar_upload("ok")
+        return _avatar_response(current, deduplicated=True)
+
+    key = f"{principal.user_id}/{uuid4().hex}.{processed.ext}"
+    try:
+        url = await get_storage_provider().put(
+            key, processed.data, content_type=processed.content_type
+        )
+    except Exception as exc:  # storage outage → clean failure, no dangling url
+        logger.error("Avatar storage failed: %s", exc)
+        raise ApiError(503, "storage_unavailable", "Couldn't save your photo right now. Try again.")
+
+    record, old_key = await set_avatar(
+        principal.user_id,
+        avatar_url=url,
+        avatar_key=key,
+        metadata={
+            "width": processed.width,
+            "height": processed.height,
+            "checksum": processed.checksum,
+            "format": processed.source_format,
+            "byte_size": processed.byte_size,
+            "dominant_color": processed.dominant_color,
+        },
+    )
+    if record is None:  # pragma: no cover
+        raise ApiError(401, "unauthorized", "Account not found.")
+    # Garbage-collect the replaced object (best-effort; retention also sweeps).
+    if old_key and old_key != key:
+        try:
+            await get_storage_provider().delete(old_key)
+        except Exception:  # pragma: no cover
+            logger.debug("Old avatar GC failed for %s", old_key, exc_info=True)
+    metrics.avatar_upload("ok")
+    return _avatar_response(record)
+
+
+@router.delete("/me/avatar", response_model=AvatarResponse)
+async def delete_avatar(
+    principal: Principal = Depends(require_session),
+) -> AvatarResponse:
+    """Remove the caller's profile photo and GC the stored master (Photo System).
+
+    Resumes that pinned a snapshot keep rendering (their frozen URL is unaffected);
+    resumes tracking the canonical photo fall back to their no-photo layout.
+    """
+    from app.auth.accounts import clear_avatar
+    from app.storage.provider import get_storage_provider
+
+    record, old_key = await clear_avatar(principal.user_id)
+    if record is None:  # pragma: no cover - live session implies live user
+        raise ApiError(401, "unauthorized", "Account not found.")
+    if old_key:
+        try:
+            await get_storage_provider().delete(old_key)
+        except Exception:  # pragma: no cover - best-effort; retention also sweeps
+            logger.debug("Avatar GC failed for %s", old_key, exc_info=True)
+    return _avatar_response(record)
+
+
+def _avatar_response(record, *, deduplicated: bool = False) -> AvatarResponse:
+    """Build the :class:`AvatarResponse` from an account record + its metadata."""
+    aspect = None
+    if record.avatar_width and record.avatar_height:
+        aspect = round(record.avatar_width / record.avatar_height, 4)
+    return AvatarResponse(
+        avatar_url=record.avatar_url,
+        width=record.avatar_width,
+        height=record.avatar_height,
+        aspect_ratio=aspect,
+        dominant_color=record.avatar_dominant_color,
+        format=record.avatar_format,
+        byte_size=record.avatar_bytes,
+        checksum=record.avatar_checksum,
+        deduplicated=deduplicated,
+    )
 
 
 @router.get("/me/sessions", response_model=SessionListResponse)

@@ -1,0 +1,57 @@
+name: CI
+
+# Verifies the codebase on every push/PR: backend test suite (SQLite), frontend
+# lint + unit tests + production build. Complements db-portability.yml (which
+# runs the Postgres + transaction-pooler integration proof).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/backend
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+      - name: Sync dependencies
+        run: uv sync --frozen --extra dev
+      - name: Run backend test suite
+        run: uv run pytest -q
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # Node 24 (current LTS) matches the Dockerfile builder and .nvmrc. The
+          # committed package-lock.json is authored by npm 11 (Node 24); Node 22's
+          # npm 10 resolves optional wasm deps (@emnapi/*) differently and would
+          # reject it under `npm ci`. Keep this in lockstep with Dockerfile/.nvmrc.
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: apps/frontend/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Unit tests
+        run: npm run test
+      - name: Production build (also typechecks)
+        run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"

@@ -33,6 +33,77 @@ def _resolve_feature_prompt(
     return custom, True
 
 
+COVER_LETTER_SYSTEM_PROMPT = (
+    "You are a professional career coach and resume writer. Write compelling, "
+    "personalized cover letters."
+)
+OUTREACH_SYSTEM_PROMPT = (
+    "You are a professional networking coach. Write genuine, engaging cold "
+    "outreach messages."
+)
+
+
+def _format_feature_prompt(
+    custom_key: str,
+    default_template: str,
+    *,
+    resume_data: dict[str, Any],
+    job_description: str,
+    output_language: str,
+) -> str:
+    """Resolve + format a feature prompt with fallback to the default template.
+
+    Single source of truth for building the cover-letter / outreach prompt so the
+    streaming (P4) and non-streaming paths never drift.
+    """
+    template, is_custom = _resolve_feature_prompt(custom_key, default_template)
+    try:
+        return template.format(
+            job_description=job_description,
+            resume_data=json.dumps(resume_data),
+            output_language=output_language,
+        )
+    except (KeyError, IndexError, ValueError) as e:
+        if not is_custom:
+            raise
+        logging.warning(
+            "Custom prompt %s failed to format (%s); falling back to default",
+            custom_key,
+            e,
+        )
+        return default_template.format(
+            job_description=job_description,
+            resume_data=json.dumps(resume_data),
+            output_language=output_language,
+        )
+
+
+def build_cover_letter_prompt(
+    resume_data: dict[str, Any], job_description: str, language: str = "en"
+) -> str:
+    """Build the cover-letter user prompt (shared by stream + non-stream)."""
+    return _format_feature_prompt(
+        "cover_letter_prompt",
+        COVER_LETTER_PROMPT,
+        resume_data=resume_data,
+        job_description=job_description,
+        output_language=get_language_name(language),
+    )
+
+
+def build_outreach_prompt(
+    resume_data: dict[str, Any], job_description: str, language: str = "en"
+) -> str:
+    """Build the outreach-message user prompt (shared by stream + non-stream)."""
+    return _format_feature_prompt(
+        "outreach_message_prompt",
+        OUTREACH_MESSAGE_PROMPT,
+        resume_data=resume_data,
+        job_description=job_description,
+        output_language=get_language_name(language),
+    )
+
+
 async def generate_cover_letter(
     resume_data: dict[str, Any],
     job_description: str,
@@ -48,39 +119,11 @@ async def generate_cover_letter(
     Returns:
         Generated cover letter as plain text
     """
-    output_language = get_language_name(language)
-
-    template, is_custom = _resolve_feature_prompt(
-        "cover_letter_prompt", COVER_LETTER_PROMPT
-    )
-    try:
-        prompt = template.format(
-            job_description=job_description,
-            resume_data=json.dumps(resume_data),
-            output_language=output_language,
-        )
-    except (KeyError, IndexError, ValueError) as e:
-        # str.format() raises KeyError for unknown placeholders, IndexError for
-        # positional out-of-range, and ValueError for unmatched/invalid braces
-        # (e.g., ``{foo``). If the failing template is the built-in default,
-        # something is broken upstream and the caller should see it — re-raise.
-        # If it's a user-supplied custom prompt, fall back to the default with a
-        # warning so generation doesn't crash on out-of-band disk edits.
-        if not is_custom:
-            raise
-        logging.warning(
-            "Custom cover letter prompt failed to format (%s); falling back to default",
-            e,
-        )
-        prompt = COVER_LETTER_PROMPT.format(
-            job_description=job_description,
-            resume_data=json.dumps(resume_data),
-            output_language=output_language,
-        )
+    prompt = build_cover_letter_prompt(resume_data, job_description, language)
 
     result = await complete(
         prompt=prompt,
-        system_prompt="You are a professional career coach and resume writer. Write compelling, personalized cover letters.",
+        system_prompt=COVER_LETTER_SYSTEM_PROMPT,
         max_tokens=2048,
     )
 
@@ -102,52 +145,68 @@ async def generate_outreach_message(
     Returns:
         Generated outreach message as plain text
     """
-    output_language = get_language_name(language)
-
-    template, is_custom = _resolve_feature_prompt(
-        "outreach_message_prompt", OUTREACH_MESSAGE_PROMPT
-    )
-    try:
-        prompt = template.format(
-            job_description=job_description,
-            resume_data=json.dumps(resume_data),
-            output_language=output_language,
-        )
-    except (KeyError, IndexError, ValueError) as e:
-        # See generate_cover_letter for rationale on the exception set.
-        if not is_custom:
-            raise
-        logging.warning(
-            "Custom outreach message prompt failed to format (%s); falling back to default",
-            e,
-        )
-        prompt = OUTREACH_MESSAGE_PROMPT.format(
-            job_description=job_description,
-            resume_data=json.dumps(resume_data),
-            output_language=output_language,
-        )
+    prompt = build_outreach_prompt(resume_data, job_description, language)
 
     result = await complete(
         prompt=prompt,
-        system_prompt="You are a professional networking coach. Write genuine, engaging cold outreach messages.",
+        system_prompt=OUTREACH_SYSTEM_PROMPT,
         max_tokens=1024,
     )
 
     return result.strip()
 
 
+def _clean_title_fragment(value: str, *, max_len: int = 60) -> str:
+    """Sanitize an LLM/title fragment into a short, single-line string.
+
+    Collapses whitespace/newlines (guards against paragraph-length output),
+    strips wrapping quotes, and truncates to ``max_len`` characters so a
+    verbose model response can never produce a sentence-long title.
+    """
+    # Collapse any run of whitespace (incl. newlines) to a single space.
+    cleaned = " ".join(value.split()).strip().strip("\"'").strip()
+    if len(cleaned) > max_len:
+        cleaned = cleaned[:max_len].rstrip()
+    return cleaned
+
+
+def compose_resume_title(
+    candidate_name: str | None,
+    role_and_company: str,
+) -> str:
+    """Compose a concise, human-readable resume title.
+
+    Produces ``"<Name> — <Role @ Company>"`` when a candidate name is known,
+    otherwise falls back to just the role/company fragment. The result is
+    always a short single line (never a sentence/paragraph).
+    """
+    role = _clean_title_fragment(role_and_company)
+    name = _clean_title_fragment(candidate_name or "", max_len=40)
+    if name and role:
+        return f"{name} — {role}"[:80]
+    if role:
+        return role[:80]
+    if name:
+        return f"{name} — Resume"[:80]
+    return "Tailored resume"
+
+
 async def generate_resume_title(
     job_description: str,
     language: str = "en",
+    candidate_name: str | None = None,
 ) -> str:
     """Generate a short descriptive title from a job description.
 
     Args:
         job_description: Target job description text
         language: Output language code (en, es, zh, ja)
+        candidate_name: The candidate's name (from resume personalInfo). When
+            provided, the title is composed as ``"<Name> — <Role @ Company>"``.
 
     Returns:
-        Generated title like "Senior Frontend Engineer @ Stripe"
+        Generated title like "Jane Doe — Senior Frontend Engineer @ Stripe"
+        (or "Senior Frontend Engineer @ Stripe" when the name is unknown).
     """
     output_language = get_language_name(language)
 
@@ -163,6 +222,6 @@ async def generate_resume_title(
         temperature=0.3,
     )
 
-    # Strip quotes and whitespace, truncate to 80 chars
-    title = result.strip().strip("\"'")
-    return title[:80]
+    # Compose the final concise title in code so a verbose model response can
+    # never yield a sentence/paragraph-length name.
+    return compose_resume_title(candidate_name, result)

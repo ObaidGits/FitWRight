@@ -456,6 +456,11 @@ class SessionService:
                 expires_at = self._extend_expiry(row, now)
                 row.last_seen_at = now.isoformat()
                 row.expires_at = expires_at
+                # Keep the admin "last active" watermark fresh on the same
+                # write-behind cadence (P2 Admin — no extra query/write per
+                # request). The active-users *stat* reads sessions.last_seen_at
+                # directly; this column powers the per-user display only.
+                user.last_active_at = now.isoformat()
                 await session.commit()
 
             resolved = ResolvedSession(

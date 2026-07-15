@@ -21,6 +21,7 @@ type PageProps = {
   searchParams?: Promise<{
     pageSize?: string;
     lang?: string;
+    print_token?: string;
   }>;
 };
 
@@ -37,10 +38,25 @@ interface CoverLetterData {
   personalInfo: PersonalInfo;
 }
 
-async function fetchCoverLetterData(resumeId: string): Promise<CoverLetterData> {
-  const res = await fetch(`${API_BASE}/resumes?resume_id=${encodeURIComponent(resumeId)}`, {
-    cache: 'no-store',
-  });
+async function fetchCoverLetterData(
+  resumeId: string,
+  printToken?: string
+): Promise<CoverLetterData> {
+  // See print/resumes/[id]/page.tsx — authenticate the server-side render with
+  // the short-lived print token (PDF export), or forward cookies (direct view).
+  let url: string;
+  const init: RequestInit = { cache: 'no-store' };
+  if (printToken) {
+    url = `${API_BASE}/resumes/print-data?resume_id=${encodeURIComponent(resumeId)}&token=${encodeURIComponent(printToken)}`;
+  } else {
+    url = `${API_BASE}/resumes?resume_id=${encodeURIComponent(resumeId)}`;
+    const { headers } = await import('next/headers');
+    const cookie = (await headers()).get('cookie');
+    if (cookie) {
+      init.headers = { cookie };
+    }
+  }
+  const res = await fetch(url, init);
   if (!res.ok) {
     throw new Error(`Failed to load resume (status ${res.status}).`);
   }
@@ -75,7 +91,10 @@ export default async function PrintCoverLetterPage({ params, searchParams }: Pag
   const locale = resolveLocale(resolvedSearchParams?.lang);
 
   // Fetch cover letter data from API (same pattern as resume)
-  const { coverLetter, personalInfo } = await fetchCoverLetterData(resolvedParams.id);
+  const { coverLetter, personalInfo } = await fetchCoverLetterData(
+    resolvedParams.id,
+    resolvedSearchParams?.print_token
+  );
 
   // Standard cover letter margins
   const margins = { top: 25, right: 25, bottom: 25, left: 25 };

@@ -984,6 +984,15 @@ async def improve_resume(
     # LLM-006: Pre-validation check for truncation signs
     _check_for_truncation(result)
 
+    # The improve prompts intentionally skip personalInfo; the LLM must never
+    # rewrite identity/contact. Restore it verbatim from the original so the
+    # header — including the Photo System config (photo + avatarUrl) — is
+    # preserved exactly on the tailored resume (never invented, never dropped).
+    if original_resume_data is not None and isinstance(
+        original_resume_data.get("personalInfo"), dict
+    ):
+        result["personalInfo"] = original_resume_data["personalInfo"]
+
     # Validate against schema
     validated = ResumeData.model_validate(result)
     return validated.model_dump()

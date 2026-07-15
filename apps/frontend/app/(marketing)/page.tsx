@@ -30,14 +30,43 @@ import Eye from 'lucide-react/dist/esm/icons/eye';
 import { Button } from '@/components/atelier/button';
 import { Card } from '@/components/atelier/card';
 import { Reveal } from '@/components/marketing/reveal';
+import { ContactCta } from '@/components/marketing/contact-cta';
 import { Hero } from '@/components/marketing/hero';
 import { Faq } from '@/components/marketing/faq';
+import { LANDING_FAQS } from '@/components/marketing/faq-data';
 import { AnalysisMock, KanbanMock, ResumeDocMock } from '@/components/marketing/mockups';
+import { CAPABILITY_NAV } from '@/components/marketing/capabilities-data';
+import { JsonLd } from '@/lib/seo/json-ld';
+import { KEYWORDS } from '@/lib/seo/page-keywords';
+import { OG_IMAGE, TWITTER_IMAGE } from '@/lib/seo/config';
+import {
+  softwareApplicationSchema,
+  softwareSourceCodeSchema,
+  faqPageSchema,
+  howToSchema,
+  breadcrumbSchema,
+} from '@/lib/seo/structured-data';
 
 export const metadata: Metadata = {
-  title: 'FitWright — Built to fit',
+  // Absolute title: the home page owns the full brand headline and must not get
+  // the "· FitWright" template suffix (which would duplicate the brand name).
+  title: { absolute: 'FitWright — AI Resume Builder & Tailor' },
   description:
-    'Tailor your resume to every job with AI. Honest ATS scoring, cover letters, interview prep, and an application tracker. Bring your own API key. Open source.',
+    'Tailor your resume to every job with AI. Honest ATS scoring, cover letters, interview prep, and an application tracker. Bring your own API key. Free and open source.',
+  keywords: [...KEYWORDS.landing],
+  alternates: { canonical: '/' },
+  openGraph: {
+    title: 'FitWright — AI Resume Builder & Tailor',
+    description:
+      'Tailor your resume to every job with AI. Honest ATS scoring, cover letters, interview prep, and application tracking. Bring your own API key. Free and open source.',
+    url: '/',
+    type: 'website',
+    images: [OG_IMAGE],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    images: [TWITTER_IMAGE],
+  },
 };
 
 const PROBLEMS = [
@@ -150,6 +179,23 @@ function SectionHeading({ eyebrow, title, sub }: { eyebrow: string; title: strin
 export default function LandingPage() {
   return (
     <main>
+      {/* Product + FAQ + breadcrumb structured data. Organization/WebSite are
+          emitted site-wide in the root layout and referenced here by @id. */}
+      <JsonLd
+        data={[
+          softwareApplicationSchema(),
+          softwareSourceCodeSchema(),
+          faqPageSchema(LANDING_FAQS),
+          // Mirrors the visible "How it works" section (single source: STEPS).
+          howToSchema({
+            name: 'How to tailor your resume to a job with FitWright',
+            description:
+              'Add your resume, paste the job description, and let FitWright tailor it with AI — then refine, export, and track your application.',
+            steps: STEPS.map((s) => ({ name: s.title, text: s.body })),
+          }),
+          breadcrumbSchema([{ name: 'Home', path: '/' }]),
+        ]}
+      />
       {/* Progressive enhancement: reveal content even without JS. */}
       <noscript>
         <style>{`.reveal{opacity:1 !important;transform:none !important}`}</style>
@@ -483,42 +529,11 @@ export default function LandingPage() {
         </Reveal>
       </section>
 
-      {/* About the developer */}
-      <section className="mx-auto w-full max-w-3xl px-4 pb-16 text-center md:px-8">
-        <p className="text-xs uppercase tracking-wider text-[var(--muted-foreground)]">
-          About the developer
-        </p>
-        <p className="mx-auto mt-3 max-w-xl text-[var(--foreground)]">
-          FitWright is built by <span className="font-semibold">Obaidullah Zeeshan</span> — a
-          full-stack &amp; backend-focused software engineer.
-        </p>
-        <div className="mt-4 flex flex-wrap items-center justify-center gap-4 text-sm text-[var(--primary)]">
-          <a
-            href="https://obaidullah-zeeshan.dev"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="hover:underline"
-          >
-            Website
-          </a>
-          <a
-            href="https://www.linkedin.com/in/obaidullah-zeeshan/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="hover:underline"
-          >
-            LinkedIn
-          </a>
-          <a
-            href="https://github.com/ObaidGits"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="hover:underline"
-          >
-            GitHub
-          </a>
-        </div>
-      </section>
+      {/* Let's work together — personal contact CTA (introduces the developer
+          and routes to /contact). Replaces the thin "About the developer"
+          blurb with a richer, conversion-focused section right where the
+          reader has just finished the product story. */}
+      <ContactCta />
 
       {/* Footer */}
       <footer className="border-t border-[var(--border)]">
@@ -529,7 +544,21 @@ export default function LandingPage() {
             </span>
             © {new Date().getFullYear()} FitWright
           </span>
-          <nav className="flex items-center gap-5" aria-label="Footer">
+          <nav
+            className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 md:justify-end"
+            aria-label="Footer"
+          >
+            {CAPABILITY_NAV.map((cap) => (
+              <Link key={cap.slug} href={`/${cap.slug}`} className="hover:text-[var(--foreground)]">
+                {cap.label}
+              </Link>
+            ))}
+            <Link href="/connect" className="hover:text-[var(--foreground)]">
+              Connect
+            </Link>
+            <Link href="/contact" className="hover:text-[var(--foreground)]">
+              Contact
+            </Link>
             <Link href="/privacy" className="hover:text-[var(--foreground)]">
               Privacy
             </Link>

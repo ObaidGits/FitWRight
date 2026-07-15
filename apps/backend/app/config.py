@@ -11,6 +11,30 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
 
+
+def _is_https_or_loopback_http(uri: str) -> bool:
+    """Whether an OAuth redirect URI is acceptable in hosted mode.
+
+    Accepts any ``https://`` URL, plus ``http://`` when the host is a loopback
+    address (localhost / 127.0.0.1 / ::1). Plaintext http is safe there because
+    the traffic never leaves the machine — this is the standard local-dev OAuth
+    pattern that Google's console explicitly permits and that RFC 8252 §8.3
+    (loopback interface redirection) sanctions. Any non-loopback host must use
+    https so OAuth is never carried over the network in cleartext.
+    """
+    from urllib.parse import urlparse
+
+    try:
+        parsed = urlparse(uri)
+    except Exception:
+        return False
+    if parsed.scheme == "https":
+        return True
+    if parsed.scheme == "http":
+        return (parsed.hostname or "").lower() in ("localhost", "127.0.0.1", "::1")
+    return False
+
+
 # Minimum length for operator-supplied cryptographic secrets (session signing,
 # ip-hash HMAC key). Short secrets are a real weakness, so we reject them with a
 # clear error rather than silently accepting them.
@@ -26,6 +50,13 @@ _MAX_TTL_SECONDS = 60 * 60 * 24 * 365  # one year
 _EMAIL_DEFAULT_ALIASES = frozenset({"", "log", "logging", "console", "dev"})
 _CAPTCHA_DISABLED_ALIASES = frozenset({"", "none", "disabled", "off", "allow"})
 _BREACH_DISABLED_ALIASES = frozenset({"", "none", "disabled", "off", "noop"})
+
+# KVSTORE_URL values that select the in-process (non-shared) LocalKVStore. Kept
+# in sync with app.auth.kvstore.factory so hosted-mode validation can detect a
+# non-shared store (which would split rate-limit/lock/session state per worker).
+_KVSTORE_LOCAL_ALIASES = frozenset(
+    {"", "local", "memory", "inproc", "in-proc", "local://"}
+)
 
 
 # Path to config file for API key persistence
@@ -374,6 +405,13 @@ class Settings(BaseSettings):
     # fail-fast requirements for the real secrets below (R14.3).
     single_user_mode: bool = True
 
+    # Explicit deployment profile (ARCHITECTURE §3/§4; IMPLEMENTATION_PLAN Phase
+    # 1). Declared intent — ``desktop``/``saas``/``enterprise``/``self_hosted``/
+    # ``development``/``test``/``ci``. Blank → derived from ``single_user_mode``
+    # (desktop when true, saas when false), so existing .env files are unchanged.
+    # When set, it must not contradict ``single_user_mode`` (validated at boot).
+    deployment_profile: str = ""
+
     # Session signing / CSRF derivation secret (+ previous key for zero-downtime
     # rotation, R16.3). Required in hosted mode; in local mode a strong ephemeral
     # value is generated per process (never persisted, never used in hosted).
@@ -435,8 +473,30 @@ class Settings(BaseSettings):
     # Primary database (ADR-13). Empty → the local SQLite file (unchanged
     # behavior). Hosted MUST set a Postgres URL (ephemeral disk wipes SQLite).
     database_url: str = ""
+    # Dedicated connection string for DDL/migrations. On Supabase (and any
+    # PgBouncer transaction pooler) the runtime uses the POOLED endpoint (6543),
+    # but migrations MUST use the DIRECT endpoint (5432): CREATE INDEX
+    # CONCURRENTLY cannot run through a transaction pooler and the migration
+    # advisory lock is session-scoped (unstable when each statement may hit a
+    # different backend). Blank → fall back to DATABASE_URL (correct when the app
+    # already talks to a direct connection, e.g. Neon-direct or local).
+    migration_database_url: str = ""
     db_pool_size: int = 5
     db_use_pooler: bool = True
+    # Postgres TLS mode (ADR-13). Blank → derive from the DATABASE_URL's own
+    # ``sslmode`` query param, else default to ``require`` in hosted mode and no
+    # forced TLS in local single-user mode. Explicit values (disable | prefer |
+    # allow | require | verify-ca | verify-full) override the URL/default. This
+    # is normalized in ``app.db_engine`` into the per-driver connect arg
+    # (asyncpg ``ssl`` context / psycopg ``sslmode``), since asyncpg rejects a
+    # raw ``sslmode`` kwarg — required for Supabase's TLS-only endpoints.
+    db_ssl: str = ""
+    # Automatically run ``alembic upgrade head`` at startup on hosted Postgres
+    # (SQLite is unaffected — it uses create_all). Serialized across workers by a
+    # Postgres advisory lock and idempotent, so it is safe on every boot. Set
+    # false to manage migrations out-of-band (a dedicated release phase); the app
+    # then only verifies DB reachability at boot. See app.migrations_runtime.
+    db_auto_migrate: bool = True
 
     # Free/premium infra toggles (ADR-14). Conservative free-tier-safe defaults.
     storage_provider: Literal["local", "cloudinary", "s3"] = "local"
@@ -460,6 +520,523 @@ class Settings(BaseSettings):
     # the other lifetimes so a typo can't create a zero/never interval.
     reaper_interval_seconds: int = 60 * 60  # 1 hour
 
+    # =====================================================================
+    # P2 Admin subsystem (design "Deployment")
+    # =====================================================================
+    # Master feature flag for the admin surface. When off, the guarded admin
+    # router still mounts but every endpoint returns 404 ``admin_disabled`` (the
+    # rollout "deploy flag-off → enable read → enable manage" step).
+    admin_enabled: bool = True
+    # Kill-switch for irreversible destructive actions (soft-delete + purge).
+    # When off, delete/restore endpoints and the PurgeJob are refused/skipped —
+    # the safe default for the initial rollout can flip this off to disable
+    # destruction entirely without a redeploy of code (value change, ADR-14).
+    admin_destructive_actions: bool = True
+    # Grace-period length (days) between soft-delete and irreversible purge.
+    # A soft-deleted user is restorable until ``deleted_at + this``; bounded to a
+    # sane window so a typo can't create a zero (instant purge) or absurd delay.
+    admin_delete_grace_days: int = 7
+    # Bounded batch size for ``POST /users/bulk-disable`` (R6.4) — caps the
+    # blast radius / request cost of a single bulk action.
+    admin_bulk_disable_max: int = 100
+
+    @field_validator(
+        "admin_enabled",
+        "admin_destructive_actions",
+        mode="before",
+    )
+    @classmethod
+    def _blank_admin_bool_to_default(cls, v: Any, info: Any) -> Any:
+        """Treat a blank admin bool env var as the field default."""
+        if isinstance(v, str) and not v.strip():
+            return cls.model_fields[info.field_name].default
+        return v
+
+    @field_validator("admin_delete_grace_days", mode="before")
+    @classmethod
+    def _validate_grace_days(cls, v: Any) -> int:
+        """Coerce + bounds-check the grace period to [1, 365] days."""
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return 7
+        try:
+            days = int(float(str(v).strip()))
+        except (TypeError, ValueError, OverflowError):
+            return 7
+        return max(1, min(365, days))
+
+    @field_validator("admin_bulk_disable_max", mode="before")
+    @classmethod
+    def _validate_bulk_max(cls, v: Any) -> int:
+        """Coerce + bounds-check the bulk-disable cap to [1, 1000]."""
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return 100
+        try:
+            n = int(float(str(v).strip()))
+        except (TypeError, ValueError, OverflowError):
+            return 100
+        return max(1, min(1000, n))
+
+    # =====================================================================
+    # Admin panel observability upgrade (design "admin-panel-upgrade")
+    # =====================================================================
+    # Tiered audit-log retention windows (Req 1.3/1.4/1.8). A Security_Critical
+    # row is deleted once older than the hot window; a Downsamplable row is
+    # aggregated-then-deleted once older than the downsample window. Positive
+    # integers — a blank/typo env falls back to the documented default so the
+    # retention job can never resolve a zero/never window.
+    admin_audit_hot_days: int = 365
+    admin_audit_downsample_days: int = 90
+    # Max audit rows the retention job deletes per invocation (Req 1.7). Bounded
+    # to [1, 100000] so a typo can't disable batching (0) or unbound the run.
+    admin_audit_retention_batch: int = 1000
+    # Age (days) beyond which the MetricsPruneStep deletes `metrics_daily` rows,
+    # excluding the totals snapshot (Req 15.6). Positive integer.
+    admin_metrics_retention_days: int = 400
+    # Minimum interval (minutes) between DB-size samples taken by the rollup's
+    # DbSizeSampleStep — the hourly KV guard that keeps sampling off the request
+    # path (Req 7). Positive integer.
+    admin_db_size_sample_minutes: int = 60
+    # Stuck-job detection (Req 8.10): a running job is flagged potentially-stuck
+    # when its current duration exceeds `multiplier × expected duration`, or the
+    # absolute `ceiling` (seconds) when no expected duration exists. Positive
+    # integers; computed from existing run markers, no new monitoring.
+    admin_job_stuck_multiplier: int = 3
+    admin_job_stuck_ceiling_seconds: int = 3600
+    # Minimal threshold alerting (Req 12.5). Percentages are bounded to [0, 100];
+    # the cooldown is a positive integer number of seconds an alert stays
+    # suppressed while its condition remains continuously true. Every value is
+    # read from config, never hard-coded.
+    alert_storage_full_pct: int = 90
+    alert_error_rate_pct: int = 5
+    alert_cooldown_seconds: int = 3600
+
+    @field_validator(
+        "admin_audit_hot_days",
+        "admin_audit_downsample_days",
+        "admin_metrics_retention_days",
+        "admin_db_size_sample_minutes",
+        "admin_job_stuck_multiplier",
+        "admin_job_stuck_ceiling_seconds",
+        "alert_cooldown_seconds",
+        mode="before",
+    )
+    @classmethod
+    def _validate_admin_positive_int(cls, v: Any, info: Any) -> int:
+        """Coerce a positive-int admin setting; blank/typo env → field default."""
+        default = cls.model_fields[info.field_name].default
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return default
+        try:
+            n = int(float(str(v).strip()))
+        except (TypeError, ValueError, OverflowError):
+            return default
+        return max(1, n)
+
+    @field_validator("admin_audit_retention_batch", mode="before")
+    @classmethod
+    def _validate_audit_retention_batch(cls, v: Any) -> int:
+        """Coerce + bounds-check the audit retention batch to [1, 100000]."""
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return 1000
+        try:
+            n = int(float(str(v).strip()))
+        except (TypeError, ValueError, OverflowError):
+            return 1000
+        return max(1, min(100_000, n))
+
+    @field_validator(
+        "alert_storage_full_pct",
+        "alert_error_rate_pct",
+        mode="before",
+    )
+    @classmethod
+    def _validate_alert_percent(cls, v: Any, info: Any) -> int:
+        """Coerce + bounds-check an alert percentage to [0, 100]; blank → default."""
+        default = cls.model_fields[info.field_name].default
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return default
+        try:
+            n = int(float(str(v).strip()))
+        except (TypeError, ValueError, OverflowError):
+            return default
+        return max(0, min(100, n))
+
+    # =====================================================================
+    # P3 Productivity — Version history (design §A, Requirements 1–3)
+    # =====================================================================
+    # Master feature flag for the version-history surface. Off → the router
+    # mounts but every endpoint returns 404 and snapshot capture is skipped, so
+    # the feature can be dark-launched / killed without a redeploy (ADR-14).
+    version_history_enabled: bool = True
+    # Max snapshots retained per resume; the oldest non-``original`` rows are
+    # pruned beyond this (the ``original`` is always retained — R1.3). Bounded so
+    # a typo can't disable pruning or store thousands of blobs per resume.
+    version_history_cap: int = 50
+    # Debounce window (seconds) coalescing rapid consecutive ``manual`` saves
+    # into a single snapshot (R1.2). 0 disables debouncing.
+    version_manual_debounce_seconds: int = 120
+
+    @field_validator("version_history_enabled", mode="before")
+    @classmethod
+    def _blank_version_bool_to_default(cls, v: Any, info: Any) -> Any:
+        """Treat a blank version-history bool env var as the field default."""
+        if isinstance(v, str) and not v.strip():
+            return cls.model_fields[info.field_name].default
+        return v
+
+    @field_validator("version_history_cap", mode="before")
+    @classmethod
+    def _validate_version_cap(cls, v: Any) -> int:
+        """Coerce + bounds-check the snapshot cap to [2, 500]."""
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return 50
+        try:
+            n = int(float(str(v).strip()))
+        except (TypeError, ValueError, OverflowError):
+            return 50
+        return max(2, min(500, n))
+
+    @field_validator("version_manual_debounce_seconds", mode="before")
+    @classmethod
+    def _validate_version_debounce(cls, v: Any) -> int:
+        """Coerce + bounds-check the manual-save debounce to [0, 3600] seconds."""
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return 120
+        try:
+            n = int(float(str(v).strip()))
+        except (TypeError, ValueError, OverflowError):
+            return 120
+        return max(0, min(3600, n))
+
+    # =====================================================================
+    # Professional Profile System (docs/architecture/PROFILE_SYSTEM_PLAN.md)
+    # =====================================================================
+    # Master flag for the profile surface. Off → the router mounts but every
+    # endpoint returns 404 and snapshot capture is skipped (dark-launch / kill
+    # switch without a redeploy — ADR-14).
+    profile_enabled: bool = True
+    # Max profile snapshots retained per user; oldest non-first rows pruned.
+    profile_history_cap: int = 50
+    # Debounce window (seconds) coalescing rapid consecutive ``manual`` profile
+    # saves into one snapshot. 0 disables debouncing.
+    profile_manual_debounce_seconds: int = 120
+    # Merge similarity backend: deterministic (default) | hybrid | embedding.
+    # hybrid/embedding are inert without an injected semantic/embed fn (no vector
+    # infra ships), falling back to deterministic — never fabricating a score.
+    profile_similarity_provider: str = "deterministic"
+
+    @field_validator("profile_enabled", mode="before")
+    @classmethod
+    def _blank_profile_bool_to_default(cls, v: Any, info: Any) -> Any:
+        """Treat a blank profile bool env var as the field default."""
+        if isinstance(v, str) and not v.strip():
+            return cls.model_fields[info.field_name].default
+        return v
+
+    @field_validator("profile_history_cap", mode="before")
+    @classmethod
+    def _validate_profile_cap(cls, v: Any) -> int:
+        """Coerce + bounds-check the profile snapshot cap to [2, 500]."""
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return 50
+        try:
+            n = int(float(str(v).strip()))
+        except (TypeError, ValueError, OverflowError):
+            return 50
+        return max(2, min(500, n))
+
+    @field_validator("profile_manual_debounce_seconds", mode="before")
+    @classmethod
+    def _validate_profile_debounce(cls, v: Any) -> int:
+        """Coerce + bounds-check the profile manual-save debounce to [0, 3600]."""
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return 120
+        try:
+            n = int(float(str(v).strip()))
+        except (TypeError, ValueError, OverflowError):
+            return 120
+        return max(0, min(3600, n))
+
+    # =====================================================================
+    # P3 Productivity — Notifications + shared platform (design §B/§Platform)
+    # =====================================================================
+    # Master flag for the global-search surface (router 404s when off).
+    search_enabled: bool = True
+    # P3 Avatar + profile (design §H). Storage creds (Cloudinary free default when
+    # configured) + hardening caps. Local provider is the zero-config dev default.
+    cloudinary_cloud_name: str = ""
+    cloudinary_api_key: str = ""
+    cloudinary_api_secret: str = ""
+    avatar_max_bytes: int = 5 * 1024 * 1024
+    avatar_max_dimension: int = 4096
+    # Canonical profile-image master (Photo System). The master preserves aspect
+    # ratio (no crop) and is downscaled so its longest edge ≤ this many pixels;
+    # every render-time crop/shape and every responsive CDN variant derives from
+    # it (no re-upload, original never mutated). 1024 keeps a crisp master for
+    # high-DPI resume headers while staying small.
+    image_master_max_dimension: int = 1024
+    image_master_quality: int = 85
+
+    @property
+    def cloudinary_configured(self) -> bool:
+        return bool(
+            self.cloudinary_cloud_name.strip()
+            and self.cloudinary_api_key.strip()
+            and self.cloudinary_api_secret.strip()
+        )
+
+    @field_validator(
+        "avatar_max_bytes",
+        "avatar_max_dimension",
+        "image_master_max_dimension",
+        "image_master_quality",
+        mode="before",
+    )
+    @classmethod
+    def _validate_avatar_int(cls, v: Any, info: Any) -> int:
+        default = cls.model_fields[info.field_name].default
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return default
+        try:
+            n = int(float(str(v).strip()))
+        except (TypeError, ValueError, OverflowError):
+            return default
+        return max(1, n)
+
+    # PDF rendering resource bounds (headless Chromium is memory/CPU-heavy).
+    # ``pdf_max_concurrency`` caps simultaneous renders (backpressure/DoS guard);
+    # a request that can't get a slot within ``pdf_render_queue_timeout_seconds``
+    # fails fast with 503 instead of piling up and exhausting memory.
+    pdf_max_concurrency: int = 2
+    pdf_render_queue_timeout_seconds: int = 30
+
+    # Per-user rate limit (events/minute) for expensive LLM generation endpoints
+    # (resume parse, cover letter, interview prep, enrichment, resume wizard,
+    # JD-from-URL). Guards provider cost/abuse; 0 disables. Enforced via the
+    # shared KVStore so it holds across workers/instances (see app.llm_ratelimit).
+    llm_rate_per_min_user: int = 20
+
+    @field_validator("pdf_max_concurrency", "pdf_render_queue_timeout_seconds", mode="before")
+    @classmethod
+    def _validate_pdf_int(cls, v: Any, info: Any) -> int:
+        default = cls.model_fields[info.field_name].default
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return default
+        try:
+            n = int(float(str(v).strip()))
+        except (TypeError, ValueError, OverflowError):
+            return default
+        return max(1, n)
+
+    @field_validator("llm_rate_per_min_user", mode="before")
+    @classmethod
+    def _validate_llm_rate(cls, v: Any, info: Any) -> int:
+        # Allow 0 to disable; blank → default; negative → 0.
+        default = cls.model_fields[info.field_name].default
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return default
+        try:
+            n = int(float(str(v).strip()))
+        except (TypeError, ValueError, OverflowError):
+            return default
+        return max(0, n)
+
+    # P3 JD-from-URL (SSRF-hardened import). Kill-switch + rate/concurrency caps.
+    jd_from_url_enabled: bool = True
+    jd_v2_enabled: bool = True  # v2 extraction pipeline (cascade: API → JSON-LD → DOM)
+    jd_url_rate_per_min_user: int = 10
+    jd_url_rate_per_min_global: int = 120
+    jd_url_max_concurrency: int = 4
+    jd_url_cache_ttl_seconds: int = 3600
+    jd_pipeline_timeout: int = 20  # Global timeout (seconds) for v2 pipeline
+
+    # Phase 3 (Coverage & Polish) feature flags.
+    jd_pdf_enabled: bool = True          # PDF extraction pipeline (§20)
+    jd_ocr_enabled: bool = False         # Tesseract OCR fallback for scanned PDFs (opt-in; needs deps)
+    jd_i18n_enabled: bool = True         # Language detection + i18n section keywords (§21)
+    jd_robots_check_enabled: bool = True  # robots.txt policy check before fetch (§26)
+    jd_cost_monitoring_enabled: bool = True  # Per-user/global cost caps (§25)
+    jd_cost_user_daily_cap_usd: float = 0.5
+    jd_cost_global_hourly_break_usd: float = 100.0
+
+    # Phase 4 (Advanced) feature flags.
+    jd_extension_fallback_enabled: bool = True   # Accept user's rendered DOM (browser-extension fallback)
+    jd_ml_scoring_enabled: bool = False          # ML content scorer as an extra DOM confidence signal
+    jd_webhook_enabled: bool = False             # Employer webhook ingestion (zero-scrape authoritative push)
+    jd_webhook_secret: str = ""                  # HMAC-SHA256 shared secret for webhook auth (required when enabled)
+    jd_distributed_render_max: int = 0           # Global concurrent Playwright renders across workers (0 = per-process only)
+    jd_edge_render_url: str = ""                 # External edge-renderer endpoint (blank = local Playwright)
+
+    @field_validator(
+        "jd_from_url_enabled", "jd_pdf_enabled", "jd_ocr_enabled",
+        "jd_i18n_enabled", "jd_robots_check_enabled", "jd_cost_monitoring_enabled",
+        "jd_extension_fallback_enabled", "jd_ml_scoring_enabled", "jd_webhook_enabled",
+        mode="before",
+    )
+    @classmethod
+    def _blank_jd_bool_to_default(cls, v: Any, info: Any) -> Any:
+        if isinstance(v, str) and not v.strip():
+            return cls.model_fields[info.field_name].default
+        return v
+
+    @field_validator("jd_distributed_render_max", mode="before")
+    @classmethod
+    def _validate_jd_render_max(cls, v: Any, info: Any) -> int:
+        default = cls.model_fields[info.field_name].default
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return default
+        try:
+            n = int(float(str(v).strip()))
+        except (TypeError, ValueError, OverflowError):
+            return default
+        return max(0, min(1000, n))
+
+    @field_validator("jd_cost_user_daily_cap_usd", "jd_cost_global_hourly_break_usd", mode="before")
+    @classmethod
+    def _validate_jd_cost(cls, v: Any, info: Any) -> float:
+        default = cls.model_fields[info.field_name].default
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return default
+        try:
+            f = float(str(v).strip())
+        except (TypeError, ValueError, OverflowError):
+            return default
+        return max(0.0, f)
+
+    @field_validator(
+        "jd_url_rate_per_min_user", "jd_url_rate_per_min_global",
+        "jd_url_max_concurrency", "jd_url_cache_ttl_seconds", mode="before",
+    )
+    @classmethod
+    def _validate_jd_int(cls, v: Any, info: Any) -> int:
+        default = cls.model_fields[info.field_name].default
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return default
+        try:
+            n = int(float(str(v).strip()))
+        except (TypeError, ValueError, OverflowError):
+            return default
+        return max(1, min(100000, n))
+
+    # P3 reminders / interviews / agenda feature flags + abuse caps.
+    reminders_enabled: bool = True
+    interviews_enabled: bool = True
+    agenda_enabled: bool = True
+    max_reminders_per_user: int = 500
+    max_interviews_per_user: int = 500
+
+    @field_validator("reminders_enabled", "interviews_enabled", "agenda_enabled", mode="before")
+    @classmethod
+    def _blank_sched_bool_to_default(cls, v: Any, info: Any) -> Any:
+        if isinstance(v, str) and not v.strip():
+            return cls.model_fields[info.field_name].default
+        return v
+
+    @field_validator("max_reminders_per_user", "max_interviews_per_user", mode="before")
+    @classmethod
+    def _validate_sched_cap(cls, v: Any, info: Any) -> int:
+        default = cls.model_fields[info.field_name].default
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return default
+        try:
+            n = int(float(str(v).strip()))
+        except (TypeError, ValueError, OverflowError):
+            return default
+        return max(1, min(100000, n))
+    # Master flag for the notification surface (router 404s when off).
+    notifications_enabled: bool = True
+    # Kill-switch for notification *email* delivery (NOTIFICATIONS_EMAIL). Off →
+    # in-app still works; the email worker sends nothing (marks rows skipped).
+    notifications_email_enabled: bool = True
+    # Transport selector for the frontend badge/center: polling (free) vs sse
+    # (premium). Data model + endpoints are identical; only delivery differs.
+    sse_notifications: bool = False
+    # Client poll interval (seconds) for the unread badge (active tab only).
+    notification_poll_interval_seconds: int = 45
+    # Retention windows (days). Read/dismissed notifications + processed outbox
+    # rows older than these are pruned by the retention job (R17.4).
+    notification_retention_days: int = 30
+    outbox_retention_days: int = 7
+
+    @field_validator("search_enabled", "notifications_enabled", "notifications_email_enabled", "sse_notifications", mode="before")
+    @classmethod
+    def _blank_notif_bool_to_default(cls, v: Any, info: Any) -> Any:
+        if isinstance(v, str) and not v.strip():
+            return cls.model_fields[info.field_name].default
+        return v
+
+    @field_validator(
+        "notification_poll_interval_seconds",
+        "notification_retention_days",
+        "outbox_retention_days",
+        mode="before",
+    )
+    @classmethod
+    def _validate_notif_int(cls, v: Any, info: Any) -> int:
+        default = cls.model_fields[info.field_name].default
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return default
+        try:
+            n = int(float(str(v).strip()))
+        except (TypeError, ValueError, OverflowError):
+            return default
+        # Poll interval bounded [15, 300]s; retention windows [1, 3650] days.
+        if info.field_name == "notification_poll_interval_seconds":
+            return max(15, min(300, n))
+        return max(1, min(3650, n))
+
+    # =====================================================================
+    # P4 Resilience — streaming AI, offline support, advanced autosave
+    # =====================================================================
+    # Independent ADR-14 free/premium toggles. Each area is dark-launchable and
+    # has a documented off/rollback path (design §Deployment). Conservative
+    # defaults: autosave on (pure win, degrades to local-draft), streaming and
+    # offline off until explicitly enabled per the rollout order.
+    streaming_ai_enabled: bool = False
+    offline_support_enabled: bool = False
+    advanced_autosave_enabled: bool = True
+
+    # Streaming caps (R1.5): per-user concurrent streams, max lifetime, and the
+    # heartbeat TTL after which an abandoned stream's slot is reclaimed and the
+    # server-side task reaped. Bounded so a typo can't disable the guardrails.
+    stream_max_concurrent_per_user: int = 3
+    stream_max_lifetime_seconds: int = 300
+    stream_heartbeat_seconds: int = 15
+
+    @field_validator(
+        "streaming_ai_enabled",
+        "offline_support_enabled",
+        "advanced_autosave_enabled",
+        mode="before",
+    )
+    @classmethod
+    def _blank_resilience_bool_to_default(cls, v: Any, info: Any) -> Any:
+        if isinstance(v, str) and not v.strip():
+            return cls.model_fields[info.field_name].default
+        return v
+
+    @field_validator(
+        "stream_max_concurrent_per_user",
+        "stream_max_lifetime_seconds",
+        "stream_heartbeat_seconds",
+        mode="before",
+    )
+    @classmethod
+    def _validate_stream_int(cls, v: Any, info: Any) -> int:
+        default = cls.model_fields[info.field_name].default
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return default
+        try:
+            n = int(float(str(v).strip()))
+        except (TypeError, ValueError, OverflowError):
+            return default
+        # Concurrency [1, 20]; lifetime [30, 1800]s; heartbeat [5, 120]s.
+        if info.field_name == "stream_max_concurrent_per_user":
+            return max(1, min(20, n))
+        if info.field_name == "stream_max_lifetime_seconds":
+            return max(30, min(1800, n))
+        return max(5, min(120, n))
+
     # Pluggable auth providers (ADR-14). Empty selects the shipped dev-safe
     # default adapter; a configured provider is constructed in ``app.auth.runtime``.
     email_provider: str = ""
@@ -473,6 +1050,10 @@ class Settings(BaseSettings):
     email_smtp_user: str = ""
     email_smtp_password: str = ""
     email_smtp_use_tls: bool = True
+    # Recipient for public "Contact" form submissions. Falls back to EMAIL_FROM
+    # when unset so the feature works out of the box once any sender is wired;
+    # if neither is set the submission is still persisted + logged (no delivery).
+    contact_recipient_email: str = ""
     captcha_provider: str = ""
     captcha_secret: str = ""
     captcha_site_key: str = ""
@@ -490,6 +1071,7 @@ class Settings(BaseSettings):
         "single_user_mode",
         "cookie_secure",
         "db_use_pooler",
+        "db_auto_migrate",
         "email_smtp_use_tls",
         mode="before",
     )
@@ -602,10 +1184,13 @@ class Settings(BaseSettings):
                     errors.append(
                         "OAUTH_REDIRECT_URI is required when Google OAuth is configured"
                     )
-            elif not self.single_user_mode and not self.oauth_redirect_uri.strip().startswith(
-                "https://"
+            elif not self.single_user_mode and not _is_https_or_loopback_http(
+                self.oauth_redirect_uri.strip()
             ):
-                errors.append("OAUTH_REDIRECT_URI must be an https:// URL in hosted mode")
+                errors.append(
+                    "OAUTH_REDIRECT_URI must be an https:// URL in hosted mode "
+                    "(http is allowed only for localhost/127.0.0.1/::1)"
+                )
 
         # -- owner email sanity ------------------------------------------------
         if self.owner_email and "@" not in self.owner_email:
@@ -639,6 +1224,70 @@ class Settings(BaseSettings):
                     "(SQLite is local-dev only — ADR-13)"
                 )
 
+        # -- background-jobs / scheduler wiring must actually be able to run ---
+        # (hosted only; local single-user never needs the reaper/notifier).
+        if not self.single_user_mode:
+            kv = (self.kvstore_url or "").strip().lower()
+            kv_is_local = kv in _KVSTORE_LOCAL_ALIASES
+
+            # external_cron drives ALL background work (reaper, search indexing,
+            # notification emails, reminders, retention, purge) through
+            # POST /api/v1/internal/run-jobs, which rejects every caller when no
+            # INTERNAL_JOB_TOKEN is set → those jobs could NEVER run. Fail fast.
+            if self.scheduler_mode == "external_cron" and not self.internal_job_token.strip():
+                errors.append(
+                    "SCHEDULER_MODE=external_cron requires INTERNAL_JOB_TOKEN so your "
+                    "cron can call POST /api/v1/internal/run-jobs; without it, session "
+                    "reaping, search indexing, notification/reminder emails, retention "
+                    "and purge never run. Set INTERNAL_JOB_TOKEN (>=16 chars) or switch "
+                    "to SCHEDULER_MODE=internal with a shared KVSTORE_URL."
+                )
+
+            # internal scheduler relies on a SHARED single-flight lock; an
+            # in-process KVStore means every replica runs the jobs (split-brain,
+            # duplicate work). Require a shared store.
+            if self.scheduler_mode == "internal" and kv_is_local:
+                errors.append(
+                    "SCHEDULER_MODE=internal requires a shared KVSTORE_URL "
+                    "(redis:// / rediss://): the reaper/retention single-flight lock "
+                    "must be cluster-wide, but an in-process KVStore split-brains "
+                    "across replicas (duplicate job runs)."
+                )
+
+            # Shared abuse-control + session-cache state is per-process with a
+            # local KVStore → weakened once you run >1 worker/instance. A single
+            # container is valid, so warn (not fatal).
+            if kv_is_local:
+                logger.warning(
+                    "Hosted mode with an in-process KVStore (KVSTORE_URL blank): rate "
+                    "limits, account lockouts, CAPTCHA gating and the session cache are "
+                    "per-process and will NOT be shared across multiple workers/"
+                    "instances. Set KVSTORE_URL=redis:// / rediss:// before scaling out."
+                )
+
+            # Email verification enabled but no real delivery provider → users
+            # can never receive verification/reset links (only the dev log sees
+            # them). Recoverable/product-dependent, so warn loudly (not fatal).
+            if self.email_verification_enabled:
+                provider = (self.email_provider or "").strip().lower()
+                delivers = (
+                    provider == "smtp"
+                    and bool(self.email_smtp_host.strip())
+                    and bool(self.email_from.strip())
+                ) or (
+                    provider == "resend"
+                    and bool(self.email_api_key.strip())
+                    and bool(self.email_from.strip())
+                )
+                if not delivers:
+                    logger.warning(
+                        "Email verification is ENABLED but no delivery provider is "
+                        "configured (EMAIL_PROVIDER/EMAIL_FROM/creds): verification and "
+                        "password-reset links will only be written to the server log, "
+                        "never delivered. Configure EMAIL_PROVIDER=smtp|resend or set "
+                        "EMAIL_VERIFICATION=false."
+                    )
+
         if errors:
             raise ValueError(
                 "Invalid auth configuration:\n  - " + "\n  - ".join(errors)
@@ -656,6 +1305,18 @@ class Settings(BaseSettings):
     def google_oauth_configured(self) -> bool:
         """Whether Google OAuth credentials are present (both id and secret)."""
         return bool(self.google_client_id.strip() and self.google_client_secret.strip())
+
+    @property
+    def resolved_profile(self):
+        """The active :class:`~app.platform.profiles.DeploymentProfile`.
+
+        Explicit ``deployment_profile`` wins; otherwise derived from
+        ``single_user_mode`` (ARCHITECTURE §3, IMPLEMENTATION_PLAN Phase 1).
+        Imported lazily to keep ``platform`` out of ``config`` import time.
+        """
+        from app.platform.profiles import resolve_profile
+
+        return resolve_profile(self)
 
     # Paths
     data_dir: Path = Path(__file__).parent.parent / "data"

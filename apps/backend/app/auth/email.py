@@ -38,34 +38,81 @@ __all__ = [
     "build_verification_email",
     "build_password_reset_email",
     "build_email_change_email",
+    "build_contact_notification_email",
+    "build_contact_acknowledgement_email",
+    "build_review_notification_email",
     "send_email_safe",
+    "PermanentEmailError",
 ]
 
 # Resend transactional-email send endpoint (fixed — SSRF-safe).
 RESEND_SEND_ENDPOINT = "https://api.resend.com/emails"
 
+# Default bounded retry policy for transient send failures (see send_email_safe).
+_EMAIL_MAX_ATTEMPTS = 3
+_EMAIL_BASE_DELAY = 0.5
 
-async def send_email_safe(sender: "EmailSender", message: "EmailMessage") -> bool:
-    """Best-effort deliver ``message``, swallowing hard failures (logged).
+
+class PermanentEmailError(Exception):
+    """A send failed for a non-retryable reason (bad recipient/sender, 4xx).
+
+    Senders raise this to tell :func:`send_email_safe` NOT to retry — retrying a
+    rejected recipient or an auth/validation error only wastes attempts and can
+    look like abuse to the provider. Any *other* exception is treated as
+    transient and retried with backoff.
+    """
+
+
+async def send_email_safe(
+    sender: "EmailSender",
+    message: "EmailMessage",
+    *,
+    attempts: int = _EMAIL_MAX_ATTEMPTS,
+    base_delay: float = _EMAIL_BASE_DELAY,
+    sleep=None,
+) -> bool:
+    """Best-effort deliver ``message`` with bounded retry, swallowing failures.
 
     The enumeration-safe auth flows (verification/reset request) MUST return
     their uniform acknowledgement even when the transactional-email provider is
     down (design §Reliability): a provider outage must never surface as a 500 —
     which would leak, via the differing response, that the address is registered
-    — nor block the caller. The failure is logged (no token/PII beyond what the
-    sender itself logs) so it can be alerted on / retried / queued by ops, and
-    the caller proceeds with the same uniform ack. Returns ``True`` on delivery,
-    ``False`` if the send failed and was swallowed.
+    — nor block the caller.
+
+    Transient failures (network blips, disconnects, 429/5xx) are retried up to
+    ``attempts`` times with exponential backoff; a :class:`PermanentEmailError`
+    (bad recipient/sender, permanent 4xx) is **not** retried. On final failure
+    the error is logged (no token/PII beyond what the sender logs) so ops can
+    alert/retry, and the caller proceeds with the uniform ack. Returns ``True``
+    on delivery, ``False`` if it failed and was swallowed. Callers with a durable
+    queue (notifications) treat ``False`` as "retry on the next pass".
     """
-    try:
-        await sender.send(message)
-        return True
-    except Exception:
-        logger.warning(
-            "Transactional email delivery failed; continuing (uniform ack preserved)",
-            exc_info=True,
-        )
-        return False
+    import asyncio as _asyncio
+
+    _sleep = sleep or _asyncio.sleep
+    attempts = max(1, attempts)
+    for attempt in range(attempts):
+        try:
+            await sender.send(message)
+            return True
+        except PermanentEmailError:
+            logger.warning(
+                "Transactional email permanently rejected; not retrying "
+                "(uniform ack preserved)",
+                exc_info=True,
+            )
+            return False
+        except Exception:
+            if attempt == attempts - 1:
+                logger.warning(
+                    "Transactional email delivery failed after %d attempt(s); "
+                    "continuing (uniform ack preserved)",
+                    attempts,
+                    exc_info=True,
+                )
+                return False
+            await _sleep(base_delay * (2**attempt))
+    return False  # pragma: no cover - loop always returns
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,51 +140,278 @@ def _link(base_url: str, path: str, raw_token: str) -> str:
     return f"{base_url.rstrip('/')}{path}?token={quote(raw_token, safe='')}"
 
 
-def build_verification_email(*, to: str, raw_token: str, base_url: str) -> "EmailMessage":
-    """Compose the email-verification message (link → ``/verify``)."""
+# Product identity used across every transactional auth email (branding).
+_BRAND_NAME = "FitWright"
+_SUPPORT_EMAIL = "support@fitwright.tech"
+
+
+def _humanize_duration(seconds: int) -> str:
+    """Render a TTL (seconds) as a short human phrase for the expiry notice."""
+    seconds = max(0, int(seconds))
+    if seconds % 3600 == 0 and seconds >= 3600:
+        hours = seconds // 3600
+        return f"{hours} hour" + ("s" if hours != 1 else "")
+    if seconds % 60 == 0 and seconds >= 60:
+        minutes = seconds // 60
+        return f"{minutes} minute" + ("s" if minutes != 1 else "")
+    return f"{seconds} second" + ("s" if seconds != 1 else "")
+
+
+def _html_escape(value: str) -> str:
+    """Escape a value for safe interpolation into the HTML body."""
+    import html
+
+    return html.escape(value, quote=True)
+
+
+def _render_branded_email(
+    *,
+    heading: str,
+    intro: str,
+    cta_label: str,
+    link: str,
+    expires_phrase: str,
+    security_note: str,
+) -> tuple[str, str]:
+    """Render the shared branded (text, html) pair for a link-carrying email.
+
+    Both bodies include: branding, a primary call-to-action (button in HTML), a
+    plain-URL fallback, an expiration notice, a security note, and a support
+    contact. The **plain URL is always present verbatim in the text body** so
+    link extraction (and copy/paste in clients that strip HTML) always works.
+    """
+    text_body = (
+        f"{heading}\n\n"
+        f"{intro}\n\n"
+        f"{cta_label}:\n{link}\n\n"
+        f"This link will expire in {expires_phrase}.\n\n"
+        f"{security_note}\n\n"
+        f"Need help? Contact us at {_SUPPORT_EMAIL}.\n\n"
+        f"— The {_BRAND_NAME} team"
+    )
+
+    safe_heading = _html_escape(heading)
+    safe_intro = _html_escape(intro)
+    safe_cta = _html_escape(cta_label)
+    safe_link_text = _html_escape(link)
+    safe_link_href = _html_escape(link)
+    safe_expires = _html_escape(expires_phrase)
+    safe_security = _html_escape(security_note)
+    safe_support = _html_escape(_SUPPORT_EMAIL)
+
+    html_body = f"""\
+<!doctype html>
+<html lang="en">
+  <body style="margin:0;padding:0;background:#f4f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1f2933;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f5f7;padding:24px 0;">
+      <tr><td align="center">
+        <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e4e7eb;">
+          <tr><td style="padding:24px 32px;background:#111827;color:#ffffff;font-size:20px;font-weight:600;">{_BRAND_NAME}</td></tr>
+          <tr><td style="padding:32px;">
+            <h1 style="margin:0 0 16px;font-size:20px;font-weight:600;color:#111827;">{safe_heading}</h1>
+            <p style="margin:0 0 24px;font-size:15px;line-height:1.5;color:#374151;">{safe_intro}</p>
+            <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
+              <tr><td style="border-radius:8px;background:#2563eb;">
+                <a href="{safe_link_href}" style="display:inline-block;padding:12px 28px;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:8px;">{safe_cta}</a>
+              </td></tr>
+            </table>
+            <p style="margin:0 0 8px;font-size:13px;color:#6b7280;">If the button doesn't work, copy and paste this link into your browser:</p>
+            <p style="margin:0 0 24px;font-size:13px;word-break:break-all;"><a href="{safe_link_href}" style="color:#2563eb;">{safe_link_text}</a></p>
+            <p style="margin:0 0 8px;font-size:13px;color:#6b7280;">This link will expire in {safe_expires}.</p>
+            <p style="margin:0 0 24px;font-size:13px;color:#6b7280;">{safe_security}</p>
+            <hr style="border:none;border-top:1px solid #e4e7eb;margin:0 0 16px;" />
+            <p style="margin:0;font-size:12px;color:#9aa5b1;">Need help? Contact us at <a href="mailto:{safe_support}" style="color:#2563eb;">{safe_support}</a>.</p>
+          </td></tr>
+        </table>
+        <p style="margin:16px 0 0;font-size:12px;color:#9aa5b1;">© {_BRAND_NAME}</p>
+      </td></tr>
+    </table>
+  </body>
+</html>"""
+    return text_body, html_body
+
+
+def build_verification_email(
+    *, to: str, raw_token: str, base_url: str, expires_seconds: int = 60 * 60 * 24
+) -> "EmailMessage":
+    """Compose the branded email-verification message (link → ``/verify``).
+
+    Includes an HTML + plain-text body with branding, a verify button, a
+    plain-URL fallback, an expiration notice, a security note, and a support
+    contact (R5). The raw token appears only in the link (only its ``sha256`` is
+    stored). ``expires_seconds`` drives the human-readable expiry notice.
+    """
     link = _link(base_url, "/verify", raw_token)
+    text_body, html_body = _render_branded_email(
+        heading=f"Welcome to {_BRAND_NAME}!",
+        intro=(
+            "Confirm your email address to finish setting up your account and "
+            "start tailoring resumes."
+        ),
+        cta_label="Verify email address",
+        link=link,
+        expires_phrase=_humanize_duration(expires_seconds),
+        security_note=(
+            "If you didn't create a FitWright account, you can safely ignore this "
+            "message — no account will be activated."
+        ),
+    )
     return EmailMessage(
         to=to,
-        subject="Verify your email address",
-        text_body=(
-            "Welcome to FitWright! Confirm your email address to finish setting "
-            f"up your account:\n\n{link}\n\n"
-            "If you didn't create an account, you can ignore this message."
-        ),
+        subject=f"Verify your email address — {_BRAND_NAME}",
+        text_body=text_body,
+        html_body=html_body,
     )
 
 
-def build_password_reset_email(*, to: str, raw_token: str, base_url: str) -> "EmailMessage":
-    """Compose the password-reset message (link → ``/reset``)."""
+def build_password_reset_email(
+    *, to: str, raw_token: str, base_url: str, expires_seconds: int = 60 * 30
+) -> "EmailMessage":
+    """Compose the branded password-reset message (link → ``/reset``)."""
     link = _link(base_url, "/reset", raw_token)
-    return EmailMessage(
-        to=to,
-        subject="Reset your password",
-        text_body=(
-            "We received a request to reset your FitWright password. Use the link "
-            f"below to choose a new one:\n\n{link}\n\n"
+    text_body, html_body = _render_branded_email(
+        heading="Reset your password",
+        intro=(
+            "We received a request to reset your FitWright password. Use the "
+            "button below to choose a new one."
+        ),
+        cta_label="Reset password",
+        link=link,
+        expires_phrase=_humanize_duration(expires_seconds),
+        security_note=(
             "If you didn't request this, you can safely ignore this message — your "
             "password will not change."
         ),
     )
+    return EmailMessage(
+        to=to,
+        subject=f"Reset your password — {_BRAND_NAME}",
+        text_body=text_body,
+        html_body=html_body,
+    )
 
 
-def build_email_change_email(*, to: str, raw_token: str, base_url: str) -> "EmailMessage":
-    """Compose the email-change confirmation message (link → ``/verify-email``).
+def build_email_change_email(
+    *, to: str, raw_token: str, base_url: str, expires_seconds: int = 60 * 60 * 24
+) -> "EmailMessage":
+    """Compose the branded email-change confirmation (link → ``/verify-email``).
 
     Sent to the *new* address in a verify-before-switch email change (R7.4): the
     account's primary email only changes once this link is confirmed.
     """
     link = _link(base_url, "/verify-email", raw_token)
+    text_body, html_body = _render_branded_email(
+        heading="Confirm your new email address",
+        intro=(
+            "You asked to change the email address on your FitWright account to "
+            "this one. Confirm the change using the button below. Your account "
+            "email will not change until you confirm."
+        ),
+        cta_label="Confirm email address",
+        link=link,
+        expires_phrase=_humanize_duration(expires_seconds),
+        security_note=(
+            "If you didn't request this, you can safely ignore this message — your "
+            "account email will not change."
+        ),
+    )
     return EmailMessage(
         to=to,
-        subject="Confirm your new email address",
+        subject=f"Confirm your new email address — {_BRAND_NAME}",
+        text_body=text_body,
+        html_body=html_body,
+    )
+
+
+def build_contact_notification_email(
+    *,
+    to: str,
+    reference: str,
+    name: str,
+    email: str,
+    subject: str,
+    message: str,
+    purpose: str,
+    company: str | None = None,
+    linkedin: str | None = None,
+    project_type: str | None = None,
+    budget: str | None = None,
+) -> "EmailMessage":
+    """Compose the notification sent to the site owner for a contact submission.
+
+    The submitter's address goes in ``Reply-To`` semantics via the body (the
+    ``From`` is always the app's own verified sender, so provider SPF/DKIM stays
+    intact and the message is not treated as spoofed). All values are already
+    validated/sanitized by :class:`~app.schemas.contact.ContactRequest`.
+    """
+    lines = [
+        f"New contact submission ({reference})",
+        "",
+        f"Name:    {name}",
+        f"Email:   {email}",
+        f"Purpose: {purpose}",
+    ]
+    if company:
+        lines.append(f"Company: {company}")
+    if linkedin:
+        lines.append(f"LinkedIn: {linkedin}")
+    if project_type:
+        lines.append(f"Project: {project_type}")
+    if budget:
+        lines.append(f"Budget:  {budget}")
+    lines += ["", f"Subject: {subject}", "", "Message:", message]
+    return EmailMessage(
+        to=to,
+        subject=f"[FitWright contact] {subject}",
+        text_body="\n".join(lines),
+    )
+
+
+def build_review_notification_email(
+    *,
+    to: str,
+    reference: str,
+    rating: int,
+    title: str,
+    body: str,
+    name: str | None = None,
+    email: str | None = None,
+) -> "EmailMessage":
+    """Compose the notification sent to the owner for a submitted review."""
+    stars = "★" * max(0, min(5, rating)) + "☆" * (5 - max(0, min(5, rating)))
+    lines = [
+        f"New product review ({reference})",
+        "",
+        f"Rating:  {stars} ({rating}/5)",
+        f"Title:   {title}",
+        f"From:    {name or 'Anonymous'}",
+    ]
+    if email:
+        lines.append(f"Email:   {email}")
+    lines += ["", "Review:", body]
+    return EmailMessage(
+        to=to,
+        subject=f"[FitWright review] {rating}★ — {title}",
+        text_body="\n".join(lines),
+    )
+
+
+def build_contact_acknowledgement_email(
+    *, to: str, name: str, reference: str, subject: str
+) -> "EmailMessage":
+    """Compose the auto-acknowledgement sent back to the submitter."""
+    first = name.split(" ", 1)[0] if name else "there"
+    return EmailMessage(
+        to=to,
+        subject="Thanks for reaching out — FitWright",
         text_body=(
-            "You asked to change the email address on your FitWright account to "
-            "this one. Confirm the change using the link below:\n\n"
-            f"{link}\n\n"
-            "Your account email will not change until you confirm. If you didn't "
-            "request this, you can safely ignore this message."
+            f"Hi {first},\n\n"
+            "Thanks for getting in touch. Your message has been received and I'll "
+            "get back to you as soon as I can — typically within 1–2 business days.\n\n"
+            f"Reference: {reference}\n"
+            f"Subject: {subject}\n\n"
+            "If your message is time-sensitive, just reply to this email.\n\n"
+            "— Obaidullah Zeeshan · FitWright"
         ),
     )
 
@@ -284,7 +558,16 @@ class SmtpEmailSender(EmailSender):
 
     async def send(self, message: EmailMessage) -> None:
         mime = _build_mime(message, sender=self._sender)
-        await asyncio.to_thread(self._transport.send, mime)
+        try:
+            await asyncio.to_thread(self._transport.send, mime)
+        except (
+            smtplib.SMTPRecipientsRefused,
+            smtplib.SMTPSenderRefused,
+            smtplib.SMTPNotSupportedError,
+        ) as exc:
+            # Permanent: recipient/sender rejected or feature unsupported — no
+            # amount of retrying will help, so don't (send_email_safe honors this).
+            raise PermanentEmailError(str(exc)) from exc
 
 
 class ResendHttpClient(Protocol):
@@ -351,11 +634,19 @@ class ResendEmailSender(EmailSender):
         }
         if message.html_body:
             body["html"] = message.html_body
-        await self._client.post_json(
-            self._endpoint,
-            headers={
-                "Authorization": f"Bearer {self._api_key}",
-                "Content-Type": "application/json",
-            },
-            json=body,
-        )
+        try:
+            await self._client.post_json(
+                self._endpoint,
+                headers={
+                    "Authorization": f"Bearer {self._api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=body,
+            )
+        except Exception as exc:
+            # A permanent 4xx (bad request / auth / invalid recipient — but NOT
+            # 429 rate limit) should not be retried; 429 and 5xx are transient.
+            status = getattr(getattr(exc, "response", None), "status_code", None)
+            if isinstance(status, int) and 400 <= status < 500 and status != 429:
+                raise PermanentEmailError(f"resend responded {status}") from exc
+            raise

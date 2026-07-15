@@ -28,6 +28,12 @@ export const DropdownMenuContent = React.forwardRef<
       ref={ref}
       sideOffset={sideOffset}
       className={cn(
+        // `atelier` is required here: Radix portals this content to
+        // document.body (outside the .atelier subtree), so without it the
+        // popover would inherit the legacy Swiss :root tokens (black borders,
+        // beige surface) instead of the Atelier palette. `.dark .atelier`
+        // still matches because <html> carries the `.dark` class.
+        'atelier',
         'z-50 min-w-44 rounded-[var(--radius-at-lg)] border border-[var(--border)] bg-[var(--popover)] p-1 text-[var(--popover-foreground)] shadow-[var(--shadow-at-e2)]',
         'data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95',
         'data-[state=closed]:animate-out data-[state=closed]:fade-out-0',

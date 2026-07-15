@@ -9,6 +9,7 @@ import { getSortedSections, getSectionMeta } from '@/lib/utils/section-helpers';
 import { formatDateRange } from '@/lib/utils';
 import { DynamicResumeSection } from './dynamic-resume-section';
 import { SafeHtml } from './safe-html';
+import { PhotoFrame, resolveResumePhoto } from './photo-frame';
 import baseStyles from './styles/_base.module.css';
 import styles from './styles/modern-two-column.module.css';
 
@@ -37,6 +38,9 @@ export const ResumeModernTwoColumn: React.FC<ResumeModernTwoColumnProps> = ({
   fallbackLabels,
 }) => {
   const { personalInfo, summary, workExperience, education, personalProjects, additional } = data;
+
+  // Photo System: shows the photo at the top of the sidebar by default.
+  const mtcPhoto = resolveResumePhoto(data, 'modern-two-column');
 
   // Drop blank/whitespace-only entries so empty lines (e.g. from editing in the
   // builder) never render in the resume or PDF (issue #763).
@@ -341,6 +345,21 @@ export const ResumeModernTwoColumn: React.FC<ResumeModernTwoColumnProps> = ({
 
         {/* Sidebar Column - Right */}
         <div className={styles.sidebarColumn}>
+          {mtcPhoto && mtcPhoto.slot === 'sidebar' && (
+            <div
+              className={`flex ${baseStyles['resume-section']}`}
+              style={{
+                justifyContent:
+                  mtcPhoto.config.align === 'right'
+                    ? 'flex-end'
+                    : mtcPhoto.config.align === 'center'
+                      ? 'center'
+                      : 'flex-start',
+              }}
+            >
+              <PhotoFrame url={mtcPhoto.url} config={mtcPhoto.config} name={mtcPhoto.name} />
+            </div>
+          )}
           {/* Education Section */}
           {isSectionVisible('education') && education && education.length > 0 && (
             <div className={baseStyles['resume-section']}>

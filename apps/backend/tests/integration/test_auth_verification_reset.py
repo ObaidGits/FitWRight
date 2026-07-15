@@ -70,11 +70,15 @@ class _CapturingSender(EmailSender):
 
 
 def _install_sender(monkeypatch) -> _CapturingSender:
-    """Bind a capturing EmailSender as the process-wide singleton."""
-    import app.auth.runtime as runtime
+    """Bind a capturing EmailSender via the composition root (Phase 3 owner of adapters).
+
+    ``monkeypatch`` is retained in the signature for call-site compatibility; the
+    override is cleared between tests by the conftest ``reset_container()``.
+    """
+    from app.platform import get_container
 
     sender = _CapturingSender()
-    monkeypatch.setattr(runtime, "_email_sender", sender)
+    get_container().override("email_sender", sender)
     return sender
 
 
@@ -119,6 +123,85 @@ async def _verify_request(client: AsyncClient, *, email: str | None = None):
 async def _stored_tokens(db, model):
     async with db.session_factory() as session:
         return (await session.execute(select(model))).scalars().all()
+
+
+# ---------------------------------------------------------------------------
+# signup → verification email is actually sent (regression: previously the
+# signup handler created a pending_verification user but never issued a token
+# or sent an email, so "check your inbox" was a lie until the user resent).
+# ---------------------------------------------------------------------------
+
+
+class TestSignupSendsVerificationEmail:
+    async def test_signup_dispatches_a_working_verification_link(
+        self, auth_env, monkeypatch
+    ):
+        from tests.integration.test_auth_api import _signup
+
+        # Hosted mode → email verification on.
+        monkeypatch.setattr(app_settings, "single_user_mode", False)
+        sender = _install_sender(monkeypatch)
+
+        async with _client() as client:
+            resp = await _signup(client, "welcome@example.com")
+            assert resp.status_code == 200
+            assert resp.json() == {"status": "pending_verification"}
+
+            # The signup itself sent a verification email (post-response
+            # background task) carrying a real, single-use token — the whole
+            # point of the fix.
+            assert sender.messages, "signup did not send a verification email"
+            msg = sender.last
+            assert msg.to == "welcome@example.com"
+            assert msg.html_body, "verification email must have an HTML body"
+            assert "verify" in msg.subject.lower()
+            token = _token_from(msg)
+
+            # And the emailed token verifies the account (pending → active).
+            confirm = await client.post(
+                "/api/v1/auth/verify/confirm", json={"token": token}
+            )
+        assert confirm.status_code == 200
+        assert confirm.json()["status"] == "verified"
+
+    async def test_signup_existing_email_sends_no_email(self, auth_env, monkeypatch):
+        """The existing-email branch stays silent (enumeration-safe): identical
+        pending response, but no verification email is dispatched to a stranger."""
+        from tests.integration.test_auth_api import _signup
+
+        monkeypatch.setattr(app_settings, "single_user_mode", False)
+        await _seed_active_user(auth_env, "taken@example.com")
+        sender = _install_sender(monkeypatch)
+
+        async with _client() as client:
+            resp = await _signup(client, "taken@example.com")
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "pending_verification"}
+        # No email to the already-registered address (would leak existence).
+        assert sender.messages == []
+
+
+class TestLoginBlockedUntilVerified:
+    async def test_login_pending_verification_is_blocked_with_verify_message(
+        self, auth_env, monkeypatch
+    ):
+        """A correct password for a still-unverified account must NOT create a
+        session and must return the verify-your-email guidance (not 'disabled')."""
+        from tests.integration.test_auth_api import _csrf
+
+        await _seed_pending_user(auth_env, "unverified-login@example.com")
+
+        async with _client() as client:
+            token = await _csrf(client)
+            resp = await client.post(
+                "/api/v1/auth/login",
+                json={"email": "unverified-login@example.com", "password": STRONG_PW},
+                headers={"X-CSRF-Token": token},
+            )
+        assert resp.status_code == 403
+        assert resp.json()["error"]["code"] == "email_unverified"
+        # No session cookie was set for the unverified account.
+        assert "__Host-session" not in resp.headers.get("set-cookie", "")
 
 
 # ---------------------------------------------------------------------------

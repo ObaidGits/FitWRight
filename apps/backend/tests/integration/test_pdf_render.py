@@ -182,12 +182,18 @@ class TestRenderPageWaitStrategy:
         page.pdf.return_value = b"%PDF-1.4 fake"
         await _render_page_to_pdf(page, "http://f/print/r", ".resume-print", "A4", {"top": "10mm"})
         page.wait_for_function.assert_awaited()
-        assert "fonts" in page.wait_for_function.call_args.args[0]
-        assert page.wait_for_function.call_args.kwargs.get("timeout")
+        # _render_page_to_pdf now waits for BOTH fonts and images (the photo
+        # system added an image-load wait), so scan all calls for the fonts wait
+        # rather than inspecting only the last call.
+        fonts_calls = [
+            call for call in page.wait_for_function.call_args_list if "fonts" in call.args[0]
+        ]
+        assert fonts_calls, "expected a document.fonts readiness wait"
+        assert fonts_calls[0].kwargs.get("timeout")  # bounded, not Playwright's default
 
 
 class TestPlaywrightErrorMapping:
-    """#811 + info-disclosure (CLAUDE.md rule 5): the catch-all must NOT leak raw
+    """#811 + info-disclosure (detailed errors stay server-side): the catch-all must NOT leak raw
     Playwright internals (call log, internal navigation URLs) to the client;
     curated, safe messages must be preserved.
     """

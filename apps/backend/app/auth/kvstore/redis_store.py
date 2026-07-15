@@ -85,10 +85,31 @@ class RedisKVStore(KVStore):
 
     @classmethod
     def from_url(cls, url: str, **kwargs: Any) -> "RedisKVStore":
-        """Build from a ``redis://`` / ``rediss://`` URL (lazy — no connect)."""
-        import redis.asyncio as redis  # local import: redis is an optional infra dep
+        """Build from a ``redis://`` / ``rediss://`` URL (lazy — no connect).
 
-        client = redis.from_url(url, decode_responses=True, **kwargs)
+        Production resilience defaults are applied unless the caller overrides
+        them: bounded socket connect/read timeouts (so a dead Redis fails fast
+        instead of hanging a request), automatic retry-on-timeout with backoff,
+        TCP keepalive (detect half-open connections behind NAT/load balancers,
+        e.g. Upstash), and a periodic health check that transparently reconnects
+        a stale pooled connection. These make transient Redis blips self-heal
+        rather than surface as errors.
+        """
+        import redis.asyncio as redis  # local import: redis is an optional infra dep
+        from redis.backoff import ExponentialBackoff
+        from redis.retry import Retry
+
+        defaults: dict[str, Any] = {
+            "decode_responses": True,
+            "socket_connect_timeout": 5.0,
+            "socket_timeout": 5.0,
+            "socket_keepalive": True,
+            "health_check_interval": 30,
+            "retry_on_timeout": True,
+            "retry": Retry(ExponentialBackoff(cap=1.0, base=0.05), retries=3),
+        }
+        defaults.update(kwargs)
+        client = redis.from_url(url, **defaults)
         return cls(client)
 
     async def get(self, key: str) -> str | None:

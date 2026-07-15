@@ -1,7 +1,7 @@
 import { render } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 
-import { RichTextEditor } from '@/components/ui/rich-text-editor';
+import { RichTextEditor } from '@/components/atelier/rich-text-editor';
 
 // Regression: StarterKit (v3) already bundles the `link` and `underline`
 // extensions, so adding them again as standalone extensions makes Tiptap warn

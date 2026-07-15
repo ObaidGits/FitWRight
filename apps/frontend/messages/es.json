@@ -466,7 +466,12 @@
       "outreachSaveFailed": "No se pudo guardar el mensaje de contacto. Por favor, inténtalo de nuevo.",
       "coverLetterGenerateFailed": "No se pudo generar la carta de presentación: {error}",
       "outreachGenerateFailed": "No se pudo generar el mensaje de contacto: {error}",
-      "interviewPrepGenerateFailed": "No se pudo generar la preparación de entrevista: {error}"
+      "interviewPrepGenerateFailed": "No se pudo generar la preparación de entrevista: {error}",
+      "aiRequiresConnection": "La generación con IA necesita conexión a internet. Reconéctate e inténtalo de nuevo.",
+      "aiStreaming": "Generando con IA…",
+      "draftQuarantined": "Un borrador local guardado no se pudo leer y se apartó para proteger tu trabajo. Tu contenido actual está a salvo.",
+      "storageDegraded": "El almacenamiento local no está disponible, así que los cambios se guardan solo en memoria durante esta sesión. Guarda en el servidor para no perderlos.",
+      "openRecoveryCenter": "Abrir centro de recuperación"
     }
   },
   "enrichment": {

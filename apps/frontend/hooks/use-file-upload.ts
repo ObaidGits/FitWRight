@@ -9,6 +9,7 @@ import {
   type DragEvent,
   type InputHTMLAttributes,
 } from 'react';
+import { readCsrfToken } from '@/lib/api/client';
 
 export type FileMetadata = {
   name: string;
@@ -226,9 +227,19 @@ export const useFileUpload = (
       markUploadStarted();
 
       try {
+        // This upload uses a raw fetch (not apiFetch) to stream FormData, so it
+        // must replicate apiFetch's auth plumbing itself: send cookies AND echo
+        // the double-submit CSRF token. Without the X-CSRF-Token header the
+        // backend rejects the mutation with `csrf_failed` in hosted mode
+        // (per-session CSRF is only enforced when a real session exists).
+        const uploadHeaders: Record<string, string> = {};
+        const csrf = readCsrfToken();
+        if (csrf) uploadHeaders['X-CSRF-Token'] = csrf;
         const response = await fetch(uploadUrl, {
           method: 'POST',
           body: formData,
+          credentials: 'include',
+          headers: uploadHeaders,
         });
 
         let responseData: Record<string, unknown> = {}; // Initialize for broader scope

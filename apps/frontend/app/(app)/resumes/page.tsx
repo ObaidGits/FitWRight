@@ -9,10 +9,19 @@ import Sparkles from 'lucide-react/dist/esm/icons/sparkles';
 import Trash2 from 'lucide-react/dist/esm/icons/trash-2';
 import RefreshCw from 'lucide-react/dist/esm/icons/refresh-cw';
 import PenLine from 'lucide-react/dist/esm/icons/pen-line';
+import Search from 'lucide-react/dist/esm/icons/search';
 
 import { Button } from '@/components/atelier/button';
 import { Card } from '@/components/atelier/card';
 import { Badge } from '@/components/atelier/badge';
+import { Input } from '@/components/atelier/input';
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from '@/components/atelier/select';
 import { EmptyState, LoadingSkeleton, ErrorState } from '@/components/atelier/states';
 import {
   DropdownMenu,
@@ -34,6 +43,13 @@ import { useResumeLibrary, useDeleteResume, useRetryProcessing } from '@/feature
 import type { ResumeListItem } from '@/lib/api/resume';
 
 type Filter = 'all' | 'master' | 'tailored';
+type SortKey = 'updated' | 'created' | 'name';
+
+const SORT_LABELS: Record<SortKey, string> = {
+  updated: 'Recently updated',
+  created: 'Recently added',
+  name: 'Name (A–Z)',
+};
 
 function StatusBadge({ status }: { status: string }) {
   if (status === 'ready') return <Badge variant="success">Ready</Badge>;
@@ -47,12 +63,32 @@ export default function ResumesPage() {
   const retry = useRetryProcessing();
   const { toast } = useToast();
   const [filter, setFilter] = React.useState<Filter>('all');
+  const [search, setSearch] = React.useState('');
+  const [sort, setSort] = React.useState<SortKey>('updated');
   const [toDelete, setToDelete] = React.useState<ResumeListItem | null>(null);
 
-  const resumes = data ?? [];
-  const filtered = resumes.filter((r) =>
-    filter === 'all' ? true : filter === 'master' ? r.is_master : !r.is_master
-  );
+  const resumes = React.useMemo(() => data ?? [], [data]);
+
+  function resumeName(r: ResumeListItem): string {
+    return (r.title || r.filename || 'Untitled resume').toLowerCase();
+  }
+
+  // filter tab → text search → sort. Memoized so it scales to large libraries.
+  const filtered = React.useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const byTab = resumes.filter((r) =>
+      filter === 'all' ? true : filter === 'master' ? r.is_master : !r.is_master
+    );
+    const bySearch = q ? byTab.filter((r) => resumeName(r).includes(q)) : byTab;
+    const sorted = [...bySearch].sort((a, b) => {
+      if (sort === 'name') return resumeName(a).localeCompare(resumeName(b));
+      const key = sort === 'created' ? 'created_at' : 'updated_at';
+      return (b[key] ?? '').localeCompare(a[key] ?? '');
+    });
+    return sorted;
+  }, [resumes, filter, search, sort]);
+
+  const searching = search.trim().length > 0;
 
   async function confirmDelete() {
     if (!toDelete) return;
@@ -92,20 +128,48 @@ export default function ResumesPage() {
       </div>
 
       {resumes.length > 0 && (
-        <div className="flex gap-1 rounded-[var(--radius-at-lg)] bg-[var(--secondary)] p-1 text-sm w-fit">
-          {(['all', 'master', 'tailored'] as Filter[]).map((f) => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={`rounded-[var(--radius-at-md)] px-3 py-1.5 capitalize transition-colors ${
-                filter === f
-                  ? 'bg-[var(--card)] text-[var(--foreground)] shadow-[var(--shadow-at-e1)]'
-                  : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]'
-              }`}
-            >
-              {f}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex gap-1 rounded-[var(--radius-at-lg)] bg-[var(--secondary)] p-1 text-sm w-fit">
+            {(['all', 'master', 'tailored'] as Filter[]).map((f) => (
+              <button
+                key={f}
+                onClick={() => setFilter(f)}
+                aria-pressed={filter === f}
+                className={`rounded-[var(--radius-at-md)] px-3 py-1.5 capitalize transition-colors ${
+                  filter === f
+                    ? 'bg-[var(--card)] text-[var(--foreground)] shadow-[var(--shadow-at-e1)]'
+                    : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]'
+                }`}
+              >
+                {f}
+              </button>
+            ))}
+          </div>
+
+          <div className="relative min-w-0 flex-1 sm:max-w-xs">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted-foreground)]" />
+            <Input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search resumes…"
+              aria-label="Search resumes"
+              className="pl-9"
+            />
+          </div>
+
+          <Select value={sort} onValueChange={(v) => setSort(v as SortKey)}>
+            <SelectTrigger aria-label="Sort resumes" className="w-[180px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => (
+                <SelectItem key={k} value={k}>
+                  {SORT_LABELS[k]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       )}
 
@@ -127,6 +191,34 @@ export default function ResumesPage() {
                 <Link href="/wizard">Use wizard</Link>
               </Button>
             </div>
+          }
+        />
+      ) : filtered.length === 0 && searching ? (
+        <EmptyState
+          icon={Search}
+          title="No matches"
+          description={`No resumes match “${search.trim()}”.`}
+          action={
+            <Button variant="outline" onClick={() => setSearch('')}>
+              Clear search
+            </Button>
+          }
+        />
+      ) : filtered.length === 0 ? (
+        <EmptyState
+          icon={FileText}
+          title={filter === 'master' ? 'No master resume' : 'No tailored resumes'}
+          description={
+            filter === 'master'
+              ? 'Upload or build a resume and mark it as your master.'
+              : 'Tailor your resume to a job to create a tailored variant.'
+          }
+          action={
+            <Button asChild variant="outline" onClick={() => setFilter('all')}>
+              <Link href={filter === 'tailored' ? '/tailor' : '/import'}>
+                {filter === 'tailored' ? 'Tailor to a job' : 'Add resume'}
+              </Link>
+            </Button>
           }
         />
       ) : (

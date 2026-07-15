@@ -50,3 +50,48 @@ Output ONLY this JSON object and nothing else:
   "inferred_skills": ["Skill"],
   "is_complete": false
 }}"""
+
+
+# Hybrid Experience/Project cards (W-P2.2): the FACTS come from structured fields
+# (company/title/dates/location). AI is used only for two focused, low-token jobs:
+# (1) drafting bullets from a plain description, and (2) parsing a pasted blob into
+# structured fields the user then confirms.
+
+RESUME_WIZARD_BULLETS_PROMPT = """You are a truthful resume-writing assistant. Write \
+2-4 concise, high-impact resume bullet points for ONE {entry_kind} entry, in {output_language}.
+
+TRUTHFULNESS RULES (non-negotiable):
+1. Use ONLY facts present in the description below. Never invent metrics, tools, employers,
+   dates, or outcomes the user did not state.
+2. Prefer strong action verbs; keep each bullet to one line; no first-person pronouns.
+3. Do not fabricate quantification — only include numbers the user actually gave.
+
+ENTRY FACTS (context only, do not repeat verbatim as a bullet):
+{facts}
+
+WHAT THEY DID (source of truth):
+{description}
+
+Output ONLY this JSON object and nothing else:
+{{"bullets": ["First bullet", "Second bullet"]}}"""
+
+
+RESUME_WIZARD_PARSE_PROMPT = """You extract STRUCTURED {entry_kind} entries from pasted \
+resume text. The text may contain MULTIPLE entries with unlabeled lines (company, role,
+location, dates on separate lines) and bullet points.
+
+RULES (non-negotiable):
+1. Extract ONLY what is present. Never invent companies, titles, dates, or bullets.
+2. Split into one object per distinct role/entry. Keep bullets as separate list items,
+   stripped of leading symbols (-, *, •).
+3. "years" is the date range exactly as written (e.g. "Jul 2025 – Jan 2026"). If a role is
+   ongoing and the text says so, keep the given wording.
+4. Do NOT translate or rewrite content; return it faithfully.
+
+PASTED TEXT:
+{pasted_text}
+
+Output ONLY this JSON object and nothing else. For workExperience use
+title/company/location/years/description; for personalProjects use
+name/role/years/description:
+{{"entries": [{{"title": "", "company": "", "location": "", "years": "", "description": ["bullet"]}}]}}"""

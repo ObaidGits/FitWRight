@@ -24,6 +24,8 @@ import { Button } from '@/components/atelier/button';
 import { Textarea } from '@/components/atelier/input';
 import { Badge } from '@/components/atelier/badge';
 import { useToast } from '@/components/atelier/toast';
+import { AiProgress } from '@/components/ai/ai-progress';
+import { ASK_AI_STAGES, ASK_AI_MESSAGES, ESTIMATE_SHORT } from '@/lib/ai-progress-copy';
 import { regenerateItems, type RegeneratedItem } from '@/lib/api/enrichment';
 
 export type AskAiItemType = 'experience' | 'project' | 'skills';
@@ -186,6 +188,18 @@ export function AskAiDialog({ open, onOpenChange, target, onApply }: AskAiDialog
             </Button>
           </div>
         </div>
+
+        {/* Generating — compact honest timeline instead of a blank dialog. */}
+        {loading && !result && (
+          <div className="rounded-[var(--radius-at-lg)] border border-[var(--border)] p-4">
+            <AiProgress
+              stages={ASK_AI_STAGES}
+              active
+              messages={ASK_AI_MESSAGES}
+              estimate={ESTIMATE_SHORT}
+            />
+          </div>
+        )}
 
         {/* Preview */}
         {result && (

@@ -148,3 +148,57 @@ class TestStatusEndpoint:
             resp = await client.get("/api/v1/status")
         assert resp.status_code == 200
         assert resp.json()["llm_configured"] is True
+
+
+class TestStatusLlmHealthCache:
+    """The /status LLM-health probe is cached (short TTL, single-flight) so a
+    public, unauthenticated /status flood cannot trigger one live provider
+    round-trip per request (cost/abuse + throughput guard)."""
+
+    @patch("app.routers.health.db", new_callable=AsyncMock)
+    @patch("app.routers.health.check_llm_health", new_callable=AsyncMock)
+    @patch("app.routers.health.get_llm_config")
+    async def test_repeated_status_probes_llm_once(
+        self, mock_config, mock_health, mock_db, client
+    ):
+        mock_config.return_value = type(
+            "C", (), {"api_key": "sk-test", "provider": "openai", "model": "gpt", "api_base": ""}
+        )()
+        mock_health.return_value = {"healthy": True}
+        mock_db.get_stats.return_value = {
+            "total_resumes": 0,
+            "total_jobs": 0,
+            "total_improvements": 0,
+            "has_master_resume": False,
+        }
+        async with client:
+            for _ in range(5):
+                resp = await client.get("/api/v1/status")
+                assert resp.status_code == 200
+        # Five status calls, but only ONE live provider round-trip.
+        assert mock_health.await_count == 1
+
+    @patch("app.routers.health.db", new_callable=AsyncMock)
+    @patch("app.routers.health.check_llm_health", new_callable=AsyncMock)
+    @patch("app.routers.health.get_llm_config")
+    async def test_key_rotation_invalidates_cache(
+        self, mock_config, mock_health, mock_db, client
+    ):
+        mock_health.return_value = {"healthy": True}
+        mock_db.get_stats.return_value = {
+            "total_resumes": 0,
+            "total_jobs": 0,
+            "total_improvements": 0,
+            "has_master_resume": False,
+        }
+        async with client:
+            mock_config.return_value = type(
+                "C", (), {"api_key": "sk-old", "provider": "openai", "model": "gpt", "api_base": ""}
+            )()
+            await client.get("/api/v1/status")
+            # Rotate the key -> new fingerprint -> cache miss -> fresh probe.
+            mock_config.return_value = type(
+                "C", (), {"api_key": "sk-new", "provider": "openai", "model": "gpt", "api_base": ""}
+            )()
+            await client.get("/api/v1/status")
+        assert mock_health.await_count == 2

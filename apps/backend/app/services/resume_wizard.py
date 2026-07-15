@@ -16,17 +16,23 @@ from app.schemas.models import (
     Experience,
     Project,
     ResumeData,
+    _coerce_string_list,
     normalize_resume_data,
 )
 from app.schemas.resume_wizard import (
+    STRUCTURED_PERSONAL_INFO_FIELDS,
     ResumeWizardHistoryEntry,
     ResumeWizardProgress,
     ResumeWizardQuestion,
     ResumeWizardState,
+    ResumeWizardStructuredUpdate,
 )
 
 RESUME_WIZARD_MAX_QUESTIONS = 15
-_PROGRESS_BASELINE = 8
+# Fixed number of content milestones used for the progress bar denominator. The
+# denominator is CONSTANT so the goal never recedes while the user answers
+# (W-P0.3): Identity, Contact, Experience, Education, Skills, Summary.
+_PROGRESS_MILESTONES = 6
 
 _VALID_SECTIONS = {
     "intro",
@@ -93,7 +99,32 @@ def build_initial_wizard_state() -> ResumeWizardState:
         step="intro",
         resume_data=ResumeData(),
         current_question=ResumeWizardQuestion(text=_INTRO_QUESTION, section="intro"),
-        progress=ResumeWizardProgress(current=0, total=_PROGRESS_BASELINE),
+        progress=ResumeWizardProgress(current=0, total=_PROGRESS_MILESTONES),
+    )
+
+
+def build_prefilled_wizard_state(resume_data: ResumeData) -> ResumeWizardState:
+    """Build a wizard state pre-populated from an existing profile (W-P3.2).
+
+    Returning users with a profile shouldn't re-enter known facts: we seed
+    ``resume_data`` from the profile projection and jump straight to the first
+    gap (or intro if the name is somehow missing), so the wizard only asks for
+    what's missing. Deterministic, no LLM.
+    """
+    has_name = bool(resume_data.personalInfo.name.strip())
+    if not has_name:
+        return ResumeWizardState(
+            step="intro",
+            resume_data=resume_data,
+            current_question=ResumeWizardQuestion(text=_INTRO_QUESTION, section="intro"),
+            progress=compute_progress(resume_data),
+        )
+    gap = _next_gap_section(resume_data)
+    return ResumeWizardState(
+        step="review" if gap == "review" else "question",
+        resume_data=resume_data,
+        current_question=ResumeWizardQuestion(text=section_prompt(gap), section=gap),
+        progress=compute_progress(resume_data),
     )
 
 
@@ -145,13 +176,34 @@ def build_review_warnings(data: ResumeData) -> list[str]:
     return warnings
 
 
-def compute_progress(asked_count: int, is_complete: bool) -> ResumeWizardProgress:
-    """Server-side progress so the bar never trusts the model."""
-    total = min(
-        RESUME_WIZARD_MAX_QUESTIONS,
-        max(_PROGRESS_BASELINE, asked_count + (0 if is_complete else 2)),
+def compute_progress(data: ResumeData) -> ResumeWizardProgress:
+    """Milestone-based progress with a FIXED denominator (W-P0.3).
+
+    ``current`` counts how many of the six content milestones are satisfied by
+    ``data``; ``total`` is constant. This replaces the old ``asked_count``-driven
+    formula whose denominator grew with every answer (defeating the goal-gradient
+    effect). Progress can only move forward as sections fill in.
+    """
+    info = data.personalInfo
+    milestones = (
+        bool(info.name.strip()),
+        any(
+            value.strip()
+            for value in (
+                info.email,
+                info.phone,
+                info.linkedin or "",
+                info.github or "",
+                info.website or "",
+            )
+        ),
+        bool(data.workExperience or data.personalProjects),
+        bool(data.education),
+        bool(data.additional.technicalSkills),
+        bool(data.summary.strip()),
     )
-    return ResumeWizardProgress(current=min(asked_count, total), total=total)
+    current = sum(1 for satisfied in milestones if satisfied)
+    return ResumeWizardProgress(current=current, total=_PROGRESS_MILESTONES)
 
 
 def normalize_wizard_resume_data(data: dict[str, Any]) -> dict[str, Any]:
@@ -167,16 +219,75 @@ def _string_list(value: Any) -> list[str]:
     return [item for item in value if isinstance(item, str)]
 
 
+# W-P3.3: persona detection + branch-specific section ordering. Different users
+# should experience different, relevant flows. Detection is deterministic from
+# the (early-collected) target role; ordering is data-driven so branches are easy
+# to extend and test. Summary is always appended LAST (W-P2.4) regardless of
+# persona.
+_CREATIVE_KEYWORDS = (
+    "design",
+    "designer",
+    "ux",
+    "ui",
+    "artist",
+    "creative",
+    "illustrat",
+    "photograph",
+    "brand",
+)
+_STUDENT_KEYWORDS = ("student", "graduate", "intern", "undergrad", "fresher")
+
+_PERSONA_GAP_ORDER: dict[str, tuple[str, ...]] = {
+    # Students lead with education + projects (little/no work history yet).
+    "student": ("education", "personalProjects", "workExperience", "skills"),
+    # Creatives lead with a portfolio of projects.
+    "creative": ("personalProjects", "workExperience", "education", "skills"),
+    # Professionals lead with work experience.
+    "professional": ("workExperience", "education", "personalProjects", "skills"),
+}
+_DEFAULT_GAP_ORDER: tuple[str, ...] = (
+    "workExperience",
+    "education",
+    "personalProjects",
+    "skills",
+)
+
+
+def persona_for(data: ResumeData) -> str:
+    """Classify the user into a flow persona from their target role (W-P3.3)."""
+    title = data.personalInfo.title.casefold()
+    if any(keyword in title for keyword in _CREATIVE_KEYWORDS):
+        return "creative"
+    if any(keyword in title for keyword in _STUDENT_KEYWORDS):
+        return "student"
+    return "professional"
+
+
+def _section_is_empty(data: ResumeData, section: str) -> bool:
+    if section == "workExperience":
+        return not data.workExperience
+    if section == "education":
+        return not data.education
+    if section == "personalProjects":
+        return not data.personalProjects
+    if section == "skills":
+        return not data.additional.technicalSkills
+    return False
+
+
 def _next_gap_section(data: ResumeData) -> str:
-    """Pick the next obviously-empty section, else review."""
-    if not data.workExperience:
-        return "workExperience"
-    if not data.education:
-        return "education"
-    if not data.personalProjects:
-        return "personalProjects"
-    if not data.additional.technicalSkills:
-        return "skills"
+    """Pick the next empty section using the persona's order, else summary/review.
+
+    Persona-aware (W-P3.3): the order of the content sections depends on the
+    detected persona. Summary is intentionally LAST (W-P2.4): only requested once
+    there is substantive content (experience or projects) to summarise.
+    """
+    order = _PERSONA_GAP_ORDER.get(persona_for(data), _DEFAULT_GAP_ORDER)
+    for section in order:
+        if _section_is_empty(data, section):
+            return section
+    if not data.summary.strip() and (data.workExperience or data.personalProjects):
+        return "summary"
     return "review"
 
 
@@ -297,9 +408,10 @@ def _merge_section(
                 merged.additional.awards = merge_unique_skills(
                     merged.additional.awards, updated.additional.awards
                 )
-        merged.additional.technicalSkills = merge_unique_skills(
-            merged.additional.technicalSkills, inferred_skills
-        )
+        # W-P1.2: inferred skills are NO LONGER auto-merged here. They are
+        # returned in the state as *suggestions* the user explicitly confirms via
+        # the skills chip UI, honouring the prompt's "never invent skills" rule.
+        # (``inferred_skills`` is intentionally unused in this branch now.)
         return merged
 
     # Unknown / review section: never mutate resume_data.
@@ -322,6 +434,99 @@ def _assign_entry_ids(data: ResumeData) -> None:
         item.id = index
 
 
+# W-P1.4: per-section completion budgets. A single-section bullet rewrite needs
+# far fewer tokens than the old blanket 8192; summary/experience get the most.
+_SECTION_MAX_TOKENS = {
+    "workExperience": 1600,
+    "internships": 1600,
+    "personalProjects": 1200,
+    "education": 800,
+    "summary": 900,
+}
+_DEFAULT_MAX_TOKENS = 1200
+
+# W-P1.4: which resume slices to send to the model for each section. Sending only
+# the relevant slice (plus dependencies for summary) shrinks the prompt and can't
+# accidentally leak/clobber unrelated sections (``_merge_section`` guards writes).
+_SECTION_CONTEXT_KEYS = {
+    "intro": ("personalInfo",),
+    "contact": ("personalInfo",),
+    "summary": ("summary", "workExperience", "personalProjects"),
+    "workExperience": ("workExperience",),
+    "internships": ("workExperience",),
+    "education": ("education",),
+    "personalProjects": ("personalProjects",),
+    "skills": ("additional",),
+}
+
+
+def max_tokens_for_section(section: str) -> int:
+    """Return the completion-token budget for ``section`` (W-P1.4)."""
+    return _SECTION_MAX_TOKENS.get(section, _DEFAULT_MAX_TOKENS)
+
+
+def scoped_resume_json(data: ResumeData, section: str) -> str:
+    """Serialize only the resume slices relevant to ``section`` (W-P1.4).
+
+    Falls back to the full document for unknown sections so behaviour is never
+    worse than before.
+    """
+    full = data.model_dump(mode="json")
+    keys = _SECTION_CONTEXT_KEYS.get(section)
+    if not keys:
+        payload = full
+    else:
+        payload = {key: full[key] for key in keys if key in full}
+    return json.dumps(payload, ensure_ascii=False)
+
+
+def _build_turn_state(
+    *,
+    data: ResumeData,
+    next_question: ResumeWizardQuestion,
+    history: list[ResumeWizardHistoryEntry],
+    asked_count: int,
+    inferred_skills: list[str],
+    is_complete: bool,
+    warnings: list[str],
+) -> ResumeWizardState:
+    """Build the post-turn state, auto-advancing to the review STEP when there is
+    nothing left to ask.
+
+    ``_next_gap_section`` (and the model) can resolve the next section to
+    ``"review"`` once every content section is filled. Emitting that as a
+    ``step="question"`` with ``section="review"`` renders a degenerate question
+    card ("Let's review…") with a free-text box. Instead, transition to the
+    review step so the client shows the review/save surface. History is preserved
+    so Back from review restores the last real question with data intact.
+    """
+    if next_question.section == "review":
+        return ResumeWizardState(
+            step="review",
+            resume_data=data,
+            current_question=ResumeWizardQuestion(
+                text=section_prompt("review"), section="review"
+            ),
+            history=history,
+            asked_count=asked_count,
+            inferred_skills=inferred_skills,
+            is_complete=is_complete,
+            progress=compute_progress(data),
+            warnings=build_review_warnings(data),
+        )
+    return ResumeWizardState(
+        step="question",
+        resume_data=data,
+        current_question=next_question,
+        history=history,
+        asked_count=asked_count,
+        inferred_skills=inferred_skills,
+        is_complete=is_complete,
+        progress=compute_progress(data),
+        warnings=warnings,
+    )
+
+
 def _next_question(result: dict[str, Any], data: ResumeData) -> ResumeWizardQuestion:
     """Use the model's next_question, or fall back to the next empty section."""
     candidate = result.get("next_question")
@@ -342,7 +547,8 @@ async def run_ai_turn(
 ) -> ResumeWizardState:
     """Run one adaptive AI turn (answer or skip) and validate the result."""
     section = state.current_question.section
-    resume_json = json.dumps(state.resume_data.model_dump(mode="json"), ensure_ascii=False)
+    # W-P1.4: send only the section-relevant slice, not the whole resume.
+    resume_json = scoped_resume_json(state.resume_data, section)
     prompt_answer = (
         "(The user skipped this question. Do NOT modify resume_data. "
         "Ask the next most useful question for a different section.)"
@@ -357,7 +563,9 @@ async def run_ai_turn(
         resume_json=resume_json,
         answer_text=prompt_answer,
     )
-    result = await complete_json(prompt, max_tokens=8192, schema_type="resume")
+    result = await complete_json(
+        prompt, max_tokens=max_tokens_for_section(section), schema_type="resume"
+    )
     if not isinstance(result, dict):
         raise ValueError("Resume wizard LLM response must be a JSON object.")
 
@@ -386,9 +594,31 @@ async def run_ai_turn(
     _assign_entry_ids(data)
 
     asked_count = state.asked_count + 1
+
+    # W-P0.5: the name is the one hard requirement for finalize. If we're still
+    # on intro and couldn't capture a name, re-ask for it now rather than letting
+    # the user discover the failure at Save time (a 422). This keeps the fix at
+    # the point of collection instead of the end of the flow.
+    missing_name_at_intro = section == "intro" and not data.personalInfo.name.strip()
+    if missing_name_at_intro:
+        next_question = ResumeWizardQuestion(
+            text=(
+                "Thanks! One thing first — what's your name? "
+                "It goes at the top of your resume."
+            ),
+            section="intro",
+        )
+        warnings = ["Add your name — it's required to create your resume."]
+    else:
+        next_question = _next_question(result, data)
+        warnings = []
+
     # `is_complete` is a SUGGESTION to surface "Review & finish" — the step stays
     # "question" and never auto-finalizes. The client decides when to call /review.
-    is_complete = bool(result.get("is_complete")) or asked_count >= RESUME_WIZARD_MAX_QUESTIONS
+    is_complete = (
+        not missing_name_at_intro
+        and (bool(result.get("is_complete")) or asked_count >= RESUME_WIZARD_MAX_QUESTIONS)
+    )
 
     history = list(state.history)
     history.append(
@@ -400,39 +630,238 @@ async def run_ai_turn(
         )
     )
 
-    return ResumeWizardState(
-        step="question",
-        resume_data=data,
-        current_question=_next_question(result, data),
+    return _build_turn_state(
+        data=data,
+        next_question=next_question,
         history=history,
         asked_count=asked_count,
         inferred_skills=inferred,
         is_complete=is_complete,
-        progress=compute_progress(asked_count, is_complete),
-        warnings=[],
+        warnings=warnings,
     )
 
 
+def _sanitize(text: str) -> str:
+    """Strip prompt-injection patterns + redact credential-like tokens."""
+    return _scrub_secrets(_sanitize_user_input(text))
+
+
+def _entry_kind(section: str) -> str:
+    return "project" if section == "personalProjects" else "work experience"
+
+
+async def draft_bullets(*, section: str, title: str, company: str, description: str) -> list[str]:
+    """AI-draft 2-4 truthful resume bullets for one entry (W-P2.2).
+
+    Facts (title/company) are context only; the plain ``description`` is the
+    source of truth. Never mutates state; returns bullets for the card to show.
+    """
+    from app.prompts.resume_wizard import RESUME_WIZARD_BULLETS_PROMPT
+
+    facts = ", ".join(part for part in (title.strip(), company.strip()) if part) or "(none)"
+    prompt = RESUME_WIZARD_BULLETS_PROMPT.format(
+        entry_kind=_entry_kind(section),
+        output_language=get_language_name(get_content_language()),
+        facts=_sanitize(facts),
+        description=_sanitize(description),
+    )
+    result = await complete_json(prompt, max_tokens=600, schema_type="resume")
+    if not isinstance(result, dict):
+        return []
+    # Reuse the resume schema's bullet coercion so numbered/΄dashed lines normalize.
+    return _coerce_string_list(result.get("bullets"))
+
+
+async def parse_entries(*, section: str, text: str) -> list[dict[str, Any]]:
+    """AI-parse a pasted blob into structured entries for confirmation (W-P2.2).
+
+    Never mutates state; returns Experience/Project-shaped dicts the client loads
+    into the card(s). Truthful extraction only (no invention).
+    """
+    from app.prompts.resume_wizard import RESUME_WIZARD_PARSE_PROMPT
+
+    prompt = RESUME_WIZARD_PARSE_PROMPT.format(
+        entry_kind=_entry_kind(section),
+        pasted_text=_sanitize(text),
+    )
+    result = await complete_json(prompt, max_tokens=2000, schema_type="resume")
+    if not isinstance(result, dict):
+        return []
+    raw_entries = result.get("entries")
+    if not isinstance(raw_entries, list):
+        return []
+    entries: list[dict[str, Any]] = []
+    for raw in raw_entries:
+        if not isinstance(raw, dict):
+            continue
+        entries.append(
+            {
+                "title": str(raw.get("title") or ""),
+                "company": str(raw.get("company") or ""),
+                "location": str(raw.get("location") or ""),
+                "years": str(raw.get("years") or ""),
+                "name": str(raw.get("name") or ""),
+                "role": str(raw.get("role") or ""),
+                "description": _coerce_string_list(raw.get("description")),
+            }
+        )
+    return entries
+
+
 def apply_back(state: ResumeWizardState) -> ResumeWizardState:
-    """Deterministically restore the previous question + draft snapshot."""
+    """Navigate to the previous question WITHOUT destroying entered data (W-P0.1).
+
+    Back is navigation, not undo: the current merged ``resume_data`` is kept
+    (so the live preview never loses what the user just entered), the previous
+    question is restored, and that question's earlier answer is returned in
+    ``restored_answer`` so the client can repopulate the input for editing. When
+    the user re-submits, ``_merge_entries`` replaces the matching entry in place.
+    """
     if not state.history:
         return state.model_copy(deep=True)
     history = list(state.history)
     last = history.pop()
     asked_count = max(0, state.asked_count - 1)
+    # Keep the current merged draft rather than rewinding to the pre-answer
+    # snapshot — this is the core of the non-destructive fix.
+    kept_data = state.resume_data.model_copy(deep=True)
     # Derive step from the restored question itself, not just the count, so a
     # restored non-intro question never renders under the intro step (which hides
     # the question-step actions).
     return ResumeWizardState(
         step="intro" if last.section == "intro" else "question",
-        resume_data=last.resume_data_before,
+        resume_data=kept_data,
         current_question=ResumeWizardQuestion(text=last.question, section=last.section),
         history=history,
         asked_count=asked_count,
         inferred_skills=[],
         is_complete=False,
-        progress=compute_progress(asked_count, False),
+        progress=compute_progress(kept_data),
         warnings=[],
+        restored_answer=last.answer,
+    )
+
+
+def apply_skip(state: ResumeWizardState) -> ResumeWizardState:
+    """Advance to the next gap section deterministically, with NO LLM call (W-P0.4).
+
+    Skipping never modifies ``resume_data`` and never needs the model to choose
+    the next question — ``_next_gap_section`` already does that on the server. The
+    turn is recorded in history (so Back still works after a skip) but costs zero
+    tokens and no latency.
+    """
+    data = state.resume_data.model_copy(deep=True)
+    asked_count = state.asked_count + 1
+    history = list(state.history)
+    history.append(
+        ResumeWizardHistoryEntry(
+            question=state.current_question.text,
+            answer="",
+            section=state.current_question.section,
+            resume_data_before=state.resume_data,
+        )
+    )
+    gap = _next_gap_section(data)
+    return _build_turn_state(
+        data=data,
+        next_question=ResumeWizardQuestion(text=section_prompt(gap), section=gap),
+        history=history,
+        asked_count=asked_count,
+        inferred_skills=[],
+        is_complete=asked_count >= RESUME_WIZARD_MAX_QUESTIONS,
+        warnings=[],
+    )
+
+
+_INTRO_NAME_REASK = (
+    "Thanks! One thing first — what's your name? It goes at the top of your resume."
+)
+
+
+def apply_structured(
+    state: ResumeWizardState, update: ResumeWizardStructuredUpdate
+) -> ResumeWizardState:
+    """Apply a structured section update deterministically, with NO LLM call (W-P1.1).
+
+    Merges discrete identity/contact fields and/or a confirmed skills list, then
+    advances to the client-named ``next_section`` (or the next content gap). The
+    turn is recorded in history so Back stays non-destructive.
+    """
+    section = state.current_question.section
+    data = state.resume_data.model_copy(deep=True)
+
+    for field, raw in update.personal_info.items():
+        if field in STRUCTURED_PERSONAL_INFO_FIELDS:
+            setattr(data.personalInfo, field, raw.strip())
+
+    if update.technical_skills is not None:
+        # Confirmed skills fully define the list (deduped, order-preserving).
+        data.additional.technicalSkills = merge_unique_skills([], update.technical_skills)
+
+    # A structured Education entry is appended/replaced by signature (W-P2.1),
+    # never clobbering earlier entries — same rule as the AI merge path.
+    if update.education is not None and (
+        update.education.institution.strip() or update.education.degree.strip()
+    ):
+        data.education = _merge_entries(
+            data.education, [update.education], _education_key
+        )
+
+    # Structured Experience / Project entries (W-P2.2 hybrid cards). Merged by
+    # signature so re-submitting the same role replaces it in place; lists support
+    # confirming a parsed multi-role paste in one turn.
+    if update.experiences:
+        valid_exp = [
+            exp for exp in update.experiences if exp.title.strip() or exp.company.strip()
+        ]
+        if valid_exp:
+            data.workExperience = _merge_entries(
+                data.workExperience, valid_exp, _experience_key
+            )
+    if update.projects:
+        valid_proj = [proj for proj in update.projects if proj.name.strip()]
+        if valid_proj:
+            data.personalProjects = _merge_entries(
+                data.personalProjects, valid_proj, _project_key
+            )
+
+    _assign_entry_ids(data)
+    asked_count = state.asked_count + 1
+
+    history = list(state.history)
+    history.append(
+        ResumeWizardHistoryEntry(
+            question=state.current_question.text,
+            answer="",
+            section=section,
+            resume_data_before=state.resume_data,
+        )
+    )
+
+    # Identity must yield a name; if it didn't, re-ask intro (mirrors W-P0.5).
+    if section == "intro" and not data.personalInfo.name.strip():
+        next_question = ResumeWizardQuestion(text=_INTRO_NAME_REASK, section="intro")
+        warnings = ["Add your name — it's required to create your resume."]
+    elif update.next_section:
+        next_question = ResumeWizardQuestion(
+            text=section_prompt(update.next_section), section=update.next_section
+        )
+        warnings = []
+    else:
+        gap = _next_gap_section(data)
+        next_question = ResumeWizardQuestion(text=section_prompt(gap), section=gap)
+        warnings = []
+
+    return _build_turn_state(
+        data=data,
+        next_question=next_question,
+        history=history,
+        asked_count=asked_count,
+        # Preserve skill suggestions across structured turns so the chip UI can
+        # still offer them (W-P1.2).
+        inferred_skills=state.inferred_skills,
+        is_complete=False,
+        warnings=warnings,
     )
 
 
@@ -444,4 +873,7 @@ def apply_review(state: ResumeWizardState) -> ResumeWizardState:
         text=section_prompt("review"), section="review"
     )
     next_state.warnings = build_review_warnings(next_state.resume_data)
+    # A restored answer is only meaningful for the question that was restored;
+    # never carry it into review.
+    next_state.restored_answer = ""
     return next_state

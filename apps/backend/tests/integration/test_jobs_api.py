@@ -62,6 +62,95 @@ class TestJobUpload:
         assert resp.status_code == 400
 
 
+class TestJobAnalyze:
+    """POST /api/v1/jobs/analyze"""
+
+    _KEYWORDS = {
+        "required_skills": ["Python", "AWS"],
+        "preferred_skills": ["Kubernetes"],
+        "keywords": ["microservices"],
+        "experience_requirements": ["5+ years"],
+        "seniority_level": "senior",
+        "experience_years": 5,
+    }
+
+    async def test_empty_jd_returns_400(self, client):
+        async with client:
+            resp = await client.post("/api/v1/jobs/analyze", json={"job_description": "  "})
+        assert resp.status_code == 400
+
+    @patch("app.routers.jobs.extract_job_keywords", new_callable=AsyncMock)
+    async def test_keywords_only_without_resume(self, mock_extract, client):
+        mock_extract.return_value = self._KEYWORDS
+        async with client:
+            resp = await client.post(
+                "/api/v1/jobs/analyze",
+                json={"job_description": "Senior Python/AWS engineer role."},
+            )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["keywords"]["required_skills"] == ["Python", "AWS"]
+        # experience_years coerced to a string; matched/missing empty w/o resume.
+        assert data["keywords"]["experience_years"] == "5"
+        assert data["matched"] == []
+        assert data["missing"] == []
+        assert data["fit_score"] is None
+
+    @patch("app.routers.jobs.db", new_callable=AsyncMock)
+    @patch("app.routers.jobs.extract_job_keywords", new_callable=AsyncMock)
+    async def test_computes_matched_missing_and_fit(self, mock_extract, mock_db, client):
+        mock_extract.return_value = self._KEYWORDS
+        mock_db.get_resume.return_value = {
+            "processed_data": {
+                "summary": "Backend engineer building microservices in Python.",
+                "additional": {"technicalSkills": ["Python", "Docker"]},
+            }
+        }
+        async with client:
+            resp = await client.post(
+                "/api/v1/jobs/analyze",
+                json={
+                    "job_description": "Senior Python/AWS engineer role.",
+                    "resume_id": "r1",
+                },
+            )
+        assert resp.status_code == 200
+        data = resp.json()
+        # Python + microservices are present; AWS + Kubernetes are not.
+        assert set(data["matched"]) == {"Python", "microservices"}
+        assert set(data["missing"]) == {"AWS", "Kubernetes"}
+        assert data["fit_score"] == pytest.approx(50.0)
+
+    @patch("app.routers.jobs.db", new_callable=AsyncMock)
+    @patch("app.routers.jobs.extract_job_keywords", new_callable=AsyncMock)
+    async def test_missing_resume_returns_404(self, mock_extract, mock_db, client):
+        mock_extract.return_value = self._KEYWORDS
+        mock_db.get_resume.return_value = None
+        async with client:
+            resp = await client.post(
+                "/api/v1/jobs/analyze",
+                json={"job_description": "Senior role.", "resume_id": "nope"},
+            )
+        assert resp.status_code == 404
+
+    @patch("app.routers.jobs.db", new_callable=AsyncMock)
+    @patch("app.routers.jobs.extract_job_keywords", new_callable=AsyncMock)
+    async def test_resume_without_processed_data_returns_keywords_only(
+        self, mock_extract, mock_db, client
+    ):
+        mock_extract.return_value = self._KEYWORDS
+        mock_db.get_resume.return_value = {"content_type": "md", "content": "# raw"}
+        async with client:
+            resp = await client.post(
+                "/api/v1/jobs/analyze",
+                json={"job_description": "Senior role.", "resume_id": "r1"},
+            )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["fit_score"] is None
+        assert data["matched"] == []
+
+
 class TestGetJob:
     """GET /api/v1/jobs/{job_id}"""
 

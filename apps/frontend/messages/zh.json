@@ -466,7 +466,12 @@
       "outreachSaveFailed": "保存联系邮件失败，请重试。",
       "coverLetterGenerateFailed": "生成求职信失败：{error}",
       "outreachGenerateFailed": "生成联系邮件失败：{error}",
-      "interviewPrepGenerateFailed": "生成面试准备失败：{error}"
+      "interviewPrepGenerateFailed": "生成面试准备失败：{error}",
+      "aiRequiresConnection": "AI 生成需要网络连接。请重新连接后再试。",
+      "aiStreaming": "正在使用 AI 生成…",
+      "draftQuarantined": "已保存的本地草稿无法读取，已被隔离以保护你的工作。当前内容是安全的。",
+      "storageDegraded": "本地存储不可用，本次会话的更改仅保存在内存中。请保存到服务器以免丢失。",
+      "openRecoveryCenter": "打开恢复中心"
     }
   },
   "enrichment": {

@@ -1,4 +1,5 @@
 import { apiFetch } from './client';
+import { parseError, readJson } from './errors';
 
 // Supported LLM providers
 export type LLMProvider =
@@ -65,12 +66,7 @@ export interface LLMHealthCheck {
 // Fetch full LLM configuration
 export async function fetchLlmConfig(): Promise<LLMConfig> {
   const res = await apiFetch('/config/llm-api-key', { credentials: 'include' });
-
-  if (!res.ok) {
-    throw new Error(`Failed to load LLM config (status ${res.status}).`);
-  }
-
-  return res.json();
+  return readJson<LLMConfig>(res, 'Failed to load LLM config.');
 }
 
 // Legacy function for backwards compatibility
@@ -87,13 +83,7 @@ export async function updateLlmConfig(config: LLMConfigUpdate): Promise<LLMConfi
     credentials: 'include',
     body: JSON.stringify(config),
   });
-
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.detail || `Failed to update LLM config (status ${res.status}).`);
-  }
-
-  return res.json();
+  return readJson<LLMConfig>(res, 'Failed to update LLM config.');
 }
 
 // Legacy function for backwards compatibility
@@ -116,23 +106,13 @@ export async function testLlmConnection(config?: LLMConfigUpdate): Promise<LLMHe
   }
 
   const res = await apiFetch('/config/llm-test', options);
-
-  if (!res.ok) {
-    throw new Error(`Failed to test LLM connection (status ${res.status}).`);
-  }
-
-  return res.json();
+  return readJson<LLMHealthCheck>(res, 'Failed to test LLM connection.');
 }
 
 // Fetch system status
 export async function fetchSystemStatus(): Promise<SystemStatus> {
   const res = await apiFetch('/status', { credentials: 'include' });
-
-  if (!res.ok) {
-    throw new Error(`Failed to fetch system status (status ${res.status}).`);
-  }
-
-  return res.json();
+  return readJson<SystemStatus>(res, 'Failed to fetch system status.');
 }
 
 // Provider display names and default models
@@ -177,12 +157,7 @@ export interface FeatureConfigUpdate {
 // Fetch feature configuration
 export async function fetchFeatureConfig(): Promise<FeatureConfig> {
   const res = await apiFetch('/config/features', { credentials: 'include' });
-
-  if (!res.ok) {
-    throw new Error(`Failed to load feature config (status ${res.status}).`);
-  }
-
-  return res.json();
+  return readJson<FeatureConfig>(res, 'Failed to load feature config.');
 }
 
 // Update feature configuration
@@ -193,13 +168,7 @@ export async function updateFeatureConfig(config: FeatureConfigUpdate): Promise<
     credentials: 'include',
     body: JSON.stringify(config),
   });
-
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.detail || `Failed to update feature config (status ${res.status}).`);
-  }
-
-  return res.json();
+  return readJson<FeatureConfig>(res, 'Failed to update feature config.');
 }
 
 // Language configuration types
@@ -219,12 +188,7 @@ export interface LanguageConfigUpdate {
 // Fetch language configuration
 export async function fetchLanguageConfig(): Promise<LanguageConfig> {
   const res = await apiFetch('/config/language', { credentials: 'include' });
-
-  if (!res.ok) {
-    throw new Error(`Failed to load language config (status ${res.status}).`);
-  }
-
-  return res.json();
+  return readJson<LanguageConfig>(res, 'Failed to load language config.');
 }
 
 // Update language configuration
@@ -235,13 +199,7 @@ export async function updateLanguageConfig(update: LanguageConfigUpdate): Promis
     credentials: 'include',
     body: JSON.stringify(update),
   });
-
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.detail || `Failed to update language config (status ${res.status}).`);
-  }
-
-  return res.json();
+  return readJson<LanguageConfig>(res, 'Failed to update language config.');
 }
 
 export interface PromptOption {
@@ -262,12 +220,7 @@ export interface PromptConfigUpdate {
 // Fetch prompt configuration
 export async function fetchPromptConfig(): Promise<PromptConfig> {
   const res = await apiFetch('/config/prompts', { credentials: 'include' });
-
-  if (!res.ok) {
-    throw new Error(`Failed to load prompt config (status ${res.status}).`);
-  }
-
-  return res.json();
+  return readJson<PromptConfig>(res, 'Failed to load prompt config.');
 }
 
 // Update prompt configuration
@@ -278,13 +231,7 @@ export async function updatePromptConfig(update: PromptConfigUpdate): Promise<Pr
     credentials: 'include',
     body: JSON.stringify(update),
   });
-
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.detail || `Failed to update prompt config (status ${res.status}).`);
-  }
-
-  return res.json();
+  return readJson<PromptConfig>(res, 'Failed to update prompt config.');
 }
 
 // Custom feature prompts (cover letter, cold outreach)
@@ -321,10 +268,7 @@ export class FeaturePromptsError extends Error {
 
 export async function fetchFeaturePrompts(): Promise<FeaturePrompts> {
   const res = await apiFetch('/config/feature-prompts', { credentials: 'include' });
-  if (!res.ok) {
-    throw new Error(`Failed to load feature prompts (status ${res.status}).`);
-  }
-  return res.json();
+  return readJson<FeaturePrompts>(res, 'Failed to load feature prompts.');
 }
 
 export async function updateFeaturePrompts(update: FeaturePromptsUpdate): Promise<FeaturePrompts> {
@@ -431,12 +375,7 @@ export const API_KEY_PROVIDER_INFO: Record<ApiKeyProvider, { name: string; descr
 // Fetch API key status for all providers
 export async function fetchApiKeyStatus(): Promise<ApiKeyStatusResponse> {
   const res = await apiFetch('/config/api-keys', { credentials: 'include' });
-
-  if (!res.ok) {
-    throw new Error(`Failed to load API key status (status ${res.status}).`);
-  }
-
-  return res.json();
+  return readJson<ApiKeyStatusResponse>(res, 'Failed to load API key status.');
 }
 
 // Update API keys for one or more providers
@@ -447,13 +386,7 @@ export async function updateApiKeys(keys: ApiKeysUpdateRequest): Promise<ApiKeys
     credentials: 'include',
     body: JSON.stringify(keys),
   });
-
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.detail || `Failed to update API keys (status ${res.status}).`);
-  }
-
-  return res.json();
+  return readJson<ApiKeysUpdateResponse>(res, 'Failed to update API keys.');
 }
 
 // Delete API key for a specific provider
@@ -462,11 +395,7 @@ export async function deleteApiKey(provider: ApiKeyProvider): Promise<void> {
     method: 'DELETE',
     credentials: 'include',
   });
-
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.detail || `Failed to delete API key (status ${res.status}).`);
-  }
+  if (!res.ok) throw await parseError(res, 'Failed to delete API key.');
 }
 
 // Clear all API keys
@@ -475,11 +404,7 @@ export async function clearAllApiKeys(): Promise<void> {
     method: 'DELETE',
     credentials: 'include',
   });
-
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.detail || `Failed to clear API keys (status ${res.status}).`);
-  }
+  if (!res.ok) throw await parseError(res, 'Failed to clear API keys.');
 }
 
 // Reset database
@@ -490,9 +415,39 @@ export async function resetDatabase(): Promise<void> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ confirm: 'RESET_ALL_DATA' }),
   });
+  if (!res.ok) throw await parseError(res, 'Failed to reset database.');
+}
 
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.detail || `Failed to reset database (status ${res.status}).`);
+/** P4 resilience feature flags + streaming params (GET /config/flags). */
+export interface ResilienceFlags {
+  streaming_ai: boolean;
+  offline_support: boolean;
+  advanced_autosave: boolean;
+  stream_max_concurrent_per_user: number;
+  stream_max_lifetime_seconds: number;
+  stream_heartbeat_seconds: number;
+}
+
+const DEFAULT_RESILIENCE_FLAGS: ResilienceFlags = {
+  streaming_ai: false,
+  offline_support: false,
+  advanced_autosave: true,
+  stream_max_concurrent_per_user: 3,
+  stream_max_lifetime_seconds: 300,
+  stream_heartbeat_seconds: 15,
+};
+
+/**
+ * Fetch the P4 resilience flags. Falls back to conservative defaults (autosave
+ * on, streaming/offline off) if the endpoint is unreachable, so a flag-service
+ * blip never breaks the editor — it just degrades to the safe path.
+ */
+export async function fetchResilienceFlags(): Promise<ResilienceFlags> {
+  try {
+    const res = await apiFetch('/config/flags');
+    if (!res.ok) return DEFAULT_RESILIENCE_FLAGS;
+    return (await res.json()) as ResilienceFlags;
+  } catch {
+    return DEFAULT_RESILIENCE_FLAGS;
   }
 }

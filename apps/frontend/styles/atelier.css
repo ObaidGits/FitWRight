@@ -144,6 +144,17 @@
   }
 }
 
+/* Mobile: form fields render at 16px so iOS Safari doesn't auto-zoom on focus
+   (fields are visually text-sm on larger screens; this only lifts the on-screen
+   size on small viewports, where the zoom jump is most disruptive). */
+@media (max-width: 640px) {
+  .atelier input,
+  .atelier textarea,
+  .atelier select {
+    font-size: 16px;
+  }
+}
+
 /* ============================================================
    Engine isolation (Task 1.3 / Req 11.5, 22.2)
    ------------------------------------------------------------

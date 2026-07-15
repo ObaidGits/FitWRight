@@ -21,7 +21,10 @@ async def auth_env(isolated_db, monkeypatch):
     (they import ``app.database.db`` lazily, which the fixture has monkeypatched).
     Yields the isolated ``Database`` for direct assertions/seeding.
     """
-    import app.auth.runtime as runtime
+    from app.admin.lifecycle import reset_lifecycle_service
+    from app.admin.metrics import reset_admin_metrics
+    from app.admin.metrics_service import reset_metrics_service
+    from app.admin.repo import reset_admin_repo
     from app.auth.audit import reset_audit_service
     from app.auth.metrics import reset_metrics
     from app.auth.passwords import reset_password_service
@@ -35,14 +38,23 @@ async def auth_env(isolated_db, monkeypatch):
     monkeypatch.setattr(app_settings, "argon2_memory_cost", 64)
     monkeypatch.setattr(app_settings, "argon2_parallelism", 1)
 
+    from app.platform import reset_container
+
     def _reset() -> None:
-        runtime._kvstore = None
+        # Adapters are owned by the composition root now (Phase 3); resetting the
+        # container drops the KVStore + all cached adapters in one place.
+        reset_container()
         reset_password_service()
         reset_session_service()
         reset_audit_service()
         reset_rate_limiter()
         reset_token_service()
         reset_metrics()
+        # P2 admin singletons (bound to db.session_factory on first use).
+        reset_admin_repo()
+        reset_metrics_service()
+        reset_lifecycle_service()
+        reset_admin_metrics()
 
     _reset()
     yield isolated_db

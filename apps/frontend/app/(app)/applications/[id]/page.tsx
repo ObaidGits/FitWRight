@@ -32,6 +32,17 @@ import {
 } from '@/components/atelier/dropdown-menu';
 import { useToast } from '@/components/atelier/toast';
 import { ExportButton } from '@/components/resume/export-button';
+import { AiProgress } from '@/components/ai/ai-progress';
+import {
+  COVER_LETTER_STAGES,
+  COVER_LETTER_MESSAGES,
+  OUTREACH_STAGES,
+  OUTREACH_MESSAGES,
+  INTERVIEW_PREP_STAGES,
+  INTERVIEW_PREP_MESSAGES,
+  ESTIMATE_MEDIUM,
+} from '@/lib/ai-progress-copy';
+import { SchedulingPanel } from '@/components/scheduling/scheduling-panel';
 import {
   APPLICATION_STATUS_ORDER,
   createApplication,
@@ -49,8 +60,17 @@ import {
   generateInterviewPrep,
   fetchResume,
 } from '@/lib/api/resume';
+import { useFeatureConfig } from '@/features/settings/hooks';
+import { useSystemStatus } from '@/features/home/hooks';
+import { useQueryClient } from '@tanstack/react-query';
+import { invalidateApplicationLists, queryKeys } from '@/lib/query/client';
+import type { InterviewPrepData } from '@/components/common/resume_previewer_context';
 
-type Deliverable = { coverLetter: string | null; outreach: string | null; interviewPrep: unknown };
+type Deliverable = {
+  coverLetter: string | null;
+  outreach: string | null;
+  interviewPrep: InterviewPrepData | null;
+};
 
 export default function ApplicationWorkspacePage() {
   const params = useParams<{ id: string }>();
@@ -59,7 +79,15 @@ export default function ApplicationWorkspacePage() {
   const { data: app, isLoading, isError, refetch } = useApplicationDetail(id);
   const move = useMoveApplication();
   const notesMut = useUpdateApplicationNotes();
+  const features = useFeatureConfig();
+  const statusQuery = useSystemStatus();
+  const aiUnconfigured = statusQuery.data && !statusQuery.data.llm_configured;
   const { toast } = useToast();
+  const qc = useQueryClient();
+
+  const coverEnabled = features.data?.enable_cover_letter ?? true;
+  const outreachEnabled = features.data?.enable_outreach_message ?? true;
+  const prepEnabled = features.data?.enable_interview_prep ?? true;
   const [duplicating, setDuplicating] = React.useState(false);
 
   const [notes, setNotes] = React.useState('');
@@ -107,6 +135,9 @@ export default function ApplicationWorkspacePage() {
         const prep = await generateInterviewPrep(app.resume_id);
         setDeliverable((d) => ({ ...d, interviewPrep: prep }));
       }
+      // These persist onto the resume record — refresh its cache so the Resume
+      // Editor (if open elsewhere) reflects the new deliverable on next view.
+      qc.invalidateQueries({ queryKey: queryKeys.resume(app.resume_id) });
       toast({ title: 'Generated', variant: 'success' });
     } catch (e) {
       toast({ title: e instanceof Error ? e.message : 'Generation failed', variant: 'error' });
@@ -147,6 +178,7 @@ export default function ApplicationWorkspacePage() {
         status: 'saved',
         notes: app.notes ?? undefined,
       });
+      invalidateApplicationLists(qc);
       toast({ title: 'Application duplicated', variant: 'success' });
       router.push(`/applications/${created.application_id}`);
     } catch (e) {
@@ -227,9 +259,10 @@ export default function ApplicationWorkspacePage() {
       <Tabs defaultValue="overview">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="cover">Cover Letter</TabsTrigger>
-          <TabsTrigger value="prep">Interview Prep</TabsTrigger>
-          <TabsTrigger value="outreach">Outreach</TabsTrigger>
+          <TabsTrigger value="schedule">Schedule</TabsTrigger>
+          {coverEnabled && <TabsTrigger value="cover">Cover Letter</TabsTrigger>}
+          {prepEnabled && <TabsTrigger value="prep">Interview Prep</TabsTrigger>}
+          {outreachEnabled && <TabsTrigger value="outreach">Outreach</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="overview">
@@ -263,55 +296,95 @@ export default function ApplicationWorkspacePage() {
           </div>
         </TabsContent>
 
-        <TabsContent value="cover">
-          <DeliverablePanel
-            label="cover letter"
-            value={deliverable.coverLetter}
-            busy={busy === 'cover'}
-            onGenerate={() => run('cover')}
-            onCopy={() =>
-              deliverable.coverLetter && navigator.clipboard.writeText(deliverable.coverLetter)
-            }
-            exportSlot={
-              app.resume_id ? (
-                <ExportButton kind="cover-letter" resumeId={app.resume_id} label="Export PDF" />
-              ) : null
-            }
-          />
+        <TabsContent value="schedule">
+          <SchedulingPanel applicationId={id} />
         </TabsContent>
 
-        <TabsContent value="prep">
-          {deliverable.interviewPrep ? (
-            <Card className="p-5">
-              <pre className="max-h-[28rem] overflow-y-auto whitespace-pre-wrap text-sm">
-                {JSON.stringify(deliverable.interviewPrep, null, 2)}
-              </pre>
-            </Card>
-          ) : (
-            <EmptyState
-              icon={Sparkles}
-              title="No interview prep yet"
-              description="Generate resume-grounded questions and talking points for this role."
-              action={
-                <Button loading={busy === 'prep'} onClick={() => run('prep')}>
-                  <Sparkles className="h-4 w-4" /> Generate interview prep
-                </Button>
+        {coverEnabled && (
+          <TabsContent value="cover">
+            <DeliverablePanel
+              label="cover letter"
+              value={deliverable.coverLetter}
+              busy={busy === 'cover'}
+              disabled={Boolean(aiUnconfigured)}
+              onGenerate={() => run('cover')}
+              onCopy={() =>
+                deliverable.coverLetter && navigator.clipboard.writeText(deliverable.coverLetter)
+              }
+              exportSlot={
+                app.resume_id ? (
+                  <ExportButton kind="cover-letter" resumeId={app.resume_id} label="Export PDF" />
+                ) : null
               }
             />
-          )}
-        </TabsContent>
+          </TabsContent>
+        )}
 
-        <TabsContent value="outreach">
-          <DeliverablePanel
-            label="outreach message"
-            value={deliverable.outreach}
-            busy={busy === 'outreach'}
-            onGenerate={() => run('outreach')}
-            onCopy={() =>
-              deliverable.outreach && navigator.clipboard.writeText(deliverable.outreach)
-            }
-          />
-        </TabsContent>
+        {prepEnabled && (
+          <TabsContent value="prep">
+            {busy === 'prep' && !deliverable.interviewPrep ? (
+              <Card className="p-5">
+                <AiProgress
+                  stages={INTERVIEW_PREP_STAGES}
+                  active
+                  messages={INTERVIEW_PREP_MESSAGES}
+                  estimate={ESTIMATE_MEDIUM}
+                />
+              </Card>
+            ) : deliverable.interviewPrep ? (
+              <div className="space-y-3">
+                <div className="flex justify-end">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    loading={busy === 'prep'}
+                    disabled={Boolean(aiUnconfigured)}
+                    onClick={() => run('prep')}
+                  >
+                    Regenerate
+                  </Button>
+                </div>
+                <InterviewPrep data={deliverable.interviewPrep} />
+              </div>
+            ) : (
+              <EmptyState
+                icon={Sparkles}
+                title="No interview prep yet"
+                description={
+                  aiUnconfigured
+                    ? 'Add an AI provider key in settings to generate interview prep.'
+                    : 'Generate resume-grounded questions and talking points for this role.'
+                }
+                action={
+                  aiUnconfigured ? (
+                    <Button asChild variant="outline">
+                      <Link href="/settings">Open settings</Link>
+                    </Button>
+                  ) : (
+                    <Button loading={busy === 'prep'} onClick={() => run('prep')}>
+                      <Sparkles className="h-4 w-4" /> Generate interview prep
+                    </Button>
+                  )
+                }
+              />
+            )}
+          </TabsContent>
+        )}
+
+        {outreachEnabled && (
+          <TabsContent value="outreach">
+            <DeliverablePanel
+              label="outreach message"
+              value={deliverable.outreach}
+              busy={busy === 'outreach'}
+              disabled={Boolean(aiUnconfigured)}
+              onGenerate={() => run('outreach')}
+              onCopy={() =>
+                deliverable.outreach && navigator.clipboard.writeText(deliverable.outreach)
+              }
+            />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );
@@ -321,6 +394,7 @@ function DeliverablePanel({
   label,
   value,
   busy,
+  disabled = false,
   onGenerate,
   onCopy,
   exportSlot,
@@ -328,20 +402,49 @@ function DeliverablePanel({
   label: string;
   value: string | null;
   busy: boolean;
+  disabled?: boolean;
   onGenerate: () => void;
   onCopy: () => void;
   exportSlot?: React.ReactNode;
 }) {
+  // While the FIRST draft generates, show the honest stage timeline instead of a
+  // bare spinner (regenerating keeps the existing value visible).
+  if (busy && !value) {
+    const progress =
+      label === 'outreach message'
+        ? { stages: OUTREACH_STAGES, messages: OUTREACH_MESSAGES }
+        : { stages: COVER_LETTER_STAGES, messages: COVER_LETTER_MESSAGES };
+    return (
+      <Card className="p-5">
+        <AiProgress
+          stages={progress.stages}
+          active
+          messages={progress.messages}
+          estimate={ESTIMATE_MEDIUM}
+        />
+      </Card>
+    );
+  }
   if (!value) {
     return (
       <EmptyState
         icon={Sparkles}
         title={`No ${label} yet`}
-        description={`Generate a tailored ${label} grounded in your resume and the job.`}
+        description={
+          disabled
+            ? `Add an AI provider key in settings to generate a ${label}.`
+            : `Generate a tailored ${label} grounded in your resume and the job.`
+        }
         action={
-          <Button loading={busy} onClick={onGenerate}>
-            <Sparkles className="h-4 w-4" /> Generate {label}
-          </Button>
+          disabled ? (
+            <Button asChild variant="outline">
+              <Link href="/settings">Open settings</Link>
+            </Button>
+          ) : (
+            <Button loading={busy} onClick={onGenerate}>
+              <Sparkles className="h-4 w-4" /> Generate {label}
+            </Button>
+          )
         }
       />
     );
@@ -355,7 +458,13 @@ function DeliverablePanel({
             <Copy className="h-4 w-4" /> Copy
           </Button>
           {exportSlot}
-          <Button size="sm" variant="outline" loading={busy} onClick={onGenerate}>
+          <Button
+            size="sm"
+            variant="outline"
+            loading={busy}
+            disabled={disabled}
+            onClick={onGenerate}
+          >
             Regenerate
           </Button>
         </div>
@@ -364,5 +473,75 @@ function DeliverablePanel({
         {value}
       </p>
     </Card>
+  );
+}
+
+/** Atelier-styled interview-prep renderer (replaces raw JSON dump). */
+function InterviewPrep({ data }: { data: InterviewPrepData }) {
+  const questionBlock = (title: string, items: InterviewPrepData['resume_questions']) =>
+    items.length > 0 && (
+      <Card className="space-y-3 p-5">
+        <h3 className="text-sm font-semibold text-[var(--muted-foreground)]">{title}</h3>
+        <ul className="space-y-3">
+          {items.map((q, i) => (
+            <li key={i} className="space-y-1">
+              <p className="text-sm font-medium text-[var(--foreground)]">{q.question}</p>
+              {q.focus_area && (
+                <p className="text-xs text-[var(--muted-foreground)]">Focus: {q.focus_area}</p>
+              )}
+              {q.suggested_answer_points.length > 0 && (
+                <ul className="ml-4 list-disc space-y-0.5 text-xs text-[var(--muted-foreground)]">
+                  {q.suggested_answer_points.map((p, j) => (
+                    <li key={j}>{p}</li>
+                  ))}
+                </ul>
+              )}
+            </li>
+          ))}
+        </ul>
+      </Card>
+    );
+
+  return (
+    <div className="space-y-4">
+      {data.role_fit_analysis.length > 0 && (
+        <Card className="space-y-2 p-5">
+          <h3 className="text-sm font-semibold text-[var(--muted-foreground)]">Role fit</h3>
+          <ul className="ml-4 list-disc space-y-1 text-sm text-[var(--foreground)]">
+            {data.role_fit_analysis.map((r, i) => (
+              <li key={i}>{r}</li>
+            ))}
+          </ul>
+        </Card>
+      )}
+      {questionBlock('Likely questions', data.resume_questions)}
+      {questionBlock('Project follow-ups', data.project_follow_ups)}
+      {data.skill_gaps.length > 0 && (
+        <Card className="space-y-3 p-5">
+          <h3 className="text-sm font-semibold text-[var(--muted-foreground)]">
+            Skill gaps to prepare
+          </h3>
+          <ul className="space-y-3">
+            {data.skill_gaps.map((g, i) => (
+              <li key={i} className="space-y-0.5">
+                <p className="text-sm font-medium text-[var(--foreground)]">{g.skill}</p>
+                <p className="text-xs text-[var(--muted-foreground)]">{g.why_it_matters}</p>
+                <p className="text-xs text-[var(--at-ai)]">{g.preparation_suggestion}</p>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+      {data.talking_points.length > 0 && (
+        <Card className="space-y-2 p-5">
+          <h3 className="text-sm font-semibold text-[var(--muted-foreground)]">Talking points</h3>
+          <ul className="ml-4 list-disc space-y-1 text-sm text-[var(--foreground)]">
+            {data.talking_points.map((t, i) => (
+              <li key={i}>{t}</li>
+            ))}
+          </ul>
+        </Card>
+      )}
+    </div>
   );
 }

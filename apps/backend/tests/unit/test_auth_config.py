@@ -23,6 +23,15 @@ def _hosted(**overrides) -> dict:
         session_secret="x" * 32,
         ip_hash_secret="y" * 32,
         database_url="postgresql+asyncpg://user:pass@host:5432/db",
+        # external_cron (the default) now requires a job token in hosted mode so
+        # the scheduler endpoint is actually reachable; provide one for a valid base.
+        internal_job_token="z" * 32,
+        # Hermetic OAuth defaults: pydantic-settings would otherwise inherit the
+        # developer's real .env (GOOGLE_CLIENT_ID/SECRET + a localhost http
+        # redirect), making these hosted-mode config tests machine-dependent.
+        google_client_id="",
+        google_client_secret="",
+        oauth_redirect_uri="",
     )
     base.update(overrides)
     return base
@@ -102,8 +111,15 @@ class TestSecretRotationPair:
 
 class TestGoogleOAuthValidation:
     def test_partial_pair_rejected(self):
+        # Explicit kwargs (highest precedence) keep this hermetic regardless of
+        # the developer's real .env, which may set google creds.
         with pytest.raises(ValidationError, match="together"):
-            Settings(single_user_mode=True, google_client_id="id-only")
+            Settings(
+                single_user_mode=True,
+                google_client_id="id-only",
+                google_client_secret="",
+                _env_file=None,
+            )
 
     def test_configured_property(self):
         s = Settings(
@@ -114,7 +130,13 @@ class TestGoogleOAuthValidation:
         assert s.google_oauth_configured is True
 
     def test_not_configured_by_default(self):
-        assert Settings(single_user_mode=True).google_oauth_configured is False
+        s = Settings(
+            single_user_mode=True,
+            google_client_id="",
+            google_client_secret="",
+            _env_file=None,
+        )
+        assert s.google_oauth_configured is False
 
     def test_hosted_oauth_requires_redirect_uri(self):
         with pytest.raises(ValidationError, match="OAUTH_REDIRECT_URI"):
@@ -139,6 +161,32 @@ class TestGoogleOAuthValidation:
             )
         )
         assert s.google_oauth_configured is True
+
+    def test_hosted_oauth_allows_loopback_http(self):
+        # Google + RFC 8252 permit http on loopback for local development; the
+        # traffic never leaves the machine, so hosted mode must accept it.
+        for uri in (
+            "http://localhost:3000/api/v1/auth/oauth/google/callback",
+            "http://127.0.0.1:8000/api/v1/auth/oauth/google/callback",
+        ):
+            s = Settings(
+                **_hosted(
+                    google_client_id="id",
+                    google_client_secret="secret",
+                    oauth_redirect_uri=uri,
+                )
+            )
+            assert s.google_oauth_configured is True
+
+    def test_hosted_oauth_rejects_http_non_loopback(self):
+        with pytest.raises(ValidationError, match="https"):
+            Settings(
+                **_hosted(
+                    google_client_id="id",
+                    google_client_secret="secret",
+                    oauth_redirect_uri="http://myapp.example.com/api/v1/auth/oauth/google/callback",
+                )
+            )
 
 
 class TestSessionLifetimes:
@@ -204,3 +252,31 @@ class TestOwnerEmail:
 
     def test_default_owner_email(self):
         assert Settings(single_user_mode=True).owner_email == "owner@localhost"
+
+
+class TestHostedSchedulerAndKVStore:
+    """Hosted-mode operational fail-fast (B1/B2): background jobs must be able
+    to run, and the internal scheduler must have a shared lock store."""
+
+    def test_external_cron_without_token_fails(self):
+        with pytest.raises(ValidationError, match="INTERNAL_JOB_TOKEN"):
+            Settings(**_hosted(internal_job_token="", scheduler_mode="external_cron"))
+
+    def test_external_cron_with_token_ok(self):
+        s = Settings(**_hosted(scheduler_mode="external_cron", internal_job_token="z" * 32))
+        assert s.scheduler_mode == "external_cron"
+
+    def test_internal_scheduler_with_local_kvstore_fails(self):
+        with pytest.raises(ValidationError, match="shared KVSTORE_URL"):
+            Settings(**_hosted(scheduler_mode="internal", kvstore_url=""))
+
+    def test_internal_scheduler_with_redis_ok(self):
+        s = Settings(
+            **_hosted(scheduler_mode="internal", kvstore_url="rediss://h:6379/0")
+        )
+        assert s.scheduler_mode == "internal"
+
+    def test_local_single_user_never_requires_token(self):
+        # The whole point: zero-config local dev is unaffected by hosted rules.
+        s = Settings(single_user_mode=True)
+        assert s.internal_job_token == ""

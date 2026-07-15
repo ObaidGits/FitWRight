@@ -17,24 +17,22 @@ export function OutreachPreview({ content, className }: OutreachPreviewProps) {
   return (
     <div
       className={cn(
-        'bg-white border-2 border-black',
-        'shadow-sw-default',
-        'overflow-hidden',
+        'overflow-hidden rounded-[var(--radius-at-lg)] border border-[var(--border)] bg-[var(--card)] shadow-[var(--shadow-at-e1)]',
         className
       )}
     >
       {/* Preview Header */}
-      <div className="p-4 border-b-2 border-black bg-[#F5F5F0]">
+      <div className="border-b border-[var(--border)] bg-[var(--secondary)]/40 p-4">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <Linkedin className="w-4 h-4 text-[#0077B5]" />
-            <span className="font-mono text-xs uppercase">
+            <Linkedin className="h-4 w-4 text-[#0077B5]" />
+            <span className="text-xs uppercase text-[var(--muted-foreground)]">
               {t('outreach.preview.channels.linkedin')}
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <Mail className="w-4 h-4 text-ink-soft" />
-            <span className="font-mono text-xs uppercase">
+            <Mail className="h-4 w-4 text-[var(--muted-foreground)]" />
+            <span className="text-xs uppercase text-[var(--muted-foreground)]">
               {t('outreach.preview.channels.email')}
             </span>
           </div>
@@ -46,16 +44,18 @@ export function OutreachPreview({ content, className }: OutreachPreviewProps) {
         {content ? (
           <div className="space-y-4">
             {/* Message Bubble Style */}
-            <div className="bg-[#F5F5F0] border-2 border-black p-4 shadow-sw-sm">
-              <p className="font-sans text-sm leading-relaxed whitespace-pre-wrap">{content}</p>
+            <div className="rounded-[var(--radius-at-md)] border border-[var(--border)] bg-[var(--secondary)]/40 p-4">
+              <p className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--foreground)]">
+                {content}
+              </p>
             </div>
 
             {/* Usage Tips */}
-            <div className="pt-4 border-t border-paper-tint">
-              <p className="font-mono text-xs text-steel-grey uppercase mb-2">
+            <div className="border-t border-[var(--border)] pt-4">
+              <p className="mb-2 text-xs uppercase text-[var(--muted-foreground)]">
                 {t('outreach.preview.howToUseTitle')}
               </p>
-              <ul className="font-mono text-xs text-steel-grey space-y-1">
+              <ul className="space-y-1 text-xs text-[var(--muted-foreground)]">
                 <li>{t('outreach.preview.steps.step1')}</li>
                 <li>{t('outreach.preview.steps.step2')}</li>
                 <li>{t('outreach.preview.steps.step3')}</li>
@@ -64,9 +64,9 @@ export function OutreachPreview({ content, className }: OutreachPreviewProps) {
             </div>
           </div>
         ) : (
-          <div className="text-center py-12 text-steel-grey">
-            <p className="font-mono text-sm">{t('outreach.preview.emptyTitle')}</p>
-            <p className="font-mono text-xs mt-2">{t('outreach.preview.emptyDescription')}</p>
+          <div className="py-12 text-center text-[var(--muted-foreground)]">
+            <p className="text-sm">{t('outreach.preview.emptyTitle')}</p>
+            <p className="mt-2 text-xs">{t('outreach.preview.emptyDescription')}</p>
           </div>
         )}
       </div>

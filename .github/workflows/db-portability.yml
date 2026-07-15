@@ -1,0 +1,82 @@
+name: DB Portability (Postgres + pooler)
+
+# Goal A regression gate: proves the app keeps running on real Postgres behind a
+# transaction-mode pooler (Supabase's topology) unmodified — the full Alembic
+# chain applies + reverses, and the runtime data layer (incl. GIN full-text
+# search and prepared-statement safety under pooling) works. If a change breaks
+# Postgres/pooler portability, this job fails.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/backend/**"
+      - ".github/workflows/db-portability.yml"
+  pull_request:
+    paths:
+      - "apps/backend/**"
+      - ".github/workflows/db-portability.yml"
+  workflow_dispatch:
+
+jobs:
+  postgres-pooler:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/backend
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: verify
+          POSTGRES_PASSWORD: verify
+          POSTGRES_DB: verifydb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U verify -d verifydb"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+
+      pgbouncer:
+        image: edoburu/pgbouncer:latest
+        env:
+          DB_HOST: postgres
+          DB_PORT: "5432"
+          DB_USER: verify
+          DB_PASSWORD: verify
+          DB_NAME: verifydb
+          POOL_MODE: transaction
+          AUTH_TYPE: scram-sha-256
+          MAX_CLIENT_CONN: "100"
+          DEFAULT_POOL_SIZE: "5"
+        ports:
+          - 6432:5432
+
+    env:
+      DIRECT_URL: postgresql+asyncpg://verify:verify@127.0.0.1:5432/verifydb
+      POOLED_URL: postgresql+asyncpg://verify:verify@127.0.0.1:6432/verifydb
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Sync backend dependencies
+        run: uv sync --frozen
+
+      - name: Migrate schema on DIRECT connection
+        run: ALEMBIC_DATABASE_URL="$DIRECT_URL" uv run python -m alembic upgrade head
+
+      - name: Verify reversibility (downgrade base -> upgrade head)
+        run: |
+          ALEMBIC_DATABASE_URL="$DIRECT_URL" uv run python -m alembic downgrade base
+          ALEMBIC_DATABASE_URL="$DIRECT_URL" uv run python -m alembic upgrade head
+
+      - name: Runtime harness via POOLED endpoint (transaction pooling)
+        run: |
+          DATABASE_URL="$POOLED_URL" DB_USE_POOLER=true SINGLE_USER_MODE=true \
+            uv run python scripts/verify_postgres.py

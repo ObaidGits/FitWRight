@@ -58,7 +58,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     <ToastContext.Provider value={value}>
       {children}
       <div
-        className="pointer-events-none fixed bottom-4 right-4 z-[100] flex w-[calc(100%-2rem)] max-w-sm flex-col gap-2"
+        // The ToastProvider sits above the route-group `.atelier` wrapper, so
+        // this container needs its own `atelier` class to resolve Atelier
+        // tokens instead of the legacy Swiss :root fallbacks.
+        className="atelier pointer-events-none fixed bottom-4 right-4 z-[100] flex w-[calc(100%-2rem)] max-w-sm flex-col gap-2"
         role="region"
         aria-label="Notifications"
       >

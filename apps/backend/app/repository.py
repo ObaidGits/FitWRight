@@ -25,7 +25,23 @@ from typing import TypeVar
 
 from sqlalchemy.sql import Delete, Select, Update
 
-from app.models import ApiKey, Application, Improvement, Job, Resume
+from app.models import (
+    AnalysisArtifact,
+    ApiKey,
+    Application,
+    Improvement,
+    Job,
+    Interview,
+    Notification,
+    NotificationPref,
+    Profile,
+    ProfileVersion,
+    Reminder,
+    Resume,
+    ResumeVersion,
+    SearchDocument,
+    UserUnreadCount,
+)
 
 __all__ = ["Repo"]
 
@@ -48,6 +64,16 @@ class Repo:
             Improvement.__tablename__,
             Application.__tablename__,
             ApiKey.__tablename__,
+            ResumeVersion.__tablename__,
+            Notification.__tablename__,
+            NotificationPref.__tablename__,
+            UserUnreadCount.__tablename__,
+            SearchDocument.__tablename__,
+            Reminder.__tablename__,
+            Interview.__tablename__,
+            Profile.__tablename__,
+            ProfileVersion.__tablename__,
+            AnalysisArtifact.__tablename__,
         }
     )
 

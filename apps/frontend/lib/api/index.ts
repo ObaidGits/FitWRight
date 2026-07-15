@@ -35,6 +35,7 @@ export {
   createInitialResumeWizardState,
   finalizeResumeWizard,
   postResumeWizardTurn,
+  prefillResumeWizard,
   type ResumeWizardAction,
   type ResumeWizardFinalizeResponse,
   type ResumeWizardSection,

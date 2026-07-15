@@ -13,6 +13,8 @@ import * as React from 'react';
 import Download from 'lucide-react/dist/esm/icons/download';
 import { Button, type ButtonProps } from '@/components/atelier/button';
 import { useToast } from '@/components/atelier/toast';
+import { useRotatingMessages } from '@/lib/hooks/use-ai-progress';
+import { EXPORT_MESSAGES } from '@/lib/ai-progress-copy';
 import { downloadResumePdf, downloadCoverLetterPdf } from '@/lib/api/resume';
 import type { TemplateSettings } from '@/lib/types/template-settings';
 
@@ -43,6 +45,8 @@ export function ExportButton(props: ExportButtonProps) {
   const { label = 'Export PDF', variant = 'outline', size = 'sm', className } = props;
   const { toast } = useToast();
   const [loading, setLoading] = React.useState(false);
+  // Rotate honest render stages so a multi-second PDF render never looks frozen.
+  const progressMsg = useRotatingMessages(EXPORT_MESSAGES, { active: loading, intervalMs: 1800 });
 
   async function onExport() {
     setLoading(true);
@@ -74,14 +78,19 @@ export function ExportButton(props: ExportButtonProps) {
   }
 
   return (
-    <Button
-      variant={variant}
-      size={size}
-      className={className}
-      loading={loading}
-      onClick={onExport}
-    >
-      <Download className="h-4 w-4" /> {label}
-    </Button>
+    <>
+      <span role="status" aria-live="polite" className="sr-only">
+        {loading ? progressMsg : ''}
+      </span>
+      <Button
+        variant={variant}
+        size={size}
+        className={className}
+        loading={loading}
+        onClick={onExport}
+      >
+        <Download className="h-4 w-4" /> {loading ? (progressMsg ?? label) : label}
+      </Button>
+    </>
   );
 }

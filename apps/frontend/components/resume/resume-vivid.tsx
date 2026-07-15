@@ -9,6 +9,7 @@ import type {
 import { getSortedSections, getSectionMeta } from '@/lib/utils/section-helpers';
 import { formatDateRange } from '@/lib/utils';
 import { SafeHtml } from './safe-html';
+import { PhotoFrame, resolveResumePhoto } from './photo-frame';
 import baseStyles from './styles/_base.module.css';
 import styles from './styles/vivid.module.css';
 
@@ -37,6 +38,9 @@ export const ResumeVivid: React.FC<ResumeVividProps> = ({
   fallbackLabels,
 }) => {
   const { personalInfo, summary, workExperience, education, personalProjects, additional } = data;
+
+  // Photo System: Vivid shows the photo at the top of the sidebar by default.
+  const vividPhoto = resolveResumePhoto(data, 'vivid');
 
   const clean = (items?: string[]) =>
     (items ?? []).filter((item): item is string => typeof item === 'string' && item.trim() !== '');
@@ -310,6 +314,21 @@ export const ResumeVivid: React.FC<ResumeVividProps> = ({
 
         {/* Sidebar Column - Right */}
         <div className={styles.sidebarColumn}>
+          {vividPhoto && vividPhoto.slot === 'sidebar' && (
+            <div
+              className={`flex ${baseStyles['resume-section']}`}
+              style={{
+                justifyContent:
+                  vividPhoto.config.align === 'right'
+                    ? 'flex-end'
+                    : vividPhoto.config.align === 'center'
+                      ? 'center'
+                      : 'flex-start',
+              }}
+            >
+              <PhotoFrame url={vividPhoto.url} config={vividPhoto.config} name={vividPhoto.name} />
+            </div>
+          )}
           {isSectionVisible('additional') && technicalSkills.length > 0 && (
             <div className={baseStyles['resume-section']}>
               <h3 className={styles.sectionTitleSm}>{headingFallbacks.skills}</h3>

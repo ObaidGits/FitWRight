@@ -21,6 +21,7 @@ import {
   DropdownMenuSeparator,
 } from '@/components/atelier/dropdown-menu';
 import { Button } from '@/components/atelier/button';
+import { cn } from '@/lib/utils';
 import { notificationsApi, type AppNotification } from '@/lib/api/notifications';
 
 function relativeTime(iso: string): string {
@@ -37,6 +38,9 @@ export function NotificationCenter() {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const [items, setItems] = React.useState<AppNotification[]>([]);
+  // Server-authoritative unread badge (O(1) counter) — kept fresh by polling
+  // the interval the backend advertises, active tab only.
+  const [serverUnread, setServerUnread] = React.useState<number | null>(null);
 
   const load = React.useCallback(() => {
     notificationsApi
@@ -45,22 +49,73 @@ export function NotificationCenter() {
       .catch(() => setItems([]));
   }, []);
 
+  const refreshCount = React.useCallback(() => {
+    notificationsApi
+      .unreadCount()
+      .then((c) => setServerUnread(c.unread))
+      .catch(() => setServerUnread(null));
+  }, []);
+
   React.useEffect(() => {
     load();
-  }, [load]);
+    refreshCount();
+  }, [load, refreshCount]);
 
   React.useEffect(() => {
     if (open) load();
   }, [open, load]);
 
-  const unread = items.filter((n) => !n.read).length;
+  // Poll the unread counter while the tab is visible. Uses the backend's
+  // advertised interval (falls back to 60s) and pauses when hidden.
+  React.useEffect(() => {
+    let timer: ReturnType<typeof setInterval> | null = null;
+    let cancelled = false;
+    async function schedule() {
+      try {
+        const c = await notificationsApi.unreadCount();
+        if (cancelled) return;
+        setServerUnread(c.unread);
+        const ms = Math.max(15, c.pollIntervalSeconds || 60) * 1000;
+        timer = setInterval(() => {
+          if (document.visibilityState === 'visible') refreshCount();
+        }, ms);
+      } catch {
+        /* leave badge derived from the list */
+      }
+    }
+    schedule();
+    return () => {
+      cancelled = true;
+      if (timer) clearInterval(timer);
+    };
+  }, [refreshCount]);
+
+  // Prefer the server counter; fall back to deriving from the loaded list.
+  const derivedUnread = items.filter((n) => !n.read).length;
+  const unread = serverUnread ?? derivedUnread;
 
   async function dismiss(id: string) {
+    const wasUnread = items.find((n) => n.id === id && !n.read);
     await notificationsApi.dismiss(id).catch(() => undefined);
     setItems((prev) => prev.filter((n) => n.id !== id));
+    if (wasUnread) setServerUnread((c) => (c != null ? Math.max(0, c - 1) : c));
+  }
+
+  async function markAllRead() {
+    const hadUnread = items.some((n) => !n.read);
+    if (!hadUnread) return;
+    setItems((prev) => prev.map((n) => ({ ...n, read: true })));
+    setServerUnread(0);
+    await notificationsApi.markAllRead().catch(() => refreshCount());
   }
 
   function openNode(n: AppNotification) {
+    // Mark read on interaction (optimistic), then deep-link if possible.
+    if (!n.read) {
+      setItems((prev) => prev.map((it) => (it.id === n.id ? { ...it, read: true } : it)));
+      setServerUnread((c) => (c != null ? Math.max(0, c - 1) : c));
+      notificationsApi.markRead(n.id).catch(() => refreshCount());
+    }
     if (!n.nodeRef) return;
     const href =
       n.nodeRef.type === 'resume' ? `/resumes/${n.nodeRef.id}` : `/applications/${n.nodeRef.id}`;
@@ -86,7 +141,20 @@ export function NotificationCenter() {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-80">
-        <DropdownMenuLabel>Notifications</DropdownMenuLabel>
+        <div className="flex items-center justify-between px-2">
+          <DropdownMenuLabel>Notifications</DropdownMenuLabel>
+          {unread > 0 && (
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                void markAllRead();
+              }}
+              className="text-xs font-medium text-[var(--primary)] hover:underline"
+            >
+              Mark all read
+            </button>
+          )}
+        </div>
         <DropdownMenuSeparator />
         {items.length === 0 ? (
           <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
@@ -100,15 +168,28 @@ export function NotificationCenter() {
                 key={n.id}
                 className="flex items-start gap-2 border-b border-[var(--border)] px-3 py-2.5 last:border-0"
               >
-                <button
-                  onClick={() => openNode(n)}
-                  className="min-w-0 flex-1 text-left"
-                  disabled={!n.nodeRef}
-                >
-                  <p className="truncate text-sm text-[var(--foreground)]">{n.message}</p>
-                  <p className="text-xs text-[var(--muted-foreground)]">
+                <button onClick={() => openNode(n)} className="min-w-0 flex-1 text-left">
+                  <span className="flex items-center gap-1.5">
+                    {!n.read && (
+                      <span
+                        className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--primary)]"
+                        aria-hidden
+                      />
+                    )}
+                    <span
+                      className={cn(
+                        'truncate text-sm',
+                        n.read
+                          ? 'text-[var(--muted-foreground)]'
+                          : 'font-medium text-[var(--foreground)]'
+                      )}
+                    >
+                      {n.message}
+                    </span>
+                  </span>
+                  <span className="mt-0.5 block text-xs text-[var(--muted-foreground)]">
                     {relativeTime(n.createdAt)}
-                  </p>
+                  </span>
                 </button>
                 <button
                   onClick={() => dismiss(n.id)}

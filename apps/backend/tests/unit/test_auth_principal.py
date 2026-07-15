@@ -235,6 +235,13 @@ def _hosted_settings() -> Settings:
         ip_hash_secret="ip-hash-secret-value-1234",
         database_url="postgresql+asyncpg://user:pass@localhost/db",
         cookie_secure=False,  # allow TestClient over http
+        # external_cron hosted mode now requires a job token; and keep hermetic
+        # from the developer's real .env (google creds + localhost redirect).
+        internal_job_token="internal-job-token-value-1234",
+        google_client_id="",
+        google_client_secret="",
+        oauth_redirect_uri="",
+        _env_file=None,
     )
 
 

@@ -1,0 +1,42 @@
+# Reproducible Postgres + transaction-pooler harness for the Supabase-readiness
+# verification (Goal A). This mirrors Supabase's topology locally: a Postgres
+# server plus PgBouncer in **transaction** pool mode (Supabase's 6543 endpoint).
+#
+#   direct  (DDL / migrations): localhost:${PG_DIRECT_PORT:-55432}  -> postgres
+#   pooled  (app runtime):      localhost:${PG_POOLED_PORT:-56432}  -> pgbouncer
+#
+# Driven by scripts/verify_postgres.sh; not part of the app's runtime compose.
+name: rm-verify-postgres
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: verify
+      POSTGRES_PASSWORD: verify
+      POSTGRES_DB: verifydb
+    ports:
+      - "${PG_DIRECT_PORT:-55432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U verify -d verifydb"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: verify
+      DB_PASSWORD: verify
+      DB_NAME: verifydb
+      POOL_MODE: transaction          # <-- the Supabase pooled-endpoint mode
+      AUTH_TYPE: scram-sha-256
+      MAX_CLIENT_CONN: "100"
+      DEFAULT_POOL_SIZE: "5"
+    ports:
+      - "${PG_POOLED_PORT:-56432}:5432"

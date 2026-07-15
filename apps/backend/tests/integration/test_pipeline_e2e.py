@@ -306,6 +306,19 @@ class TestTailoringPipeline:
                 new_callable=AsyncMock,
                 return_value="Senior Backend Engineer - TechCorp",
             ),
+            # Cover-letter/outreach are LLM boundaries too (this module's
+            # contract: the real LLM is NEVER called). Mock them so confirm is
+            # hermetic regardless of the feature-flag config in the test env.
+            patch(
+                "app.routers.resumes.generate_cover_letter",
+                new_callable=AsyncMock,
+                return_value="Dear Hiring Manager, ...",
+            ),
+            patch(
+                "app.routers.resumes.generate_outreach_message",
+                new_callable=AsyncMock,
+                return_value="Hi — I'd love to connect about this role.",
+            ),
         ):
             # --- Preview (no persistence; resume_id stays null) ---
             async with _new_client() as client:
@@ -351,10 +364,15 @@ class TestTailoringPipeline:
         assert stored_tailored["parent_id"] == resume_id
         assert stored_tailored["processing_status"] == "ready"
         assert stored_tailored["processed_data"]["summary"] == improved["summary"]
-        # personalInfo preserved from the master (the confirm invariant).
+        # personalInfo preserved from the master (the confirm invariant). The
+        # stored value is the schema-normalized form (``ResumeData`` adds optional
+        # fields like ``avatarUrl``/``photo`` defaulting to ``None``), so compare
+        # against the normalized master rather than the raw fixture.
+        expected_personal_info = ResumeData.model_validate(
+            copy.deepcopy(sample_resume)
+        ).model_dump()["personalInfo"]
         assert (
-            stored_tailored["processed_data"]["personalInfo"]
-            == sample_resume["personalInfo"]
+            stored_tailored["processed_data"]["personalInfo"] == expected_personal_info
         )
 
         # An improvements record links original -> tailored for this job.
@@ -449,6 +467,16 @@ class TestTailoringPipeline:
                 "app.routers.resumes.generate_resume_title",
                 new_callable=AsyncMock,
                 return_value="Senior Backend Engineer",
+            ),
+            patch(
+                "app.routers.resumes.generate_cover_letter",
+                new_callable=AsyncMock,
+                return_value="Dear Hiring Manager, ...",
+            ),
+            patch(
+                "app.routers.resumes.generate_outreach_message",
+                new_callable=AsyncMock,
+                return_value="Hi — I'd love to connect about this role.",
             ),
         ):
             async with _new_client() as client:

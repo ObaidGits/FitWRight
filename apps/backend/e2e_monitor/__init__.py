@@ -3,7 +3,7 @@
 This package is INERT by default: it has no import side effects, is never
 imported by ``app/*`` or by the default test suite, and every expensive move
 refuses to run unless explicitly enabled (see ``e2e_monitor.gate``). See
-``docs/superpowers/specs/2026-06-01-agentic-e2e-monitor-design.md``.
+``e2e_monitor/README.md`` for usage.
 """
 
 __version__ = "0.1.0"

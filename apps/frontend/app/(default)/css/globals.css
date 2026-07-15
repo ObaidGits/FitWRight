@@ -129,8 +129,8 @@
 }
 
 /* Light theme only — Swiss/Brutalist works on the warm Canvas background.
-   The half-finished dark mode mapping was removed; .impeccable.md commits
-   to light only. */
+   The half-finished dark mode mapping was removed; the brand commits to
+   light only. */
 
 @layer base {
   * {

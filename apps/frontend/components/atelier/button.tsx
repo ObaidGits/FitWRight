@@ -41,6 +41,14 @@ const buttonVariants = cva(
           'bg-[var(--destructive)] text-[var(--destructive-foreground)] shadow-[var(--shadow-at-e1)]',
           'hover:brightness-110 active:brightness-95'
         ),
+        success: cn(
+          'bg-[var(--at-success)] text-[var(--at-success-foreground)] shadow-[var(--shadow-at-e1)]',
+          'hover:brightness-110 active:brightness-95'
+        ),
+        warning: cn(
+          'bg-[var(--at-warning)] text-[var(--at-warning-foreground)] shadow-[var(--shadow-at-e1)]',
+          'hover:brightness-110 active:brightness-95'
+        ),
         link: 'text-[var(--primary)] underline-offset-4 hover:underline p-0 h-auto',
         ai: cn(
           'bg-[var(--at-ai)] text-white shadow-[var(--shadow-at-e1)]',
@@ -52,6 +60,9 @@ const buttonVariants = cva(
         md: 'h-10 px-4',
         lg: 'h-11 px-6 text-base',
         icon: 'h-10 w-10',
+        // Compact icon control for dense rows — still a comfortable touch target
+        // on mobile (32px meets WCAG 2.5.8 AA with margin), with a focus ring.
+        iconSm: 'h-8 w-8',
       },
     },
     defaultVariants: { variant: 'primary', size: 'md' },

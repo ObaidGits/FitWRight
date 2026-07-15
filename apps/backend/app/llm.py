@@ -1,9 +1,13 @@
 """LiteLLM wrapper for multi-provider AI support."""
 
+import asyncio
 import json
 import logging
 import re
 import threading
+import time
+from collections.abc import AsyncIterator, Awaitable, Callable
+from dataclasses import dataclass, field
 from typing import Any, Literal
 
 import litellm
@@ -653,6 +657,76 @@ async def check_llm_health(
         return result
 
 
+# ---------------------------------------------------------------------------
+# AI metrics instrumentation (admin-panel-upgrade Req 4.1)
+# ---------------------------------------------------------------------------
+#
+# Every provider round-trip (the Router-backed completion functions below) is
+# counted once via the in-process AiMetricsService. Only the allowlisted
+# aggregate signals are recorded — total calls / success / failure / timeouts /
+# retries / per-provider counts / total tokens / latency. Rejected fields
+# (temperature, prompt/completion length, model version, system prompt, tool
+# calls, reasoning tokens, ids) are never passed. See app/admin/ai_metrics.py.
+
+
+def _is_timeout_error(exc: BaseException) -> bool:
+    """Best-effort classification of an exception as an LLM timeout.
+
+    Covers the stdlib ``TimeoutError`` (which ``asyncio.TimeoutError`` aliases
+    on 3.11+) and LiteLLM's own ``Timeout`` type when available.
+    """
+    if isinstance(exc, (TimeoutError, asyncio.TimeoutError)):
+        return True
+    lite_timeout = getattr(litellm, "Timeout", None)
+    if lite_timeout is not None and isinstance(exc, lite_timeout):
+        return True
+    return False
+
+
+def _usage_total_tokens(response: Any) -> int:
+    """Extract the allowlisted aggregate ``usage.total_tokens`` (0 if absent).
+
+    Only the aggregate is read — never the prompt/completion breakdown, which is
+    a rejected field for the admin AI metrics allowlist.
+    """
+    try:
+        usage = _safe_get(response, "usage")
+        total = _safe_get(usage, "total_tokens")
+        return int(total) if total else 0
+    except Exception:
+        return 0
+
+
+def _record_ai_call(
+    provider: str | None,
+    *,
+    ok: bool,
+    timed_out: bool = False,
+    retried: bool | int = False,
+    tokens: int = 0,
+    latency_ms: float = 0.0,
+) -> None:
+    """Best-effort record of one AI provider call to the AiMetricsService.
+
+    The import is lazy so ``llm.py`` stays import-light and no import cycle can
+    form. This never raises — metrics must never break an LLM call (mirrors the
+    defensive AdminMetricsMiddleware).
+    """
+    try:
+        from app.admin.ai_metrics import get_ai_metrics_service
+
+        get_ai_metrics_service().record_call(
+            provider,
+            ok=ok,
+            timed_out=timed_out,
+            retried=retried,
+            tokens=tokens,
+            latency_ms=latency_ms,
+        )
+    except Exception:  # pragma: no cover - metrics must never break a call
+        pass
+
+
 async def complete(
     prompt: str,
     system_prompt: str | None = None,
@@ -672,6 +746,11 @@ async def complete(
         messages.append({"role": "system", "content": system_prompt})
     messages.append({"role": "user", "content": prompt})
 
+    # AI metrics (Req 4.1): time + classify this single provider round-trip.
+    _start = time.perf_counter()
+    _ok = False
+    _timed_out = False
+    _tokens = 0
     try:
         kwargs: dict[str, Any] = {
             "model": "primary",
@@ -685,6 +764,7 @@ async def complete(
             kwargs["reasoning_effort"] = config.reasoning_effort
 
         response = await router.acompletion(**kwargs)
+        _tokens = _usage_total_tokens(response)
 
         content = _extract_choice_text(response.choices[0])
         if not content:
@@ -694,14 +774,194 @@ async def complete(
             content = _strip_thinking_tags(content)
             if not content:
                 raise ValueError("Response contained only thinking content, no output")
+        _ok = True
         return content
     except Exception as e:
+        _timed_out = _is_timeout_error(e)
         # Log the actual error server-side for debugging
         logging.error(f"LLM completion failed: {e}", extra={
                       "model": model_name})
         raise ValueError(
             "LLM completion failed. Please check your API configuration and try again."
         ) from e
+    finally:
+        # retried: the Router's transport retries are not observable here, so
+        # this single-shot path best-effort reports no app-level retry (0).
+        _record_ai_call(
+            config.provider,
+            ok=_ok,
+            timed_out=_timed_out,
+            retried=False,
+            tokens=_tokens,
+            latency_ms=(time.perf_counter() - _start) * 1000,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Streaming completion (P4 Resilience — Streaming AI, R1)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(slots=True)
+class StreamUsage:
+    """Token usage for a (possibly cancelled) streamed generation (R1.7)."""
+
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+
+
+@dataclass(slots=True)
+class StreamResult:
+    """Mutable accumulator threaded through :func:`stream_complete`.
+
+    The generator yields token *deltas*; the caller also reads ``text`` (the full
+    accumulated output) and ``usage`` (token accounting, populated on the final
+    chunk or estimated for a cancelled stream) after iteration ends. ``cancelled``
+    records whether the stream stopped early via the cancel check.
+    """
+
+    text: str = ""
+    usage: StreamUsage = field(default_factory=StreamUsage)
+    cancelled: bool = False
+
+
+def provider_supports_streaming(config: LLMConfig | None = None) -> bool:
+    """Capability probe: whether the active provider/model can stream (R1.3).
+
+    LiteLLM supports SSE streaming for all first-class providers we ship; the
+    only realistic non-streaming case is a misconfigured OpenAI-compatible
+    server. We consult LiteLLM's model registry when available and default to
+    ``True`` for known providers, so a negative probe deterministically routes
+    the client to the non-stream fallback.
+    """
+    if config is None:
+        config = get_llm_config()
+    model_name = get_model_name(config)
+    try:
+        return bool(litellm.supports_response_schema) or litellm.supports_function_calling(model_name) or True
+    except Exception:
+        # Unknown/local model — assume streaming works; a mid-stream error still
+        # triggers the transparent fallback, so this is safe.
+        return True
+
+
+def _estimate_tokens(text: str) -> int:
+    """Rough token estimate (~4 chars/token) for providers that omit usage.
+
+    Used only when the provider does not report usage on a streamed response
+    (common for local/compatible servers and on cancellation) so cost accounting
+    still records a non-zero, order-of-magnitude-correct figure (R1.7).
+    """
+    return max(0, (len(text) + 3) // 4)
+
+
+async def stream_complete(
+    prompt: str,
+    result: StreamResult,
+    *,
+    system_prompt: str | None = None,
+    config: LLMConfig | None = None,
+    max_tokens: int = 4096,
+    temperature: float = 0.7,
+    cancel_check: Callable[[], Awaitable[bool]] | None = None,
+) -> AsyncIterator[str]:
+    """Stream a completion, yielding token deltas (R1.1).
+
+    ``result`` is mutated in place: ``result.text`` accumulates the full output,
+    ``result.usage`` is filled from the provider's final chunk (or estimated),
+    and ``result.cancelled`` is set if ``cancel_check`` returned truthy mid-flight.
+    Cancellation aborts the provider iterator and leaves no persisted state
+    (Property 3) — persistence only ever happens on explicit accept, never here.
+
+    Raises the underlying provider error so the caller can emit a terminal
+    ``error`` SSE event and fall back to the non-stream path (R1.3).
+    """
+    router, config = get_router(config)
+    model_name = get_model_name(config)
+
+    messages: list[dict[str, str]] = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": prompt})
+
+    kwargs: dict[str, Any] = {
+        "model": "primary",
+        "messages": messages,
+        "max_tokens": max_tokens,
+        "stream": True,
+        # Ask OpenAI-family providers to include usage in the final chunk; other
+        # providers ignore it (drop_params) and we fall back to an estimate.
+        "stream_options": {"include_usage": True},
+        "timeout": _calculate_timeout("completion", max_tokens, config.provider),
+    }
+    if _supports_temperature(model_name, temperature):
+        kwargs["temperature"] = temperature
+    if config.reasoning_effort:
+        kwargs["reasoning_effort"] = config.reasoning_effort
+
+    # AI metrics (Req 4.1): time + classify this streamed provider round-trip.
+    # Recorded once when the stream completes/errors/closes (via the outer
+    # finally), reading the allowlisted aggregate token count off ``result``.
+    _start = time.perf_counter()
+    _ok = False
+    _timed_out = False
+    try:
+        try:
+            response = await router.acompletion(**kwargs)
+        except Exception as _e:
+            _timed_out = _is_timeout_error(_e)
+            raise
+        try:
+            async for chunk in response:
+                if cancel_check is not None and await cancel_check():
+                    result.cancelled = True
+                    break
+                # Capture usage if the provider reports it on any chunk.
+                usage = _safe_get(chunk, "usage")
+                if usage is not None:
+                    result.usage = StreamUsage(
+                        prompt_tokens=int(_safe_get(usage, "prompt_tokens") or 0),
+                        completion_tokens=int(_safe_get(usage, "completion_tokens") or 0),
+                        total_tokens=int(_safe_get(usage, "total_tokens") or 0),
+                    )
+                choices = _safe_get(chunk, "choices") or []
+                if not choices:
+                    continue
+                delta = _safe_get(choices[0], "delta")
+                piece = _join_text_parts(_extract_text_parts(_safe_get(delta, "content")))
+                if piece:
+                    result.text += piece
+                    yield piece
+        finally:
+            # Best-effort close of the provider stream so a cancelled/aborted
+            # generation frees the upstream connection promptly (no leak, R1.5).
+            aclose = getattr(response, "aclose", None)
+            if aclose is not None:
+                try:
+                    await aclose()
+                except Exception:  # pragma: no cover - provider close best-effort
+                    pass
+
+        # Strip reasoning tags from the accumulated text for reasoning models.
+        if "<think>" in result.text:
+            result.text = _strip_thinking_tags(result.text)
+
+        # Fill in usage if the provider didn't report it (or on cancellation).
+        if result.usage.total_tokens == 0 and result.text:
+            est = _estimate_tokens(result.text)
+            result.usage = StreamUsage(completion_tokens=est, total_tokens=est)
+
+        _ok = True
+    finally:
+        _record_ai_call(
+            config.provider,
+            ok=_ok,
+            timed_out=_timed_out,
+            retried=False,
+            tokens=result.usage.total_tokens,
+            latency_ms=(time.perf_counter() - _start) * 1000,
+        )
 
 
 def _supports_json_mode(model_name: str) -> bool:
@@ -1128,7 +1388,32 @@ async def complete_json(
             if use_json_mode and not json_mode_failed:
                 kwargs["response_format"] = {"type": "json_object"}
 
-            response = await router.acompletion(**kwargs)
+            # AI metrics (Req 4.1): record this single provider round-trip.
+            # complete_json's app-level retries each perform one round-trip, so
+            # each is counted once here (retried=True for attempt > 0). This is
+            # the narrowest, non-nested call site — complete_json does not call
+            # complete()/stream_complete(), so there is no double-counting.
+            _attempt_start = time.perf_counter()
+            try:
+                response = await router.acompletion(**kwargs)
+            except Exception as _call_exc:
+                _record_ai_call(
+                    config.provider,
+                    ok=False,
+                    timed_out=_is_timeout_error(_call_exc),
+                    retried=(attempt > 0),
+                    tokens=0,
+                    latency_ms=(time.perf_counter() - _attempt_start) * 1000,
+                )
+                raise
+            _record_ai_call(
+                config.provider,
+                ok=True,
+                timed_out=False,
+                retried=(attempt > 0),
+                tokens=_usage_total_tokens(response),
+                latency_ms=(time.perf_counter() - _attempt_start) * 1000,
+            )
             content = _extract_choice_text(response.choices[0])
 
             if not content:

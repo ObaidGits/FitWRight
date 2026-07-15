@@ -19,7 +19,13 @@
 import { CSRF_COOKIE_NAME } from '@/lib/config/auth';
 
 const DEFAULT_PUBLIC_API_URL = '/';
-const INTERNAL_API_ORIGIN = 'http://127.0.0.1:8000';
+// Origin used for server-side (SSR) calls when the public API URL is a relative
+// path. Defaults to the co-located backend in the bundled image; override with
+// INTERNAL_API_ORIGIN for split deployments where the backend lives elsewhere.
+const INTERNAL_API_ORIGIN = (process.env.INTERNAL_API_ORIGIN ?? 'http://127.0.0.1:8000').replace(
+  /\/+$/,
+  ''
+);
 
 /** Extra options understood by {@link apiFetch} on top of the standard `RequestInit`. */
 export interface ApiFetchInit extends RequestInit {
@@ -103,6 +109,24 @@ export function setUnauthorizedHandler(handler: UnauthorizedHandler | null): voi
   unauthorizedHandler = handler;
 }
 
+// ---------------------------------------------------------------------------
+// 429 rate-limit interceptor (wired by RateLimitListener under the ToastProvider)
+// ---------------------------------------------------------------------------
+
+type RateLimitHandler = (retryAfterSeconds: number | null) => void;
+let rateLimitHandler: RateLimitHandler | null = null;
+// Debounce repeated 429s so a burst of calls raises a single toast.
+let lastRateLimitNotifyAt = 0;
+
+/**
+ * Register a global handler invoked when any app request returns 429. The
+ * listener component surfaces a single, debounced "you're going too fast" toast
+ * so every caller gets consistent rate-limit UX without per-call wiring.
+ */
+export function setRateLimitHandler(handler: RateLimitHandler | null): void {
+  rateLimitHandler = handler;
+}
+
 /**
  * Standard fetch wrapper with common error handling.
  * Returns the Response object for flexibility.
@@ -163,6 +187,17 @@ export async function apiFetch(
       unauthorizedHandler
     ) {
       unauthorizedHandler();
+    }
+    // Global 429 UX: surface a single debounced toast so users understand they
+    // hit a rate limit (rather than seeing a generic per-call failure string).
+    if (response.status === 429 && typeof window !== 'undefined' && rateLimitHandler) {
+      const now = Date.now();
+      if (now - lastRateLimitNotifyAt > 3000) {
+        lastRateLimitNotifyAt = now;
+        const retryHeader = response.headers.get('Retry-After');
+        const parsed = retryHeader ? Number(retryHeader) : NaN;
+        rateLimitHandler(Number.isFinite(parsed) ? parsed : null);
+      }
     }
     return response;
   } catch (error) {

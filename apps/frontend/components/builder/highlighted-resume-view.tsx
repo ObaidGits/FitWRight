@@ -36,12 +36,12 @@ export function HighlightedResumeView({ resumeData, keywords }: HighlightedResum
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="flex items-center gap-2 p-4 border-b border-paper-tint bg-paper-tint">
-        <FileUser className="w-4 h-4 text-ink-soft" />
-        <h3 className="font-mono text-sm font-bold uppercase text-ink-soft">
+      <div className="flex items-center gap-2 border-b border-[var(--border)] bg-[var(--secondary)]/40 p-4">
+        <FileUser className="h-4 w-4 text-[var(--muted-foreground)]" />
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
           {t('builder.jdMatch.yourResume')}
         </h3>
-        <span className="text-xs text-steel-grey ml-2">
+        <span className="ml-2 text-xs text-[var(--muted-foreground)]">
           {t('builder.jdMatch.matchingKeywordsHighlighted')}
         </span>
       </div>
@@ -60,20 +60,22 @@ export function HighlightedResumeView({ resumeData, keywords }: HighlightedResum
           <Section title={t('resume.sections.experience')} icon={<Briefcase className="w-4 h-4" />}>
             {resumeData.workExperience.map((exp) => (
               <div key={exp.id} className="mb-4 last:mb-0">
-                <div className="font-semibold text-ink-soft">
+                <div className="font-semibold text-[var(--foreground)]">
                   <HighlightedText text={exp.title || ''} keywords={keywords} />
                   {exp.company && (
-                    <span className="text-ink-soft">
+                    <span className="text-[var(--foreground)]">
                       {t('builder.jdMatch.atSeparator')}
                       <HighlightedText text={exp.company} keywords={keywords} />
                     </span>
                   )}
                 </div>
-                {exp.years && <div className="text-xs text-steel-grey mb-1">{exp.years}</div>}
+                {exp.years && (
+                  <div className="text-xs text-[var(--muted-foreground)] mb-1">{exp.years}</div>
+                )}
                 {exp.description && (
                   <ul className="list-disc list-inside space-y-1 text-sm">
                     {exp.description.map((bullet, i) => (
-                      <li key={i} className="text-ink-soft">
+                      <li key={i} className="text-[var(--foreground)]">
                         <HighlightedText text={bullet} keywords={keywords} />
                       </li>
                     ))}
@@ -92,15 +94,17 @@ export function HighlightedResumeView({ resumeData, keywords }: HighlightedResum
           >
             {resumeData.education.map((edu) => (
               <div key={edu.id} className="mb-3 last:mb-0">
-                <div className="font-semibold text-ink-soft">
+                <div className="font-semibold text-[var(--foreground)]">
                   <HighlightedText text={edu.degree || ''} keywords={keywords} />
                 </div>
                 {edu.institution && (
-                  <div className="text-sm text-ink-soft">
+                  <div className="text-sm text-[var(--foreground)]">
                     <HighlightedText text={edu.institution} keywords={keywords} />
                   </div>
                 )}
-                {edu.years && <div className="text-xs text-steel-grey">{edu.years}</div>}
+                {edu.years && (
+                  <div className="text-xs text-[var(--muted-foreground)]">{edu.years}</div>
+                )}
               </div>
             ))}
           </Section>
@@ -114,21 +118,23 @@ export function HighlightedResumeView({ resumeData, keywords }: HighlightedResum
           >
             {resumeData.personalProjects.map((proj) => (
               <div key={proj.id} className="mb-4 last:mb-0">
-                <div className="font-semibold text-ink-soft">
+                <div className="font-semibold text-[var(--foreground)]">
                   <HighlightedText text={proj.name || ''} keywords={keywords} />
                   {proj.role && (
-                    <span className="text-ink-soft font-normal">
+                    <span className="text-[var(--foreground)] font-normal">
                       {' '}
                       {t('builder.jdMatch.roleSeparator')}{' '}
                       <HighlightedText text={proj.role} keywords={keywords} />
                     </span>
                   )}
                 </div>
-                {proj.years && <div className="text-xs text-steel-grey mb-1">{proj.years}</div>}
+                {proj.years && (
+                  <div className="text-xs text-[var(--muted-foreground)] mb-1">{proj.years}</div>
+                )}
                 {proj.description && (
                   <ul className="list-disc list-inside space-y-1 text-sm">
                     {proj.description.map((bullet, i) => (
-                      <li key={i} className="text-ink-soft">
+                      <li key={i} className="text-[var(--foreground)]">
                         <HighlightedText text={bullet} keywords={keywords} />
                       </li>
                     ))}
@@ -144,7 +150,7 @@ export function HighlightedResumeView({ resumeData, keywords }: HighlightedResum
           <Section title={t('resume.sections.skills')} icon={<Wrench className="w-4 h-4" />}>
             {visibleTechnicalSkills.length > 0 && (
               <div className="mb-3">
-                <div className="text-xs font-mono uppercase text-steel-grey mb-1">
+                <div className="mb-1 text-xs uppercase text-[var(--muted-foreground)]">
                   {t('resume.additional.technicalSkills')}
                 </div>
                 <div className="flex flex-wrap gap-1">
@@ -157,7 +163,7 @@ export function HighlightedResumeView({ resumeData, keywords }: HighlightedResum
 
             {visibleLanguages.length > 0 && (
               <div className="mb-3">
-                <div className="text-xs font-mono uppercase text-steel-grey mb-1">
+                <div className="mb-1 text-xs uppercase text-[var(--muted-foreground)]">
                   {t('resume.sections.languages')}
                 </div>
                 <div className="flex flex-wrap gap-1">
@@ -170,12 +176,12 @@ export function HighlightedResumeView({ resumeData, keywords }: HighlightedResum
 
             {visibleCertificationsTraining.length > 0 && (
               <div className="mb-3">
-                <div className="text-xs font-mono uppercase text-steel-grey mb-1">
+                <div className="mb-1 text-xs uppercase text-[var(--muted-foreground)]">
                   {t('resume.sections.certifications')}
                 </div>
                 <ul className="list-disc list-inside space-y-1 text-sm">
                   {visibleCertificationsTraining.map((cert, i) => (
-                    <li key={i} className="text-ink-soft">
+                    <li key={i} className="text-[var(--foreground)]">
                       <HighlightedText text={cert} keywords={keywords} />
                     </li>
                   ))}
@@ -202,10 +208,12 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <div className="border border-paper-tint bg-white rounded-none">
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-paper-tint bg-paper-tint">
+    <div className="overflow-hidden rounded-[var(--radius-at-md)] border border-[var(--border)] bg-[var(--card)]">
+      <div className="flex items-center gap-2 border-b border-[var(--border)] bg-[var(--secondary)]/40 px-3 py-2">
         {icon}
-        <span className="font-mono text-xs font-bold uppercase text-ink-soft">{title}</span>
+        <span className="text-xs font-semibold uppercase text-[var(--muted-foreground)]">
+          {title}
+        </span>
       </div>
       <div className="p-3">{children}</div>
     </div>
@@ -222,7 +230,10 @@ function HighlightedText({ text, keywords }: { text: string; keywords: Set<strin
     <span>
       {segments.map((segment, i) =>
         segment.isMatch ? (
-          <mark key={i} className="bg-yellow-200 text-black px-0.5">
+          <mark
+            key={i}
+            className="rounded-[var(--radius-at-sm)] bg-[var(--at-warning)]/25 px-0.5 text-[var(--foreground)]"
+          >
             {segment.text}
           </mark>
         ) : (
@@ -241,8 +252,10 @@ function SkillTag({ text, keywords }: { text: string; keywords: Set<string> }) {
 
   return (
     <span
-      className={`inline-block px-2 py-0.5 text-xs ${
-        isMatch ? 'bg-yellow-200 text-black font-medium' : 'bg-background text-ink-soft'
+      className={`inline-block rounded-[var(--radius-at-sm)] px-2 py-0.5 text-xs ${
+        isMatch
+          ? 'bg-[var(--at-warning)]/25 font-medium text-[var(--foreground)]'
+          : 'bg-[var(--secondary)] text-[var(--muted-foreground)]'
       }`}
     >
       {text}

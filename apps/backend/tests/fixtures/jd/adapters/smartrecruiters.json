@@ -1,0 +1,14 @@
+{
+  "name": "Data Scientist",
+  "company": {"name": "DataCo"},
+  "location": {"city": "London", "region": "England", "country": "uk"},
+  "typeOfEmployment": {"label": "Full-time"},
+  "jobAd": {
+    "sections": {
+      "companyDescription": {"title": "About DataCo", "text": "<p>DataCo builds ML platforms for enterprises.</p>"},
+      "jobDescription": {"title": "The Role", "text": "<p>Build and deploy production ML models.</p><ul><li>Own the full model lifecycle.</li><li>Partner with product teams.</li></ul>"},
+      "qualifications": {"title": "Requirements", "text": "<ul><li>3+ years in applied ML.</li><li>Python, PyTorch, SQL.</li></ul>"},
+      "additionalInformation": {"title": "Benefits", "text": "<p>Hybrid schedule, equity, learning budget.</p>"}
+    }
+  }
+}

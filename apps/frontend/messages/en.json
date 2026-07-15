@@ -466,7 +466,12 @@
       "outreachSaveFailed": "Failed to save outreach message. Please try again.",
       "coverLetterGenerateFailed": "Failed to generate cover letter: {error}",
       "outreachGenerateFailed": "Failed to generate outreach message: {error}",
-      "interviewPrepGenerateFailed": "Failed to generate interview preparation: {error}"
+      "interviewPrepGenerateFailed": "Failed to generate interview preparation: {error}",
+      "aiRequiresConnection": "AI generation needs an internet connection. Reconnect and try again.",
+      "aiStreaming": "Generating with AI…",
+      "draftQuarantined": "A saved local draft was unreadable and has been set aside to protect your work. Your current content is safe.",
+      "storageDegraded": "Local storage is unavailable, so changes are kept in memory only for this session. Save to the server to avoid losing them.",
+      "openRecoveryCenter": "Open recovery center"
     }
   },
   "enrichment": {

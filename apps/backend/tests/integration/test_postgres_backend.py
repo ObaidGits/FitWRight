@@ -176,6 +176,67 @@ class TestPostgresMigrationChain:
             assert "users" not in tables
             assert "resumes" not in tables
 
+    def test_admin_schema_and_concurrent_indexes_on_postgres(self, alembic_cfg_pg, pg_url):
+        """P2 Admin migrations 0007/0008 apply on real Postgres (audit M4).
+
+        Verifies the admin columns + ``metrics_daily`` + the ``CONCURRENTLY``
+        ``text_pattern_ops`` search indexes and the ``last_seen_at`` index are
+        actually created on Postgres (the SQLite migration suite cannot exercise
+        the ``CONCURRENTLY``/opclass path), and that the chain still reverses.
+        """
+        import psycopg
+
+        command.upgrade(alembic_cfg_pg, "head")
+        libpq = pg_url.replace("postgresql+psycopg://", "postgresql://", 1)
+        with psycopg.connect(libpq) as conn:
+            cols = {
+                row[0]
+                for row in conn.execute(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='users'"
+                ).fetchall()
+            }
+            assert {"deleted_at", "resume_count", "application_count", "last_active_at"} <= cols
+
+            tables = {
+                row[0]
+                for row in conn.execute(
+                    "SELECT table_name FROM information_schema.tables WHERE table_schema='public'"
+                ).fetchall()
+            }
+            assert "metrics_daily" in tables
+
+            indexes = {
+                row[0]
+                for row in conn.execute(
+                    "SELECT indexname FROM pg_indexes WHERE schemaname='public'"
+                ).fetchall()
+            }
+            assert "ix_users_email_pattern" in indexes
+            assert "ix_users_name_lower_pattern" in indexes
+            assert "ix_sessions_last_seen_at" in indexes
+            assert "ix_users_role_status" in indexes
+            assert "ix_users_created_at_id" in indexes
+
+            # The pattern index uses the text_pattern_ops opclass (prefix LIKE).
+            opclass = conn.execute(
+                "SELECT indexdef FROM pg_indexes WHERE indexname='ix_users_email_pattern'"
+            ).fetchone()[0]
+            assert "text_pattern_ops" in opclass
+
+        # Reverse the two admin migrations and re-apply (clean round-trip).
+        command.downgrade(alembic_cfg_pg, "0006")
+        with psycopg.connect(libpq) as conn:
+            tables = {
+                row[0]
+                for row in conn.execute(
+                    "SELECT table_name FROM information_schema.tables WHERE table_schema='public'"
+                ).fetchall()
+            }
+            assert "metrics_daily" not in tables
+        command.upgrade(alembic_cfg_pg, "head")
+        command.downgrade(alembic_cfg_pg, "base")
+
 
 class TestPostgresRuntimeCrud:
     async def test_scoped_crud_round_trip_on_postgres(self, alembic_cfg_pg, pg_url):

@@ -57,11 +57,8 @@ apps/backend/data/config.json
 .cursor/
 .cursorrules
 
-# Claude Code — track only CLAUDE.md and settings.json, ignore everything else
-# (skills, subagents, thoughts, prompts, sessions are all personal workflow)
-.claude/*
-!.claude/CLAUDE.md
-!.claude/settings.json
+# Claude Code — personal AI workflow, never tracked
+.claude/
 skills-lock.json
 
 # AI assistant tool folders (personal workflow, not tracked)
@@ -129,9 +126,8 @@ next-env.d.ts
 config.json
 **/config.json
 
-# Agentic E2E monitor — runtime evidence bundles and the local-only skill
+# Agentic E2E monitor — runtime evidence bundles (local only)
 /artifacts/
-/.claude/skills/monitor-e2e/
 
-# Superpowers brainstorming visual-companion scratch (local only)
-/.superpowers/
+# Kiro spec/workflow files (local only, not tracked)
+.kiro/

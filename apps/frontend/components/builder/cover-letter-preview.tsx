@@ -45,9 +45,7 @@ export function CoverLetterPreview({
   return (
     <div
       className={cn(
-        'bg-white border-2 border-black',
-        'shadow-sw-default',
-        'overflow-hidden',
+        'overflow-hidden rounded-[var(--radius-at-lg)] border border-[var(--border)] bg-white shadow-[var(--shadow-at-e2)]',
         className
       )}
     >
@@ -59,11 +57,11 @@ export function CoverLetterPreview({
         }}
       >
         {/* Header - Personal Info */}
-        <header className="mb-8 border-b-2 border-black pb-4">
-          <h1 className="font-serif text-2xl font-bold tracking-tight">
+        <header className="mb-8 border-b border-neutral-300 pb-4">
+          <h1 className="font-serif text-2xl font-bold tracking-tight text-neutral-900">
             {personalInfo.name || t('coverLetter.preview.defaultName')}
           </h1>
-          <div className="mt-2 font-mono text-xs text-ink-soft flex flex-wrap gap-x-4 gap-y-1">
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-neutral-500">
             {personalInfo.email && <span>{personalInfo.email}</span>}
             {personalInfo.phone && <span>{personalInfo.phone}</span>}
             {personalInfo.location && <span>{personalInfo.location}</span>}
@@ -73,21 +71,21 @@ export function CoverLetterPreview({
 
         {/* Date */}
         <div className="mb-8">
-          <p className="font-mono text-sm text-ink-soft">{today}</p>
+          <p className="text-sm text-neutral-500">{today}</p>
         </div>
 
         {/* Body */}
         <div className="space-y-4">
           {paragraphs.length > 0 ? (
             paragraphs.map((para, idx) => (
-              <p key={idx} className="font-serif text-base leading-relaxed text-ink-soft">
+              <p key={idx} className="font-serif text-base leading-relaxed text-neutral-700">
                 {para}
               </p>
             ))
           ) : (
-            <div className="text-center py-12 text-steel-grey">
-              <p className="font-mono text-sm">{t('coverLetter.preview.emptyTitle')}</p>
-              <p className="font-mono text-xs mt-2">{t('coverLetter.preview.emptyDescription')}</p>
+            <div className="py-12 text-center text-neutral-400">
+              <p className="text-sm">{t('coverLetter.preview.emptyTitle')}</p>
+              <p className="mt-2 text-xs">{t('coverLetter.preview.emptyDescription')}</p>
             </div>
           )}
         </div>

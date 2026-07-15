@@ -6,15 +6,16 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { type ResumeData } from '@/components/dashboard/resume-component';
 import { ResumeForm } from './resume-form';
 import { FormattingControls } from './formatting-controls';
+import { PhotoControls } from './photo-controls';
 import { CoverLetterEditor } from './cover-letter-editor';
 import { OutreachEditor } from './outreach-editor';
 import { CoverLetterPreview } from './cover-letter-preview';
 import { OutreachPreview } from './outreach-preview';
 import { GeneratePrompt } from './generate-prompt';
 import { InterviewPrepView } from './interview-prep-view';
-import { Button } from '@/components/ui/button';
-import { RetroTabs } from '@/components/ui/retro-tabs';
-import { ConfirmDialog, type ConfirmDialogProps } from '@/components/ui/confirm-dialog';
+import { Button } from '@/components/atelier/button';
+import { TabStrip } from '@/components/atelier/tab-strip';
+import { ConfirmDialog, type ConfirmDialogProps } from '@/components/atelier/confirm-dialog';
 import {
   Download,
   Save,
@@ -44,7 +45,9 @@ import {
   generateOutreachMessage,
   generateInterviewPrep,
   fetchJobDescription,
+  buildResumeStreamTransport,
 } from '@/lib/api/resume';
+import { StreamController } from '@/lib/resilience/stream-client';
 import { JDComparisonView } from './jd-comparison-view';
 import { RegenerateWizard } from './regenerate-wizard';
 import { useRegenerateWizard } from '@/hooks/use-regenerate-wizard';
@@ -52,6 +55,14 @@ import { useTranslations } from '@/lib/i18n';
 import { type TemplateSettings, DEFAULT_TEMPLATE_SETTINGS } from '@/lib/types/template-settings';
 import { withLocalizedDefaultSections } from '@/lib/utils/section-helpers';
 import { useLanguage } from '@/lib/context/language-context';
+import { useSession } from '@/lib/context/session';
+import { useResilienceFlags } from '@/lib/hooks/use-resilience-flags';
+import { useAutosave } from '@/lib/hooks/use-autosave';
+import { useRecovery } from '@/lib/hooks/use-recovery';
+import { SaveStatusChip } from '@/components/resilience/save-status-chip';
+import { ConflictDialog } from '@/components/resilience/conflict-dialog';
+import { RecoveryBanner } from '@/components/resilience/recovery-banner';
+import { RecoveryCenter } from '@/components/resilience/recovery-center';
 import { buildResumeFilename, downloadBlobAsFile, openUrlInNewTab } from '@/lib/utils/download';
 import type { RegenerateItemInput } from '@/lib/api/enrichment';
 
@@ -176,6 +187,34 @@ const ResumeBuilderContent = () => {
   // JD comparison state
   const [jobDescription, setJobDescription] = useState<string | null>(null);
   const [jobContextStatus, setJobContextStatus] = useState<JobContextStatus>('idle');
+
+  // ---------------------------------------------------------------------
+  // P4 Resilience: durable autosave (version CAS + local draft + recovery +
+  // conflict + multi-tab). Falls back to local-draft-only when the flag is off.
+  // ---------------------------------------------------------------------
+  const { user } = useSession();
+  const { flags } = useResilienceFlags();
+  const autosave = useAutosave<ResumeData & Record<string, unknown>>({
+    resumeId: resumeId || '',
+    userId: user?.id || '',
+    initialVersion: null,
+    enabled: flags.advanced_autosave && Boolean(resumeId),
+    onServerData: (data) => {
+      const d = data as { processed_resume?: ResumeData } | null;
+      if (d?.processed_resume) {
+        setResumeData(d.processed_resume);
+        setLastSavedData(d.processed_resume);
+        setHasUnsavedChanges(false);
+      }
+    },
+  });
+  const recovery = useRecovery(user?.id || '', { retrySync: autosave.retrySync });
+  const [showRecoveryCenter, setShowRecoveryCenter] = useState(false);
+  // Keep the recovery surface fresh when quarantine/outbox state changes.
+  useEffect(() => {
+    void recovery.refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autosave.quarantined, autosave.pendingOutbox]);
 
   // AI Regenerate wizard
   const regenerateWizard = useRegenerateWizard({
@@ -320,6 +359,14 @@ const ResumeBuilderContent = () => {
           }
           setInterviewPrep(data.interview_prep ?? null);
           setInterviewPrepError(null);
+          // Seed the optimistic-concurrency base version + the synced content
+          // (the common ancestor used for correct conflict diff/merge — P4 R3.1/3.2).
+          autosave.setBaseVersion(
+            data.version ?? null,
+            (data.processed_resume ?? undefined) as
+              | (ResumeData & Record<string, unknown>)
+              | undefined
+          );
           // Prefer processed_resume if available
           if (data.processed_resume) {
             setResumeData(data.processed_resume as ResumeData);
@@ -384,6 +431,10 @@ const ResumeBuilderContent = () => {
     };
 
     loadResumeData();
+    // `autosave` is intentionally omitted from deps: including it would re-run
+    // the loader on every autosave state change; we only call the stable
+    // `autosave.setBaseVersion` callback here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     improvedData?.data?.job_id,
     improvedData?.data?.resume_id,
@@ -429,12 +480,18 @@ const ResumeBuilderContent = () => {
     };
   }, [isTailoredResume, resumeId]);
 
-  const handleUpdate = useCallback((newData: ResumeData) => {
-    setResumeData(newData);
-    setHasUnsavedChanges(true);
-    // Auto-save draft to localStorage
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(newData));
-  }, []);
+  const handleUpdate = useCallback(
+    (newData: ResumeData) => {
+      setResumeData(newData);
+      setHasUnsavedChanges(true);
+      // Legacy localStorage draft (kept as a belt-and-suspenders fallback).
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(newData));
+      // P4: durable autosave (server + encrypted IndexedDB draft, debounced +
+      // coalesced + version-CAS + retry). No-op for an unsaved (id-less) resume.
+      autosave.update(newData as ResumeData & Record<string, unknown>);
+    },
+    [autosave]
+  );
 
   const handleSettingsChange = useCallback((newSettings: TemplateSettings) => {
     setTemplateSettings(newSettings);
@@ -583,13 +640,62 @@ const ResumeBuilderContent = () => {
   };
 
   // On-demand generation handlers
+  // Active streaming controller (P4 R1) so an in-flight generation is cancellable.
+  const streamCtrlRef = React.useRef<StreamController | null>(null);
+  const [streamingActive, setStreamingActive] = useState(false);
+  const cancelActiveStream = useCallback(() => {
+    void streamCtrlRef.current?.cancel();
+  }, []);
+
+  /**
+   * Generate progressively via SSE when STREAMING_AI is on (R1.1); the
+   * StreamController transparently falls back to the non-stream path on any
+   * error (R1.3). Tokens stream into the field as they arrive.
+   */
+  const runStreamedGeneration = useCallback(
+    async (kind: 'cover-letter' | 'outreach', setField: (text: string) => void): Promise<void> => {
+      if (!resumeId) return;
+      const requestId =
+        typeof crypto?.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : `req-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const transport = buildResumeStreamTransport(resumeId, kind, requestId);
+      const ctrl = new StreamController(transport, { onToken: (full) => setField(full) });
+      streamCtrlRef.current = ctrl;
+      setStreamingActive(true);
+      try {
+        const text = await ctrl.run();
+        setField(text);
+      } finally {
+        streamCtrlRef.current = null;
+        setStreamingActive(false);
+      }
+    },
+    [resumeId]
+  );
+
+  // R2.3: AI generation requires a connection. Guard the action explicitly with
+  // a clear message rather than letting the request fail opaquely offline.
+  const ensureOnlineForAI = useCallback((): boolean => {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      showNotification(t('builder.alerts.aiRequiresConnection'), 'warning');
+      return false;
+    }
+    return true;
+  }, [showNotification, t]);
+
   const doGenerateCoverLetter = async () => {
     if (!resumeId) return;
+    if (!ensureOnlineForAI()) return;
     setIsGeneratingCoverLetter(true);
     setShowRegenerateDialog(null);
     try {
-      const content = await generateCoverLetter(resumeId);
-      setCoverLetter(content);
+      if (flags.streaming_ai) {
+        await runStreamedGeneration('cover-letter', setCoverLetter);
+      } else {
+        const content = await generateCoverLetter(resumeId);
+        setCoverLetter(content);
+      }
     } catch (error) {
       console.error('Failed to generate cover letter:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -614,11 +720,16 @@ const ResumeBuilderContent = () => {
 
   const doGenerateOutreach = async () => {
     if (!resumeId) return;
+    if (!ensureOnlineForAI()) return;
     setIsGeneratingOutreach(true);
     setShowRegenerateDialog(null);
     try {
-      const content = await generateOutreachMessage(resumeId);
-      setOutreachMessage(content);
+      if (flags.streaming_ai) {
+        await runStreamedGeneration('outreach', setOutreachMessage);
+      } else {
+        const content = await generateOutreachMessage(resumeId);
+        setOutreachMessage(content);
+      }
     } catch (error) {
       console.error('Failed to generate outreach message:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -654,6 +765,7 @@ const ResumeBuilderContent = () => {
 
   const doGenerateInterviewPrep = async () => {
     if (!canGenerateInterviewPrep || !resumeId) return;
+    if (!ensureOnlineForAI()) return;
     setIsGeneratingInterviewPrep(true);
     setInterviewPrepError(null);
     setShowRegenerateDialog(null);
@@ -709,13 +821,92 @@ const ResumeBuilderContent = () => {
   };
 
   return (
-    <div className="h-screen w-full bg-background flex justify-center items-center p-4 md:p-8">
+    <div className="flex h-screen w-full items-center justify-center bg-[var(--background)] p-4 md:p-8">
+      {/* P4 R6.5: announce streaming AI progress to screen readers via aria-live. */}
+      <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {streamingActive ? t('builder.alerts.aiStreaming') : ''}
+      </div>
+      {/* P4 Resilience: explicit conflict resolution (version CAS 409). */}
+      {autosave.conflict && (
+        <ConflictDialog
+          mine={resumeData as unknown as Record<string, unknown>}
+          latest={(autosave.conflict.currentData as Record<string, unknown>) ?? {}}
+          base={(autosave.conflictBase as Record<string, unknown> | null) ?? undefined}
+          currentVersion={autosave.conflict.currentVersion}
+          onKeepMine={() =>
+            void autosave.resolveKeepMine(resumeData as ResumeData & Record<string, unknown>)
+          }
+          onTakeLatest={autosave.resolveTakeLatest}
+          onMerge={(merged) => {
+            setResumeData(merged as unknown as ResumeData);
+            void autosave.resolveMerge(merged as ResumeData & Record<string, unknown>);
+          }}
+          onDismiss={autosave.resolveTakeLatest}
+        />
+      )}
       {/* Main Container */}
-      <div className="w-full h-full max-w-[90%] md:max-w-[95%] xl:max-w-[1800px] border border-black bg-background shadow-sw-lg flex flex-col">
+      <div className="flex h-full w-full max-w-[90%] flex-col overflow-hidden rounded-[var(--radius-at-xl)] border border-[var(--border)] bg-[var(--background)] shadow-[var(--shadow-at-e3)] md:max-w-[95%] xl:max-w-[1800px]">
+        {/* P4 Resilience: non-destructive crash/refresh recovery (R5.1). */}
+        {autosave.recovery && (
+          <RecoveryBanner
+            savedAt={autosave.recovery.savedAt}
+            onRestore={() => {
+              const recovered = autosave.recovery?.payload as ResumeData | undefined;
+              if (recovered) {
+                setResumeData(recovered);
+                setHasUnsavedChanges(true);
+              }
+              autosave.acceptRecovery();
+            }}
+            onDiscard={autosave.dismissRecovery}
+          />
+        )}
+        {/* P4 R5.3/R5.5: corrupt draft or queued edits → open the recovery center. */}
+        {(autosave.quarantined || recovery.hasAnything) && (
+          <div
+            role="alert"
+            className="flex flex-wrap items-center gap-2 bg-[var(--at-warning)]/15 px-4 py-2 text-xs font-medium text-[var(--at-warning)]"
+          >
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            <span>{t('builder.alerts.draftQuarantined')}</span>
+            <button
+              type="button"
+              className="ml-auto underline underline-offset-2"
+              onClick={() => {
+                void recovery.refresh();
+                setShowRecoveryCenter(true);
+              }}
+            >
+              {t('builder.alerts.openRecoveryCenter')}
+            </button>
+          </div>
+        )}
+        {showRecoveryCenter && (
+          <RecoveryCenter
+            quarantine={recovery.quarantine}
+            outbox={recovery.outbox}
+            onExportQuarantine={recovery.exportQuarantine}
+            onDiscardQuarantine={(id) => void recovery.discardQuarantine(id)}
+            onDiscardOutbox={(id) => void recovery.discardOutbox(id)}
+            onRetrySync={() => void autosave.retrySync().then(() => recovery.refresh())}
+            onClose={() => setShowRecoveryCenter(false)}
+          />
+        )}
+        {/* P4 R8.4: durable local storage is unavailable — warn (memory-only). */}
+        {autosave.storageDegraded && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="flex items-center gap-2 bg-[var(--at-warning)]/15 px-4 py-2 text-xs font-medium text-[var(--at-warning)]"
+          >
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            {t('builder.alerts.storageDegraded')}
+          </div>
+        )}
         {/* Header Section */}
-        <div className="border-b border-black p-6 md:p-8 bg-background no-print">
+        <div className="no-print border-b border-[var(--border)] bg-[var(--background)] p-6 md:p-8">
           {/* Top Row: Back button and Actions */}
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+          <div className="mb-6 flex flex-col items-start justify-between md:flex-row md:items-center">
             <div>
               <Button
                 variant="link"
@@ -725,16 +916,15 @@ const ResumeBuilderContent = () => {
                 <ArrowLeft className="w-4 h-4" />
                 {t('nav.backToDashboard')}
               </Button>
-              <h1 className="font-serif text-3xl md:text-5xl text-black tracking-tight leading-[0.95] uppercase">
+              <h1 className="text-3xl font-semibold leading-tight tracking-tight text-[var(--foreground)] md:text-5xl">
                 {t('nav.builder')}
               </h1>
               <div className="mt-3 flex items-center gap-3">
-                <p className="text-sm font-mono text-blue-700 uppercase tracking-wide font-bold">
-                  {'// '}
+                <p className="text-sm font-medium text-[var(--primary)]">
                   {resumeId ? t('builder.editMode') : t('builder.createAndPreview')}
                 </p>
                 {hasUnsavedChanges && (
-                  <span className="flex items-center gap-1 text-xs font-mono text-amber-600 bg-amber-50 px-2 py-1 border border-amber-200">
+                  <span className="flex items-center gap-1 rounded-[var(--radius-at-sm)] border border-[var(--at-warning)]/40 bg-[var(--at-warning)]/12 px-2 py-1 text-xs font-medium text-[var(--at-warning)]">
                     <AlertTriangle className="w-3 h-3" />
                     {t('builder.unsavedDraft')}
                   </span>
@@ -764,6 +954,23 @@ const ResumeBuilderContent = () => {
                     <RotateCcw className="w-4 h-4" />
                     {t('common.reset')}
                   </Button>
+                  {flags.advanced_autosave && resumeId && (
+                    <SaveStatusChip
+                      status={autosave.status}
+                      lastSavedAt={autosave.lastSavedAt}
+                      isFollower={!autosave.isLeader}
+                    />
+                  )}
+                  {streamingActive && (
+                    <Button
+                      variant="warning"
+                      size="sm"
+                      onClick={cancelActiveStream}
+                      aria-label={t('common.cancel')}
+                    >
+                      {t('common.cancel')}
+                    </Button>
+                  )}
                   <Button size="sm" onClick={handleSave} disabled={!resumeId || isSaving}>
                     <Save className="w-4 h-4" />
                     {isSaving ? t('common.saving') : t('common.save')}
@@ -861,13 +1068,13 @@ const ResumeBuilderContent = () => {
         </div>
 
         {/* Content Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 bg-black gap-[1px] flex-1 min-h-0">
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-px bg-[var(--border)] lg:grid-cols-2">
           {/* Left Panel: Editor */}
-          <div className="bg-background p-6 md:p-8 overflow-y-auto no-print">
-            <div className="max-w-3xl mx-auto space-y-6">
-              <div className="flex items-center gap-2 border-b-2 border-black pb-2">
-                <div className="w-3 h-3 bg-blue-700"></div>
-                <h2 className="font-mono text-lg font-bold uppercase tracking-wider">
+          <div className="no-print overflow-y-auto bg-[var(--background)] p-6 md:p-8">
+            <div className="mx-auto max-w-3xl space-y-6">
+              <div className="flex items-center gap-2 border-b border-[var(--border)] pb-2">
+                <div className="h-3 w-3 rounded-full bg-[var(--primary)]"></div>
+                <h2 className="text-lg font-semibold text-[var(--foreground)]">
                   {activeTab === 'resume' && t('builder.leftPanel.editorPanel')}
                   {activeTab === 'cover-letter' && t('builder.leftPanel.coverLetterEditor')}
                   {activeTab === 'outreach' && t('builder.leftPanel.outreachEditor')}
@@ -880,6 +1087,27 @@ const ResumeBuilderContent = () => {
               {activeTab === 'resume' && (
                 <>
                   <FormattingControls settings={templateSettings} onChange={handleSettingsChange} />
+                  <div className="rounded-[var(--radius-at-lg)] border border-[var(--border)] bg-[var(--card)] p-4">
+                    <h3 className="mb-3 text-sm font-semibold text-[var(--foreground)]">Photo</h3>
+                    <PhotoControls
+                      template={templateSettings.template}
+                      value={resumeData.personalInfo?.photo}
+                      profileAvatarUrl={resumeData.personalInfo?.avatarUrl}
+                      onChange={(photo) =>
+                        handleUpdate({
+                          ...resumeData,
+                          personalInfo: { ...resumeData.personalInfo, photo },
+                        })
+                      }
+                      onProfileAvatarChange={(url) =>
+                        handleUpdate({
+                          ...resumeData,
+                          personalInfo: { ...resumeData.personalInfo, avatarUrl: url },
+                        })
+                      }
+                      onError={(message) => showNotification(message, 'danger')}
+                    />
+                  </div>
                   <ResumeForm resumeData={resumeData} onUpdate={handleUpdate} />
                 </>
               )}
@@ -937,20 +1165,20 @@ const ResumeBuilderContent = () => {
               {/* JD Match Info Panel */}
               {activeTab === 'jd-match' && (
                 <div className="space-y-4">
-                  <div className="border-2 border-black bg-white p-4">
-                    <h3 className="font-mono text-sm font-bold uppercase mb-2">
+                  <div className="rounded-[var(--radius-at-lg)] border border-[var(--border)] bg-[var(--card)] p-4">
+                    <h3 className="mb-2 text-sm font-semibold text-[var(--foreground)]">
                       {t('builder.jdMatch.aboutTitle')}
                     </h3>
-                    <p className="text-sm text-ink-soft leading-relaxed">
+                    <p className="text-sm leading-relaxed text-[var(--muted-foreground)]">
                       {t('builder.jdMatch.aboutDescription')}
                     </p>
                   </div>
 
-                  <div className="border-2 border-black bg-background p-4">
-                    <h3 className="font-mono text-sm font-bold uppercase mb-2">
+                  <div className="rounded-[var(--radius-at-lg)] border border-[var(--border)] bg-[var(--card)] p-4">
+                    <h3 className="mb-2 text-sm font-semibold text-[var(--foreground)]">
                       {t('builder.jdMatch.highlightedKeywordsTitle')}
                     </h3>
-                    <p className="text-sm text-ink-soft leading-relaxed">
+                    <p className="text-sm leading-relaxed text-[var(--muted-foreground)]">
                       {(() => {
                         const template = t(
                           'builder.jdMatch.highlightedKeywordsDescriptionTemplate'
@@ -960,7 +1188,7 @@ const ResumeBuilderContent = () => {
                         return (
                           <>
                             {parts[0]}
-                            <mark className="bg-yellow-200 px-1">
+                            <mark className="rounded-[var(--radius-at-sm)] bg-[var(--at-warning)]/25 px-1 text-[var(--foreground)]">
                               {t('builder.jdMatch.highlightColor')}
                             </mark>
                             {parts.slice(1).join('__COLOR__')}
@@ -970,11 +1198,11 @@ const ResumeBuilderContent = () => {
                     </p>
                   </div>
 
-                  <div className="border-2 border-black bg-white p-4">
-                    <h3 className="font-mono text-sm font-bold uppercase mb-2">
+                  <div className="rounded-[var(--radius-at-lg)] border border-[var(--border)] bg-[var(--card)] p-4">
+                    <h3 className="mb-2 text-sm font-semibold text-[var(--foreground)]">
                       {t('builder.jdMatch.tipsTitle')}
                     </h3>
-                    <ul className="text-sm text-ink-soft space-y-1 list-disc list-inside">
+                    <ul className="list-inside list-disc space-y-1 text-sm text-[var(--muted-foreground)]">
                       <li>{t('builder.jdMatch.tips.items.addMissingKeywords')}</li>
                       <li>{t('builder.jdMatch.tips.items.focusTechnicalSkills')}</li>
                       <li>{t('builder.jdMatch.tips.items.matchActionVerbs')}</li>
@@ -986,10 +1214,11 @@ const ResumeBuilderContent = () => {
           </div>
 
           {/* Right Panel: Preview with Tabs */}
-          <div className="bg-secondary overflow-hidden flex flex-col no-print">
+          <div className="no-print flex flex-col overflow-hidden bg-[var(--secondary)]">
             {/* Tabs Header */}
-            <div className="px-6 pt-3 shrink-0 bg-secondary">
-              <RetroTabs
+            <div className="shrink-0 bg-[var(--secondary)] px-6 pt-3">
+              <TabStrip
+                aria-label={t('builder.leftPanel.jdMatchAnalysis')}
                 tabs={[
                   { id: 'resume', label: t('builder.previewTabs.resume') },
                   {
@@ -1015,6 +1244,7 @@ const ResumeBuilderContent = () => {
                 ]}
                 activeTab={activeTab}
                 onTabChange={(id) => setActiveTab(id as TabId)}
+                className="flex-wrap"
               />
             </div>
 
@@ -1084,15 +1314,15 @@ const ResumeBuilderContent = () => {
         </div>
 
         {/* Footer */}
-        <div className="p-4 bg-background flex justify-between items-center font-mono text-xs text-blue-700 border-t border-black no-print">
-          <span className="uppercase font-bold flex items-center gap-2">
+        <div className="no-print flex items-center justify-between border-t border-[var(--border)] bg-[var(--background)] p-4 text-xs text-[var(--muted-foreground)]">
+          <span className="flex items-center gap-2 font-medium">
             <Image src="/logo.svg" alt="FitWright" width={20} height={20} className="w-5 h-5" />
             {t('builder.footer.moduleLabel')}
           </span>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-green-700"></div>
-              <span className="uppercase">
+              <div className="h-2 w-2 rounded-full bg-[var(--at-success)]"></div>
+              <span>
                 {templateSettings.template === 'swiss-single' ||
                 templateSettings.template === 'modern' ||
                 templateSettings.template === 'latex' ||
@@ -1101,8 +1331,8 @@ const ResumeBuilderContent = () => {
                   : t('builder.footer.twoColumn')}
               </span>
             </div>
-            <span className="text-steel-grey">|</span>
-            <span className="uppercase">
+            <span className="text-[var(--border)]">|</span>
+            <span>
               {templateSettings.pageSize === 'A4' ? 'A4' : t('builder.pageSize.usLetter')}
             </span>
           </div>

@@ -26,8 +26,9 @@ from __future__ import annotations
 import hmac
 import logging
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, Request, Response
 from fastapi.responses import RedirectResponse
+from sqlalchemy.exc import IntegrityError
 
 from app.auth import (
     Principal,
@@ -171,13 +172,45 @@ def _safe_user(principal_or_record, *, aal: str) -> SafeUser:
     )
 
 
+async def _dispatch_verification_email(user_id: str, email: str) -> None:
+    """Issue a fresh verification token and email the link (best-effort, R5.1/5.3).
+
+    The single place both signup and the (re)send endpoint use to deliver a
+    verification link, so the two flows can never drift. Issuing invalidates any
+    prior unused verification token for the user (single active link), and the
+    send goes through the configured :class:`EmailSender` abstraction. Never
+    raises — a provider outage must not surface as a 500 (which, on signup, would
+    leak that the address is new) and the user can always resend; the token is
+    persisted regardless so a resend still works.
+    """
+    try:
+        raw_token = await get_token_service().issue_verification(user_id)
+        await send_email_safe(
+            get_email_sender(),
+            build_verification_email(
+                to=email,
+                raw_token=raw_token,
+                base_url=settings.frontend_base_url,
+                expires_seconds=settings.email_verification_ttl,
+            ),
+        )
+        get_metrics().record_verification_sent()
+    except Exception:  # pragma: no cover - dispatch is strictly best-effort
+        logger.warning("Verification email dispatch failed for a signup/resend", exc_info=True)
+
+
 # ---------------------------------------------------------------------------
 # POST /auth/signup
 # ---------------------------------------------------------------------------
 
 
 @router.post("/signup", response_model=None)
-async def signup(request: Request, response: Response, payload: SignupRequest):
+async def signup(
+    request: Request,
+    response: Response,
+    payload: SignupRequest,
+    background_tasks: BackgroundTasks,
+):
     """Create an account (enumeration-safe, uniform response + timing)."""
     ip = client_ip(request)
     limiter = get_rate_limiter()
@@ -214,16 +247,30 @@ async def signup(request: Request, response: Response, payload: SignupRequest):
         # operation and return the identical pending response (Property 4).
         if existing is None:
             hashed = passwords.hash_password(payload.password)
-            record = await create_user(
-                email=str(payload.email),
-                name=payload.name,
-                password_hash=hashed,
-                status="pending_verification",
-            )
+            try:
+                record = await create_user(
+                    email=str(payload.email),
+                    name=payload.name,
+                    password_hash=hashed,
+                    status="pending_verification",
+                )
+            except IntegrityError:
+                # A concurrent signup won the unique-email race between the
+                # pre-check and this insert. Collapse to the SAME uniform pending
+                # response (never a 500) so the outcome stays enumeration-safe.
+                return SignupPendingResponse()
             await audit.record(
                 AuditEvent.SIGNUP, actor_user_id=record.id, ip_hash=ip_hash
             )
             get_metrics().record_signup()
+            # Deliver the verification link AFTER the response is sent: this both
+            # keeps signup fast and equalizes response timing between the create
+            # and existing-email branches (the send never runs pre-response), so
+            # it adds no enumeration signal. The link carries a fresh single-use
+            # token; the "check your inbox" screen the client shows is now true.
+            background_tasks.add_task(
+                _dispatch_verification_email, record.id, record.email
+            )
         else:
             # Existing email: run the dummy hash so timing matches the create
             # branch, then fall through to the same response.
@@ -238,13 +285,18 @@ async def signup(request: Request, response: Response, payload: SignupRequest):
     hashed = passwords.hash_password(payload.password)
     from datetime import datetime, timezone
 
-    record = await create_user(
-        email=str(payload.email),
-        name=payload.name,
-        password_hash=hashed,
-        status="active",
-        email_verified_at=datetime.now(timezone.utc).isoformat(),
-    )
+    try:
+        record = await create_user(
+            email=str(payload.email),
+            name=payload.name,
+            password_hash=hashed,
+            status="active",
+            email_verified_at=datetime.now(timezone.utc).isoformat(),
+        )
+    except IntegrityError:
+        # Lost the unique-email race with a concurrent signup — surface the same
+        # 409 the pre-check would have (never a 500).
+        raise ApiError(409, "email_unavailable", "That email is unavailable.")
     session_service = get_session_service()
     raw_token, info = await session_service.create_session(
         record.id, remember_me=False, ip=ip, user_agent=request.headers.get("user-agent")
@@ -308,11 +360,20 @@ async def login(request: Request, response: Response, payload: LoginRequest) -> 
         raise ApiError(401, "invalid_credentials", "Invalid email or password.")
 
     # Correct password but the account cannot be used. Only reachable by someone
-    # who already knows the password, so surfacing the reason is acceptable (R2.4).
+    # who already knows the password, so surfacing the specific reason is
+    # acceptable (R2.4) — and an unverified account must be told to verify (not
+    # "disabled"), with a resend path from the login screen.
     if existing is not None and existing.status != "active":
         await audit.record(
             AuditEvent.LOGIN_FAILED, target_user_id=existing.id, ip_hash=ip_hash
         )
+        if existing.status == "pending_verification":
+            raise ApiError(
+                403,
+                "email_unverified",
+                "Please verify your email before logging in. Check your inbox for "
+                "the confirmation link, or request a new one.",
+            )
         raise ApiError(403, "account_disabled", "This account is disabled.")
 
     assert existing is not None  # verified=True implies a real account + hash
@@ -387,10 +448,18 @@ async def logout_all(
 
 @router.get("/session", response_model=SafeUser)
 async def current_session(request: Request) -> SafeUser:
-    """Return the caller's ``SafeUser`` (+ ``aal``), or 401 if unauthenticated."""
+    """Return the caller's ``SafeUser`` (+ ``aal``), or 401 if unauthenticated.
+
+    Loads the account record so the ``avatarUrl`` is included (the ``Principal``
+    from the session cache doesn't carry it) — this is what the top-bar avatar
+    reads, so it must reflect the current profile photo (upload/replace/remove).
+    """
     principal = get_optional_principal(request)
     if principal is None:
         raise ApiError(401, "unauthorized", "Not authenticated.")
+    from app.auth.accounts import get_by_id
+
+    record = await get_by_id(principal.user_id)
     return SafeUser.build(
         id=principal.user_id,
         name=principal.name,
@@ -399,6 +468,7 @@ async def current_session(request: Request) -> SafeUser:
         status=principal.status,
         email_verified=principal.email_verified,
         aal=principal.aal,
+        avatar_url=record.avatar_url if record else None,
     )
 
 
@@ -453,21 +523,11 @@ async def verify_request(
         if not acct_rl.allowed:
             raise _rate_limited(acct_rl.retry_after)
         # Only issue for an account that still needs verifying; an already-verified
-        # account silently no-ops so the response stays uniform.
+        # account silently no-ops so the response stays uniform. Delivery goes
+        # through the shared best-effort dispatcher (same path as signup) so the
+        # two flows can never drift; a provider outage stays a uniform ack.
         if not record.email_verified:
-            raw_token = await get_token_service().issue_verification(record.id)
-            # Fail-safe: a provider outage must not 500 (which would leak that the
-            # address is registered) — the response stays a uniform ack (design
-            # §Reliability). The token is already persisted, so a resend still works.
-            await send_email_safe(
-                get_email_sender(),
-                build_verification_email(
-                    to=record.email,
-                    raw_token=raw_token,
-                    base_url=settings.frontend_base_url,
-                ),
-            )
-            get_metrics().record_verification_sent()
+            await _dispatch_verification_email(record.id, record.email)
     return UniformAckResponse()
 
 
@@ -541,6 +601,7 @@ async def password_forgot(
                 to=record.email,
                 raw_token=raw_token,
                 base_url=settings.frontend_base_url,
+                expires_seconds=settings.password_reset_ttl,
             ),
         )
     return UniformAckResponse()

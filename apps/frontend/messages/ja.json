@@ -466,7 +466,12 @@
       "outreachSaveFailed": "連絡メールの保存に失敗しました。もう一度お試しください。",
       "coverLetterGenerateFailed": "カバーレターの生成に失敗しました: {error}",
       "outreachGenerateFailed": "連絡メールの生成に失敗しました: {error}",
-      "interviewPrepGenerateFailed": "面接準備の生成に失敗しました: {error}"
+      "interviewPrepGenerateFailed": "面接準備の生成に失敗しました: {error}",
+      "aiRequiresConnection": "AI生成にはインターネット接続が必要です。再接続してからもう一度お試しください。",
+      "aiStreaming": "AIで生成しています…",
+      "draftQuarantined": "保存されたローカル下書きが読み取れなかったため、作業を保護するために隔離しました。現在の内容は安全です。",
+      "storageDegraded": "ローカルストレージが利用できないため、このセッションでは変更をメモリ内にのみ保持します。失わないようにサーバーへ保存してください。",
+      "openRecoveryCenter": "リカバリーセンターを開く"
     }
   },
   "enrichment": {

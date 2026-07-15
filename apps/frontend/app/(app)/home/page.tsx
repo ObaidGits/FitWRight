@@ -26,6 +26,71 @@ import {
   useSystemStatus,
   flattenApplications,
 } from '@/features/home/hooks';
+import { useAgenda, flattenAgenda } from '@/features/agenda/hooks';
+import CalendarClock from 'lucide-react/dist/esm/icons/calendar-clock';
+import CircleCheck from 'lucide-react/dist/esm/icons/circle-check';
+import Circle from 'lucide-react/dist/esm/icons/circle';
+
+/**
+ * Onboarding checklist that reflects live setup state: add an AI key → add a
+ * resume → tailor to a job. Completed steps show a filled check; the current
+ * step is emphasized. Replaces the previous first-run dead-end.
+ */
+function FirstRunChecklist({
+  aiUnconfigured,
+  hasResume,
+}: {
+  aiUnconfigured: boolean;
+  hasResume: boolean;
+}) {
+  const steps = [
+    { label: 'Add an AI provider key', done: !aiUnconfigured },
+    { label: 'Add your first resume', done: hasResume },
+    { label: 'Tailor it to a job', done: false },
+  ];
+  // Emphasize the first incomplete step so a new user always knows what's next
+  // (goal-gradient / recognition-over-recall).
+  const currentStep = steps.findIndex((s) => !s.done);
+  return (
+    <Card className="p-4">
+      <p className="mb-3 text-xs font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
+        Get set up
+      </p>
+      <ol className="space-y-2">
+        {steps.map((s, i) => {
+          const isCurrent = i === currentStep;
+          return (
+            <li key={s.label} className="flex items-center gap-2.5 text-sm">
+              {s.done ? (
+                <CircleCheck className="h-4 w-4 shrink-0 text-[var(--at-success)]" />
+              ) : (
+                <Circle
+                  className={`h-4 w-4 shrink-0 ${isCurrent ? 'text-[var(--primary)]' : 'text-[var(--muted-foreground)]'}`}
+                />
+              )}
+              <span
+                className={
+                  s.done
+                    ? 'text-[var(--muted-foreground)] line-through'
+                    : isCurrent
+                      ? 'font-medium text-[var(--foreground)]'
+                      : 'text-[var(--muted-foreground)]'
+                }
+              >
+                {s.label}
+              </span>
+              {isCurrent && (
+                <span className="ml-auto text-[11px] font-medium uppercase tracking-wide text-[var(--primary)]">
+                  Next
+                </span>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </Card>
+  );
+}
 
 function statusBadge(status: string) {
   if (status === 'ready') return <Badge variant="success">Ready</Badge>;
@@ -39,6 +104,8 @@ export default function HomePage() {
   const resumesQuery = useResumes();
   const appsQuery = useApplications();
   const statusQuery = useSystemStatus();
+  const agendaQuery = useAgenda();
+  const upcoming = flattenAgenda(agendaQuery.data?.pages).slice(0, 3);
 
   const resumes = resumesQuery.data ?? [];
   const apps = flattenApplications(appsQuery.data);
@@ -77,6 +144,29 @@ export default function HomePage() {
             Start with your resume — upload one or build it with the wizard.
           </p>
         </div>
+
+        {/* Getting-started checklist — turns the dead-end into a guided path.
+            Step 1 (AI key) is what a brand-new user is otherwise never told. */}
+        <FirstRunChecklist aiUnconfigured={Boolean(aiUnconfigured)} hasResume={false} />
+
+        {/* First-run AI-key guidance: without a key, upload parsing and the
+            wizard will fail silently. Tell the user up front. */}
+        {aiUnconfigured && (
+          <Card className="flex items-start gap-3 border-[var(--at-warning)]/40 bg-[var(--at-warning)]/8 p-4">
+            <Key className="mt-0.5 h-5 w-5 shrink-0 text-[var(--at-warning)]" />
+            <div className="flex-1">
+              <p className="text-sm font-medium">Add an AI provider key first</p>
+              <p className="text-xs text-[var(--muted-foreground)]">
+                Parsing, the wizard, and tailoring all need an AI key. Add one in settings, then
+                come back here.
+              </p>
+            </div>
+            <Button asChild size="sm" variant="outline">
+              <Link href="/settings">Open settings</Link>
+            </Button>
+          </Card>
+        )}
+
         <div className="grid gap-4 sm:grid-cols-2">
           <Card className="p-6">
             <Upload className="mb-3 h-6 w-6 text-[var(--primary)]" />
@@ -94,9 +184,15 @@ export default function HomePage() {
             <p className="mb-4 text-sm text-[var(--muted-foreground)]">
               Answer a few questions and let AI assemble a strong first draft.
             </p>
-            <Button asChild variant="outline" className="w-full">
-              <Link href="/wizard">Start wizard</Link>
-            </Button>
+            {aiUnconfigured ? (
+              <Button variant="outline" className="w-full" disabled title="Add an AI key first">
+                Add an AI key to use the wizard
+              </Button>
+            ) : (
+              <Button asChild variant="outline" className="w-full">
+                <Link href="/wizard">Start wizard</Link>
+              </Button>
+            )}
           </Card>
         </div>
       </div>
@@ -175,6 +271,37 @@ export default function HomePage() {
         </section>
       )}
 
+      {/* Coming up (agenda snapshot) */}
+      {upcoming.length > 0 && (
+        <section className="space-y-2">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-[var(--muted-foreground)]">Coming up</h2>
+            <Link href="/agenda" className="text-xs text-[var(--primary)] hover:underline">
+              View agenda
+            </Link>
+          </div>
+          <div className="space-y-2">
+            {upcoming.map((item) => (
+              <Link key={`${item.kind}-${item.id}`} href={`/applications/${item.application_id}`}>
+                <Card className="flex items-center gap-3 p-3.5 transition-shadow hover:shadow-[var(--shadow-at-e2)]">
+                  <CalendarClock className="h-4 w-4 shrink-0 text-[var(--muted-foreground)]" />
+                  <span className="min-w-0 flex-1 truncate text-sm">{item.title}</span>
+                  <span className="shrink-0 text-xs text-[var(--muted-foreground)]">
+                    {new Date(item.when).toLocaleDateString(undefined, {
+                      month: 'short',
+                      day: 'numeric',
+                    })}
+                  </span>
+                  <Badge variant={item.kind === 'interview' ? 'primary' : 'neutral'}>
+                    {item.kind}
+                  </Badge>
+                </Card>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* Recent + pipeline snapshot link */}
       <div className="grid gap-6 md:grid-cols-2">
         <section className="space-y-2">
@@ -184,9 +311,13 @@ export default function HomePage() {
               View all
             </Link>
           </div>
-          <div className="space-y-2">
+          <div className="space-y-3">
             {recent.map((r) => (
-              <Link key={r.resume_id} href={`/resumes/${r.resume_id}`}>
+              <Link
+                key={r.resume_id}
+                href={`/resumes/${r.resume_id}`}
+                className="block mb-3 last:mb-0"
+              >
                 <Card className="flex items-center justify-between gap-3 p-3.5 transition-shadow hover:shadow-[var(--shadow-at-e2)]">
                   <span className="flex min-w-0 items-center gap-2">
                     <FileText className="h-4 w-4 shrink-0 text-[var(--muted-foreground)]" />

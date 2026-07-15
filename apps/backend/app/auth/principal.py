@@ -173,10 +173,14 @@ async def get_effective_user_id(request: Request) -> str:
         set_current_user_id(principal.user_id)
         return principal.user_id
 
-    if settings.single_user_mode:
-        from app.auth.owner import ensure_owner
+    # No principal on the request: the composition root's IdentityProvider
+    # decides whether there is an implicit owner (local → bootstrap owner;
+    # hosted → None). This replaces the former ``if settings.single_user_mode``
+    # branch, keeping the deployment axis in the composition seam (Phase 5).
+    from app.platform import get_container
 
-        owner_id = await ensure_owner()
+    owner_id = await get_container().identity_provider().resolve_owner_fallback()
+    if owner_id is not None:
         set_current_user_id(owner_id)
         return owner_id
 
@@ -340,6 +344,27 @@ _CSP = (
 )
 
 
+import os as _os
+
+
+def _api_version_string() -> str:
+    """Build the ``X-API-Version`` value: ``<semver>+<build-id>`` (P4 R9.8).
+
+    ``build-id`` is the first platform-provided deploy identifier found
+    (``BUILD_ID`` → Render ``RENDER_GIT_COMMIT`` → Netlify ``COMMIT_REF``),
+    truncated. Absent all of them (local dev), just the semantic version — so a
+    real deploy that ships a new commit always changes the string and is
+    detectable even when the semver is unchanged.
+    """
+    from app import __version__ as _app_version
+
+    for key in ("BUILD_ID", "RENDER_GIT_COMMIT", "COMMIT_REF"):
+        val = _os.environ.get(key)
+        if val:
+            return f"{_app_version}+{val[:12]}"
+    return _app_version
+
+
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Attach transport/hardening headers to every response (R12.3)."""
 
@@ -355,6 +380,13 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         headers.setdefault("X-Frame-Options", "DENY")
         headers.setdefault("Content-Security-Policy", _CSP)
         headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
+        # P4 R9.8/R9.12: advertise the running API/build version so the client can
+        # detect a deploy mid-session (API version skew) and enter Safe-Mode +
+        # prompt a reload at a safe point. The value includes a per-deploy build
+        # id when the platform provides one (Render's ``RENDER_GIT_COMMIT``, or an
+        # explicit ``BUILD_ID``), so even a *same-semver* redeploy changes it and
+        # is detected — falling back to the semantic version otherwise.
+        headers.setdefault("X-API-Version", _api_version_string())
         # HSTS only over HTTPS (and only meaningful in hosted/secure mode).
         if self._config.cookie_secure:
             headers.setdefault(

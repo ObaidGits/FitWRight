@@ -27,6 +27,7 @@ const PROTECTED_PREFIXES = [
   '/wizard',
   '/settings',
   '/admin',
+  '/builder',
 ];
 
 function isProtected(pathname: string): boolean {
@@ -72,5 +73,6 @@ export const config = {
     '/wizard/:path*',
     '/settings/:path*',
     '/admin/:path*',
+    '/builder/:path*',
   ],
 };

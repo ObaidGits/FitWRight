@@ -18,7 +18,6 @@ interface DraggableListItemProps {
  * - Drag handle (grip icon) for initiating drag operations
  * - Visual feedback during drag (opacity, cursor)
  * - Keyboard accessibility for drag operations
- * - Swiss International Style aesthetic (square corners, high contrast)
  */
 export const DraggableListItem: React.FC<DraggableListItemProps> = ({ id, children }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -40,7 +39,7 @@ export const DraggableListItem: React.FC<DraggableListItemProps> = ({ id, childr
         className="absolute left-0 top-0 h-full w-4 flex items-start justify-center cursor-grab active:cursor-grabbing z-10"
         title="Drag to reorder"
       >
-        <GripVertical className="w-4 h-4 text-steel-grey hover:text-ink-soft transition-colors" />
+        <GripVertical className="w-4 h-4 text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]" />
       </div>
 
       {/* List Item Content - add left padding to make room for drag handle */}

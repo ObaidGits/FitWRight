@@ -12,10 +12,13 @@ import {
   updateLanguageConfig,
   fetchApiKeyStatus,
   updateApiKeys,
+  fetchFeaturePrompts,
+  updateFeaturePrompts,
   type LLMConfigUpdate,
   type FeatureConfigUpdate,
   type LanguageConfigUpdate,
   type ApiKeysUpdateRequest,
+  type FeaturePromptsUpdate,
 } from '@/lib/api/config';
 
 export function useLlmConfig() {
@@ -57,6 +60,16 @@ export function useUpdateLanguageConfig() {
 }
 export function useTestConnection() {
   return useMutation({ mutationFn: (u?: LLMConfigUpdate) => testLlmConnection(u) });
+}
+export function useFeaturePrompts() {
+  return useQuery({ queryKey: ['config', 'feature-prompts'], queryFn: fetchFeaturePrompts });
+}
+export function useUpdateFeaturePrompts() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (u: FeaturePromptsUpdate) => updateFeaturePrompts(u),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['config', 'feature-prompts'] }),
+  });
 }
 export function useUpdateApiKeys() {
   const qc = useQueryClient();

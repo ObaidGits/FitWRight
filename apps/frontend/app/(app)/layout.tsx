@@ -10,10 +10,16 @@
  * backend call) as a fast path; this layout is the authoritative server check.
  * Client guards remain UX-only — the backend enforces `user_id` on every call.
  */
+import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 import { AppShell } from '@/components/layout/app-shell';
 import { getServerSession } from '@/lib/api/session-server';
+import { ResilienceProvider } from '@/components/resilience/resilience-provider';
+import { NOINDEX } from '@/lib/seo/metadata';
+
+// Authenticated, per-user workspace — never indexable.
+export const metadata: Metadata = { robots: NOINDEX };
 
 export default async function AppGroupLayout({ children }: { children: React.ReactNode }) {
   const user = await getServerSession();
@@ -24,7 +30,9 @@ export default async function AppGroupLayout({ children }: { children: React.Rea
   }
   return (
     <div className="atelier">
-      <AppShell>{children}</AppShell>
+      <ResilienceProvider>
+        <AppShell>{children}</AppShell>
+      </ResilienceProvider>
     </div>
   );
 }

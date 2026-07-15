@@ -1,8 +1,8 @@
 'use client';
 
 import React from 'react';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/atelier/label';
+import { Textarea } from '@/components/atelier/input';
 import { useTranslations } from '@/lib/i18n';
 
 interface GenericTextFormProps {
@@ -37,15 +37,13 @@ export const GenericTextForm: React.FC<GenericTextFormProps> = ({
 
   return (
     <div className="space-y-2">
-      <Label className="font-mono text-xs uppercase tracking-wider text-steel-grey">
-        {finalLabel}
-      </Label>
+      <Label className="text-xs font-medium text-[var(--muted-foreground)]">{finalLabel}</Label>
       <Textarea
         value={value || ''}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder={finalPlaceholder}
-        className="min-h-[150px] text-black rounded-none border-black focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-blue-700 bg-white"
+        className="min-h-[150px]"
       />
     </div>
   );

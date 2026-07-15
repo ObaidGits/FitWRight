@@ -463,6 +463,7 @@ Rules:
 - If the company name is not found, return just the role (e.g., "Senior Frontend Engineer")
 - Maximum 60 characters
 - Use the most specific role title mentioned
+- Never output a sentence, description, or paragraph — only the role (and company)
 - Do not add any other text, quotes, or formatting
 
 Output the title only, nothing else."""

@@ -96,14 +96,39 @@ class TestPostgresEngine:
         assert not event.contains(engine, "connect", _apply_sqlite_pragmas)
 
     def test_pooler_mode_is_transaction_safe(self, monkeypatch):
-        """Neon/PgBouncer pooling: NullPool + prepared statements disabled."""
+        """Neon/PgBouncer pooling: WARM client pool + server-side prepared
+        statements disabled.
+
+        The transaction-safety property (no server-side prepared statements —
+        unsafe when pgbouncer multiplexes a connection across backends) is
+        preserved via the connect_args, NOT via NullPool. We now keep a warm
+        client-side pool (perf: avoids a full TCP+TLS+startup reconnect per DB
+        operation to the external pooler); pgbouncer is designed to hold many
+        persistent client connections and multiplex them.
+        """
         monkeypatch.setattr(settings, "db_use_pooler", True)
+        monkeypatch.setattr(settings, "db_pool_size", 5)
         async_engine = make_async_engine(self._URL)
         sync_engine = make_sync_engine(self._URL)
-        assert isinstance(async_engine.pool, NullPool)
-        assert isinstance(sync_engine.pool, NullPool)
+
+        # No longer NullPool — a warm, sized pool is kept.
+        assert not isinstance(async_engine.pool, NullPool)
+        assert not isinstance(sync_engine.pool, NullPool)
+        assert async_engine.pool.size() == 5
+        assert sync_engine.pool.size() == 5
         assert async_engine.dialect.driver == "asyncpg"
         assert sync_engine.dialect.driver == "psycopg"
+
+        # Transaction-pool safety is still enforced via connect_args:
+        async_opts = db_engine._pg_async_options()
+        assert async_opts["connect_args"]["statement_cache_size"] == 0
+        assert async_opts["connect_args"]["prepared_statement_cache_size"] == 0
+        assert callable(async_opts["connect_args"]["prepared_statement_name_func"])
+        assert async_opts["pool_pre_ping"] is True
+
+        sync_opts = db_engine._pg_sync_options()
+        assert sync_opts["connect_args"]["prepare_threshold"] is None
+        assert sync_opts["pool_pre_ping"] is True
 
     def test_direct_mode_uses_sized_pool(self, monkeypatch):
         monkeypatch.setattr(settings, "db_use_pooler", False)

@@ -127,12 +127,13 @@ class TestKVStoreOutage:
 
     async def test_scoped_read_still_serves_when_cache_down(self, auth_env, monkeypatch):
         """An owned-resource read fails OPEN under a KVStore outage (single-user)."""
-        import app.auth.runtime as runtime
         from app.auth.ratelimit import reset_rate_limiter
         from app.auth.sessions import reset_session_service
+        from app.platform import get_container
 
-        # Point every lazily-built auth singleton at the dead store.
-        monkeypatch.setattr(runtime, "_kvstore", _DeadCacheKV())
+        # Force the composition root to hand out the dead store, then rebuild the
+        # services so they pick it up (KVStore is owned by the container — Phase 3).
+        get_container().override("kvstore", _DeadCacheKV())
         reset_session_service()
         reset_rate_limiter()
 

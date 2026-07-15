@@ -112,10 +112,23 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * Safe fallback used when a legacy i18n component (e.g. confirm-dialog) is
+ * rendered outside a LanguageProvider — which happens in the new (app)/(auth)/
+ * admin route groups that don't mount the provider. Instead of throwing (a
+ * latent crash, M5), we degrade to English defaults with no-op setters.
+ */
+const FALLBACK_LANGUAGE_CONTEXT: LanguageContextValue = {
+  contentLanguage: defaultLocale,
+  uiLanguage: defaultLocale,
+  isLoading: false,
+  setContentLanguage: async () => {},
+  setUiLanguage: () => {},
+  languageNames: localeNames,
+  supportedLanguages: locales,
+};
+
 export function useLanguage() {
   const context = useContext(LanguageContext);
-  if (context === undefined) {
-    throw new Error('useLanguage must be used within a LanguageProvider');
-  }
-  return context;
+  return context ?? FALLBACK_LANGUAGE_CONTEXT;
 }

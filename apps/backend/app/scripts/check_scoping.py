@@ -36,7 +36,20 @@ from pathlib import Path
 
 # Owned tables carry an ownership scope (must match app.repository.Repo.OWNED_TABLES).
 OWNED_MODELS: frozenset[str] = frozenset(
-    {"Resume", "Job", "Improvement", "Application", "ApiKey"}
+    {
+        "Resume",
+        "Job",
+        "Improvement",
+        "Application",
+        "ApiKey",
+        "ResumeVersion",
+        "Notification",
+        "NotificationPref",
+        "UserUnreadCount",
+        "SearchDocument",
+        "Reminder",
+        "Interview",
+    }
 )
 
 # The single repository layer where scoped owned queries are allowed to live.
@@ -49,6 +62,21 @@ _ALLOWLIST_SUFFIXES: tuple[str, ...] = (
     "app/repository.py",
     "app/auth/owner.py",
     "app/scripts/check_scoping.py",
+    # P3 notification data access is centralized + user-scoped in this repo
+    # module (same trust model as app/admin/repo.py); the outbox consumer and
+    # the NotificationService route every owned query through it.
+    "app/notifications/repo.py",
+    # P3 search-document access is centralized + user-scoped-in-SQL here (FTS/
+    # tsvector raw queries + scoped upserts); same trust model as admin/repo.py.
+    "app/search/repo.py",
+    # P3 reminder/interview data access is centralized + user-scoped here
+    # (CRUD + claim-based scheduler scans); same trust model as admin/repo.py.
+    "app/scheduling/repo.py",
+    # The isolated, heavily-reviewed cross-user READ path for admin (ADR admin
+    # §Architecture). This is the *only* module allowed to query owned tables
+    # without a user_id scope; it holds no write methods (the purge delete goes
+    # through the user-scoped Database.purge_user_owned_data facade instead).
+    "app/admin/repo.py",
 )
 _ALLOWLIST_DIR_PARTS: tuple[str, ...] = ("scripts", "alembic")
 

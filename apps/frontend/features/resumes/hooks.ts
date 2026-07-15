@@ -15,6 +15,15 @@ export function useResumeLibrary() {
   return useQuery<ResumeListItem[]>({
     queryKey: [...queryKeys.resumes, 'library'],
     queryFn: () => fetchResumeList(true),
+    // Poll while any resume is still parsing so "Processing" flips to
+    // "Ready"/"Failed" without a manual refresh; stop once all are settled.
+    refetchInterval: (query) => {
+      const items = query.state.data;
+      const anyProcessing = items?.some(
+        (r) => r.processing_status === 'processing' || r.processing_status === 'pending'
+      );
+      return anyProcessing ? 4000 : false;
+    },
   });
 }
 
@@ -23,6 +32,12 @@ export function useResume(resumeId: string) {
     queryKey: queryKeys.resume(resumeId),
     queryFn: () => fetchResume(resumeId),
     enabled: !!resumeId,
+    // Poll while this resume is still processing so the editor updates when
+    // parsing completes (or fails) without requiring a reload.
+    refetchInterval: (query) => {
+      const status = query.state.data?.raw_resume?.processing_status;
+      return status === 'processing' || status === 'pending' ? 4000 : false;
+    },
   });
 }
 

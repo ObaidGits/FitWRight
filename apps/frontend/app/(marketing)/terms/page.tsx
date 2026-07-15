@@ -1,10 +1,26 @@
 import type { Metadata } from 'next';
+import { JsonLd } from '@/lib/seo/json-ld';
+import { buildMetadata } from '@/lib/seo/metadata';
+import { KEYWORDS } from '@/lib/seo/page-keywords';
+import { breadcrumbSchema } from '@/lib/seo/structured-data';
 
-export const metadata: Metadata = { title: 'Terms of Use — FitWright' };
+export const metadata: Metadata = buildMetadata({
+  title: 'Terms of Use',
+  description:
+    'The terms for using FitWright: provided as-is to tailor resumes and manage applications, you are responsible for keeping your content truthful, and it is released under the Apache License 2.0.',
+  path: '/terms',
+  keywords: KEYWORDS.terms,
+});
 
 export default function TermsPage() {
   return (
     <article className="mx-auto w-full max-w-3xl px-4 py-16 md:px-8">
+      <JsonLd
+        data={breadcrumbSchema([
+          { name: 'Home', path: '/' },
+          { name: 'Terms of Use', path: '/terms' },
+        ])}
+      />
       <h1 className="text-3xl font-semibold">Terms of Use</h1>
       <p className="mt-2 text-sm text-[var(--muted-foreground)]">
         Last updated {new Date().getFullYear()}

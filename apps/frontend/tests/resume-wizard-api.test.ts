@@ -29,7 +29,7 @@ describe('resume wizard api', () => {
     expect(state.current_question.text.length).toBeGreaterThan(0);
     expect(state.resume_data.personalInfo?.name).toBe('');
     expect(state.asked_count).toBe(0);
-    expect(state.progress.total).toBe(8);
+    expect(state.progress.total).toBe(6);
   });
 
   it('returns a fresh state object each call (no shared mutable references)', () => {
@@ -54,10 +54,16 @@ describe('resume wizard api', () => {
     expect(body.state.step).toBe('intro');
   });
 
-  it('throws endpoint text when finalize fails', async () => {
-    fetchMock.mockResolvedValueOnce(new Response('already exists', { status: 409 }));
+  it('surfaces the backend detail as a clean message (not raw JSON) when finalize fails', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ detail: 'A master resume already exists.' }), {
+        status: 409,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
+    // readJson extracts `detail` — the user never sees the `{"detail":...}` blob.
     await expect(finalizeResumeWizard(createInitialResumeWizardState())).rejects.toThrow(
-      /already exists/
+      'A master resume already exists.'
     );
   });
 });

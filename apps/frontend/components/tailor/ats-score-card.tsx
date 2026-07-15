@@ -13,15 +13,15 @@ const SUB_SCORE_LABELS: Record<string, string> = {
 };
 
 function scoreColor(value: number): string {
-  if (value >= 80) return 'text-green-400';
-  if (value >= 60) return 'text-yellow-400';
-  return 'text-red-400';
+  if (value >= 80) return 'text-[var(--at-success)]';
+  if (value >= 60) return 'text-[var(--at-warning)]';
+  return 'text-[var(--destructive)]';
 }
 
 function barColor(value: number): string {
-  if (value >= 80) return 'bg-green-500';
-  if (value >= 60) return 'bg-yellow-500';
-  return 'bg-red-500';
+  if (value >= 80) return 'bg-[var(--at-success)]';
+  if (value >= 60) return 'bg-[var(--at-warning)]';
+  return 'bg-[var(--destructive)]';
 }
 
 function clampWidth(value: number): number {
@@ -31,13 +31,13 @@ function clampWidth(value: number): number {
 function SubScoreRow({ label, value }: { label: string; value: number }) {
   return (
     <div>
-      <div className="flex justify-between items-center mb-1">
-        <span className="text-sm text-gray-300">{label}</span>
+      <div className="mb-1 flex items-center justify-between">
+        <span className="text-sm text-[var(--muted-foreground)]">{label}</span>
         <span className={`text-sm font-semibold tabular-nums ${scoreColor(value)}`}>
           {Number.isFinite(value) ? value.toFixed(1) : '—'}%
         </span>
       </div>
-      <div className="w-full bg-gray-700 rounded-full h-1.5">
+      <div className="h-1.5 w-full rounded-full bg-[var(--secondary)]">
         <div
           className={`h-1.5 rounded-full transition-all duration-500 ${barColor(value)}`}
           style={{ width: `${clampWidth(value)}%` }}
@@ -52,20 +52,20 @@ export function ATSScoreCard({ atsScore }: ATSScoreCardProps) {
     atsScore;
 
   return (
-    <div className="rounded-lg border border-gray-700 bg-gray-800/60 p-5 space-y-5">
+    <div className="space-y-5 rounded-[var(--radius-at-lg)] border border-[var(--border)] bg-[var(--card)] p-5 shadow-[var(--shadow-at-e1)]">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h3 className="text-base font-semibold text-white">ATS Score Breakdown</h3>
+        <h3 className="text-base font-semibold text-[var(--foreground)]">ATS Score Breakdown</h3>
         <div className="flex items-end gap-1">
           <span className={`text-3xl font-bold tabular-nums ${scoreColor(overall_score)}`}>
             {overall_score.toFixed(1)}
           </span>
-          <span className="text-gray-400 text-sm mb-0.5">/100</span>
+          <span className="mb-0.5 text-sm text-[var(--muted-foreground)]">/100</span>
         </div>
       </div>
 
       {/* Overall bar */}
-      <div className="w-full bg-gray-700 rounded-full h-2">
+      <div className="h-2 w-full rounded-full bg-[var(--secondary)]">
         <div
           className={`h-2 rounded-full transition-all duration-500 ${barColor(overall_score)}`}
           style={{ width: `${clampWidth(overall_score)}%` }}
@@ -82,14 +82,14 @@ export function ATSScoreCard({ atsScore }: ATSScoreCardProps) {
       {/* Missing keywords */}
       {missing_keywords.length > 0 && (
         <div>
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
             Missing Keywords
           </p>
           <div className="flex flex-wrap gap-1.5">
             {missing_keywords.map((kw, i) => (
               <span
                 key={`missing-${i}-${kw}`}
-                className="text-xs bg-red-900/40 border border-red-700/50 text-red-300 rounded px-2 py-0.5"
+                className="rounded-[var(--radius-at-sm)] border border-[var(--destructive)]/40 bg-[var(--destructive)]/10 px-2 py-0.5 text-xs text-[var(--destructive)]"
               >
                 {kw}
               </span>
@@ -101,14 +101,14 @@ export function ATSScoreCard({ atsScore }: ATSScoreCardProps) {
       {/* Injectable keywords */}
       {injectable_keywords.length > 0 && (
         <div>
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
             Safe to Add (in your master resume)
           </p>
           <div className="flex flex-wrap gap-1.5">
             {injectable_keywords.map((kw, i) => (
               <span
                 key={`injectable-${i}-${kw}`}
-                className="text-xs bg-blue-900/40 border border-blue-700/50 text-blue-300 rounded px-2 py-0.5"
+                className="rounded-[var(--radius-at-sm)] border border-[var(--primary)]/40 bg-[var(--primary)]/10 px-2 py-0.5 text-xs text-[var(--primary)]"
               >
                 {kw}
               </span>
@@ -120,13 +120,16 @@ export function ATSScoreCard({ atsScore }: ATSScoreCardProps) {
       {/* Recommendations */}
       {recommendations.length > 0 && (
         <div>
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
             Recommendations
           </p>
           <ul className="space-y-1.5">
             {recommendations.map((tip, i) => (
-              <li key={`rec-${i}-${tip.slice(0, 30)}`} className="flex gap-2 text-sm text-gray-300">
-                <span className="text-blue-400 mt-0.5 shrink-0">•</span>
+              <li
+                key={`rec-${i}-${tip.slice(0, 30)}`}
+                className="flex gap-2 text-sm text-[var(--muted-foreground)]"
+              >
+                <span className="mt-0.5 shrink-0 text-[var(--primary)]">•</span>
                 <span>{tip}</span>
               </li>
             ))}

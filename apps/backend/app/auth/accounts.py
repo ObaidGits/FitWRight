@@ -63,6 +63,19 @@ class AccountRecord:
     avatar_url: str | None
     email_verified_at: str | None
     updated_at: str
+    avatar_key: str | None = None
+    headline: str | None = None
+    location: str | None = None
+    links: list | None = None
+    # Canonical profile-image metadata (Photo System). Metadata only — never
+    # binary. ``avatar_checksum`` powers content-addressed dedup.
+    avatar_width: int | None = None
+    avatar_height: int | None = None
+    avatar_checksum: str | None = None
+    avatar_format: str | None = None
+    avatar_bytes: int | None = None
+    avatar_dominant_color: str | None = None
+    avatar_updated_at: str | None = None
 
     @property
     def email_verified(self) -> bool:
@@ -79,7 +92,116 @@ def _to_record(row: User) -> AccountRecord:
         avatar_url=row.avatar_url,
         email_verified_at=row.email_verified_at,
         updated_at=row.updated_at,
+        avatar_key=getattr(row, "avatar_key", None),
+        headline=getattr(row, "headline", None),
+        location=getattr(row, "location", None),
+        links=getattr(row, "links", None),
+        avatar_width=getattr(row, "avatar_width", None),
+        avatar_height=getattr(row, "avatar_height", None),
+        avatar_checksum=getattr(row, "avatar_checksum", None),
+        avatar_format=getattr(row, "avatar_format", None),
+        avatar_bytes=getattr(row, "avatar_bytes", None),
+        avatar_dominant_color=getattr(row, "avatar_dominant_color", None),
+        avatar_updated_at=getattr(row, "avatar_updated_at", None),
     )
+
+
+async def set_avatar(
+    user_id: str,
+    *,
+    avatar_url: str,
+    avatar_key: str,
+    metadata: "dict | None" = None,
+    db=None,
+) -> tuple[AccountRecord | None, str | None]:
+    """Set the avatar URL+key (+ canonical metadata) after a successful store.
+
+    Returns ``(record, old_key)``. The old key is returned so the caller can
+    garbage-collect the replaced object (R13.2). The url is only ever set *after*
+    a successful upload (no dangling url on storage failure — the caller stores
+    first, then calls this). ``metadata`` carries the Photo-System master fields
+    (width/height/checksum/format/bytes/dominant_color); when omitted the columns
+    are left untouched.
+    """
+    db = _resolve_db(db)
+    meta = metadata or {}
+    async with db.session_factory() as session:
+        row = await session.get(User, user_id)
+        if row is None:
+            return None, None
+        old_key = row.avatar_key
+        row.avatar_url = avatar_url
+        row.avatar_key = avatar_key
+        now = _now_iso()
+        if meta:
+            row.avatar_width = meta.get("width")
+            row.avatar_height = meta.get("height")
+            row.avatar_checksum = meta.get("checksum")
+            row.avatar_format = meta.get("format")
+            row.avatar_bytes = meta.get("byte_size")
+            row.avatar_dominant_color = meta.get("dominant_color")
+            row.avatar_updated_at = now
+        row.updated_at = now
+        await session.commit()
+        return _to_record(row), old_key
+
+
+async def clear_avatar(user_id: str, *, db=None) -> tuple[AccountRecord | None, str | None]:
+    """Remove the avatar (url/key/metadata) and return ``(record, old_key)``.
+
+    Used by the delete endpoint. The old key is returned so the caller can
+    garbage-collect the stored object (best-effort; retention also sweeps).
+    """
+    db = _resolve_db(db)
+    async with db.session_factory() as session:
+        row = await session.get(User, user_id)
+        if row is None:
+            return None, None
+        old_key = row.avatar_key
+        row.avatar_url = None
+        row.avatar_key = None
+        row.avatar_width = None
+        row.avatar_height = None
+        row.avatar_checksum = None
+        row.avatar_format = None
+        row.avatar_bytes = None
+        row.avatar_dominant_color = None
+        row.avatar_updated_at = _now_iso()
+        row.updated_at = _now_iso()
+        await session.commit()
+        return _to_record(row), old_key
+
+
+async def update_profile(
+    user_id: str,
+    *,
+    headline: str | None,
+    location: str | None,
+    links: list | None,
+    db=None,
+) -> AccountRecord | None:
+    """Update the extended profile fields (already validated) — R14.1."""
+    db = _resolve_db(db)
+    async with db.session_factory() as session:
+        row = await session.get(User, user_id)
+        if row is None:
+            return None
+        row.headline = headline
+        row.location = location
+        row.links = links
+        row.updated_at = _now_iso()
+        await session.commit()
+        return _to_record(row)
+
+
+async def all_avatar_keys(db=None) -> set[str]:
+    """Return every referenced avatar key (orphan-GC reference set — R13.2)."""
+    db = _resolve_db(db)
+    async with db.session_factory() as session:
+        rows = (
+            await session.execute(select(User.avatar_key).where(User.avatar_key.is_not(None)))
+        ).scalars().all()
+        return {k for k in rows if k}
 
 
 def _resolve_db(db):

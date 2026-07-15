@@ -35,28 +35,49 @@ def _resolve_database_url() -> str:
     Precedence (single source of truth so migrations never hit the ini
     placeholder): an explicit ``-x db_url=…`` passed on the command line, then
     the ``ALEMBIC_DATABASE_URL`` environment variable (used by the migration
-    test harness to point at a throwaway copy), then the application's resolved
-    ``effective_database_url`` (SQLite locally, Postgres hosted — ADR-13). The
-    async driver is required because ``env.py`` runs migrations through an async
-    engine.
+    test harness to point at a throwaway copy), then the dedicated
+    ``MIGRATION_DATABASE_URL`` (the DIRECT / session-mode endpoint — DDL and the
+    session-scoped advisory lock are unsafe through a transaction pooler), and
+    finally the application's resolved ``effective_database_url`` (SQLite
+    locally, Postgres hosted — ADR-13). The async driver is required because
+    ``env.py`` runs migrations through an async engine.
     """
     x_args = context.get_x_argument(as_dictionary=True)
     url = x_args.get("db_url") or os.environ.get("ALEMBIC_DATABASE_URL")
     if not url:
         from app.config import settings
 
-        url = settings.effective_database_url
+        url = (settings.migration_database_url or "").strip() or settings.effective_database_url
     # Normalize to an async driver so ``async_engine_from_config`` can connect.
+    # Reuse the runtime engine's normalizer so every Postgres prefix
+    # (postgres://, postgresql+psycopg2://, …) is handled identically.
     if url.startswith("sqlite:///"):
-        url = url.replace("sqlite:///", "sqlite+aiosqlite:///", 1)
-    elif url.startswith("postgresql://"):
-        url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
-    return url
+        return url.replace("sqlite:///", "sqlite+aiosqlite:///", 1)
+    from app.db_engine import _normalize_url
+
+    return _normalize_url(url, async_=True)
 
 
 # Inject the resolved URL so both offline and online paths use it instead of the
-# ini placeholder.
-config.set_main_option("sqlalchemy.url", _resolve_database_url())
+# ini placeholder. Libpq TLS params (``sslmode``/``ssl``) are stripped here and
+# translated into an asyncpg ``ssl`` connect arg, because asyncpg rejects the
+# raw ``sslmode`` kwarg — without this, migrating against a TLS-only Postgres
+# (e.g. Supabase's ``?sslmode=require``) fails with a connect TypeError.
+_resolved_url = _resolve_database_url()
+_SSL_CONNECT_ARGS: dict = {}
+if _resolved_url.startswith("postgresql"):
+    from app.db_engine import _asyncpg_ssl_arg, _extract_pg_ssl_mode
+
+    _resolved_url, _ssl_mode = _extract_pg_ssl_mode(_resolved_url)
+    _ssl_arg = _asyncpg_ssl_arg(_ssl_mode)
+    if _ssl_arg is not None:
+        _SSL_CONNECT_ARGS = {"ssl": _ssl_arg}
+# ConfigParser (Alembic's config store) uses ``%`` for interpolation, so a URL
+# that legitimately contains ``%`` — e.g. a URL-encoded password like ``%40``
+# for ``@`` — otherwise raises "invalid interpolation syntax". Escape ``%`` as
+# ``%%``; interpolation restores the single ``%`` when the value is read back by
+# ``async_engine_from_config`` (and SQLAlchemy then decodes ``%40`` → ``@``).
+config.set_main_option("sqlalchemy.url", _resolved_url.replace("%", "%%"))
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
@@ -113,6 +134,7 @@ async def run_async_migrations() -> None:
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        connect_args=_SSL_CONNECT_ARGS,
     )
 
     async with connectable.connect() as connection:

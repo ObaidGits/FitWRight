@@ -87,6 +87,20 @@ class AuditEvent:
     SESSION_REVOKED = "session_revoked"
     STEP_UP = "auth.step_up"
     AUTHZ_DENIED = "authz.denied"
+    # --- P2 Admin lifecycle + sensitive reads (dotted, admin-namespaced) ---
+    ADMIN_USER_VIEWED = "admin.user_viewed"
+    # Sensitive config-diagnostics read (admin-panel-upgrade Req 10/15.3/15.9).
+    ADMIN_CONFIG_VIEWED = "admin.config_viewed"
+    # Maintenance action invocation (admin-panel-upgrade Req 18.2/18.6): one of the
+    # four fixed, idempotent ``admin.manage`` actions that only re-invoke an
+    # existing single-flighted job. The specific action is stored in meta.
+    ADMIN_MAINTENANCE_ACTION = "admin.maintenance_action"
+    ADMIN_USER_DISABLED = "user.disabled"
+    ADMIN_USER_ENABLED = "user.enabled"
+    ADMIN_USER_SOFT_DELETED = "user.soft_deleted"
+    ADMIN_USER_RESTORED = "user.restored"
+    ADMIN_USER_PURGED = "user.purged"
+    ADMIN_SETTING_CHANGED = "admin.setting_changed"
 
 
 def sanitize_log_value(value: Any, *, max_length: int = _MAX_VALUE_LENGTH) -> Any:
@@ -162,8 +176,17 @@ class AuditService:
         ip_hash: str | None = None,
         request_id: str | None = None,
         meta: dict[str, Any] | None = None,
+        raise_on_error: bool = False,
     ) -> None:
-        """Append one audit row. Never raises to the caller (fails soft)."""
+        """Append one audit row.
+
+        Fails soft by default (``raise_on_error=False``): an audit write must
+        never break the user-facing flow it observes, so a persistence error is
+        logged and swallowed. A Sensitive_Endpoint that MUST treat a failed
+        audit as a hard error (admin-panel-upgrade Req 15.9 — the access is only
+        legitimate if it is traceable) passes ``raise_on_error=True`` so the
+        exception propagates and the caller can refuse to report success.
+        """
         row = AuditLog(
             id=str(uuid4()),
             ts=self._clock().isoformat(),
@@ -180,6 +203,8 @@ class AuditService:
                 await session.commit()
         except Exception:  # pragma: no cover - defensive; audit must not break flows
             logger.exception("Failed to write audit row for event=%s", event)
+            if raise_on_error:
+                raise
 
 
 # ---------------------------------------------------------------------------

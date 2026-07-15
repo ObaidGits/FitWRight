@@ -466,7 +466,12 @@
       "outreachSaveFailed": "Falha ao salvar mensagem de contato. Por favor, tente novamente.",
       "coverLetterGenerateFailed": "Falha ao gerar carta de apresentação: {error}",
       "outreachGenerateFailed": "Falha ao gerar mensagem de contato: {error}",
-      "interviewPrepGenerateFailed": "Falha ao gerar preparação para entrevista: {error}"
+      "interviewPrepGenerateFailed": "Falha ao gerar preparação para entrevista: {error}",
+      "aiRequiresConnection": "A geração por IA precisa de conexão com a internet. Reconecte-se e tente novamente.",
+      "aiStreaming": "Gerando com IA…",
+      "draftQuarantined": "Um rascunho local salvo estava ilegível e foi isolado para proteger seu trabalho. Seu conteúdo atual está seguro.",
+      "storageDegraded": "O armazenamento local está indisponível, então as alterações ficam apenas na memória nesta sessão. Salve no servidor para não perdê-las.",
+      "openRecoveryCenter": "Abrir central de recuperação"
     }
   },
   "enrichment": {

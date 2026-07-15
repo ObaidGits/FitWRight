@@ -45,6 +45,9 @@ import { SINGLE_USER_MODE } from '@/lib/config/auth';
 import { AccountSecurity } from '@/components/settings/account-security';
 import { updateProfile } from '@/lib/api/auth';
 import { describeAuthError } from '@/components/auth/error-banner';
+import { ProfileSettings } from '@/components/settings/profile-settings';
+import { NotificationPreferences } from '@/components/settings/notification-preferences';
+import { FeaturePromptsEditor } from '@/components/settings/feature-prompts-editor';
 import {
   useLlmConfig,
   useApiKeyStatus,
@@ -78,7 +81,10 @@ export default function SettingsPage() {
           <TabsTrigger value="account">Account</TabsTrigger>
         </TabsList>
         <TabsContent value="profile">
-          <ProfileSection />
+          <div className="space-y-4">
+            <ProfileSection />
+            <ProfileSettings />
+          </div>
         </TabsContent>
         <TabsContent value="ai">
           <AiSection />
@@ -129,15 +135,9 @@ function ProfileSection() {
           placeholder="Your name"
         />
       </div>
-      {SINGLE_USER_MODE ? (
-        <p className="text-xs text-[var(--muted-foreground)]">
-          Profile &amp; avatar are saved with your account when sign-in is enabled.
-        </p>
-      ) : (
-        <Button onClick={onSave} loading={saving}>
-          Save
-        </Button>
-      )}
+      <Button onClick={onSave} loading={saving}>
+        Save name
+      </Button>
     </Card>
   );
 }
@@ -216,7 +216,7 @@ function AiSection() {
       <div className="space-y-1.5">
         <Label>Provider</Label>
         <Select value={provider} onValueChange={(v) => setProvider(v as LLMProvider)}>
-          <SelectTrigger>
+          <SelectTrigger aria-label="LLM provider">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -345,7 +345,7 @@ function PreferencesSection() {
             }
           }}
         >
-          <SelectTrigger>
+          <SelectTrigger aria-label="Content language">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -380,6 +380,12 @@ function PreferencesSection() {
           </div>
         ))}
       </Card>
+
+      {(features.data?.enable_cover_letter || features.data?.enable_outreach_message) && (
+        <FeaturePromptsEditor />
+      )}
+
+      <NotificationPreferences />
     </div>
   );
 }
