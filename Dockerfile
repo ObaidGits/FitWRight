@@ -22,8 +22,11 @@ WORKDIR /app/frontend
 # Copy package files first for better caching
 COPY apps/frontend/package*.json ./
 
-# Install dependencies
-RUN npm ci
+# Install dependencies.
+# Use `npm install` (not `npm ci`) so platform-specific optional deps (e.g.
+# sharp's @emnapi/* on the Linux build host) resolve correctly even if the
+# committed lockfile was generated on a different OS/arch.
+RUN npm install --no-audit --no-fund
 
 # Copy frontend source
 COPY apps/frontend/ ./
