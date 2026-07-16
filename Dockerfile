@@ -9,8 +9,13 @@ FROM node:24-bookworm AS frontend-builder
 # Build argument for API URL (allows customization at build time)
 # Default routes requests through Next.js rewrites on the same origin.
 ARG NEXT_PUBLIC_API_URL=/
+# Baked at build time (NEXT_PUBLIC_* are inlined into the client bundle).
+ARG NEXT_PUBLIC_SINGLE_USER_MODE=false
+ARG NEXT_PUBLIC_SITE_URL=https://fitwright.tech
 ENV NEXT_TELEMETRY_DISABLED=1 \
-    NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+    NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL} \
+    NEXT_PUBLIC_SINGLE_USER_MODE=${NEXT_PUBLIC_SINGLE_USER_MODE} \
+    NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL}
 
 WORKDIR /app/frontend
 

@@ -11,7 +11,10 @@ NC='\033[0m' # No Color
 BOLD='\033[1m'
 
 # Internal port configuration for single-port deployment.
-FRONTEND_PORT="3000"
+# On platforms that inject a $PORT (e.g. Heroku), the public frontend must bind
+# it; otherwise default to 3000. Backend stays internal on 8000 (Next proxies
+# /api to it within the same container).
+FRONTEND_PORT="${PORT:-3000}"
 BACKEND_PORT="8000"
 
 # Print banner
