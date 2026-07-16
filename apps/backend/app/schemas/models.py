@@ -953,8 +953,21 @@ class HealthResponse(BaseModel):
     status: str
 
 
+class SetupStatusResponse(BaseModel):
+    """Deterministic, user-scoped onboarding state.
+
+    Unlike ``StatusResponse``, this contract contains only persisted setup facts
+    and never performs a live provider health probe. It is therefore safe to use
+    for redirects and first-run UI without latency/race-dependent answers.
+    """
+
+    complete: bool
+    llm_configured: bool
+    has_master_resume: bool
+
+
 class StatusResponse(BaseModel):
-    """Application status response."""
+    """Application status response (includes live subsystem health)."""
 
     status: str
     llm_configured: bool

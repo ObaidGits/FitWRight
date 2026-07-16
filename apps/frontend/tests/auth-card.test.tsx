@@ -9,6 +9,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
 const replaceMock = vi.fn();
 const refreshMock = vi.fn().mockResolvedValue(undefined);
+const establishMock = vi.fn();
 
 const { AuthApiError } = vi.hoisted(() => {
   class AuthApiError extends Error {
@@ -42,7 +43,7 @@ vi.mock('next/navigation', () => ({
 }));
 
 vi.mock('@/lib/context/session', () => ({
-  useSession: () => ({ refresh: refreshMock }),
+  useSession: () => ({ refresh: refreshMock, establish: establishMock }),
 }));
 
 import { AuthCard } from '@/components/auth/auth-card';
@@ -51,6 +52,7 @@ describe('AuthCard', () => {
   beforeEach(() => {
     replaceMock.mockClear();
     refreshMock.mockClear();
+    establishMock.mockClear();
     loginMock.mockReset();
     signupMock.mockReset();
   });
@@ -85,7 +87,31 @@ describe('AuthCard', () => {
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secretpw' } });
     fireEvent.click(screen.getByRole('button', { name: /sign in/i }));
     await waitFor(() => expect(replaceMock).toHaveBeenCalledWith('/home'));
-    expect(refreshMock).toHaveBeenCalled();
+    expect(establishMock).toHaveBeenCalledWith({ id: 'u1' });
+    expect(refreshMock).not.toHaveBeenCalled();
+  });
+
+  it('redirects to the server-provided safe next path after login', async () => {
+    loginMock.mockResolvedValue({ id: 'u1' });
+    render(<AuthCard mode="login" initialNext="/applications" />);
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'a@b.com' } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secretpw' } });
+    fireEvent.click(screen.getByRole('button', { name: /sign in/i }));
+    await waitFor(() => expect(replaceMock).toHaveBeenCalledWith('/applications'));
+  });
+
+  it('rejects an unsafe server-provided next path', async () => {
+    loginMock.mockResolvedValue({ id: 'u1' });
+    render(<AuthCard mode="login" initialNext="//evil.example/phish" />);
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'a@b.com' } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secretpw' } });
+    fireEvent.click(screen.getByRole('button', { name: /sign in/i }));
+    await waitFor(() => expect(replaceMock).toHaveBeenCalledWith('/home'));
+  });
+
+  it('renders the server-provided OAuth failure immediately', () => {
+    render(<AuthCard mode="login" oauthFailed />);
+    expect(screen.getByRole('alert')).toHaveTextContent(/couldn't complete Google sign-in/i);
   });
 
   it('enforces the 12-char minimum on signup', () => {

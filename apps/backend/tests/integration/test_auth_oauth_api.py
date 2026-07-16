@@ -198,8 +198,10 @@ class TestOAuthCallback:
             )
         assert cb.status_code == 302
         assert cb.headers["location"] == f"{FRONTEND}/home"
-        # A session cookie was issued and the transient cookie was cleared.
-        assert _cookie_str(cb, "__Host-session") is not None
+        # A remembered session cookie was issued and the transient cookie was cleared.
+        session_cookie = _cookie_str(cb, "__Host-session")
+        assert session_cookie is not None
+        assert f"Max-Age={app_settings.remember_me_ttl}" in session_cookie
         assert _is_cleared(_cookie_str(cb, OAUTH_TXN_COOKIE))
 
         # The session actually authorizes and resolves to the created user.

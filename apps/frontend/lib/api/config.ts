@@ -40,6 +40,13 @@ export interface DatabaseStats {
   has_master_resume: boolean;
 }
 
+export interface SetupStatus {
+  /** Deterministic persisted onboarding completion; never depends on live AI health. */
+  complete: boolean;
+  llm_configured: boolean;
+  has_master_resume: boolean;
+}
+
 export interface SystemStatus {
   status: 'ready' | 'setup_required';
   llm_configured: boolean;
@@ -109,7 +116,13 @@ export async function testLlmConnection(config?: LLMConfigUpdate): Promise<LLMHe
   return readJson<LLMHealthCheck>(res, 'Failed to test LLM connection.');
 }
 
-// Fetch system status
+// Fetch deterministic, authenticated onboarding state (no provider health probe).
+export async function fetchSetupStatus(): Promise<SetupStatus> {
+  const res = await apiFetch('/setup/status', { credentials: 'include' });
+  return readJson<SetupStatus>(res, 'Failed to fetch setup status.');
+}
+
+// Fetch operational system status (includes live/cached provider health).
 export async function fetchSystemStatus(): Promise<SystemStatus> {
   const res = await apiFetch('/status', { credentials: 'include' });
   return readJson<SystemStatus>(res, 'Failed to fetch system status.');

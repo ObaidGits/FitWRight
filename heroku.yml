@@ -4,6 +4,10 @@ build:
   config:
     NEXT_PUBLIC_API_URL: "/"
     NEXT_PUBLIC_SINGLE_USER_MODE: "false"
-    NEXT_PUBLIC_SITE_URL: "https://fitwright.tech"
+    # Canonical host MUST match the backend's FRONTEND_BASE_URL / OAUTH_REDIRECT_URI
+    # (both `www.`). The apex `fitwright.tech` is folded onto this host by the
+    # frontend middleware so auth cookies (host-only `__Host-session`/`oauth_txn`)
+    # are never fragmented across hosts.
+    NEXT_PUBLIC_SITE_URL: "https://www.fitwright.tech"
 run:
   web: /app/start.sh

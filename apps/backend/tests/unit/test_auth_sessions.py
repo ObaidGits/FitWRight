@@ -318,16 +318,18 @@ class TestSlidingExpiry:
         expected_cap = (created + timedelta(seconds=120)).isoformat()
         assert resolved.expires_at == expected_cap
 
-    async def test_remember_me_has_larger_cap(self, service, factory):
+    async def test_remember_me_uses_full_persistent_window(self, service, factory):
         uid = await _make_user(factory)
-        raw_token, _ = await service.create_session(uid, remember_me=True)  # cap=200
-        service._clock_obj.advance(80)  # t0+80
+        raw_token, info = await service.create_session(uid, remember_me=True)  # cap=200
+        created = service._clock_obj.now
+        # The initial DB expiry now matches the remembered 200s cookie/cap,
+        # rather than the ordinary 100s idle window.
+        assert info.expires_at == (created + timedelta(seconds=200)).isoformat()
+        service._clock_obj.advance(80)
         resolved = await service.resolve(raw_token)
         assert resolved is not None
-        # idle_deadline = t0+180; absolute cap = t0+200 → min = t0+180.
-        created = service._clock_obj.now - timedelta(seconds=80)
-        expected = (created + timedelta(seconds=180)).isoformat()
-        assert resolved.expires_at == expected
+        # class idle deadline=t0+280, absolute cap=t0+200 => cap wins.
+        assert resolved.expires_at == (created + timedelta(seconds=200)).isoformat()
 
 
 # ---------------------------------------------------------------------------

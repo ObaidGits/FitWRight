@@ -15,6 +15,8 @@ import Sparkles from 'lucide-react/dist/esm/icons/sparkles';
 import ChevronDown from 'lucide-react/dist/esm/icons/chevron-down';
 import ShieldCheck from 'lucide-react/dist/esm/icons/shield-check';
 import Target from 'lucide-react/dist/esm/icons/target';
+import TriangleAlert from 'lucide-react/dist/esm/icons/triangle-alert';
+import RotateCw from 'lucide-react/dist/esm/icons/rotate-cw';
 
 import { Button } from '@/components/atelier/button';
 import { Card } from '@/components/atelier/card';
@@ -52,10 +54,11 @@ import {
 } from '@/lib/api/resume';
 import type { ImprovedResult } from '@/components/common/resume_previewer_context';
 import type { ResumeData } from '@/components/dashboard/resume-component';
+import { ApiError, toMessage } from '@/lib/api/errors';
 import Link from 'next/link';
 
 const MIN_JD = 50;
-type Phase = 'input' | 'generating' | 'review';
+type Phase = 'input' | 'generating' | 'review' | 'error';
 
 type StageStatus = 'pending' | 'active' | 'done';
 
@@ -153,6 +156,13 @@ export default function TailorPage() {
   // visible on arrival, not hidden behind a disclosure.
   const [showDetail, setShowDetail] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
+  // Graceful, structured failure surface (never raw HTML/error text). Input is
+  // preserved so the user can retry or edit without re-entering anything.
+  const [failure, setFailure] = React.useState<{
+    message: string;
+    requestId?: string;
+    retryable: boolean;
+  } | null>(null);
 
   // Optional pre-generation fit analysis (Req 15 — explicit, cost-aware AI).
   // Never fires automatically: the user must click "Analyze fit" to spend a
@@ -285,6 +295,7 @@ export default function TailorPage() {
     if (jd.trim().length < MIN_JD || !resumeId) return;
     setPhase('generating');
     setResult(null);
+    setFailure(null);
     setStages(freshStages());
     try {
       const jid = await uploadJobDescriptions([jd.trim()], resumeId);
@@ -325,9 +336,24 @@ export default function TailorPage() {
       setResult(data);
       setPhase('review');
     } catch (e) {
-      // Preserve input; return to editable state.
-      setPhase('input');
-      toast({ title: e instanceof Error ? e.message : 'Tailoring failed', variant: 'error' });
+      // Preserve input (jd/resume stay in state) and show a graceful, structured
+      // failure surface. NEVER render raw error text — a 5xx from the Heroku
+      // router is an HTML page, and `toUserMessage` guarantees a clean message.
+      const isApiErr = e instanceof ApiError;
+      // Retryable: network/timeout/5xx/429 could plausibly succeed on retry.
+      const retryable = isApiErr ? [0, 408, 425, 429, 500, 502, 503, 504].includes(e.status) : true;
+      setFailure({
+        message: toMessage(
+          e,
+          'Resume tailoring is temporarily unavailable. Please try again in a moment.'
+        ),
+        requestId:
+          isApiErr && typeof e.details === 'object' && e.details
+            ? ((e.details as Record<string, unknown>).request_id as string | undefined)
+            : undefined,
+        retryable,
+      });
+      setPhase('error');
     } finally {
       abortRef.current = null;
     }
@@ -359,7 +385,10 @@ export default function TailorPage() {
       toast({ title: 'Tailored resume saved', variant: 'success' });
       router.push('/applications');
     } catch (e) {
-      toast({ title: e instanceof Error ? e.message : 'Could not save', variant: 'error' });
+      toast({
+        title: toMessage(e, 'Could not save your tailored resume. Please try again.'),
+        variant: 'error',
+      });
     } finally {
       setSaving(false);
     }
@@ -686,6 +715,51 @@ export default function TailorPage() {
             </span>
             <Button variant="outline" size="sm" onClick={onCancelGenerate}>
               Cancel
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {/* Failure — graceful, structured surface. Never raw HTML/stack traces.
+          Input is preserved so Retry re-runs with the same JD + resume. */}
+      {phase === 'error' && failure && (
+        <Card
+          role="alert"
+          className="space-y-4 border-[var(--destructive)]/40 bg-[var(--destructive)]/5 p-5"
+        >
+          <div className="flex items-start gap-3">
+            <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0 text-[var(--destructive)]" />
+            <div className="flex-1 space-y-1">
+              <p className="text-sm font-medium">Resume tailoring didn’t complete</p>
+              <p className="text-sm text-[var(--muted-foreground)]">{failure.message}</p>
+              <p className="text-xs text-[var(--muted-foreground)]">
+                Your job description and resume selection are saved — nothing was lost.
+              </p>
+              {failure.requestId && (
+                <p className="pt-1 font-mono text-[11px] text-[var(--muted-foreground)]">
+                  Reference: {failure.requestId}
+                </p>
+              )}
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {failure.retryable && (
+              <Button size="sm" onClick={onGenerate} disabled={Boolean(aiUnconfigured)}>
+                <RotateCw className="h-4 w-4" /> Try again
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setFailure(null);
+                setPhase('input');
+              }}
+            >
+              Back to editing
+            </Button>
+            <Button asChild size="sm" variant="ghost">
+              <Link href="/contact?topic=bug">Report issue</Link>
             </Button>
           </div>
         </Card>

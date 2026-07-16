@@ -82,15 +82,18 @@ export function absoluteUrl(path = '/'): string {
 
 /**
  * Search-engine site-verification tokens, sourced from env so they can be set
- * per deployment without code changes. Empty by default — no bogus tokens are
- * emitted. Consumed by the root layout's `metadata.verification`.
+ * Google defaults to the production Search Console token and can be overridden
+ * per deployment. Bing and Yandex remain unset unless configured.
+ * Consumed by the root layout's `metadata.verification`.
  *
- *  - NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION  → Google Search Console
+ *  - NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION  → Google Search Console override
  *  - NEXT_PUBLIC_BING_SITE_VERIFICATION    → Bing Webmaster Tools (msvalidate.01)
  *  - NEXT_PUBLIC_YANDEX_SITE_VERIFICATION  → Yandex Webmaster
  */
 export const VERIFICATION = {
-  google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION || undefined,
+  google:
+    process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION ||
+    'lV_LMnwVarz4ws2OxJ3XcNj9dqHPlNS7SXBB1M96meI',
   bing: process.env.NEXT_PUBLIC_BING_SITE_VERIFICATION || undefined,
   yandex: process.env.NEXT_PUBLIC_YANDEX_SITE_VERIFICATION || undefined,
 } as const;

@@ -95,7 +95,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // and no first-paint round-trip. In SINGLE_USER_MODE this returns the owner
   // synchronously without touching cookies (keeps local pages statically
   // renderable); hosted forwards the request cookies to the backend.
-  const initialUser = await getServerSession();
+  const initialSession = await getServerSession();
   return (
     <html lang="en-US" className="h-full" suppressHydrationWarning>
       <head>
@@ -106,7 +106,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             for rich results and AI retrieval. Page-level schemas reference
             these nodes by @id, so the founder identity resolves on every page. */}
         <JsonLd data={[organizationSchema(), websiteSchema(), personSchema()]} />
-        <AppProviders initialUser={initialUser}>{children}</AppProviders>
+        <AppProviders
+          initialUser={initialSession.user}
+          initialSessionResolved={initialSession.resolved}
+        >
+          {children}
+        </AppProviders>
       </body>
     </html>
   );

@@ -11,7 +11,7 @@
  */
 import * as React from 'react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/atelier/button';
 import { Card } from '@/components/atelier/card';
 import { Input } from '@/components/atelier/input';
@@ -52,21 +52,31 @@ export function safeNext(next: string | null | undefined): string {
   return next;
 }
 
-export function AuthCard({ mode }: { mode: 'login' | 'signup' }) {
+export interface AuthCardProps {
+  mode: 'login' | 'signup';
+  /** Server-resolved query value; validated again by safeNext before use. */
+  initialNext?: string | null;
+  /** Server-resolved OAuth callback failure flag. */
+  oauthFailed?: boolean;
+}
+
+export function AuthCard({ mode, initialNext, oauthFailed = false }: AuthCardProps) {
   const isSignup = mode === 'signup';
   const router = useRouter();
-  const params = useSearchParams();
-  const { refresh } = useSession();
+  const { refresh, establish } = useSession();
 
-  const next = safeNext(params.get('next'));
-  const oauthError = params.get('error') === 'oauth_failed';
+  // Query parameters are resolved by the server page and passed as primitive
+  // props. This removes useSearchParams/Suspense from the whole auth card, so
+  // the form and Google button are present in the initial HTML rather than a
+  // null fallback that only appears after client hydration.
+  const next = safeNext(initialNext);
 
   const [email, setEmail] = React.useState('');
   const [password, setPassword] = React.useState('');
   const [name, setName] = React.useState('');
   const [rememberMe, setRememberMe] = React.useState(false);
   const [error, setError] = React.useState<string | null>(
-    oauthError ? describeAuthError(new AuthApiError('oauth_failed', '', 400)) : null
+    oauthFailed ? describeAuthError(new AuthApiError('oauth_failed', '', 400)) : null
   );
   const [pending, setPending] = React.useState(false);
 
@@ -98,11 +108,12 @@ export function AuthCard({ mode }: { mode: 'login' | 'signup' }) {
           router.replace(`/verify?email=${encodeURIComponent(email)}&sent=1`);
           return;
         }
-        await refresh();
+        if (res.user) establish(res.user);
+        else await refresh();
         router.replace(next);
       } else {
-        await authApi.login({ email, password, rememberMe });
-        await refresh();
+        const user = await authApi.login({ email, password, rememberMe });
+        establish(user);
         router.replace(next);
       }
     } catch (err) {

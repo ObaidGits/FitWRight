@@ -1059,16 +1059,35 @@ async def upload_resume_stream(
     _validate_upload_bytes(request, file, content)
     filename = file.filename or "resume.pdf"
 
+    # Heartbeat cadence — must stay well under the Heroku router's 55s idle
+    # timeout (H15/H28). The upload pipeline has two long awaits (document parse
+    # and the LLM structuring call) during which no stage event is emitted; a
+    # slow PDF or a 30-90s LLM call would otherwise stall the SSE connection
+    # long enough for the platform to sever it mid-parse (surfacing to the user
+    # as a truncated stream → non-stream fallback → Heroku "Application Error").
+    heartbeat_seconds = settings.stream_heartbeat_seconds
+
     async def event_gen():
         from app.events import EventType
+
+        # Background awaits we may need to cancel if the client disconnects.
+        bg_tasks: list[asyncio.Task] = []
 
         try:
             yield _sse("stage", {"stage": "received", "status": "done"})
 
-            # Stage 1: extract text (real boundary).
+            # Stage 1: extract text (real boundary). Awaited via a heartbeat pump
+            # so a slow parse can never trip the platform idle timeout.
             yield _sse("stage", {"stage": "extracting", "status": "active"})
+            parse_task = asyncio.ensure_future(parse_document(content, filename))
+            bg_tasks.append(parse_task)
+            while True:
+                done_set, _ = await asyncio.wait({parse_task}, timeout=heartbeat_seconds)
+                if done_set:
+                    break
+                yield _sse("heartbeat", {"stage": "extracting"})
             try:
-                markdown = await parse_document(content, filename)
+                markdown = parse_task.result()
             except Exception as e:  # noqa: BLE001
                 logger.error("Streaming upload: document parse failed: %s", e)
                 yield _sse(
@@ -1100,10 +1119,19 @@ async def upload_resume_stream(
                 original_markdown=markdown,
             )
 
-            # Stage 2: structure with the LLM (real boundary).
+            # Stage 2: structure with the LLM (real boundary). The LLM call is
+            # the slowest stage (often 30-90s); pump heartbeats while it runs so
+            # the Heroku router keeps the SSE connection open to completion.
             yield _sse("stage", {"stage": "structuring", "status": "active"})
+            struct_task = asyncio.ensure_future(_parse_resume_cached(user_id, markdown))
+            bg_tasks.append(struct_task)
+            while True:
+                done_set, _ = await asyncio.wait({struct_task}, timeout=heartbeat_seconds)
+                if done_set:
+                    break
+                yield _sse("heartbeat", {"stage": "structuring"})
             try:
-                processed_data = await _parse_resume_cached(user_id, markdown)
+                processed_data = struct_task.result()
                 await db.update_resume(
                     user_id,
                     resume["resume_id"],
@@ -1156,6 +1184,12 @@ async def upload_resume_stream(
         except Exception as e:  # noqa: BLE001 - defensive
             logger.exception("Streaming upload failed: %s", e)
             yield _sse("error", {"code": "stream_error", "message": "Upload failed; please retry."})
+        finally:
+            # If the client disconnected mid-stream, don't leak the parse/LLM
+            # tasks — cancel any that are still running.
+            for t in bg_tasks:
+                if not t.done():
+                    t.cancel()
 
     return StreamingResponse(
         event_gen(),

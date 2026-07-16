@@ -42,6 +42,22 @@ export class ApiError extends Error {
   }
 }
 
+/** True when a string is (or begins as) an HTML document. Infrastructure layers
+ * (Heroku router, proxies, CDNs) return HTML "Application Error" pages on 5xx;
+ * such text must NEVER be surfaced to the user as an error message. */
+export function looksLikeHtml(text: string): boolean {
+  return /^\s*(?:<!doctype html|<html|<!--|<head|<body|<\?xml)/i.test(text);
+}
+
+/** Generic, safe messages for well-known statuses, used when the body carries
+ * no usable JSON message (e.g. an edge/proxy HTML error page). */
+const STATUS_FALLBACKS: Record<number, string> = {
+  500: 'Something went wrong on our end. Please try again in a moment.',
+  502: 'The service is temporarily unavailable. Please try again in a moment.',
+  503: 'This feature is temporarily unavailable. Please try again in a moment.',
+  504: 'This took too long and timed out. Please try again.',
+};
+
 /** Friendly, human message for a rate-limit rejection, including a wait hint. */
 export function rateLimitMessage(retryAfter?: number): string {
   if (retryAfter && Number.isFinite(retryAfter) && retryAfter > 0) {
@@ -62,26 +78,37 @@ export async function parseError(
   fallbackMessage = 'Something went wrong. Please try again.'
 ): Promise<ApiError> {
   let code = 'error';
-  let message = fallbackMessage;
+  // Prefer a status-specific safe message over the generic fallback when the
+  // body has nothing usable (e.g. a Heroku HTML "Application Error" page).
+  let message = STATUS_FALLBACKS[response.status] ?? fallbackMessage;
   let details: unknown;
 
-  try {
-    const body = (await response.json()) as {
-      error?: { code?: string; message?: string; details?: unknown };
-      detail?: string | { code?: string; message?: string };
-    };
-    if (body?.error) {
-      code = body.error.code ?? code;
-      message = body.error.message ?? message;
-      details = body.error.details;
-    } else if (typeof body?.detail === 'string') {
-      message = body.detail;
-    } else if (body?.detail && typeof body.detail === 'object') {
-      code = body.detail.code ?? code;
-      message = body.detail.message ?? message;
+  // Read as text first so an HTML error page can never be mis-handled, then try
+  // JSON. This tolerates infrastructure 5xx pages that aren't valid JSON.
+  const raw = await response.text().catch(() => '');
+  if (raw.trim() && !looksLikeHtml(raw)) {
+    try {
+      const body = JSON.parse(raw) as {
+        error?: { code?: string; message?: string; details?: unknown };
+        detail?: string | { code?: string; message?: string };
+      };
+      if (body?.error) {
+        code = body.error.code ?? code;
+        if (typeof body.error.message === 'string') message = body.error.message;
+        details = body.error.details;
+      } else if (typeof body?.detail === 'string') {
+        message = body.detail;
+      } else if (body?.detail && typeof body.detail === 'object') {
+        code = body.detail.code ?? code;
+        if (typeof body.detail.message === 'string') message = body.detail.message;
+      }
+    } catch {
+      /* non-JSON body — keep the status/fallback message */
     }
-  } catch {
-    /* non-JSON body — keep the fallback message */
+  }
+  // Defense in depth: never let an HTML/looks-like-markup message escape.
+  if (looksLikeHtml(message)) {
+    message = STATUS_FALLBACKS[response.status] ?? fallbackMessage;
   }
 
   const retryHeader = response.headers.get('Retry-After');
@@ -105,8 +132,9 @@ export async function readJson<T>(response: Response, fallbackMessage?: string):
 
 /** Extract a user-facing string from any thrown value (Error, ApiError, etc.). */
 export function toMessage(err: unknown, fallback = 'Something went wrong.'): string {
-  if (err instanceof ApiError) return err.message;
-  if (err instanceof Error) return err.message;
-  if (typeof err === 'string') return err;
+  if (err instanceof ApiError) return looksLikeHtml(err.message) ? fallback : err.message;
+  if (err instanceof Error)
+    return err.message && !looksLikeHtml(err.message) ? err.message : fallback;
+  if (typeof err === 'string') return err && !looksLikeHtml(err) ? err : fallback;
   return fallback;
 }

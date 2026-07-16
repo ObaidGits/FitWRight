@@ -6,15 +6,15 @@ import logging
 import time
 from typing import Any
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
-from app.auth import get_optional_principal
+from app.auth import get_optional_principal, require_verified_user_id
 from app.config import settings
 from app.database import db
 from app.llm import LLMConfig, check_llm_health, get_llm_config
-from app.schemas import HealthResponse, StatusResponse
+from app.schemas import HealthResponse, SetupStatusResponse, StatusResponse
 
 logger = logging.getLogger(__name__)
 
@@ -176,6 +176,32 @@ async def _resolve_status_user_id(request: Request) -> str | None:
     from app.platform import get_container
 
     return await get_container().identity_provider().resolve_owner_fallback()
+
+
+@router.get("/setup/status", response_model=SetupStatusResponse)
+async def get_setup_status(
+    user_id: str = Depends(require_verified_user_id),
+) -> SetupStatusResponse:
+    """Return deterministic persisted onboarding facts for the current user.
+
+    This endpoint intentionally does NOT call the AI provider. Setup completion
+    means a provider is configured and a master resume exists; provider health
+    is operational state, not onboarding state. Keeping the two separate avoids
+    slow health probes, cache races, and transient provider outages sending an
+    established user back through first-time setup.
+    """
+    config = get_llm_config(user_id)
+    llm_configured = bool(config.api_key) or config.provider in (
+        "ollama",
+        "openai_compatible",
+    )
+    stats = await db.get_stats(user_id)
+    has_master_resume = bool(stats.get("has_master_resume"))
+    return SetupStatusResponse(
+        complete=llm_configured and has_master_resume,
+        llm_configured=llm_configured,
+        has_master_resume=has_master_resume,
+    )
 
 
 @router.get("/status", response_model=StatusResponse)

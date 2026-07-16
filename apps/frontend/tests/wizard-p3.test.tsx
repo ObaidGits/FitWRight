@@ -11,6 +11,11 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn() }),
 }));
 
+vi.mock('@tanstack/react-query', async (orig) => {
+  const actual = (await orig()) as Record<string, unknown>;
+  return { ...actual, useQueryClient: () => ({ invalidateQueries: vi.fn() }) };
+});
+
 vi.mock('@/features/home/hooks', () => ({
   useSystemStatus: () => ({ data: { llm_configured: true } }),
 }));

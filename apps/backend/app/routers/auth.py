@@ -1005,7 +1005,10 @@ async def oauth_callback(
 
     raw_token, session_info = await session_service.create_session(
         result.user_id,
-        remember_me=False,
+        # OAuth has no checkbox screen. Treat an explicit Google sign-in as a
+        # remembered session so it survives browser restarts like modern OAuth
+        # sessions; logout/security invalidation still revokes it immediately.
+        remember_me=True,
         ip=ip,
         user_agent=request.headers.get("user-agent"),
     )
@@ -1015,6 +1018,9 @@ async def oauth_callback(
 
     destination = _frontend_url(txn.next or "/home")
     response = RedirectResponse(destination, status_code=302)
-    _set_cookies(response, raw_token, session_info, remember_me=False)
+    # Keep the browser cookie lifetime aligned with the remembered DB session.
+    # Previously OAuth created a 30-day server row but emitted a 12-hour cookie,
+    # forcing Google users to sign in again while the server session was valid.
+    _set_cookies(response, raw_token, session_info, remember_me=True)
     _clear_txn_cookie(response)
     return response

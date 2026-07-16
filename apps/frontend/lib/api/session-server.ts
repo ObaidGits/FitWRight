@@ -1,49 +1,52 @@
 /**
- * Server-side authoritative session check (Task 8.1).
+ * Server-side authoritative session resolution.
  *
- * NOTE: this module is server-only by construction — it imports `next/headers`
- * (`cookies()`), which throws if ever pulled into a client bundle.
- *
- * The `(app)` and `admin` layouts call this per-request so the shell is
- * rendered with the real session state from the very first byte — no
- * unauthenticated flash, and no client round-trip before content shows.
- *
- * It reads the incoming request cookies (including the httpOnly
- * `__Host-session`, which the browser never exposes to JS) and forwards them to
- * the backend `GET /auth/session`. In `SINGLE_USER_MODE` there is no login wall,
- * so it returns the synthetic bootstrap owner — keeping local zero-config boot
- * identical to today (R14.3, R15.5).
- *
- * SECURITY NOTE: this is authoritative *for rendering*; the true access
- * boundary is always the backend enforcing `user_id` on every owned endpoint.
+ * Root + protected layouts both need the same answer. React `cache()` dedupes
+ * those calls within one server render, avoiding the previous two-request SSR
+ * waterfall through `/auth/session`.
  */
+import { cache } from 'react';
 import { cookies } from 'next/headers';
 import { API_BASE } from './client';
-import { SINGLE_USER_MODE } from '@/lib/config/auth';
+import { SESSION_COOKIE_NAMES, SINGLE_USER_MODE } from '@/lib/config/auth';
 import { OWNER_USER } from './session-owner';
 import type { SafeUser } from './auth';
 
 export { OWNER_USER };
 
 /**
- * Resolve the session on the server. Returns the {@link SafeUser} when
- * authenticated (or the owner in single-user mode), otherwise `null`.
+ * `resolved=true` distinguishes an authoritative guest (no cookie / backend
+ * 401) from a transient auth-service failure. Previously both collapsed to
+ * `null`, causing a redundant CSR probe on public pages and incorrect login
+ * redirects when the session database was temporarily unavailable.
  */
-export async function getServerSession(): Promise<SafeUser | null> {
-  if (SINGLE_USER_MODE) return OWNER_USER;
+export interface ServerSessionState {
+  user: SafeUser | null;
+  resolved: boolean;
+}
 
-  const cookieHeader = (await cookies()).toString();
-  if (!cookieHeader) return null;
+export const getServerSession = cache(async (): Promise<ServerSessionState> => {
+  if (SINGLE_USER_MODE) return { user: OWNER_USER, resolved: true };
+
+  const cookieStore = await cookies();
+  // A CSRF/theme/analytics cookie does not imply an authenticated session.
+  // Only call the backend when one of the actual session cookie names exists;
+  // otherwise a guest who previously visited /login incurs an unnecessary SSR
+  // auth round-trip on every public page.
+  const hasSessionCookie = SESSION_COOKIE_NAMES.some((name) => Boolean(cookieStore.get(name)));
+  if (!hasSessionCookie) return { user: null, resolved: true };
+
+  const cookieHeader = cookieStore.toString();
 
   try {
     const res = await fetch(`${API_BASE}/auth/session`, {
       headers: { cookie: cookieHeader },
       cache: 'no-store',
     });
-    if (!res.ok) return null;
-    return (await res.json()) as SafeUser;
+    if (res.status === 401) return { user: null, resolved: true };
+    if (!res.ok) return { user: null, resolved: false };
+    return { user: (await res.json()) as SafeUser, resolved: true };
   } catch {
-    // Backend unreachable during SSR — treat as guest; the client will retry.
-    return null;
+    return { user: null, resolved: false };
   }
-}
+});

@@ -21,6 +21,7 @@ on:
 jobs:
   postgres-pooler:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: apps/backend
@@ -64,9 +65,12 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
 
       - name: Sync backend dependencies
-        run: uv sync --frozen
+        # uv.lock is not committed (see .gitignore), so resolve from pyproject.
+        run: uv sync
 
       - name: Migrate schema on DIRECT connection
         run: ALEMBIC_DATABASE_URL="$DIRECT_URL" uv run python -m alembic upgrade head

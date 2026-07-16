@@ -442,7 +442,11 @@ class Settings(BaseSettings):
     # used when "remember me" is chosen (R2.6), and the idle timeout.
     session_absolute_ttl: int = 60 * 60 * 12  # 12 hours
     remember_me_ttl: int = 60 * 60 * 24 * 30  # 30 days
-    idle_ttl: int = 60 * 60 * 2  # 2 hours
+    # Ordinary sessions remain valid for their full 12-hour browser-cookie cap.
+    # Remembered sessions use REMEMBER_ME_TTL as both idle and absolute cap (see
+    # SessionService._idle_ttl), so "Keep me signed in" genuinely survives
+    # browser restarts/inactivity instead of dying after the old 2-hour window.
+    idle_ttl: int = 60 * 60 * 12  # 12 hours
 
     # Step-up ("sudo") window in seconds for sensitive actions (R9.1).
     step_up_window: int = 60 * 5  # 5 minutes

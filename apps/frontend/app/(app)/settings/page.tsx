@@ -5,6 +5,7 @@
  * Account. Wired to the existing config API. Replaces the legacy settings page.
  */
 import * as React from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import CheckCircle from 'lucide-react/dist/esm/icons/circle-check';
 import XCircle from 'lucide-react/dist/esm/icons/circle-x';
 
@@ -41,6 +42,7 @@ import {
   type SupportedLanguage,
 } from '@/lib/api/config';
 import { resetDatabase } from '@/lib/api/config';
+import { invalidateApplicationLists, invalidateResumeLists, queryKeys } from '@/lib/query/client';
 import { SINGLE_USER_MODE } from '@/lib/config/auth';
 import { AccountSecurity } from '@/components/settings/account-security';
 import { updateProfile } from '@/lib/api/auth';
@@ -392,6 +394,7 @@ function PreferencesSection() {
 
 function AccountSection() {
   const { toast } = useToast();
+  const qc = useQueryClient();
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [resetting, setResetting] = React.useState(false);
 
@@ -399,6 +402,12 @@ function AccountSection() {
     setResetting(true);
     try {
       await resetDatabase();
+      // Reset deletes resumes/applications and therefore changes persisted
+      // onboarding facts. Clear every affected list/status cache immediately;
+      // otherwise a later /home visit can reuse stale "setup complete" data.
+      invalidateResumeLists(qc);
+      invalidateApplicationLists(qc);
+      qc.invalidateQueries({ queryKey: queryKeys.status });
       toast({ title: 'All data reset', variant: 'success' });
       setConfirmOpen(false);
     } catch {

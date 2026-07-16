@@ -23,7 +23,8 @@ import { EmptyState, LoadingSkeleton, ErrorState } from '@/components/atelier/st
 import {
   useResumes,
   useApplications,
-  useSystemStatus,
+  useSetupStatus,
+  shouldShowFirstRun,
   flattenApplications,
 } from '@/features/home/hooks';
 import { useAgenda, flattenAgenda } from '@/features/agenda/hooks';
@@ -103,20 +104,21 @@ function statusBadge(status: string) {
 export default function HomePage() {
   const resumesQuery = useResumes();
   const appsQuery = useApplications();
-  const statusQuery = useSystemStatus();
+  const setupQuery = useSetupStatus();
   const agendaQuery = useAgenda();
   const upcoming = flattenAgenda(agendaQuery.data?.pages).slice(0, 3);
 
   const resumes = resumesQuery.data ?? [];
   const apps = flattenApplications(appsQuery.data);
-  const aiUnconfigured = statusQuery.data && !statusQuery.data.llm_configured;
+  const setup = setupQuery.data;
+  const aiUnconfigured = setup ? !setup.llm_configured : false;
   const failed = resumes.filter((r) => r.processing_status === 'failed');
   const recent = [...resumes]
     .sort((a, b) => (b.updated_at ?? '').localeCompare(a.updated_at ?? ''))
     .slice(0, 4);
   const mostRecent = recent[0];
 
-  if (resumesQuery.isLoading) {
+  if (resumesQuery.isLoading || setupQuery.isLoading) {
     return (
       <div className="space-y-6">
         <div className="h-9 w-56 animate-pulse rounded-[var(--radius-at-md)] bg-[var(--at-surface-2)]" />
@@ -125,29 +127,37 @@ export default function HomePage() {
     );
   }
 
-  if (resumesQuery.isError) {
+  if (resumesQuery.isError || setupQuery.isError) {
     return (
       <ErrorState
         description="Could not load your workspace."
-        onRetry={() => resumesQuery.refetch()}
+        onRetry={() => {
+          void resumesQuery.refetch();
+          void setupQuery.refetch();
+        }}
       />
     );
   }
 
-  // First-run: no resumes yet
-  if (resumes.length === 0) {
+  // First-run/setup is determined by the backend's persisted user-scoped facts,
+  // never by the visible resume list. The list intentionally excludes masters,
+  // which previously sent users whose only resume was their master back through
+  // onboarding. Provider health is also excluded: an outage is not first-time setup.
+  if (shouldShowFirstRun(setup)) {
     return (
       <div className="mx-auto max-w-2xl space-y-6 py-6">
         <div className="space-y-1 text-center">
           <h1 className="text-2xl font-semibold">Welcome to FitWright</h1>
           <p className="text-[var(--muted-foreground)]">
-            Start with your resume — upload one or build it with the wizard.
+            {setup.has_master_resume
+              ? 'Your resume is ready. Finish connecting an AI provider to start tailoring.'
+              : 'Start with your master resume — upload one or build it with the wizard.'}
           </p>
         </div>
 
         {/* Getting-started checklist — turns the dead-end into a guided path.
             Step 1 (AI key) is what a brand-new user is otherwise never told. */}
-        <FirstRunChecklist aiUnconfigured={Boolean(aiUnconfigured)} hasResume={false} />
+        <FirstRunChecklist aiUnconfigured={aiUnconfigured} hasResume={setup.has_master_resume} />
 
         {/* First-run AI-key guidance: without a key, upload parsing and the
             wizard will fail silently. Tell the user up front. */}
@@ -167,34 +177,36 @@ export default function HomePage() {
           </Card>
         )}
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Card className="p-6">
-            <Upload className="mb-3 h-6 w-6 text-[var(--primary)]" />
-            <h2 className="mb-1 text-base font-semibold">Upload a resume</h2>
-            <p className="mb-4 text-sm text-[var(--muted-foreground)]">
-              Start from a PDF or DOCX and we&apos;ll parse it into your master profile.
-            </p>
-            <Button asChild className="w-full">
-              <Link href="/import">Upload resume</Link>
-            </Button>
-          </Card>
-          <Card className="p-6">
-            <Wand className="mb-3 h-6 w-6 text-[var(--at-ai)]" />
-            <h2 className="mb-1 text-base font-semibold">Build with the wizard</h2>
-            <p className="mb-4 text-sm text-[var(--muted-foreground)]">
-              Answer a few questions and let AI assemble a strong first draft.
-            </p>
-            {aiUnconfigured ? (
-              <Button variant="outline" className="w-full" disabled title="Add an AI key first">
-                Add an AI key to use the wizard
+        {!setup.has_master_resume && (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Card className="p-6">
+              <Upload className="mb-3 h-6 w-6 text-[var(--primary)]" />
+              <h2 className="mb-1 text-base font-semibold">Upload a resume</h2>
+              <p className="mb-4 text-sm text-[var(--muted-foreground)]">
+                Start from a PDF or DOCX and we&apos;ll parse it into your master profile.
+              </p>
+              <Button asChild className="w-full">
+                <Link href="/import">Upload resume</Link>
               </Button>
-            ) : (
-              <Button asChild variant="outline" className="w-full">
-                <Link href="/wizard">Start wizard</Link>
-              </Button>
-            )}
-          </Card>
-        </div>
+            </Card>
+            <Card className="p-6">
+              <Wand className="mb-3 h-6 w-6 text-[var(--at-ai)]" />
+              <h2 className="mb-1 text-base font-semibold">Build with the wizard</h2>
+              <p className="mb-4 text-sm text-[var(--muted-foreground)]">
+                Answer a few questions and let AI assemble a strong first draft.
+              </p>
+              {aiUnconfigured ? (
+                <Button variant="outline" className="w-full" disabled title="Add an AI key first">
+                  Add an AI key to use the wizard
+                </Button>
+              ) : (
+                <Button asChild variant="outline" className="w-full">
+                  <Link href="/wizard">Start wizard</Link>
+                </Button>
+              )}
+            </Card>
+          </div>
+        )}
       </div>
     );
   }

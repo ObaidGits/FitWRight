@@ -15,7 +15,7 @@ import { Button } from '@/components/atelier/button';
 import { Card } from '@/components/atelier/card';
 import { useToast } from '@/components/atelier/toast';
 import { useSystemStatus } from '@/features/home/hooks';
-import { queryKeys } from '@/lib/query/client';
+import { invalidateResumeLists } from '@/lib/query/client';
 import {
   uploadResumeFile,
   streamUploadResumeFile,
@@ -59,7 +59,7 @@ export default function ImportPage() {
 
   const finishUpload = React.useCallback(
     (res: ResumeUploadResponse): boolean => {
-      qc.invalidateQueries({ queryKey: queryKeys.resumes });
+      invalidateResumeLists(qc);
       if (res.processing_status === 'failed') {
         // The file read fine (a genuinely unreadable/scanned file is rejected
         // upstream with its own message) — this state means AI *structuring*

@@ -11,6 +11,11 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: pushMock, replace: vi.fn(), back: vi.fn() }),
 }));
 
+vi.mock('@tanstack/react-query', async (orig) => {
+  const actual = (await orig()) as Record<string, unknown>;
+  return { ...actual, useQueryClient: () => ({ invalidateQueries: vi.fn() }) };
+});
+
 // Mutable status so each test can toggle whether a master already exists.
 let statusData: { llm_configured: boolean; has_master_resume?: boolean } = {
   llm_configured: true,

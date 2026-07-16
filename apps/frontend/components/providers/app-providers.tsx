@@ -20,14 +20,16 @@ import type { SafeUser } from '@/lib/api/auth';
 export function AppProviders({
   children,
   initialUser = null,
+  initialSessionResolved = false,
 }: {
   children: React.ReactNode;
   initialUser?: SafeUser | null;
+  initialSessionResolved?: boolean;
 }) {
   return (
     <QueryProvider>
       <ThemeProvider>
-        <SessionProvider initialUser={initialUser}>
+        <SessionProvider initialUser={initialUser} initialResolved={initialSessionResolved}>
           <ToastProvider>
             <RateLimitListener />
             <TooltipProvider delayDuration={200}>

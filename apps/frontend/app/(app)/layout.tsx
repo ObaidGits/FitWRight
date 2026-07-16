@@ -22,8 +22,13 @@ import { NOINDEX } from '@/lib/seo/metadata';
 export const metadata: Metadata = { robots: NOINDEX };
 
 export default async function AppGroupLayout({ children }: { children: React.ReactNode }) {
-  const user = await getServerSession();
-  if (!user) {
+  const session = await getServerSession();
+  if (!session.resolved) {
+    // Do not convert a transient auth DB/backend outage into a false logout.
+    // Throw into the app error boundary while preserving the browser cookie.
+    throw new Error('Authentication service is temporarily unavailable.');
+  }
+  if (!session.user) {
     const hdrs = await headers();
     const path = hdrs.get('x-invoke-path') || hdrs.get('x-pathname') || '/home';
     redirect(`/login?next=${encodeURIComponent(path)}`);

@@ -419,9 +419,16 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if raw_token:
             try:
                 resolved = await session_service.resolve(raw_token)
-            except Exception:  # pragma: no cover - resolution must not 500 a request
-                logger.warning("Session resolution failed", exc_info=True)
-                resolved = None
+            except Exception:
+                # A transient database/KV failure is NOT proof that the session
+                # is invalid. Returning 401/anonymous here made the frontend
+                # clear otherwise-valid auth state and forced a login. Fail as
+                # a retryable 503 instead; the cookie/session row remain intact.
+                logger.exception("Session resolution unavailable")
+                return _json_error(
+                    http_status.HTTP_503_SERVICE_UNAVAILABLE,
+                    "session_unavailable",
+                )
 
         principal = Principal.from_resolved(resolved) if resolved else None
         request.state.principal = principal

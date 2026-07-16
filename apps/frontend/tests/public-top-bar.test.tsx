@@ -41,11 +41,12 @@ describe('PublicTopBar', () => {
     expect(screen.queryByRole('link', { name: /^sign up$/i })).not.toBeInTheDocument();
   });
 
-  it('shows neither during hydration (loading)', () => {
+  it('shows Sign in / Sign up immediately while a session retry is loading', () => {
     sessionStatus = 'loading';
     render(<PublicTopBar />);
     expect(screen.queryByTestId('account-menu')).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /sign in/i })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: /sign in/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('link', { name: /sign up/i }).length).toBeGreaterThan(0);
     expect(screen.queryByRole('link', { name: /dashboard/i })).not.toBeInTheDocument();
   });
 });

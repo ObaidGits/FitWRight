@@ -75,6 +75,9 @@ AGENTS.md
 GEMINI.md
 CODEX.md
 
+# Local-only deploy notes (contain real secrets — never commit)
+HEROKU_DEPLOY_INSTRUCTIONS.md
+
 .DS_Store
 
 

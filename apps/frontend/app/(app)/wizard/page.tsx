@@ -11,6 +11,8 @@
  */
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
+import { invalidateResumeLists } from '@/lib/query/client';
 import ArrowLeft from 'lucide-react/dist/esm/icons/arrow-left';
 import ArrowRight from 'lucide-react/dist/esm/icons/arrow-right';
 import Wand from 'lucide-react/dist/esm/icons/wand-sparkles';
@@ -55,6 +57,7 @@ import {
 
 export default function WizardPage() {
   const router = useRouter();
+  const qc = useQueryClient();
   const { toast } = useToast();
   const statusQuery = useSystemStatus();
   const aiUnconfigured = statusQuery.data && !statusQuery.data.llm_configured;
@@ -179,6 +182,7 @@ export default function WizardPage() {
     setFinalizing(true);
     try {
       const res = await finalizeResumeWizard(state, makeMaster);
+      invalidateResumeLists(qc);
       setSaved(true);
       clearDraft();
       // Persist the template the user picked (shown in the live preview) onto

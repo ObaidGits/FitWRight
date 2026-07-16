@@ -142,6 +142,8 @@ OWNED_ENDPOINTS: list[tuple[str, str]] = [
     ("DELETE", "/api/v1/config/api-keys"),
     ("DELETE", "/api/v1/config/api-keys/prov"),
     ("POST", "/api/v1/config/reset"),
+    # deterministic onboarding facts are user-scoped (master + provider key)
+    ("GET", "/api/v1/setup/status"),
     # resume wizard (turn/assist are provider-cost — previously-unscoped routes)
     ("POST", "/api/v1/resume-wizard/turn"),
     ("POST", "/api/v1/resume-wizard/assist"),

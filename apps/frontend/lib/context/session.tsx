@@ -35,8 +35,10 @@ interface SessionContextValue {
   user: SafeUser | null;
   status: SessionStatus;
   isAdmin: boolean;
-  /** Re-fetch the session from the backend (after login/logout/profile change). */
+  /** Re-fetch the session from the backend (profile/security changes). */
   refresh: () => Promise<void>;
+  /** Seed the authenticated user returned by login/signup without a redundant request. */
+  establish: (user: SafeUser) => void;
   /** Log out (revoke server session) and route to /login. */
   signOut: () => Promise<void>;
 }
@@ -55,14 +57,21 @@ const STORAGE_LOGOUT_KEY = 'fitwright-auth-logout';
 export function SessionProvider({
   children,
   initialUser = null,
+  initialResolved = initialUser !== null,
 }: {
   children: React.ReactNode;
   initialUser?: SafeUser | null;
+  /** True when SSR authoritatively resolved either a user OR a guest. */
+  initialResolved?: boolean;
 }) {
   if (SINGLE_USER_MODE) {
     return <SingleUserSessionProvider>{children}</SingleUserSessionProvider>;
   }
-  return <MultiUserSessionProvider initialUser={initialUser}>{children}</MultiUserSessionProvider>;
+  return (
+    <MultiUserSessionProvider initialUser={initialUser} initialResolved={initialResolved}>
+      {children}
+    </MultiUserSessionProvider>
+  );
 }
 
 /** Local/zero-config: the owner is always signed in (admin). No hydration. */
@@ -73,6 +82,7 @@ function SingleUserSessionProvider({ children }: { children: React.ReactNode }) 
       status: 'authenticated',
       isAdmin: OWNER_USER.role === 'admin',
       refresh: async () => {},
+      establish: () => {},
       signOut: async () => {},
     }),
     []
@@ -83,9 +93,11 @@ function SingleUserSessionProvider({ children }: { children: React.ReactNode }) 
 function MultiUserSessionProvider({
   children,
   initialUser,
+  initialResolved,
 }: {
   children: React.ReactNode;
   initialUser: SafeUser | null;
+  initialResolved: boolean;
 }) {
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -94,11 +106,11 @@ function MultiUserSessionProvider({
   const query = useQuery({
     queryKey: SESSION_QUERY_KEY,
     queryFn: fetchSession,
-    // A real SSR user seeds the cache (no flash, no loading). `null` from SSR
-    // (guest or backend unreachable) leaves `initialData` undefined so the
-    // client does one authoritative fetch, surfacing a brief `loading` state
-    // rather than a wrong `guest` flash.
-    initialData: initialUser ?? undefined,
+    // `null` is valid initial data when SSR authoritatively found no cookie or
+    // received 401. Preserve it so public/auth pages render guest controls on
+    // first paint without a duplicate client request. Only an unresolved SSR
+    // backend failure leaves the query empty for a client retry.
+    initialData: initialResolved ? initialUser : undefined,
     staleTime: 60_000,
     gcTime: 5 * 60_000,
     retry: false,
@@ -160,6 +172,16 @@ function MultiUserSessionProvider({
     await queryClient.invalidateQueries({ queryKey: SESSION_QUERY_KEY });
   }, [queryClient]);
 
+  const establish = React.useCallback(
+    (authenticatedUser: SafeUser) => {
+      // Login/signup already returned the authoritative SafeUser and set the
+      // cookie. Seed it directly instead of blocking navigation on a redundant
+      // GET /auth/session round-trip.
+      queryClient.setQueryData(SESSION_QUERY_KEY, authenticatedUser);
+    },
+    [queryClient]
+  );
+
   const signOut = React.useCallback(async () => {
     try {
       await apiLogout();
@@ -185,9 +207,10 @@ function MultiUserSessionProvider({
       status,
       isAdmin: user?.role === 'admin',
       refresh,
+      establish,
       signOut,
     }),
-    [user, status, refresh, signOut]
+    [user, status, refresh, establish, signOut]
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

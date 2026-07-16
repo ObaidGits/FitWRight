@@ -3,6 +3,9 @@ name: CI
 # Verifies the codebase on every push/PR: backend test suite (SQLite), frontend
 # lint + unit tests + production build. Complements db-portability.yml (which
 # runs the Postgres + transaction-pooler integration proof).
+#
+# On a successful push to `main`, the `deploy` job builds the production Docker
+# image and releases it to Heroku's container registry (auto-deploy).
 
 on:
   push:
@@ -17,6 +20,7 @@ concurrency:
 jobs:
   backend:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: apps/backend
@@ -24,13 +28,21 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install uv
         uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
       - name: Sync dependencies
-        run: uv sync --frozen --extra dev
+        # `uv.lock` is not committed (see .gitignore), so `--frozen` cannot be
+        # used here — uv resolves from the pinned versions in pyproject.toml.
+        run: uv sync --extra dev
       - name: Run backend test suite
+        # LLM evals are excluded via pyproject addopts (`-m "not eval"`). The
+        # PDF/Playwright tests skip cleanly when Chromium is absent, so no
+        # browser install is needed in CI.
         run: uv run pytest -q
 
   frontend:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: apps/frontend
@@ -38,15 +50,15 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          # Node 24 (current LTS) matches the Dockerfile builder and .nvmrc. The
-          # committed package-lock.json is authored by npm 11 (Node 24); Node 22's
-          # npm 10 resolves optional wasm deps (@emnapi/*) differently and would
-          # reject it under `npm ci`. Keep this in lockstep with Dockerfile/.nvmrc.
+          # Node 24 matches the Dockerfile builder and .nvmrc.
           node-version: "24"
           cache: npm
           cache-dependency-path: apps/frontend/package-lock.json
       - name: Install dependencies
-        run: npm ci
+        # `npm install` (not `npm ci`) so platform-specific optional deps
+        # (sharp's @emnapi/*) resolve correctly regardless of the runner's npm
+        # version — the same approach the Dockerfile uses. Keeps CI reliable.
+        run: npm install --no-audit --no-fund
       - name: Lint
         run: npm run lint
       - name: Unit tests
@@ -55,3 +67,48 @@ jobs:
         run: npm run build
         env:
           NEXT_TELEMETRY_DISABLED: "1"
+
+  # Auto-deploy the container to Heroku on green pushes to main only.
+  # Requires the repository secret HEROKU_API_KEY (Heroku account → Account
+  # settings → API Key). Never runs on pull requests or forks (no secrets).
+  deploy:
+    needs: [backend, frontend]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      HEROKU_APP: fitwright
+      HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Guard — HEROKU_API_KEY must be set
+        run: |
+          if [ -z "${HEROKU_API_KEY}" ]; then
+            echo "::error::HEROKU_API_KEY secret is not set. Add it in repo Settings → Secrets → Actions."
+            exit 1
+          fi
+
+      - name: Log in to Heroku Container Registry
+        run: echo "${HEROKU_API_KEY}" | docker login --username=_ --password-stdin registry.heroku.com
+
+      - name: Build image
+        run: |
+          docker build \
+            --build-arg NEXT_PUBLIC_API_URL=/ \
+            --build-arg NEXT_PUBLIC_SINGLE_USER_MODE=false \
+            --build-arg NEXT_PUBLIC_SITE_URL=https://www.fitwright.tech \
+            -t registry.heroku.com/${HEROKU_APP}/web \
+            -f Dockerfile .
+
+      - name: Push image
+        run: docker push registry.heroku.com/${HEROKU_APP}/web
+
+      - name: Release image on Heroku
+        run: |
+          IMAGE_ID=$(docker inspect registry.heroku.com/${HEROKU_APP}/web --format={{.Id}})
+          curl -sf -X PATCH "https://api.heroku.com/apps/${HEROKU_APP}/formation" \
+            -H "Content-Type: application/json" \
+            -H "Accept: application/vnd.heroku+json; version=3.docker-releases" \
+            -H "Authorization: Bearer ${HEROKU_API_KEY}" \
+            -d "{\"updates\":[{\"type\":\"web\",\"docker_image\":\"${IMAGE_ID}\"}]}"

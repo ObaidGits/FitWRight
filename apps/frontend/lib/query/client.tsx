@@ -34,6 +34,7 @@ export const queryKeys = {
   applications: ['applications'] as const,
   application: (id: string) => ['applications', id] as const,
   status: ['status'] as const,
+  setup: ['setup', 'status'] as const,
   config: ['config'] as const,
   // P3 productivity surfaces.
   agenda: ['agenda'] as const,
@@ -64,6 +65,8 @@ export function invalidateResumeLists(qc: import('@tanstack/react-query').QueryC
   qc.invalidateQueries({ queryKey: queryKeys.resumes, exact: true });
   qc.invalidateQueries({ queryKey: [...queryKeys.resumes, 'library'] });
   qc.invalidateQueries({ queryKey: [...queryKeys.resumes, 'tailor-sources'] });
+  // Creating/deleting/changing the master resume changes deterministic setup.
+  qc.invalidateQueries({ queryKey: queryKeys.setup });
 }
 
 /** Refresh the application LIST surfaces (board + home count), not the detail. */

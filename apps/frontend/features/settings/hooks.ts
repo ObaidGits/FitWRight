@@ -2,6 +2,7 @@
 
 /** Settings data hooks (Task 13) — wrap the existing config API via Query. */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '@/lib/query/client';
 import {
   fetchLlmConfig,
   updateLlmConfig,
@@ -40,7 +41,8 @@ export function useUpdateLlmConfig() {
     mutationFn: (u: LLMConfigUpdate) => updateLlmConfig(u),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['config'] });
-      qc.invalidateQueries({ queryKey: ['status'] });
+      qc.invalidateQueries({ queryKey: queryKeys.status });
+      qc.invalidateQueries({ queryKey: queryKeys.setup });
     },
   });
 }
@@ -77,7 +79,8 @@ export function useUpdateApiKeys() {
     mutationFn: (keys: ApiKeysUpdateRequest) => updateApiKeys(keys),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['config'] });
-      qc.invalidateQueries({ queryKey: ['status'] });
+      qc.invalidateQueries({ queryKey: queryKeys.status });
+      qc.invalidateQueries({ queryKey: queryKeys.setup });
     },
   });
 }

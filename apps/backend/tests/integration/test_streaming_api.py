@@ -336,6 +336,46 @@ class TestStreamingUpload:
         assert resp.status_code == 409
         assert resp.json()["error"]["code"] == "streaming_disabled"
 
+    async def test_slow_parse_emits_heartbeats(
+        self, client, enable_streaming, isolated_db, monkeypatch
+    ):
+        """A slow parse/LLM stage MUST emit SSE heartbeats so the connection
+        never idles past a platform router timeout (Heroku H15/H28). This is the
+        regression guard for the intermittent Heroku "Application Error" on
+        upload: without heartbeats a 30-90s LLM structuring call sends no bytes
+        and the router severs the stream mid-parse."""
+        import asyncio as _asyncio
+        from unittest.mock import AsyncMock
+
+        # Tight heartbeat cadence so the test is fast; parse sleeps past it.
+        monkeypatch.setattr(
+            resumes_mod.settings, "stream_heartbeat_seconds", 0.05, raising=False
+        )
+
+        async def _slow_parse(*_a, **_k):
+            await _asyncio.sleep(0.2)
+            return "# Jane Doe\nEngineer"
+
+        monkeypatch.setattr(resumes_mod, "parse_document", _slow_parse)
+        monkeypatch.setattr(
+            resumes_mod,
+            "parse_resume_to_json",
+            AsyncMock(return_value={"personalInfo": {"name": "Jane Doe"}}),
+        )
+        async with client:
+            resp = await client.post(
+                "/api/v1/resumes/upload/stream",
+                files={"file": ("resume.pdf", b"%PDF-1.4 fake", "application/pdf")},
+            )
+        assert resp.status_code == 200
+        events = _parse_sse(resp.text)
+        heartbeats = [d for e, d in events if e == "heartbeat"]
+        assert heartbeats, "expected at least one heartbeat during the slow parse"
+        assert any(h.get("stage") == "extracting" for h in heartbeats)
+        # The stream still completes normally after the slow stage.
+        done = [d for e, d in events if e == "done"]
+        assert done and done[0]["result"]["processing_status"] == "ready"
+
     async def test_empty_text_emits_error_event(
         self, client, enable_streaming, isolated_db, monkeypatch
     ):

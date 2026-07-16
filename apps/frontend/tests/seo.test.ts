@@ -68,8 +68,8 @@ describe('config', () => {
     expect(TWITTER_IMAGE).toBe('/twitter-image');
   });
 
-  it('emits no verification tokens by default (no bogus meta tags)', () => {
-    expect(VERIFICATION.google).toBeUndefined();
+  it('ships the verified Google production token without bogus optional tokens', () => {
+    expect(VERIFICATION.google).toMatch(/\S+/);
     expect(VERIFICATION.bing).toBeUndefined();
     expect(VERIFICATION.yandex).toBeUndefined();
   });

@@ -202,3 +202,40 @@ class TestStatusLlmHealthCache:
             )()
             await client.get("/api/v1/status")
         assert mock_health.await_count == 2
+
+
+class TestSetupStatusEndpoint:
+    """GET /api/v1/setup/status — deterministic persisted onboarding facts."""
+
+    @patch("app.routers.health.check_llm_health", new_callable=AsyncMock)
+    @patch("app.routers.health.db", new_callable=AsyncMock)
+    @patch("app.routers.health.get_llm_config")
+    async def test_complete_for_configured_user_with_master(
+        self, mock_config, mock_db, mock_health, client
+    ):
+        mock_config.return_value = type("C", (), {"api_key": "sk-test", "provider": "openai"})()
+        mock_db.get_stats.return_value = {"has_master_resume": True}
+        async with client:
+            resp = await client.get("/api/v1/setup/status")
+        assert resp.status_code == 200
+        assert resp.json() == {
+            "complete": True,
+            "llm_configured": True,
+            "has_master_resume": True,
+        }
+        # Setup detection must never wait on or be changed by provider health.
+        mock_health.assert_not_awaited()
+
+    @patch("app.routers.health.db", new_callable=AsyncMock)
+    @patch("app.routers.health.get_llm_config")
+    async def test_incomplete_reports_exact_missing_facts(self, mock_config, mock_db, client):
+        mock_config.return_value = type("C", (), {"api_key": "", "provider": "openai"})()
+        mock_db.get_stats.return_value = {"has_master_resume": True}
+        async with client:
+            resp = await client.get("/api/v1/setup/status")
+        assert resp.status_code == 200
+        assert resp.json() == {
+            "complete": False,
+            "llm_configured": False,
+            "has_master_resume": True,
+        }

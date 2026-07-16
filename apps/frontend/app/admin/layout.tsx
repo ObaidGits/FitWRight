@@ -18,13 +18,18 @@ import { NOINDEX } from '@/lib/seo/metadata';
 export const metadata: Metadata = { robots: NOINDEX };
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const user = await getServerSession();
-  if (!user) {
+  const session = await getServerSession();
+  if (!session.resolved) {
+    // A transient session-store/backend outage is not evidence of logout or
+    // lost admin rights. Preserve the cookie and render the error boundary.
+    throw new Error('Authentication service is temporarily unavailable.');
+  }
+  if (!session.user) {
     const hdrs = await headers();
     const path = hdrs.get('x-invoke-path') || hdrs.get('x-pathname') || '/admin';
     redirect(`/login?next=${encodeURIComponent(path)}`);
   }
-  if (user.role !== 'admin') {
+  if (session.user.role !== 'admin') {
     redirect('/home');
   }
   return <AdminShell>{children}</AdminShell>;

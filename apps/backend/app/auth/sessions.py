@@ -218,6 +218,18 @@ class SessionService:
             self._settings.remember_me_ttl if remember_me else self._settings.session_absolute_ttl
         )
 
+    def _idle_ttl(self, remember_me: bool) -> int:
+        """Effective idle window for this session class.
+
+        A remembered session must actually survive browser revisits: previously
+        ``remember_me`` extended only the absolute cap/cookie while the database
+        row still expired after the ordinary two-hour idle window. That made the
+        30-day cookie misleading and forced a login after inactivity. Remembered
+        sessions use their 30-day cap as the idle window; ordinary sessions keep
+        the shorter configured idle policy.
+        """
+        return self._settings.remember_me_ttl if remember_me else self._settings.idle_ttl
+
     def hash_ip(self, ip: str | None) -> str | None:
         """Keyed-HMAC of a client IP using ``IP_HASH_SECRET`` (R12.5).
 
@@ -253,7 +265,15 @@ class SessionService:
         token_hash = hash_token(raw_token)
         now = self._now()
         now_iso = now.isoformat()
-        expires_at = (now + timedelta(seconds=self._settings.idle_ttl)).isoformat()
+        # Initial expiry must use the same policy as sliding renewal. Before this
+        # fix every session—including remember-me/OAuth—started with ordinary
+        # ``idle_ttl``, so a 30-day cookie pointed at a DB row that died in 2h.
+        expires_at = (
+            now
+            + timedelta(
+                seconds=min(self._idle_ttl(remember_me), self._absolute_ttl(remember_me))
+            )
+        ).isoformat()
 
         row = SessionRow(
             id=str(uuid4()),
@@ -506,8 +526,8 @@ class SessionService:
         return (now - last_seen).total_seconds() >= self._refresh_window
 
     def _extend_expiry(self, row: SessionRow, now: datetime) -> str:
-        """New ``expires_at`` = min(now + idle_ttl, created_at + absolute_cap)."""
-        idle_deadline = now + timedelta(seconds=self._settings.idle_ttl)
+        """New expiry = min(class-specific idle deadline, absolute cap)."""
+        idle_deadline = now + timedelta(seconds=self._idle_ttl(row.remember_me))
         try:
             created = _parse_iso(row.created_at)
         except ValueError:

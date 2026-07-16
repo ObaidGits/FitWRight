@@ -85,7 +85,18 @@ describe('SessionProvider — multi-user mode', () => {
     expect(screen.getByTestId('name').textContent).toBe('Ada');
   });
 
-  it('shows loading then authenticated when hydrating from the backend', async () => {
+  it('uses an SSR-resolved guest immediately without a client session request', () => {
+    fetchSessionMock.mockResolvedValue(null);
+    renderWithClient(
+      <SessionProvider initialUser={null} initialResolved>
+        <Probe />
+      </SessionProvider>
+    );
+    expect(screen.getByTestId('status').textContent).toBe('guest');
+    expect(fetchSessionMock).not.toHaveBeenCalled();
+  });
+
+  it('shows loading then authenticated when SSR could not reach the backend', async () => {
     let resolve!: (u: typeof USER) => void;
     fetchSessionMock.mockReturnValue(new Promise((r) => (resolve = r)));
     renderWithClient(

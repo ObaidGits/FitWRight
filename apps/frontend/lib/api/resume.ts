@@ -19,6 +19,7 @@ import {
   apiFetch,
   readCsrfToken,
 } from './client';
+import { ApiError, parseError } from './errors';
 import { SseDecoder, type SseEvent, type StreamTransport } from '@/lib/resilience/stream-client';
 
 // Matches backend schemas/models.py ResumeData
@@ -183,17 +184,34 @@ async function postImprove(
     throw networkError;
   }
 
-  const text = await response.text();
   if (!response.ok) {
-    console.error('Improve failed response body:', text);
-    throw new Error(`Improve failed with status ${response.status}: ${text}`);
+    // NEVER surface the raw body: a 5xx from the Heroku router is an HTML
+    // "Application Error" page, and throwing it as the error message would
+    // render raw HTML in the UI. `parseError` yields a clean, typed, user-facing
+    // ApiError (status-specific message for 5xx, envelope/detail when present).
+    throw await parseError(
+      response,
+      'Resume tailoring is temporarily unavailable. Please try again in a moment.'
+    );
   }
 
+  const text = await response.text().catch(() => '');
   try {
     return JSON.parse(text) as ImprovedResult;
-  } catch (parseError) {
-    console.error('Failed to parse improve response:', parseError, 'Raw response:', text);
-    throw parseError;
+  } catch (parseErr) {
+    console.error(
+      'Failed to parse improve response:',
+      parseErr,
+      'Raw response:',
+      text.slice(0, 500)
+    );
+    // A 2xx with a non-JSON body (e.g. an edge/proxy returned HTML) — surface a
+    // safe, typed error rather than leaking the body or a bare SyntaxError.
+    throw new ApiError(
+      'malformed_response',
+      'The server returned an unexpected response. Please try again.',
+      response.status
+    );
   }
 }
 

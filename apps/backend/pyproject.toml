@@ -39,6 +39,7 @@ app = "app.main:main"
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.24.0",
+    "pytest-timeout>=2.3.0",
     "httpx>=0.28.0",
     "respx>=0.21.1",
 ]
@@ -72,6 +73,9 @@ asyncio_mode = "auto"
 addopts = [
     "--strict-markers",
     "-v",
+    # Safety net: no single test may hang the suite/CI. A stuck test fails after
+    # 120s (signal method interrupts blocked I/O) instead of blocking forever.
+    "--timeout=120",
     # Exclude LLM-as-judge evals from the default run (they may call a real
     # provider and are non-deterministic). Run them on demand with `-m eval`.
     "-m",
