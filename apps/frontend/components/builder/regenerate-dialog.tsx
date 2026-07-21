@@ -31,7 +31,7 @@ const sectionHeaderCls =
   'flex w-full items-center justify-between p-4 transition-colors bg-[var(--card)] hover:bg-[var(--accent)]';
 
 /**
- * RegenerateDialog Component — first step of the regenerate wizard. Lets the
+ * RegenerateDialog Component - first step of the regenerate wizard. Lets the
  * user select which resume items to regenerate.
  */
 export const RegenerateDialog: React.FC<RegenerateDialogProps> = ({

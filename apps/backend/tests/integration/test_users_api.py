@@ -108,7 +108,7 @@ class TestDeviceSessions:
         assert set(entry) == {"id", "deviceLabel", "ipHash", "createdAt", "lastSeenAt", "current"}
 
     async def test_revoke_one_session(self, auth_env):
-        # Two independent logins → two active sessions for the same user.
+        # Two independent logins -> two active sessions for the same user.
         async with _client() as client_a, _client() as client_b:
             record = await _login_new_user(client_a, auth_env, "multi@example.com")
             assert (await _login(client_b, "multi@example.com")).status_code == 200
@@ -125,7 +125,7 @@ class TestDeviceSessions:
         assert remaining[0]["current"] is True
 
     async def test_revoke_foreign_session_is_404(self, auth_env):
-        # user A's client tries to revoke user B's session id → 404 (no disclosure).
+        # user A's client tries to revoke user B's session id -> 404 (no disclosure).
         other = await _seed_active_user(auth_env, "victim@example.com")
         async with _client() as attacker_client, _client() as victim_client:
             await _login_new_user(attacker_client, auth_env, "attacker@example.com")

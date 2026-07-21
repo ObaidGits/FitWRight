@@ -1,12 +1,12 @@
 # Bundle Size Optimization (CRITICAL)
 
-> Sibling docs: [waterfalls](01-waterfalls.md) · [server actions security](03-server-actions-security.md) · [server-side perf](04-server-side-perf.md) · [checklist](checklist.md)
+> Sibling docs: [waterfalls](01-waterfalls.md) - [server actions security](03-server-actions-security.md) - [server-side perf](04-server-side-perf.md) - [checklist](checklist.md)
 
 ---
 
 ## Why bundles bloat silently
 
-Modern JS libraries ship as **barrel files** — single index.js entry points that re-export everything. When you `import { Foo } from 'big-lib'`, the bundler often pulls in the *entire* library, even though you only use one symbol. This adds 200–800ms to cold starts and balloons your client bundle.
+Modern JS libraries ship as **barrel files** - single index.js entry points that re-export everything. When you `import { Foo } from 'big-lib'`, the bundler often pulls in the *entire* library, even though you only use one symbol. This adds 200-800ms to cold starts and balloons your client bundle.
 
 The fixes are simple, mechanical, and high-impact.
 
@@ -17,10 +17,10 @@ The fixes are simple, mechanical, and high-impact.
 The single most expensive line of code in many projects is a one-line icon import.
 
 ```tsx
-// ❌ BAD: Loads ~1,583 modules from lucide-react
+// BAD: Loads ~1,583 modules from lucide-react
 import { FileText, Upload, Check } from 'lucide-react';
 
-// ✅ GOOD: Direct deep imports — loads only 3 modules
+// GOOD: Direct deep imports - loads only 3 modules
 import FileText from 'lucide-react/dist/esm/icons/file-text';
 import Upload from 'lucide-react/dist/esm/icons/upload';
 import Check from 'lucide-react/dist/esm/icons/check';
@@ -46,7 +46,7 @@ module.exports = {
 };
 ```
 
-This is the lower-effort path. Use it if you can — fall back to manual deep imports only for libraries Next.js doesn't recognize.
+This is the lower-effort path. Use it if you can - fall back to manual deep imports only for libraries Next.js doesn't recognize.
 
 ### Commonly affected libraries
 
@@ -67,7 +67,7 @@ If you're importing from any of these, audit it.
 Some components are huge (editors, charts, video players, PDF renderers) and only used in specific flows. Don't ship them on the initial page load.
 
 ```tsx
-// ❌ BAD: Monaco editor loads on every page (2MB+)
+// BAD: Monaco editor loads on every page (2MB+)
 import { MonacoEditor } from '@/components/monaco-editor';
 
 export default function EditorPage() {
@@ -75,7 +75,7 @@ export default function EditorPage() {
   return showEditor ? <MonacoEditor /> : <Preview />;
 }
 
-// ✅ GOOD: Load Monaco only when the user actually needs it
+// GOOD: Load Monaco only when the user actually needs it
 import dynamic from 'next/dynamic';
 
 const MonacoEditor = dynamic(
@@ -109,10 +109,10 @@ When in doubt: if it's a click-to-open editor or modal, set `ssr: false`.
 
 ## 2.3 Defer third-party scripts
 
-Analytics, error tracking, A/B testing — none of these need to block hydration.
+Analytics, error tracking, A/B testing - none of these need to block hydration.
 
 ```tsx
-// ❌ BAD: Analytics blocks hydration
+// BAD: Analytics blocks hydration
 import { Analytics } from '@vercel/analytics/react';
 
 export default function RootLayout({ children }) {
@@ -126,7 +126,7 @@ export default function RootLayout({ children }) {
   );
 }
 
-// ✅ GOOD: Lazy-load after hydration
+// GOOD: Lazy-load after hydration
 import dynamic from 'next/dynamic';
 
 const Analytics = dynamic(
@@ -148,7 +148,7 @@ import Script from 'next/script';
 
 | Strategy | When it loads | Use for |
 |----------|---------------|---------|
-| `beforeInteractive` | Before page is interactive | Polyfills only — almost never |
+| `beforeInteractive` | Before page is interactive | Polyfills only - almost never |
 | `afterInteractive` | Right after hydration | Tag managers, A/B test SDKs |
 | `lazyOnload` | During browser idle time | Analytics, chat widgets, social embeds |
 | `worker` (experimental) | In a web worker | Heavy tracking scripts |
@@ -175,8 +175,8 @@ If any route shows >300KB First Load JS, you almost certainly have a barrel impo
 
 ## When to apply
 
-- **Always** for icon libraries — there is never a reason to barrel-import 1,500 icons to use 3
+- **Always** for icon libraries - there is never a reason to barrel-import 1,500 icons to use 3
 - **Always** for analytics, error tracking, chat widgets, social embed scripts
-- **When a route exceeds ~250KB First Load JS** — start hunting for heavy components to lazy-load
+- **When a route exceeds ~250KB First Load JS** - start hunting for heavy components to lazy-load
 
-Next: [03-server-actions-security.md](03-server-actions-security.md) covers a smaller but critical category — auth boundaries inside Server Actions.
+Next: [03-server-actions-security.md](03-server-actions-security.md) covers a smaller but critical category - auth boundaries inside Server Actions.

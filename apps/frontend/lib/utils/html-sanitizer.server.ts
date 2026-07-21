@@ -7,7 +7,7 @@ import sanitizeHtmlLib from 'sanitize-html';
  * `isomorphic-dompurify` dragged jsdom (~6.7 MB / 900+ files) into the Server
  * Component graph of every resume/print/builder/wizard route; sanitize-html is
  * a mature, audited, DOM-free allow-list sanitizer (~1 MB with deps) that never
- * ships to the browser (see `#html-sanitizer-impl` in package.json — the client
+ * ships to the browser (see `#html-sanitizer-impl` in package.json - the client
  * gets native DOMPurify instead).
  *
  * Whitelist and behavior are kept identical to the browser path and verified by

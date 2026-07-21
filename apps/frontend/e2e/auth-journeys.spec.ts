@@ -6,9 +6,9 @@ import { STORAGE_STATE } from './auth.setup';
  *
  * DETERMINISTIC BY DEFAULT: the frontend talks to the backend over same-origin
  * `/api/v1/*`, so every auth call is mocked at the network boundary with
- * Playwright `page.route`. That lets the client journeys (login, signup→verify,
- * forgot→reset, Google via a mocked IdP redirect) run against the real frontend
- * pages without a backend, real Google, or real email — so the default
+ * Playwright `page.route`. That lets the client journeys (login, signup->verify,
+ * forgot->reset, Google via a mocked IdP redirect) run against the real frontend
+ * pages without a backend, real Google, or real email - so the default
  * `npx playwright test` run is stable and quota-free.
  *
  * HOSTED-ONLY journeys (route guards, multi-tab logout, device revoke on the
@@ -22,23 +22,23 @@ import { STORAGE_STATE } from './auth.setup';
  * Real external services stay gated too: set `RUN_AUTH_E2E=1` only with a real
  * Google IdP + real email provider to run the (documented) real-service checks.
  *
- * ── Running the gated hosted journeys ──────────────────────────────────────
+ * -- Running the gated hosted journeys --------------------------------------
  * The hosted-only describe block below runs only with a real hosted stack up.
  * The Playwright global setup (`e2e/auth.setup.ts`) does the auth bootstrap for
  * you: when `RUN_AUTH_E2E=1` it performs a real signup/login through the backend
  * to establish the session cookie (persisted as `storageState`) and a SECOND
  * login to seed a 2nd device for the revoke test. Bring the stack up under ONE
- * origin (the frontend proxies `/api/v1` to the backend — the `__Host-session`
+ * origin (the frontend proxies `/api/v1` to the backend - the `__Host-session`
  * cookie is same-origin + HTTPS-only) and run it like so:
  *
  *   1. Postgres:   docker run --rm -p 5432:5432 -e POSTGRES_PASSWORD=pw \
  *                    -e POSTGRES_DB=fitwright postgres:16-alpine
- *   2. Backend (hosted mode), from apps/backend — verification OFF so the seed
+ *   2. Backend (hosted mode), from apps/backend - verification OFF so the seed
  *      signup activates immediately (no mailbox needed):
  *        SINGLE_USER_MODE=false EMAIL_VERIFICATION=false \
  *        DATABASE_URL=postgresql+asyncpg://postgres:pw@127.0.0.1:5432/fitwright \
  *        uv run alembic upgrade head && uv run app        # serves :8000
- *   3. Frontend (hosted mode), from apps/frontend — same-origin proxy to :8000:
+ *   3. Frontend (hosted mode), from apps/frontend - same-origin proxy to :8000:
  *        NEXT_PUBLIC_SINGLE_USER_MODE=false \
  *        npm run build && npm run start                   # serves :3000, proxies /api/v1
  *   4. Run the gated subset (the global setup seeds the session + 2nd device):
@@ -49,10 +49,10 @@ import { STORAGE_STATE } from './auth.setup';
  * `__Host-`/Secure caveat: browsers only accept the `__Host-session` cookie over
  * HTTPS, so the seed step needs a TLS origin (a local TLS proxy, or CI's TLS). For
  * a plain-HTTP local smoke run, set the backend COOKIE_SECURE=false with a
- * non-`__Host-` SESSION_COOKIE_NAME (e.g. `session`) — the setup detects both.
+ * non-`__Host-` SESSION_COOKIE_NAME (e.g. `session`) - the setup detects both.
  *
  * Without `RUN_AUTH_E2E=1` these are skipped, the global setup is a no-op, and the
- * deterministic block above runs standalone (no backend, no network) — the
+ * deterministic block above runs standalone (no backend, no network) - the
  * default CI path.
  */
 
@@ -77,7 +77,7 @@ function jsonRoute(route: Route, body: unknown, status = 200, setCookie?: string
 
 /**
  * Install the mocked backend auth surface. `overrides` lets a test change a
- * single endpoint's behaviour (e.g. login → 401) while keeping the rest.
+ * single endpoint's behaviour (e.g. login -> 401) while keeping the rest.
  */
 async function mockAuthApi(
   page: Page,
@@ -107,10 +107,10 @@ async function mockAuthApi(
 }
 
 // ---------------------------------------------------------------------------
-// Deterministic client journeys (mocked backend) — always run
+// Deterministic client journeys (mocked backend) - always run
 // ---------------------------------------------------------------------------
 
-test.describe('auth journeys — deterministic (mocked backend)', () => {
+test.describe('auth journeys - deterministic (mocked backend)', () => {
   test('login (+ remember me) submits credentials and navigates to next', async ({ page }) => {
     let loginBody: Record<string, unknown> | null = null;
     await mockAuthApi(page, {
@@ -151,7 +151,7 @@ test.describe('auth journeys — deterministic (mocked backend)', () => {
     await expect(page.getByLabel('Password', { exact: true })).toHaveValue('');
   });
 
-  test('signup → pending verification → verify landing → home', async ({ page }) => {
+  test('signup -> pending verification -> verify landing -> home', async ({ page }) => {
     await mockAuthApi(page, {
       '**/api/v1/auth/signup': (route) => jsonRoute(route, { status: 'pending_verification' }),
     });
@@ -166,14 +166,14 @@ test.describe('auth journeys — deterministic (mocked backend)', () => {
     await page.waitForURL('**/verify**', { timeout: 15_000 });
     await expect(page.getByRole('heading', { name: /confirm your email/i })).toBeVisible();
 
-    // Following the emailed link (?token=…) redeems it and confirms success.
+    // Following the emailed link (?token=...) redeems it and confirms success.
     await page.goto('/verify?token=verif-token');
     await expect(page.getByText(/your email is verified/i)).toBeVisible();
     await page.getByRole('button', { name: /continue/i }).click();
     await page.waitForURL('**/home', { timeout: 15_000 });
   });
 
-  test('forgot → reset → home (uniform confirmation, then new password)', async ({ page }) => {
+  test('forgot -> reset -> home (uniform confirmation, then new password)', async ({ page }) => {
     let resetBody: Record<string, unknown> | null = null;
     await mockAuthApi(page, {
       '**/api/v1/auth/password/reset': (route) => {
@@ -217,7 +217,7 @@ test.describe('auth journeys — deterministic (mocked backend)', () => {
 
   test('Google sign-in redirects top-level through a mocked IdP to home', async ({ page }) => {
     await mockAuthApi(page);
-    // Mock the backend OAuth start → (IdP round-trip) → redirect back to /home,
+    // Mock the backend OAuth start -> (IdP round-trip) -> redirect back to /home,
     // i.e. a mocked IdP at the network boundary (no real Google).
     await page.route('**/api/v1/auth/oauth/google/start**', (route) =>
       route.fulfill({ status: 302, headers: { location: '/home' }, body: '' })
@@ -240,7 +240,7 @@ test.describe('auth journeys — deterministic (mocked backend)', () => {
 // Hosted-only journeys (need NEXT_PUBLIC_SINGLE_USER_MODE=false + backend)
 // ---------------------------------------------------------------------------
 
-test.describe('auth journeys — hosted stack (SSR guards + session provider)', () => {
+test.describe('auth journeys - hosted stack (SSR guards + session provider)', () => {
   test.skip(
     !HOSTED,
     'Set RUN_AUTH_E2E=1 with the hosted-mode stack (NEXT_PUBLIC_SINGLE_USER_MODE=false + backend) to run these.'
@@ -299,7 +299,7 @@ test.describe('auth journeys — hosted stack (SSR guards + session provider)', 
   test('step-up is required on password change and unblocks after re-auth', async ({ page }) => {
     await page.goto('/settings');
     await page.getByRole('tab', { name: /account|security/i }).click();
-    // Fill ALL three fields — the client blocks the submit (and never reaches
+    // Fill ALL three fields - the client blocks the submit (and never reaches
     // the step-up challenge) if the confirmation is missing or mismatched.
     // Exact labels disambiguate "New password" from "Confirm new password".
     await page.getByLabel('Current password').fill('current-passphrase-1');

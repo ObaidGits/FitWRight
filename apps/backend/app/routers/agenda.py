@@ -70,7 +70,7 @@ async def get_agenda(
 
 
 def _cursor_n(cursor: str | None) -> int:
-    """Decode the simple offset cursor (defensive: bad cursor → 0)."""
+    """Decode the simple offset cursor (defensive: bad cursor -> 0)."""
     if not cursor:
         return 0
     try:

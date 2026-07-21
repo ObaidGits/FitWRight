@@ -1,4 +1,4 @@
-# WYSIWYG Resume Rendering — One Renderer, Preview = Export
+# WYSIWYG Resume Rendering - One Renderer, Preview = Export
 
 The resume preview and the exported PDF are produced by a single renderer, so
 what the user sees on screen matches the downloaded document. This document
@@ -13,15 +13,15 @@ snapshotting it:
 
 ```
 GET /resumes/{id}/pdf                     (apps/backend/app/routers/resumes.py)
-  → builds URL: {frontend}/print/resumes/{id}?<template settings as query>
-  → render_resume_pdf(url, pageSize, margins)          (apps/backend/app/pdf.py)
-      → Chromium goto → wait .resume-print + fonts + images → page.pdf(format, margins)
+  -> builds URL: {frontend}/print/resumes/{id}?<template settings as query>
+  -> render_resume_pdf(url, pageSize, margins)          (apps/backend/app/pdf.py)
+      -> Chromium goto -> wait .resume-print + fonts + images -> page.pdf(format, margins)
 ```
 
 The print page renders the canonical `Resume` renderer:
 
 ```
-/print/resumes/[id]  →  <div class="resume-print"><Resume settings={marginsZeroed} .../>
+/print/resumes/[id]  ->  <div class="resume-print"><Resume settings={marginsZeroed} .../>
 ```
 
 Key fact: **margins are applied by Playwright as real PDF page margins**, so the
@@ -35,37 +35,37 @@ prevents:
 
 | # | Divergence | Why it caused "surprise after download" |
 | --- | --- | --- |
-| A | Preview used a **separate wrapper** (`RenderTemplate`) with its own template→component switch; PDF used `Resume`. Two mappings drift. | Section/label/i18n differences |
+| A | Preview used a **separate wrapper** (`RenderTemplate`) with its own template->component switch; PDF used `Resume`. Two mappings drift. | Section/label/i18n differences |
 | B | Preview rendered margins as **CSS padding** on a non-page element; PDF applies margins as real page margins. | Different margin geometry |
-| C | Preview was **one infinite scroll at the panel's arbitrary width**; the PDF lays out at the A4 content-box width and paginates. | **Line wrapping and page breaks differed — the #1 surprise** |
+| C | Preview was **one infinite scroll at the panel's arbitrary width**; the PDF lays out at the A4 content-box width and paginates. | **Line wrapping and page breaks differed - the #1 surprise** |
 | D | Preview didn't pass localized headings. | i18n mismatch |
 
-The template *body* components (`ResumeSingleColumn`, `ResumeTwoColumn`, …) were
-already shared — the drift was entirely in the wrappers and the page geometry.
+The template *body* components (`ResumeSingleColumn`, `ResumeTwoColumn`, ...) were
+already shared - the drift was entirely in the wrappers and the page geometry.
 
 ---
 
-## 2. Design — one renderer, real page geometry
+## 2. Design - one renderer, real page geometry
 
 **There is now one resume renderer.** The preview delegates to the exact same
 canonical `Resume` component the PDF path uses; the separate preview template
 switch is gone.
 
 ```
-Preview  →  RenderTemplate  →  ResumeDocument  ─┐
-                                                ├─► Resume (canonical) ─► template body
-PDF/Print →  /print/resumes/[id]  ─────────────┘        (single source of truth)
+Preview  ->  RenderTemplate  ->  ResumeDocument  -+
+                                                +-► Resume (canonical) -► template body
+PDF/Print ->  /print/resumes/[id]  -------------+        (single source of truth)
 ```
 
 `ResumeDocument` (`components/resume/resume-document.tsx`) reproduces the PDF
 geometry so the preview is WYSIWYG:
 
 - **Exact content width.** Content is rendered at `page − margins` in CSS px at
-  96 DPI — the same box Chromium uses — so **line wrapping and horizontal layout
+  96 DPI - the same box Chromium uses - so **line wrapping and horizontal layout
   match the PDF** (given the same fonts). This closes divergence C/E.
 - **Margins as page padding.** The inner `Resume` renders with margins zeroed
   (exactly like the print page); the page surface supplies the margins as
-  padding — the same model Playwright uses. Closes divergence B.
+  padding - the same model Playwright uses. Closes divergence B.
 - **Real A4/Letter pages, not infinite scroll.** Content is laid across page
   surfaces with visible boundaries and page shadows.
 - **Scale the canvas, never reflow.** The whole page canvas is scaled to fit its
@@ -79,8 +79,8 @@ geometry so the preview is WYSIWYG:
 - Geometry: `mmToPx`, `pageWidthPx/HeightPx`, `contentWidthPx`,
   `pageContentHeightPx`, `fitScale`.
 - `computePageOffsets(blocks, pageContentHeight)` mirrors the PDF break rules:
-  it opens a new page *before* any measured flow block that would overflow —
-  **never splitting a block** (`break-inside: avoid`) — and glues section titles
+  it opens a new page *before* any measured flow block that would overflow -
+  **never splitting a block** (`break-inside: avoid`) - and glues section titles
   to their first item via `groupFlowBlocks` so a title is never orphaned
   (`break-after: avoid`). An oversized block (taller than a page) is clipped
   rather than looping forever, matching a forced break.
@@ -93,7 +93,7 @@ geometry so the preview is WYSIWYG:
 
 Page 1's DOM already contains the **complete** document (visually clipped to its
 slice), so pages 2+ are pure visual duplicates and are marked `aria-hidden` +
-`inert` — assistive tech and keyboard navigation traverse the resume exactly
+`inert` - assistive tech and keyboard navigation traverse the resume exactly
 once. The measurement copy is `aria-hidden`. Scaling is transform-based (honors
 browser zoom); no fabricated layout.
 
@@ -101,11 +101,11 @@ browser zoom); no fabricated layout.
 
 ## 3. Tests
 
-- `tests/resume-pagination.test.ts` — geometry (mm→px, A4/Letter, content box),
+- `tests/resume-pagination.test.ts` - geometry (mm->px, A4/Letter, content box),
   `fitScale`, `groupFlowBlocks` (break-after), and `computePageOffsets`
   (fits-on-one-page, overflow opens a page, title-stays-with-item,
-  oversized-no-loop, unmeasured→single page, page count).
-- `tests/resume-document.test.tsx` — renders the unified content on a real page
+  oversized-no-loop, unmeasured->single page, page count).
+- `tests/resume-document.test.tsx` - renders the unified content on a real page
   surface (A4 + Letter).
 - Backend PDF path contract: `test_pdf_render.py`, `export-pdf-url`.
 
@@ -121,8 +121,8 @@ browser zoom); no fabricated layout.
   the *render host's* system fonts (both `ui-serif` / `ui-sans-serif` stacks).
   On machines with different system fonts, glyph metrics can differ slightly.
   Absolute cross-machine parity requires embedding webfonts (a bundled `@font-face`
-  used by both the preview and the print page) — the recommended next step.
+  used by both the preview and the print page) - the recommended next step.
 - **Public profile / portfolio** (`/p/[slug]`) render `PublicProfileView` from
-  the **profile projection**, a different data model than `ResumeData` — they are
+  the **profile projection**, a different data model than `ResumeData` - they are
   a distinct product surface, not the resume renderer, so they are intentionally
   out of this unification.

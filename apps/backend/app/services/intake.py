@@ -1,7 +1,7 @@
 """Shared hardening for public "intake" endpoints (contact + reviews).
 
 Both the contact form and the review submission are unauthenticated, so they
-share the same production defenses — per-IP rate limiting, honeypot + submit-
+share the same production defenses - per-IP rate limiting, honeypot + submit-
 timing spam heuristics, de-duplication, and durable KVStore persistence. This
 module centralizes that logic so the routers stay thin and consistent (no
 duplication), and a future intake surface (e.g. feature-request board) can reuse
@@ -37,7 +37,7 @@ __all__ = [
 _BURST_RULE = RateLimitRule(limit=3, window_seconds=60)
 _HOURLY_RULE = RateLimitRule(limit=10, window_seconds=3600)
 
-# A genuine human takes a couple of seconds to fill a form; faster ⇒ bot.
+# A genuine human takes a couple of seconds to fill a form; faster => bot.
 _MIN_ELAPSED_MS = 1200
 
 _DEDUP_TTL_SECONDS = 300

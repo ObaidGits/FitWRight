@@ -7,7 +7,7 @@ into concrete, ready-to-use instances and exposes them as lazily-constructed
 process singletons plus FastAPI-style dependency callables the later auth waves
 depend on.
 
-Selection rules (all "value change, not code change" — ADR-14):
+Selection rules (all "value change, not code change" - ADR-14):
 
 - ``KVSTORE_URL`` picks the KVStore adapter; the DB-backed fallback reuses the
   app's own async engine so KV data lives in the same database (ADR-6).
@@ -15,7 +15,7 @@ Selection rules (all "value change, not code change" — ADR-14):
   provider adapter; empty selects the shipped dev-safe default. Recognized
   providers (``smtp``/``resend`` email, ``turnstile`` CAPTCHA, ``hibp`` breach)
   build their real adapter. A misconfigured provider (recognized but missing the
-  credentials real delivery needs) or an unrecognized value never raises — it
+  credentials real delivery needs) or an unrecognized value never raises - it
   **gracefully degrades** to the dev-safe default with a single logged warning
   naming the problem, so a missing/mis-set provider can never crash construction
   or stop the app from booting (completion-pass provider contract).
@@ -81,7 +81,7 @@ def build_kvstore(config: Settings) -> KVStore:
     """
     db_engine = None
     if url_needs_db_engine(config.kvstore_url):
-        # Imported lazily to avoid a config→database import cycle at module load.
+        # Imported lazily to avoid a config->database import cycle at module load.
         from app.database import db
 
         db_engine = db.async_engine
@@ -139,7 +139,7 @@ def build_captcha_verifier(config: Settings) -> CaptchaVerifier:
 
     ``turnstile`` builds the real verifier; a missing secret or an unrecognized
     value gracefully degrades to allow-all (feature effectively off) with a
-    logged warning (never raises) — a CAPTCHA misconfig must not block auth.
+    logged warning (never raises) - a CAPTCHA misconfig must not block auth.
     """
     provider = (config.captcha_provider or "").strip().lower()
     if provider in _CAPTCHA_DISABLED_ALIASES:
@@ -187,7 +187,7 @@ def build_breached_password_check(config: Settings) -> BreachedPasswordCheck:
 
 
 # ---------------------------------------------------------------------------
-# Dependency callables — thin delegates to the composition root (Phase 3).
+# Dependency callables - thin delegates to the composition root (Phase 3).
 # ---------------------------------------------------------------------------
 #
 # Construction + caching of these adapters lives ONLY in the composition root

@@ -32,12 +32,12 @@ describe('CircuitBreaker', () => {
     b.recordFailure();
     b.recordFailure();
     expect(b.canAttempt()).toBe(true);
-    b.recordFailure(); // 3rd → open
+    b.recordFailure(); // 3rd -> open
     expect(b.getState()).toBe('open');
     expect(b.canAttempt()).toBe(false);
   });
 
-  it('moves open→half-open after cooldown and closes on a successful probe', () => {
+  it('moves open->half-open after cooldown and closes on a successful probe', () => {
     let t = 0;
     const b = new CircuitBreaker({ failureThreshold: 2, cooldownMs: 1000, now: () => t });
     b.recordFailure();
@@ -57,7 +57,7 @@ describe('CircuitBreaker', () => {
     b.recordFailure();
     t = 1000;
     expect(b.getState()).toBe('half-open');
-    b.recordFailure(); // failed probe → back to open
+    b.recordFailure(); // failed probe -> back to open
     expect(b.getState()).toBe('open');
     expect(b.canAttempt()).toBe(false);
   });

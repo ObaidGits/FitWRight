@@ -8,15 +8,15 @@ them. Co-locating the steps with their owning service mirrors ``ai_metrics.py``
 the domain it serves, and the pipeline only imports the step *singletons*.
 
 **Bounded-context purity (Req 19.2/19.3/19.5).** As a Domain_Metrics_Service
-module this depends ONLY on shared primitives — the Metric_Store, the
+module this depends ONLY on shared primitives - the Metric_Store, the
 Metric_Registry (``DB_SIZE_BYTES``), the ``AdminRepo``, config, and the
-object-storage provider port — never on another Domain_Metrics_Service. The
+object-storage provider port - never on another Domain_Metrics_Service. The
 import-graph fitness test (Task 5.3) enforces this.
 
 **Off the request path (Req 21.5).** Both steps run only inside the Rollup_Job.
 They read cross-user aggregates via :class:`~app.admin.repo.AdminRepo` (allowed
 at rollup time) and sample object-storage usage *by the job*, never on a request
-path — see :class:`StorageSnapshotStep` for the local-disk-walk / remote-gap
+path - see :class:`StorageSnapshotStep` for the local-disk-walk / remote-gap
 resolution.
 
 Two steps, two storage destinations:
@@ -86,16 +86,16 @@ class DbSizeSampleStep:
     **On sample.** It calls :meth:`AdminRepo.db_size_bytes` (dialect-aware, Task
     5.2), which returns ``int | None``:
 
-    - a value → ``MetricStore.upsert(today, DB_SIZE_BYTES, value)`` (the daily
+    - a value -> ``MetricStore.upsert(today, DB_SIZE_BYTES, value)`` (the daily
       metric: one value per UTC day = the latest sample that day) and the
       last-sample marker is advanced to *now* (so the next sample waits a full
       interval).
-    - ``None`` (query failed / unsupported dialect) → the step does **NOT**
+    - ``None`` (query failed / unsupported dialect) -> the step does **NOT**
       overwrite ``DB_SIZE_BYTES`` (Req 7.6: retain the last recorded size) and
       does **NOT** advance the marker, so the next run retries the sample rather
       than waiting a full interval on a failed read. The staleness itself is
       surfaced by :class:`StorageMetricsService` (12.2) when the latest daily
-      sample is older than expected — the step only skips the write and logs.
+      sample is older than expected - the step only skips the write and logs.
 
     Idempotent per day (the same day's value is re-upserted, never duplicated),
     resumable (a failed/None read retries next run), and failure-isolated (any
@@ -149,7 +149,7 @@ class DbSizeSampleStep:
                     if last.tzinfo is None:
                         last = last.replace(tzinfo=timezone.utc)
                     if _now() - last < timedelta(minutes=interval_minutes):
-                        # Sampled recently — no-op success (guard holds, Req 7.1).
+                        # Sampled recently - no-op success (guard holds, Req 7.1).
                         return StepResult.success(self.name)
 
             # -- sample: dialect-aware size query (Task 5.2) --------------------
@@ -185,16 +185,16 @@ def _object_storage_usage() -> "tuple[int | None, bool]":
 
     Returns ``(bytes, stale)``:
 
-    - **LocalStorageProvider** → sum every file size under the storage root via a
+    - **LocalStorageProvider** -> sum every file size under the storage root via a
       filesystem walk (bounded, acceptable at job time, off the request path):
       ``(total_bytes, False)``.
-    - **Cloudinary / any remote provider** → the ``StorageProvider`` port exposes
+    - **Cloudinary / any remote provider** -> the ``StorageProvider`` port exposes
       only ``put``/``delete`` (see ``app/storage/provider.py``); there is **no**
       usage/size API in the adapter today. Adding a live Cloudinary usage call
       would both require a new provider API and violate Req 21.5 (no live
       request-path/remote sampling), so object-storage usage is **unavailable**:
       ``(None, True)``. Documented gap.
-    - Any error during detection/walk → ``(None, True)`` (never blocks the step).
+    - Any error during detection/walk -> ``(None, True)`` (never blocks the step).
     """
     try:
         from app.storage.provider import LocalStorageProvider, get_storage_provider
@@ -209,10 +209,10 @@ def _object_storage_usage() -> "tuple[int | None, bool]":
                     try:
                         total += os.path.getsize(fpath)
                     except OSError:
-                        # A file vanished mid-walk / unreadable — skip it.
+                        # A file vanished mid-walk / unreadable - skip it.
                         continue
             return total, False
-        # Remote provider (Cloudinary/S3): no usage API → unavailable (documented).
+        # Remote provider (Cloudinary/S3): no usage API -> unavailable (documented).
         return None, True
     except Exception:
         logger.debug("Object-storage usage sample failed", exc_info=True)
@@ -222,11 +222,11 @@ def _object_storage_usage() -> "tuple[int | None, bool]":
 class StorageSnapshotStep:
     """Snapshot storage counts + object-storage usage into the totals (Req 7.2/7.3/21.5).
 
-    Computes the storage counts via :meth:`AdminRepo.storage_counts` (Task 5.2 →
+    Computes the storage counts via :meth:`AdminRepo.storage_counts` (Task 5.2 ->
     ``{avatarCount, resumeCount, resumeVersionCount}``) and samples object-storage
-    usage **by the job** (never on a request path — Req 21.5) via
+    usage **by the job** (never on a request path - Req 21.5) via
     :func:`_object_storage_usage` (local disk walk when the active provider is
-    local; unavailable for remote providers — see that helper for the documented
+    local; unavailable for remote providers - see that helper for the documented
     Cloudinary gap).
 
     It persists a single small dict into a **named Metric_Store snapshot**
@@ -238,7 +238,7 @@ class StorageSnapshotStep:
     objectStorageStale, sampledAt}``.
 
     Failure-isolated: any error is returned as a failed ``StepResult`` (never
-    raised), and a usage sample that cannot be taken never fails the step — it is
+    raised), and a usage sample that cannot be taken never fails the step - it is
     recorded as ``objectStorageBytes=None`` + ``objectStorageStale=True``.
     """
 
@@ -287,12 +287,12 @@ class StorageSnapshotStep:
 
 
 # Process-wide instance slotted into PIPELINE by ``rollup_pipeline`` (single-
-# flighted by the Rollup_Job's KVStore lock — one run at a time).
+# flighted by the Rollup_Job's KVStore lock - one run at a time).
 STORAGE_SNAPSHOT_STEP = StorageSnapshotStep()
 
 
 # ---------------------------------------------------------------------------
-# Storage panel read model — the StorageMetricsService (Req 7.2–7.8, 21.5)
+# Storage panel read model - the StorageMetricsService (Req 7.2-7.8, 21.5)
 # ---------------------------------------------------------------------------
 
 
@@ -301,22 +301,22 @@ class StorageMetricsService:
 
     ``panel()`` builds the :class:`~app.admin.schemas.StoragePanel` served by
     ``GET /api/v1/admin/storage``. It is a cohesive, single-responsibility
-    Domain_Metrics_Service that depends **only** on shared primitives — the
+    Domain_Metrics_Service that depends **only** on shared primitives - the
     shared :class:`~app.admin.metric_store.MetricStore`, the static
     :mod:`app.admin.metric_registry` (``DB_SIZE_BYTES``), config, and the
-    response schema — never on another Domain_Metrics_Service (import-graph
+    response schema - never on another Domain_Metrics_Service (import-graph
     guard, Req 19.2/19.3/19.5).
 
     **NEVER a live query on the request path (Req 7.4/21.5).** Every value is
     read from what the two Rollup_Steps (Task 12.1) already persisted:
 
-    - the ``DB_SIZE_BYTES`` **daily** metric (``MetricStore.series`` — a bounded
+    - the ``DB_SIZE_BYTES`` **daily** metric (``MetricStore.series`` - a bounded
       30-day read) and the ``db_size_last_sample`` freshness marker
       (``snapshot_get``), both written by :class:`DbSizeSampleStep`;
     - the named ``"storage"`` snapshot (``snapshot_get``) written by
       :class:`StorageSnapshotStep`, holding the counts + object-storage usage.
 
-    No live ``pg_database_size`` call and no object enumeration ever runs here —
+    No live ``pg_database_size`` call and no object enumeration ever runs here -
     the DB-size query lives in the job's :class:`DbSizeSampleStep`, and the
     disk-walk lives in the job's :class:`StorageSnapshotStep`.
 
@@ -337,17 +337,17 @@ class StorageMetricsService:
         The most-recent **non-zero** value in ``series(DB_SIZE_BYTES, 30)`` is the
         DB size. ``MetricStore.series`` zero-fills days that have no stored row,
         and a real database size is always ``> 0``, so a ``0`` day is treated as
-        "no sample that day" — this is how a missing sample is distinguished from
-        a stored value. If **no** non-zero sample exists at all → ``dbSizeBytes``
+        "no sample that day" - this is how a missing sample is distinguished from
+        a stored value. If **no** non-zero sample exists at all -> ``dbSizeBytes``
         is ``None`` and ``dbSizeStale`` is ``True``.
 
         Staleness rule (Req 7.6): the ``db_size_last_sample`` marker records the
         ISO timestamp of the last **successful** sample (it is *not* advanced on a
-        failed/unsupported size query — see :class:`DbSizeSampleStep`). The panel
+        failed/unsupported size query - see :class:`DbSizeSampleStep`). The panel
         marks the DB size **stale** when there is no sample, or the marker is
         missing/unparseable (freshness cannot be confirmed), or the marker is
         older than ``2 × admin_db_size_sample_minutes`` (a full missed sampling
-        cycle — default ``2 × 60 = 120`` minutes). A persistently failing size
+        cycle - default ``2 × 60 = 120`` minutes). A persistently failing size
         query therefore surfaces as stale because the marker stops advancing.
 
     ``avatarCount`` / ``resumeCount`` / ``resumeVersionCount``,
@@ -356,23 +356,23 @@ class StorageMetricsService:
         the three counts are mapped directly (non-negative ints) and
         ``objectStorageBytes`` + ``objectStorageStale`` come from the snapshot,
         with ``objectStorageStale`` additionally forced ``True`` when the
-        snapshot's ``sampledAt`` is older than the stale threshold (``> 2`` days —
+        snapshot's ``sampledAt`` is older than the stale threshold (``> 2`` days -
         more than one missed nightly rollup). When the snapshot is **missing**
-        (the rollup never ran) or its read fails → counts default to ``0``,
+        (the rollup never ran) or its read fails -> counts default to ``0``,
         ``objectStorageBytes`` is ``None``, and ``objectStorageStale`` is ``True``
         (Req 7.7).
 
     ``growthBytesPerDay`` / ``growthUnavailable`` / ``growthUnavailableReason``
     (Req 7.3/7.8)
         Derived from the non-zero samples in ``series(DB_SIZE_BYTES, 30)``. With
-        **fewer than two** non-zero samples → ``growthBytesPerDay`` is ``None``,
+        **fewer than two** non-zero samples -> ``growthBytesPerDay`` is ``None``,
         ``growthUnavailable`` is ``True``, and ``growthUnavailableReason`` is
         ``"insufficient samples"`` (Req 7.8). Otherwise the estimate is the simple
         linear slope between the first and last available sample:
         ``(last_value - first_value) / days_between``, where ``days_between`` is
         the calendar-day gap between the oldest and newest non-zero sample days in
-        the rolling 30-day window. (A defensive ``days_between <= 0`` — not
-        reachable for two distinct days — is also treated as unavailable.)
+        the rolling 30-day window. (A defensive ``days_between <= 0`` - not
+        reachable for two distinct days - is also treated as unavailable.)
 
     ``retentionStatus`` (Req 7.3)
         A short, secret-free descriptive string built from retention config only
@@ -391,7 +391,7 @@ class StorageMetricsService:
     def __init__(self, *, metric_store=None) -> None:
         # Optional injected read collaborator (tests); otherwise the process-wide
         # MetricStore singleton is resolved lazily. Depends ONLY on the shared
-        # MetricStore + Metric_Registry + config + schema — never on another
+        # MetricStore + Metric_Registry + config + schema - never on another
         # Domain_Metrics_Service (import-graph guard, Req 19.2/19.3/19.5).
         self._metric_store = metric_store
 
@@ -514,7 +514,7 @@ class StorageMetricsService:
             return True
         if last.tzinfo is None:
             last = last.replace(tzinfo=timezone.utc)
-        # interval_minutes == 0 (sampling disabled) → never age-out on the marker.
+        # interval_minutes == 0 (sampling disabled) -> never age-out on the marker.
         if interval_minutes <= 0:
             return False
         return now - last > timedelta(minutes=2 * interval_minutes)
@@ -524,7 +524,7 @@ class StorageMetricsService:
         """Estimate bytes/day growth from the non-zero DB-size samples (Req 7.3/7.8).
 
         Returns ``(growthBytesPerDay, growthUnavailable, growthUnavailableReason)``.
-        Fewer than two samples → unavailable with "insufficient samples" (Req 7.8);
+        Fewer than two samples -> unavailable with "insufficient samples" (Req 7.8);
         otherwise a simple linear slope between the first and last sample.
         """
         if len(samples) < 2:
@@ -545,10 +545,10 @@ class StorageMetricsService:
     def _storage_snapshot(
         self, snapshot: dict | None, now: datetime
     ) -> "tuple[int, int, int, int | None, bool]":
-        """Map the ``"storage"`` snapshot → counts + object-storage usage (Req 7.2/7.7).
+        """Map the ``"storage"`` snapshot -> counts + object-storage usage (Req 7.2/7.7).
 
-        Missing snapshot → counts 0, object-storage None + stale True. Present
-        snapshot → mapped values, with object-storage additionally marked stale
+        Missing snapshot -> counts 0, object-storage None + stale True. Present
+        snapshot -> mapped values, with object-storage additionally marked stale
         when its ``sampledAt`` is older than :attr:`_SNAPSHOT_STALE_DAYS`.
         """
         if not isinstance(snapshot, dict):

@@ -26,7 +26,7 @@ def upgrade() -> None:
     # Add with a server_default so the NOT NULL backfill is atomic on both
     # SQLite (batch/table-rebuild) and Postgres (single ALTER). We keep the
     # server_default in place: it is harmless if the column is ever unused
-    # (rollback safety — design §Deployment), and it means INSERTs that omit
+    # (rollback safety - design §Deployment), and it means INSERTs that omit
     # ``version`` (legacy code paths) still get a valid 1.
     with op.batch_alter_table("resumes", schema=None) as batch_op:
         batch_op.add_column(

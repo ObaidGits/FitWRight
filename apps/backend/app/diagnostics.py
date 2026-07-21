@@ -4,12 +4,12 @@ Emits a single, **secret-free** structured report at boot enumerating which
 concrete providers the process resolved from configuration: database dialect +
 TLS mode + pooling + auto-migrate, KVStore backend, email/captcha/breach
 providers, storage provider, scheduler mode, and deployment mode. This turns
-"which adapters am I actually running?" — normally answerable only by reading
-env + code — into one log line, and surfaces silent dev-safe fallbacks (e.g.
+"which adapters am I actually running?" - normally answerable only by reading
+env + code - into one log line, and surfaces silent dev-safe fallbacks (e.g.
 ``EMAIL_PROVIDER=resend`` degraded to the log sender because the key is missing)
 that would otherwise be invisible until a user hit the path.
 
-Only names/modes/booleans are reported — never URLs, keys, secrets, or hosts.
+Only names/modes/booleans are reported - never URLs, keys, secrets, or hosts.
 """
 
 from __future__ import annotations
@@ -59,18 +59,18 @@ def _kvstore_summary(settings) -> str:
 def _email_summary(settings) -> str:
     provider = (settings.email_provider or "").strip().lower()
     if not provider or provider in {"log", "none", "dev"}:
-        return "log (dev — no delivery)"
+        return "log (dev - no delivery)"
     if provider == "smtp":
-        return "smtp" if (settings.email_smtp_host and settings.email_from) else "smtp→log (misconfigured)"
+        return "smtp" if (settings.email_smtp_host and settings.email_from) else "smtp->log (misconfigured)"
     if provider == "resend":
-        return "resend" if (settings.email_api_key and settings.email_from) else "resend→log (misconfigured)"
-    return f"{provider}→log (unknown)"
+        return "resend" if (settings.email_api_key and settings.email_from) else "resend->log (misconfigured)"
+    return f"{provider}->log (unknown)"
 
 
 def _storage_summary(settings) -> str:
     choice = settings.storage_provider
     if choice == "cloudinary":
-        return "cloudinary" if settings.cloudinary_configured else "cloudinary→local (misconfigured)"
+        return "cloudinary" if settings.cloudinary_configured else "cloudinary->local (misconfigured)"
     return choice
 
 

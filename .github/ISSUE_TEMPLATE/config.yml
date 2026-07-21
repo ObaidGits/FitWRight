@@ -2,14 +2,14 @@
 blank_issues_enabled: false
 
 contact_links:
-  - name: 💬 Ask a Question (Discussions)
+  - name: Ask a Question (Discussions)
     url: https://github.com/ObaidGits/FitWRight/discussions
     about: Please ask usage questions or discuss ideas here before opening a formal issue.
 
-  - name: 🔐 Report a Security Vulnerability
+  - name: Report a Security Vulnerability
     url: https://github.com/ObaidGits/FitWRight/security/advisories/new
     about: Please do not open public issues for security vulnerabilities.
 
-  - name: 📖 Read the Documentation
+  - name: Read the Documentation
     url: https://github.com/ObaidGits/FitWRight/blob/main/README.md
     about: Check the docs to see if your answer is already there.

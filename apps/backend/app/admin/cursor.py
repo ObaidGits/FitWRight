@@ -1,6 +1,6 @@
 """Opaque keyset cursor encode/decode + admin search sanitization (Task 1.3/3.1).
 
-Admin lists are cursor-paginated (keyset, never offset — R11.1). A cursor is the
+Admin lists are cursor-paginated (keyset, never offset - R11.1). A cursor is the
 base64url-encoded JSON of the last row's ``(sort_key, id)`` tuple; it is opaque
 to the client and stable under concurrent insert/delete (the ``id`` tie-break
 guarantees a total order). A malformed cursor is rejected with ``bad_cursor``
@@ -29,7 +29,7 @@ MAX_QUERY_LENGTH = 128
 
 
 class CursorError(ValueError):
-    """Raised when a cursor is malformed/tampered (router → 400 ``bad_cursor``)."""
+    """Raised when a cursor is malformed/tampered (router -> 400 ``bad_cursor``)."""
 
 
 def encode_cursor(sort_key: str, row_id: str) -> str:

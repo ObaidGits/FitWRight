@@ -1,21 +1,21 @@
-"""Resume-analytics rollup writer — the cross-user snapshot step (Req 14.1/14.2).
+"""Resume-analytics rollup writer - the cross-user snapshot step (Req 14.1/14.2).
 
 **Why this lives in ``app.admin`` and not ``app.analytics``.** Computing the
 resume source split + popular templates requires *cross-user* aggregate reads,
 and the only module permitted to issue unscoped owned-table queries is the
 heavily-reviewed :class:`~app.admin.repo.AdminRepo` (enforced by
 ``app/scripts/check_scoping.py``; a foreign module may not even import a
-module-private ``repo`` — ``tests/architecture/test_module_ownership.py``).
+module-private ``repo`` - ``tests/architecture/test_module_ownership.py``).
 
 So the **writer** (this rollup step, which reads cross-user data through
 ``AdminRepo`` and persists a ``metrics_daily`` KV snapshot) is co-located with
 ``AdminRepo`` in the admin/observability rollup infrastructure, while the
 Product-Analytics **reader** (``ResumeMetricsService`` in
 ``app.analytics.resume_metrics``) consumes the resulting snapshot **only through
-the shared Metric_Store** — exactly the cross-context seam Req 19.4 prescribes
+the shared Metric_Store** - exactly the cross-context seam Req 19.4 prescribes
 ("a Product-Analytics endpoint reads Observability keys only through the shared
 Metric_Store read helpers"). The two bounded contexts therefore share nothing
-but the Metric_Store snapshot; there is no analytics→admin import.
+but the Metric_Store snapshot; there is no analytics->admin import.
 
 ``StepResult`` is imported **lazily** inside ``run`` (the cycle-safe pattern used
 by every rollup step): ``rollup_pipeline`` imports this module at load time to
@@ -56,7 +56,7 @@ class ResumeSnapshotStep:
     KV snapshot (:data:`RESUME_SNAPSHOT_NAME`) via :meth:`MetricStore.snapshot_put`.
 
     The Product-Analytics ``ResumeMetricsService`` reads this snapshot on the
-    request path via ``snapshot_get(RESUME_SNAPSHOT_NAME)`` — never the DB.
+    request path via ``snapshot_get(RESUME_SNAPSHOT_NAME)`` - never the DB.
 
     Failure-isolated: any error is returned as a failed ``StepResult`` (never
     raised). Idempotent: a re-run simply overwrites the same snapshot key.
@@ -95,7 +95,7 @@ class ResumeSnapshotStep:
             # 1. Resume source split (Req 14.1)
             source_counts = await repo.resume_source_counts()
 
-            # 2. Popular templates — top-10 ranked by usage count (Req 14.2)
+            # 2. Popular templates - top-10 ranked by usage count (Req 14.2)
             raw_templates = await repo.popular_templates()
             # Sort descending by count, then ascending by name for tie-break,
             # and take the top 10.
@@ -125,5 +125,5 @@ class ResumeSnapshotStep:
 
 
 # Process-wide instance slotted into PIPELINE by ``rollup_pipeline``. Single-
-# flighted by the Rollup_Job's KVStore lock — one run at a time.
+# flighted by the Rollup_Job's KVStore lock - one run at a time.
 RESUME_SNAPSHOT_STEP = ResumeSnapshotStep()

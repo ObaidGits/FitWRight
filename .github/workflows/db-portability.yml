@@ -1,7 +1,7 @@
 name: DB Portability (Postgres + pooler)
 
 # Goal A regression gate: proves the app keeps running on real Postgres behind a
-# transaction-mode pooler (Supabase's topology) unmodified — the full Alembic
+# transaction-mode pooler (Supabase's topology) unmodified - the full Alembic
 # chain applies + reverses, and the runtime data layer (incl. GIN full-text
 # search and prepared-statement safety under pooling) works. If a change breaks
 # Postgres/pooler portability, this job fails.

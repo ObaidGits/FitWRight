@@ -1,5 +1,5 @@
 /**
- * TabCoordinator — multi-tab leader election + save fan-out (P4 R7, Property 6).
+ * TabCoordinator - multi-tab leader election + save fan-out (P4 R7, Property 6).
  *
  * Among N tabs of the same account, exactly one is the **leader** that owns
  * autosave + outbox flushing for a resource; followers defer persistence to it,
@@ -8,7 +8,7 @@
  * Mechanism:
  * - **Web Locks** (`navigator.locks`) elect the leader: a tab requests an
  *   exclusive lock and holds it (leader) until it closes/crashes, at which point
- *   the OS releases the lock and a waiting tab acquires it — automatic
+ *   the OS releases the lock and a waiting tab acquires it - automatic
  *   re-election within a bounded time (R7.2). The lock, not message trust, is
  *   the source of authority (defends against forged BroadcastChannel messages).
  * - **BroadcastChannel** fans out `save` events (so followers refresh their base
@@ -119,7 +119,7 @@ export class TabCoordinator {
     }
 
     if (!this.locks) {
-      // No Web Locks → assume single tab; become leader immediately.
+      // No Web Locks -> assume single tab; become leader immediately.
       this.setLeader(true);
       return;
     }

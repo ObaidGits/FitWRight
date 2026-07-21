@@ -8,13 +8,13 @@
  * latency, average tokens/call, timeouts, retries, estimated cost) plus a
  * per-provider breakdown table and an optional daily-calls trend. A window
  * selector (7 / 30 / 90 days, default 30) refetches the series when changed
- * (Req 4.3); the backend validates the 1–365 range server-side.
+ * (Req 4.3); the backend validates the 1-365 range server-side.
  *
- * This page renders ONLY what `AiAnalytics` provides — aggregate counts, rates
+ * This page renders ONLY what `AiAnalytics` provides - aggregate counts, rates
  * and a truncated whole-dollar cost estimate. It deliberately shows no prompt,
- * model, temperature or per-call/id fields (allowlist — Req 4). On fetch failure
+ * model, temperature or per-call/id fields (allowlist - Req 4). On fetch failure
  * it shows an explicit error state with a working retry control (never a blank
- * or partial view); rates degrade sensibly to 0% / — when there are no calls.
+ * or partial view); rates degrade sensibly to 0% / - when there are no calls.
  */
 import * as React from 'react';
 import { Suspense } from 'react';
@@ -47,24 +47,24 @@ const WINDOWS = [7, 30, 90] as const;
 type AiWindow = (typeof WINDOWS)[number];
 
 // ---------------------------------------------------------------------------
-// Formatters — pure + null-safe so a zero-calls window renders sensibly.
+// Formatters - pure + null-safe so a zero-calls window renders sensibly.
 // ---------------------------------------------------------------------------
 
-/** A 0.0–1.0 fraction as a percentage string ("98.00%"); "—" when no calls. */
+/** A 0.0-1.0 fraction as a percentage string ("98.00%"); "-" when no calls. */
 function formatRate(fraction: number, totalCalls: number): string {
-  if (totalCalls <= 0) return '—';
+  if (totalCalls <= 0) return '-';
   return `${(fraction * 100).toFixed(2)}%`;
 }
 
-/** A millisecond value ("142.5 ms"); "—" when there is nothing to average. */
+/** A millisecond value ("142.5 ms"); "-" when there is nothing to average. */
 function formatMs(ms: number, totalCalls: number): string {
-  if (totalCalls <= 0) return '—';
+  if (totalCalls <= 0) return '-';
   return `${ms.toLocaleString(undefined, { maximumFractionDigits: 2 })} ms`;
 }
 
-/** Average tokens per call; "—" when there is nothing to average. */
+/** Average tokens per call; "-" when there is nothing to average. */
 function formatAvg(value: number, totalCalls: number): string {
-  if (totalCalls <= 0) return '—';
+  if (totalCalls <= 0) return '-';
   return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
 }
 
@@ -93,14 +93,14 @@ function MetricCard({
 }
 
 // ---------------------------------------------------------------------------
-// Provider breakdown table (Req 4) — a11y caption + responsive stacked mobile.
+// Provider breakdown table (Req 4) - a11y caption + responsive stacked mobile.
 // ---------------------------------------------------------------------------
 
 function ProviderTable({ data }: { data: AiAnalytics }) {
   const providers = data.providers ?? [];
   const totalCalls = providers.reduce((sum, p) => sum + p.calls, 0);
   const pct = (calls: number) =>
-    totalCalls > 0 ? `${((calls / totalCalls) * 100).toFixed(1)}%` : '—';
+    totalCalls > 0 ? `${((calls / totalCalls) * 100).toFixed(1)}%` : '-';
 
   return (
     <Card className="p-5">
@@ -235,7 +235,7 @@ function AdminAiPageInner() {
           <>
             <p className="flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
               As of <LocalTime iso={data.computedAt} />
-              <span>· last {data.window} days</span>
+              <span>- last {data.window} days</span>
             </p>
 
             {/* Headline metric cards. */}

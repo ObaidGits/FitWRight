@@ -65,7 +65,7 @@ def _compute_skills_coverage(
     resume: dict[str, Any],
     job_keywords: dict[str, Any],
 ) -> float:
-    """Return skills coverage score (0–100).
+    """Return skills coverage score (0-100).
 
     Checks how many required_skills / preferred_skills from the JD appear
     in the resume's technicalSkills list (falls back to full-text search).
@@ -96,7 +96,7 @@ def _compute_skills_coverage(
 
 
 def _compute_section_completeness(resume: dict[str, Any]) -> float:
-    """Return section completeness score (0–100).
+    """Return section completeness score (0-100).
 
     Checks the structured resume dict for the presence of key sections.
     If no structured sections are detected, falls back to scanning all
@@ -142,7 +142,7 @@ def _generate_recommendations(
     if injectable_keywords:
         top_injectable = ", ".join(injectable_keywords[:5])
         tips.append(
-            f"The following skills are in your master resume but not in this tailored version — consider adding them: {top_injectable}."
+            f"The following skills are in your master resume but not in this tailored version - consider adding them: {top_injectable}."
         )
 
     if skills_score < 60:
@@ -179,7 +179,7 @@ def compute_ats_score(
 
     Args:
         refined_resume: The fully refined resume data dict.
-        job_keywords: Extracted JD keywords dict (required_skills, preferred_skills, …).
+        job_keywords: Extracted JD keywords dict (required_skills, preferred_skills, ...).
         keyword_match_percentage: Final keyword match % from refiner.calculate_keyword_match.
         missing_keywords: Keywords absent from the tailored resume (non-injectable).
         injectable_keywords: Keywords absent but present in the master resume.

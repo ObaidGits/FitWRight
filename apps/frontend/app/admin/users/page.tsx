@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Admin users (Task 8.2/8.3) — real, fully-wired user management.
+ * Admin users (Task 8.2/8.3) - real, fully-wired user management.
  *
  * Search + filters + cursor pagination are synced to the URL (shareable,
  * back-button safe). Status toggles are optimistic w/ rollback; role change is
@@ -212,7 +212,7 @@ function AdminUsersPageInner() {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by email or name (prefix)…"
+            placeholder="Search by email or name (prefix)..."
             className="pl-9"
             aria-label="Search users"
           />
@@ -363,7 +363,7 @@ function AdminUsersPageInner() {
                   </div>
                   <div className="mt-3 flex items-center justify-between">
                     <span className="text-xs text-[var(--muted-foreground)]">
-                      {u.role} · {u.resumeCount} resumes
+                      {u.role} - {u.resumeCount} resumes
                     </span>
                     <Button size="sm" variant="outline" onClick={() => setSelectedId(u.id)}>
                       View
@@ -384,7 +384,7 @@ function AdminUsersPageInner() {
                 Previous
               </Button>
               <span className="text-xs text-[var(--muted-foreground)]">
-                {isFetching ? 'Loading…' : `${rows.length} shown`}
+                {isFetching ? 'Loading...' : `${rows.length} shown`}
               </span>
               <Button
                 variant="outline"
@@ -468,7 +468,7 @@ function UserDetailDrawer({
                   label="Deleted"
                   value={
                     <span className="text-[var(--destructive)]">
-                      <LocalTime iso={data.deletedAt} /> · purge <LocalTime iso={data.purgeDueAt} />
+                      <LocalTime iso={data.deletedAt} /> - purge <LocalTime iso={data.purgeDueAt} />
                     </span>
                   }
                 />

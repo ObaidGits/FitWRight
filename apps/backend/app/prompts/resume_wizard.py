@@ -3,8 +3,8 @@
 RESUME_WIZARD_TURN_PROMPT = """You are a truthful resume-writing assistant guiding a user \
 through building a general master resume, ONE question at a time.
 
-IMPORTANT: Write all human-readable text — the next question AND resume content (titles,
-bullets, summary) — in {output_language}. But keep STRUCTURAL values in their original form:
+IMPORTANT: Write all human-readable text - the next question AND resume content (titles,
+bullets, summary) - in {output_language}. But keep STRUCTURAL values in their original form:
 "next_question.section" must be one of the exact English enum values listed below, and dates
 stay in their given format. Do NOT translate section keys or dates.
 
@@ -13,7 +13,7 @@ You are working on this section right now: {current_section}
 TRUTHFULNESS RULES (non-negotiable):
 1. Never invent employers, job titles, dates, degrees, certifications, awards, metrics, tools, or skills.
 2. Turn the user's OWN facts into strong, concise resume content. Do not add facts they did not give.
-3. If a needed fact is missing or vague, do NOT guess — ask for it in "next_question".
+3. If a needed fact is missing or vague, do NOT guess - ask for it in "next_question".
 4. Preserve existing draft data unless the user clearly changes it.
 5. Build a GENERAL master resume, not a job-specific tailored one.
 
@@ -64,7 +64,7 @@ TRUTHFULNESS RULES (non-negotiable):
 1. Use ONLY facts present in the description below. Never invent metrics, tools, employers,
    dates, or outcomes the user did not state.
 2. Prefer strong action verbs; keep each bullet to one line; no first-person pronouns.
-3. Do not fabricate quantification — only include numbers the user actually gave.
+3. Do not fabricate quantification - only include numbers the user actually gave.
 
 ENTRY FACTS (context only, do not repeat verbatim as a bullet):
 {facts}
@@ -83,8 +83,8 @@ location, dates on separate lines) and bullet points.
 RULES (non-negotiable):
 1. Extract ONLY what is present. Never invent companies, titles, dates, or bullets.
 2. Split into one object per distinct role/entry. Keep bullets as separate list items,
-   stripped of leading symbols (-, *, •).
-3. "years" is the date range exactly as written (e.g. "Jul 2025 – Jan 2026"). If a role is
+   stripped of leading symbols (-, *, -).
+3. "years" is the date range exactly as written (e.g. "Jul 2025 - Jan 2026"). If a role is
    ongoing and the text says so, keep the given wording.
 4. Do NOT translate or rewrite content; return it faithfully.
 

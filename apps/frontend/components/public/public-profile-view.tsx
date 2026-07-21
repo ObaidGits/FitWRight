@@ -1,5 +1,5 @@
 /**
- * Public profile view (P7) — the rendered share page.
+ * Public profile view (P7) - the rendered share page.
  *
  * A server-safe, presentational projection of the public profile: hero,
  * summary, experience timeline, projects, skills, education, and contact/social
@@ -134,7 +134,7 @@ export function PublicProfileView({
                     <h3 className="font-medium">
                       {e.title}
                       {e.company && (
-                        <span className="text-[var(--muted-foreground)]"> · {e.company}</span>
+                        <span className="text-[var(--muted-foreground)]"> - {e.company}</span>
                       )}
                     </h3>
                     {e.years && (
@@ -246,7 +246,7 @@ export function PublicProfileView({
                   <span className="font-medium">
                     {e.degree}
                     {e.institution && (
-                      <span className="text-[var(--muted-foreground)]"> · {e.institution}</span>
+                      <span className="text-[var(--muted-foreground)]"> - {e.institution}</span>
                     )}
                   </span>
                   {e.years && (

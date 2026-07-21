@@ -89,7 +89,7 @@ describe('SyncController', () => {
     const sync = new SyncController({ store, replay, isOnline: () => true });
     await sync.syncOnce();
     expect(sync.getStatus()).toBe('conflict');
-    await sync.syncOnce(); // still paused → no new replay
+    await sync.syncOnce(); // still paused -> no new replay
     expect(replay).toHaveBeenCalledTimes(1);
     sync.resumeResource('r1');
     await sync.syncOnce();

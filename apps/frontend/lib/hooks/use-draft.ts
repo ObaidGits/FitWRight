@@ -6,7 +6,7 @@
  * Persists a serialisable working copy to localStorage so an accidental
  * reload, crash, or navigation never loses unsaved work. On mount it detects
  * a newer stored draft than the last save and exposes it for a RecoveryBanner
- * to offer (restore / discard) — restoration is always explicit, never
+ * to offer (restore / discard) - restoration is always explicit, never
  * silent.
  */
 import * as React from 'react';
@@ -47,7 +47,7 @@ export function useDraft<T>(key: string, enabled = true): DraftController<T> {
         setRecoveredAt(parsed.savedAt ?? null);
       }
     } catch {
-      /* corrupt draft — ignore */
+      /* corrupt draft - ignore */
     }
   }, [storageKey, key, enabled]);
 
@@ -58,7 +58,7 @@ export function useDraft<T>(key: string, enabled = true): DraftController<T> {
         const payload: StoredDraft<T> = { value, savedAt: Date.now() };
         localStorage.setItem(storageKey, JSON.stringify(payload));
       } catch {
-        /* storage full / unavailable — non-fatal */
+        /* storage full / unavailable - non-fatal */
       }
     },
     [storageKey, key, enabled]

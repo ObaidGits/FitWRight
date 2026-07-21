@@ -3,20 +3,20 @@
 Every ``/api/v1/admin/*`` route depends on :func:`require_admin_read` or
 :func:`require_admin_manage`. The guard, in order:
 
-1. **Kill-switch** — when ``ADMIN_ENABLED`` is off the whole surface 404s
+1. **Kill-switch** - when ``ADMIN_ENABLED`` is off the whole surface 404s
    (``admin_disabled``), so the rollout can ship flag-off then flip it on.
-2. **AuthN** — an anonymous caller → 401; the denial is audited ``authz.denied``
+2. **AuthN** - an anonymous caller -> 401; the denial is audited ``authz.denied``
    with the route (R1.1) and counted for the compromised-admin/scraping signal.
-3. **Per-request status recheck** — a principal only exists if the session
+3. **Per-request status recheck** - a principal only exists if the session
    resolved (which already re-checks ``status == active`` against the DB and is
    evicted on disable), but we re-assert it here as defense in depth so a
    disabled/soft-deleted admin can never act (R1.2).
-4. **Capability** — reads need ``admin.read``, mutations ``admin.manage`` (R1.3);
-   a lacking capability → 403 + ``authz.denied`` audit.
-5. **Per-admin rate limit** — separate read/write buckets keyed by the admin's
-   user id (R14.2); abnormal volume → 429 + audited so scraping / a compromised
+4. **Capability** - reads need ``admin.read``, mutations ``admin.manage`` (R1.3);
+   a lacking capability -> 403 + ``authz.denied`` audit.
+5. **Per-admin rate limit** - separate read/write buckets keyed by the admin's
+   user id (R14.2); abnormal volume -> 429 + audited so scraping / a compromised
    admin is visible. Fails **open** on a KVStore blip (the caller is already an
-   authenticated admin — a store outage must not lock admins out of ops).
+   authenticated admin - a store outage must not lock admins out of ops).
 
 Mutations additionally require the P1 CSRF token, which is enforced by the
 ``AuthMiddleware`` on every state-changing request once a session is present.
@@ -78,7 +78,7 @@ def _guard(capability: str, *, write: bool):
             await _audit_denied(request, None, capability=None)
             raise ApiError(401, "unauthorized", "Authentication required.")
 
-        # 3) per-request status recheck (defense in depth — R1.2)
+        # 3) per-request status recheck (defense in depth - R1.2)
         if principal.status != "active":
             await _audit_denied(request, principal.user_id, capability=capability)
             raise ApiError(403, "forbidden", "This action is not permitted.")
@@ -88,7 +88,7 @@ def _guard(capability: str, *, write: bool):
             await _audit_denied(request, principal.user_id, capability=capability)
             raise ApiError(403, "forbidden", "This action is not permitted.")
 
-        # 5) per-admin rate limit (read/write buckets — R14.2)
+        # 5) per-admin rate limit (read/write buckets - R14.2)
         route_class = "admin_write" if write else "admin_read"
         rule = _WRITE_RULE if write else _READ_RULE
         result = await get_rate_limiter().check(
@@ -97,7 +97,7 @@ def _guard(capability: str, *, write: bool):
         # Deliberate fail-OPEN on a KVStore outage (R14.2 tradeoff): an admin is
         # already authenticated, and locking every admin out of ops during a
         # cache blip would block incident response (e.g. disabling a compromised
-        # account). The degraded state is made observable — counted + logged —
+        # account). The degraded state is made observable - counted + logged -
         # so an operator can see "admin ops proceeding unthrottled" during an
         # outage rather than it happening silently.
         if result.fail_closed:

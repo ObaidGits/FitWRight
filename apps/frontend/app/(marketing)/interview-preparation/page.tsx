@@ -1,5 +1,5 @@
 /**
- * /interview-preparation — feature landing page for FitWright's resume-grounded
+ * /interview-preparation - feature landing page for FitWright's resume-grounded
  * interview prep. Thin route shell over the shared <CapabilityLanding> renderer.
  */
 import type { Metadata } from 'next';

@@ -1,5 +1,5 @@
 /**
- * /resume-tailoring — feature landing page for the product's core, name-defining
+ * /resume-tailoring - feature landing page for the product's core, name-defining
  * capability. Thin route shell: metadata + the shared, data-driven
  * <CapabilityLanding> renderer. All content lives in CAPABILITIES data and the
  * keyword cluster in lib/seo/page-keywords (`tailoring`), so it never

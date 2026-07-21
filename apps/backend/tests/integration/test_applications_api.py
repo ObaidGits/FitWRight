@@ -78,7 +78,7 @@ class TestManualAdd:
                     },
                 )
         assert resp.status_code == 200
-        # Both fields supplied → no extraction call.
+        # Both fields supplied -> no extraction call.
         mock_extract.assert_not_called()
         body = resp.json()
         assert body["company"] == "Given Co"

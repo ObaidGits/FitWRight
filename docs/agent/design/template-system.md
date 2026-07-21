@@ -18,17 +18,17 @@
 
 ```
 components/resume/
-├── index.ts                      # Re-exports all templates
-├── resume-single-column.tsx      # swiss-single
-├── resume-two-column.tsx         # swiss-two-column
-├── resume-modern.tsx             # modern
-├── resume-modern-two-column.tsx  # modern-two-column
-├── resume-latex.tsx              # latex
-├── resume-clean.tsx              # clean
-├── resume-vivid.tsx              # vivid
-├── dynamic-resume-section.tsx    # shared custom-section renderer
-├── safe-html.tsx                 # sanitized rich-text renderer
-└── styles/                       # *.module.css per template + _base/_tokens
++-- index.ts                      # Re-exports all templates
++-- resume-single-column.tsx      # swiss-single
++-- resume-two-column.tsx         # swiss-two-column
++-- resume-modern.tsx             # modern
++-- resume-modern-two-column.tsx  # modern-two-column
++-- resume-latex.tsx              # latex
++-- resume-clean.tsx              # clean
++-- resume-vivid.tsx              # vivid
++-- dynamic-resume-section.tsx    # shared custom-section renderer
++-- safe-html.tsx                 # sanitized rich-text renderer
++-- styles/                       # *.module.css per template + _base/_tokens
 ```
 
 ## Template Settings

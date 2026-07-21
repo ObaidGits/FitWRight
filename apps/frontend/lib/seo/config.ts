@@ -24,7 +24,7 @@ export const SITE_TAGLINE = 'Built to fit';
 export const SITE_DESCRIPTION =
   'FitWright is an open-source, AI resume builder and tailor. Optimize your resume for any job with honest ATS scoring, cover letters, and interview prep. Bring your own API key.';
 
-/** Developer / founder — EEAT author identity, reused across Person schema. */
+/** Developer / founder - EEAT author identity, reused across Person schema. */
 export const AUTHOR = {
   name: 'Obaidullah Zeeshan',
   jobTitle: 'AI & Full-Stack Software Engineer',
@@ -62,19 +62,19 @@ export const BRAND_KEYWORDS = [
  * These point at the dynamic `next/og` metadata routes (`/opengraph-image`,
  * `/twitter-image`). We declare them EXPLICITLY in metadata because Next.js
  * drops the auto-attached file-based image whenever a page overrides its
- * `openGraph`/`twitter` object — which every SEO page here does. Declaring them
+ * `openGraph`/`twitter` object - which every SEO page here does. Declaring them
  * centrally guarantees `og:image`/`twitter:image` on every page.
  */
 export const OG_IMAGE = {
   url: '/opengraph-image',
   width: 1200,
   height: 630,
-  alt: `${SITE_NAME} — ${SITE_TAGLINE}`,
+  alt: `${SITE_NAME} - ${SITE_TAGLINE}`,
 } as const;
 
 export const TWITTER_IMAGE = '/twitter-image';
 
-/** Absolute URL helper — joins a path onto the canonical origin. */
+/** Absolute URL helper - joins a path onto the canonical origin. */
 export function absoluteUrl(path = '/'): string {
   if (!path || path === '/') return `${SITE_URL}/`;
   return `${SITE_URL}${path.startsWith('/') ? path : `/${path}`}`;
@@ -86,9 +86,9 @@ export function absoluteUrl(path = '/'): string {
  * per deployment. Bing and Yandex remain unset unless configured.
  * Consumed by the root layout's `metadata.verification`.
  *
- *  - NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION  → Google Search Console override
- *  - NEXT_PUBLIC_BING_SITE_VERIFICATION    → Bing Webmaster Tools (msvalidate.01)
- *  - NEXT_PUBLIC_YANDEX_SITE_VERIFICATION  → Yandex Webmaster
+ *  - NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION  -> Google Search Console override
+ *  - NEXT_PUBLIC_BING_SITE_VERIFICATION    -> Bing Webmaster Tools (msvalidate.01)
+ *  - NEXT_PUBLIC_YANDEX_SITE_VERIFICATION  -> Yandex Webmaster
  */
 export const VERIFICATION = {
   google:

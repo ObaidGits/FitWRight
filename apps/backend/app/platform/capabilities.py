@@ -10,9 +10,9 @@ This module:
 - declares which each **profile requires**, and
 - **validates** the two, returning precise errors (fail-fast, ARCHITECTURE §5).
 
-Design note (no duplication — IMPLEMENTATION_PLAN §8): the existing
+Design note (no duplication - IMPLEMENTATION_PLAN §8): the existing
 ``Settings._validate_auth_surface`` remains the authoritative *boot* gate for
-hosted secrets/Postgres. This module adds the **explicit profile→capability
+hosted secrets/Postgres. This module adds the **explicit profile->capability
 contract** and a structured, testable report used by diagnostics and the
 composition root. Where they overlap (e.g. hosted needs Postgres) the messages
 are complementary, not contradictory.
@@ -115,7 +115,7 @@ def detect_capabilities(settings) -> set[Capability]:
 def required_capabilities(profile: DeploymentProfile) -> set[Capability]:
     """The capabilities a profile *must* have to boot (ARCHITECTURE §4).
 
-    Kept intentionally minimal — only what would make the profile
+    Kept intentionally minimal - only what would make the profile
     non-functional if absent. Optional features (email, OAuth) are NOT required;
     they degrade gracefully. This mirrors, and does not contradict, the existing
     ``Settings`` validator (hosted requires Postgres).
@@ -150,11 +150,11 @@ def profile_consistency_error(settings) -> str | None:
 def validate_deployment(settings) -> list[str]:
     """Full profile validation: contradiction + missing required capabilities.
 
-    Returns a list of human-readable error strings (empty ⇒ valid). Used by the
+    Returns a list of human-readable error strings (empty => valid). Used by the
     capability **report** and unit tests. Complements ``Settings`` validation; it
     does not replace it. NOTE: the missing-capability branch is, for correctly
     *constructed* settings, already guaranteed by ``Settings._validate_auth_surface``
-    (hosted requires Postgres + is multi-user), so at real boot it never fires —
+    (hosted requires Postgres + is multi-user), so at real boot it never fires -
     which is why the startup gate uses the narrower :func:`startup_validation`.
     """
     errors: list[str] = []
@@ -180,7 +180,7 @@ def validate_deployment(settings) -> list[str]:
 def startup_validation(settings) -> list[str]:
     """The fail-fast checks the startup gate enforces (main.py lifespan).
 
-    Deliberately narrow: it raises only on a profile↔mode **contradiction**,
+    Deliberately narrow: it raises only on a profile<->mode **contradiction**,
     because required-capability gating for hosted (Postgres, multi-user, secrets)
     is already owned by ``Settings._validate_auth_surface`` at construction.
     Re-enforcing it here would duplicate that gate and would misfire in tests

@@ -1,4 +1,4 @@
-"""Overview KPI-card read model — the OverviewService (Req 13).
+"""Overview KPI-card read model - the OverviewService (Req 13).
 
 This module is the overview bounded-context's owned home. Its
 :class:`OverviewService` builds the :class:`~app.admin.schemas.OverviewKpis`
@@ -7,26 +7,26 @@ cards, each a :class:`~app.admin.schemas.KpiValue` (a value + an explicit
 ``unavailable`` marker) so the dashboard degrades gracefully instead of
 hard-failing when one source is unavailable (Req 13.7).
 
-**Bounded-context purity (Req 19.2/19.3/19.5) — the import-graph is the
+**Bounded-context purity (Req 19.2/19.3/19.5) - the import-graph is the
 constraint.** As a Domain_Metrics_Service module (``app.admin.overview`` is in
-the fitness-test's ``DOMAIN_SERVICES`` set — Task 5.3) this may depend ONLY on
+the fitness-test's ``DOMAIN_SERVICES`` set - Task 5.3) this may depend ONLY on
 shared primitives and MUST NOT import another Domain_Metrics_Service
-(``ai_metrics`` / ``errors_metrics`` / ``security_metrics`` / …). It therefore
+(``ai_metrics`` / ``errors_metrics`` / ``security_metrics`` / ...). It therefore
 sources every KPI from shared primitives only:
 
-- **totalUsers** ← the O(1) ``_TOTALS_DAY`` totals snapshot, read via
+- **totalUsers** <- the O(1) ``_TOTALS_DAY`` totals snapshot, read via
   ``MetricsService.stats()`` (``app.admin.metrics_service`` is NOT a
   Domain_Metrics_Service in the 5.3 set, so importing ``get_metrics_service`` is
   allowed; ``stats()`` reads the O(1) snapshot, never a full-table COUNT).
-- **newUsersToday** ← a live current-day count via
-  ``AdminRepo.metric_for_day("signups", …)`` — ``AdminRepo`` is a shared
+- **newUsersToday** <- a live current-day count via
+  ``AdminRepo.metric_for_day("signups", ...)`` - ``AdminRepo`` is a shared
   primitive. This is the documented "durable key + live day" pattern: the rollup
   only holds *closed* days, so today's partial day is computed live (a single
   day-bounded, index-served count).
-- **aiCallsToday** ← the durable ``AI_CALLS`` Metric_Key summed over today via
+- **aiCallsToday** <- the durable ``AI_CALLS`` Metric_Key summed over today via
   ``MetricStore.sum`` (see the eventual-consistency note on :meth:`_ai_calls_today`).
-- **errorRate24h** ← the durable ``REQUEST_*`` Metric_Keys via ``MetricStore.sum``.
-- **purgeBacklog** ← the in-process ``AdminMetrics`` ``purge_backlog`` gauge.
+- **errorRate24h** <- the durable ``REQUEST_*`` Metric_Keys via ``MetricStore.sum``.
+- **purgeBacklog** <- the in-process ``AdminMetrics`` ``purge_backlog`` gauge.
 
 Every read is O(1) (Req 13.6): a fixed, bounded number of snapshot / summed-key
 reads plus one day-bounded signups count, none of which grows with user or row
@@ -69,7 +69,7 @@ def _day_bounds(day: str) -> tuple[str, str]:
 
     Mirrors ``MetricsService._day_bounds``/``AdminRepo`` day partitioning so the
     live current-day count uses the exact same UTC boundaries as the rollup
-    (Req 13.3): ``00:00:00`` of ``day`` (inclusive) → ``00:00:00`` of the next
+    (Req 13.3): ``00:00:00`` of ``day`` (inclusive) -> ``00:00:00`` of the next
     day (exclusive).
     """
     start_dt = datetime.strptime(day, "%Y-%m-%d").replace(tzinfo=timezone.utc)
@@ -82,11 +82,11 @@ class OverviewService:
 
     :meth:`kpis` builds the :class:`~app.admin.schemas.OverviewKpis`. It is a
     cohesive, single-responsibility Domain_Metrics_Service that depends ONLY on
-    shared primitives — the shared :class:`~app.admin.metric_store.MetricStore`
+    shared primitives - the shared :class:`~app.admin.metric_store.MetricStore`
     (durable ``AI_CALLS`` / ``REQUEST_*`` reads), the :class:`~app.admin.repo.AdminRepo`
     (the live "new users today" count), the totals snapshot via
     ``MetricsService.stats()``, the in-process ``AdminMetrics`` purge-backlog
-    gauge, the static :mod:`app.admin.metric_registry`, and the response schema —
+    gauge, the static :mod:`app.admin.metric_registry`, and the response schema -
     never on another Domain_Metrics_Service (import-graph guard, Req 19.2/19.3/19.5;
     Task 5.3). Collaborators are injectable for tests; otherwise the process-wide
     singletons are resolved lazily.
@@ -99,8 +99,8 @@ class OverviewService:
         The O(1) ``_TOTALS_DAY`` totals snapshot, read via
         ``MetricsService.stats()`` (``metrics_service`` is not a
         Domain_Metrics_Service, so this import is import-graph-clean). ``stats()``
-        never runs a full-table COUNT on the request path — it reads the
-        precomputed snapshot (cache → snapshot rows). Its ``stale`` flag is also
+        never runs a full-table COUNT on the request path - it reads the
+        precomputed snapshot (cache -> snapshot rows). Its ``stale`` flag is also
         the source of the overall :attr:`OverviewKpis.stale` (see below).
 
     ``newUsersToday`` (Req 13.2/13.3)
@@ -115,24 +115,24 @@ class OverviewService:
         ``AI_CALLS`` Metric_Key via ``MetricStore.sum([AI_CALLS], today, today)``.
         See :meth:`_ai_calls_today` for the durable-only decision (Req 13.5 asks
         for durable + the live day counter, but reading the live counter would
-        require importing ``AiMetricsService`` — a forbidden cross-domain import;
+        require importing ``AiMetricsService`` - a forbidden cross-domain import;
         we source the durable key only and document the eventual consistency).
 
     ``errorRate24h`` (Req 13.2/13.3)
         The server-error rate over the **trailing 24h** as a percentage bounded
-        ``0.00``–``100.00`` (2dp). Computed from the durable ``REQUEST_*`` keys via
-        ``MetricStore.sum`` over the last two UTC days (today + yesterday) — the
+        ``0.00``-``100.00`` (2dp). Computed from the durable ``REQUEST_*`` keys via
+        ``MetricStore.sum`` over the last two UTC days (today + yesterday) - the
         same two-day trailing-24h proxy the security view uses, since daily is the
         finest durable granularity. ``errors`` = ``REQUEST_5XX`` (server errors);
         ``total`` = ``REQUEST_2XX + REQUEST_4XX + REQUEST_5XX``. When ``total == 0``
-        the rate is ``0.00`` (0 requests ⇒ 0% error, a computable value — not
+        the rate is ``0.00`` (0 requests => 0% error, a computable value - not
         "unavailable", which is reserved for a source that *cannot* be computed,
         Req 13.7).
 
     ``purgeBacklog`` (Req 13.2)
         The count of purge-due soft-deleted users, read from the in-process
         ``AdminMetrics`` ``purge_backlog`` gauge (last-write-wins, maintained by
-        the cleanup job / ``live_admin_gauges``) — a pure in-memory read, no query.
+        the cleanup job / ``live_admin_gauges``) - a pure in-memory read, no query.
 
     ``stale`` (Req 13.9 UI staleness signal)
         Overall staleness reflects the totals snapshot: it is the ``stale`` flag
@@ -147,7 +147,7 @@ class OverviewService:
     **Partial-response behaviour (Req 13.7).** Each KPI is computed in its own
     ``try/except``; a source that fails or cannot be computed yields
     ``KpiValue(value=None, unavailable=True)`` while every other KPI still
-    returns its value — the request never fails as a whole.
+    returns its value - the request never fails as a whole.
     """
 
     # Trailing-24h proxy spans at most two UTC calendar days (today + yesterday),
@@ -164,7 +164,7 @@ class OverviewService:
     ) -> None:
         # Optional injected collaborators (tests); otherwise the process-wide
         # singletons are resolved lazily. All are shared primitives / non-domain
-        # services — never another Domain_Metrics_Service (import-graph guard).
+        # services - never another Domain_Metrics_Service (import-graph guard).
         self._metric_store = metric_store
         self._admin_repo = admin_repo
         self._metrics_service = metrics_service
@@ -205,7 +205,7 @@ class OverviewService:
     async def kpis(self) -> "OverviewKpis":
         """Return the Overview KPI cards from shared primitives only (Req 13).
 
-        Assembles each KPI in isolation (per-KPI ``unavailable`` on failure —
+        Assembles each KPI in isolation (per-KPI ``unavailable`` on failure -
         Req 13.7) using UTC day/window boundaries (Req 13.3). Every read is O(1)
         (Req 13.6). See the class docstring for the full source mapping.
         """
@@ -235,7 +235,7 @@ class OverviewService:
         """``totalUsers`` from the O(1) totals snapshot + the overall stale flag.
 
         Reads ``MetricsService.stats()`` (the O(1) ``_TOTALS_DAY`` snapshot, never
-        a full-table COUNT — Req 13.4/13.6). On failure the KPI is unavailable and
+        a full-table COUNT - Req 13.4/13.6). On failure the KPI is unavailable and
         ``stale`` stays ``False`` (staleness cannot be confirmed).
         """
         from app.admin.schemas import KpiValue
@@ -250,7 +250,7 @@ class OverviewService:
             return KpiValue(value=None, unavailable=True), False
 
     async def _new_users_today(self, now: datetime) -> "KpiValue":
-        """``newUsersToday`` — users created during the current UTC day (live).
+        """``newUsersToday`` - users created during the current UTC day (live).
 
         The "durable key + live day" pattern (Req 13.2/13.3): a single
         day-bounded, index-served ``signups`` count via ``AdminRepo`` for today's
@@ -269,14 +269,14 @@ class OverviewService:
             return KpiValue(value=None, unavailable=True)
 
     async def _ai_calls_today(self, now: datetime) -> "KpiValue":
-        """``aiCallsToday`` — durable ``AI_CALLS`` summed over the current UTC day.
+        """``aiCallsToday`` - durable ``AI_CALLS`` summed over the current UTC day.
 
         **Durable-only decision (Req 13.5 vs import-graph, Req 19.2/13.5).** Req
         13.5 specifies "durable AI Metric_Keys combined with the current live day
         counter". The live day counter lives in the in-process ``AiMetricsService``
         accumulator, but importing it here would be a cross-domain
         Domain_Metrics_Service import forbidden by the import-graph fitness test
-        (Task 5.3) — ``OverviewService`` may not import ``ai_metrics``. So we source
+        (Task 5.3) - ``OverviewService`` may not import ``ai_metrics``. So we source
         AI-calls-today from the **durable** ``AI_CALLS`` Metric_Key only, summed for
         today via ``MetricStore.sum([AI_CALLS], today, today)`` (a shared
         primitive). Documented tradeoff: today's not-yet-flushed in-process AI
@@ -295,14 +295,14 @@ class OverviewService:
             return KpiValue(value=None, unavailable=True)
 
     async def _error_rate_24h(self, now: datetime) -> "KpiValue":
-        """``errorRate24h`` — server-error rate (0.00–100.00) over trailing 24h.
+        """``errorRate24h`` - server-error rate (0.00-100.00) over trailing 24h.
 
         Trailing-24h proxy = the last two UTC days (today + yesterday), the finest
         durable granularity (mirrors the security view). ``errors`` = ``REQUEST_5XX``
         (server errors); ``total`` = ``REQUEST_2XX + REQUEST_4XX + REQUEST_5XX``, both
         summed from the durable Metric_Keys via ``MetricStore.sum`` (Req 13.2/13.3).
-        ``total == 0`` ⇒ ``0.00`` (0 requests is 0% error — a computable value, not
-        "unavailable"). The result is rounded to 2dp and clamped to ``0.00``–``100.00``
+        ``total == 0`` => ``0.00`` (0 requests is 0% error - a computable value, not
+        "unavailable"). The result is rounded to 2dp and clamped to ``0.00``-``100.00``
         (Req 13.2 bound).
         """
         from app.admin.schemas import KpiValue
@@ -327,7 +327,7 @@ class OverviewService:
             return KpiValue(value=None, unavailable=True)
 
     def _purge_backlog(self) -> "KpiValue":
-        """``purgeBacklog`` — the in-process ``AdminMetrics`` ``purge_backlog`` gauge.
+        """``purgeBacklog`` - the in-process ``AdminMetrics`` ``purge_backlog`` gauge.
 
         A pure in-memory read (no DB query): ``get_admin_metrics().snapshot()``'s
         ``gauges['purge_backlog']`` (last-write-wins, maintained by the cleanup
@@ -340,7 +340,7 @@ class OverviewService:
             snapshot = self._get_admin_metrics().snapshot()
             gauges = snapshot.get("gauges", {}) if isinstance(snapshot, dict) else {}
             if "purge_backlog" not in gauges:
-                # Never set → cannot report a count (unavailable, not a false 0).
+                # Never set -> cannot report a count (unavailable, not a false 0).
                 return KpiValue(value=None, unavailable=True)
             return KpiValue(value=float(max(0.0, float(gauges["purge_backlog"]))))
         except Exception:

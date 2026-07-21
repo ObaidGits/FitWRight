@@ -1,6 +1,6 @@
 """Integration tests for global search (real isolated DB + SQLite FTS5, P3 §C).
 
-Covers the outbox→index pipeline, FTS ranking + scoping-in-SQL (no cross-user
+Covers the outbox->index pipeline, FTS ranking + scoping-in-SQL (no cross-user
 leakage), filters, cursor pagination, rebuild, drift detection, and the
 feature-flag kill-switch.
 """
@@ -31,7 +31,7 @@ async def _resume(db, uid, data, **kw):
 
 
 # ---------------------------------------------------------------------------
-# Outbox → index pipeline
+# Outbox -> index pipeline
 # ---------------------------------------------------------------------------
 
 
@@ -82,7 +82,7 @@ class TestSearchQuery:
         await _resume(isolated_db, owner_id, {"summary": "confidential_marker mine"})
         await _drain()
         rows = await get_search_repo().search(owner_id, "confidential_marker", limit=10)
-        # Only the owner's doc — never the other user's.
+        # Only the owner's doc - never the other user's.
         assert all(r["node_id"] != "foreign-1" for r in rows)
         assert len(rows) == 1
 
@@ -145,7 +145,7 @@ class TestSearchQuery:
 class TestRebuildAndDrift:
     async def test_reindex_endpoint_rebuilds(self, isolated_db, owner_id):
         await _resume(isolated_db, owner_id, {"summary": "rebuildme token"})
-        # Do NOT drain — index is empty; reindex builds from source.
+        # Do NOT drain - index is empty; reindex builds from source.
         async with _client() as c:
             resp = await c.post("/api/v1/search/reindex")
         assert resp.status_code == 200
@@ -155,7 +155,7 @@ class TestRebuildAndDrift:
 
     async def test_drift_detects_unindexed(self, isolated_db, owner_id):
         await _resume(isolated_db, owner_id, {"summary": "x"})
-        # Not drained → source has 1, index has 0 → missing 1.
+        # Not drained -> source has 1, index has 0 -> missing 1.
         drift = await search_drift(owner_id)
         assert drift["missing"] == 1
         await rebuild_user_index(owner_id)

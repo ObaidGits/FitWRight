@@ -8,13 +8,13 @@ implementation modules. It intentionally **re-exports** (no duplication): the
 behavior/definition stays with its owner.
 
 Ports (each has ≥2 implementations today):
-- ``KVStorePort``      — Local / DB / Redis            (``app.auth.kvstore``)
-- ``StoragePort``      — Local disk / Cloudinary       (``app.storage.provider``)
-- ``MailerPort``       — Logging / SMTP / Resend        (``app.auth.email``)
-- ``CaptchaPort``      — AllowAll / Turnstile           (``app.auth.captcha``)
-- ``BreachCheckPort``  — Noop / HIBP                    (``app.auth.breach``)
+- ``KVStorePort``      - Local / DB / Redis            (``app.auth.kvstore``)
+- ``StoragePort``      - Local disk / Cloudinary       (``app.storage.provider``)
+- ``MailerPort``       - Logging / SMTP / Resend        (``app.auth.email``)
+- ``CaptchaPort``      - AllowAll / Turnstile           (``app.auth.captcha``)
+- ``BreachCheckPort``  - Noop / HIBP                    (``app.auth.breach``)
 
-Deliberately NOT ports (single implementation / cross-cutting — ARCHITECTURE
+Deliberately NOT ports (single implementation / cross-cutting - ARCHITECTURE
 §11): Search (Postgres FTS only), Secrets, Logging, Metrics, Config,
 Notifications (domain, not infra), OAuth (detail inside identity).
 """

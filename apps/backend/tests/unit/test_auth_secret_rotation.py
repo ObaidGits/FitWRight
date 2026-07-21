@@ -69,7 +69,7 @@ class TestOAuthTransactionCookieRotation:
         signed_old = serialize_transaction(
             self._txn(), config=_settings(session_secret=OLD, session_secret_prev="")
         )
-        # After rotation: current=NEW, prev=OLD → still deserializes.
+        # After rotation: current=NEW, prev=OLD -> still deserializes.
         rotated = deserialize_transaction(signed_old, config=_settings())
         assert rotated is not None
         assert rotated.state == "st" and rotated.next == "/home"

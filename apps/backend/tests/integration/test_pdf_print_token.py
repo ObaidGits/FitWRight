@@ -1,7 +1,7 @@
 """Integration tests for the PDF print-token flow (hosted-mode 401 fix).
 
 The headless-Chromium PDF render loads the frontend /print route, whose SSR
-fetch has no user session cookie. In hosted mode that fetch used to 401 (→ the
+fetch has no user session cookie. In hosted mode that fetch used to 401 (-> the
 generic "PDF rendering failed" error). The export endpoint now mints a
 short-lived signed print token, and `GET /resumes/print-data` authenticates the
 render with it. These tests exercise that endpoint directly.
@@ -71,7 +71,7 @@ class TestPrintDataEndpoint:
         assert resp.status_code == 422  # token is a required query param
 
     async def test_anonymous_reachable_without_session(self, isolated_db, owner_id):
-        """The endpoint is NOT session-guarded (token-only) — anon can reach it,
+        """The endpoint is NOT session-guarded (token-only) - anon can reach it,
         but a bad token still 401s (never leaks data)."""
         async with _client() as c:
             resp = await c.get("/api/v1/resumes/print-data?resume_id=x&token=bad")

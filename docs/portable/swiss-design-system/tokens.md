@@ -1,18 +1,18 @@
 # Design Tokens
 
-The atomic values every other file in this pack builds on. Memorize the colors and the three-font hierarchy — those two things define 80% of the visual identity.
+The atomic values every other file in this pack builds on. Memorize the colors and the three-font hierarchy - those two things define 80% of the visual identity.
 
-> Sibling docs: [components](components.md) · [layouts](layouts.md) · [anti-patterns](anti-patterns.md)
+> Sibling docs: [components](components.md) - [layouts](layouts.md) - [anti-patterns](anti-patterns.md)
 
 ---
 
 ## Color Palette
 
-A small, intentional palette. Each color has one job. Don't introduce new colors casually — if a new state shows up, ask whether an existing color already covers it.
+A small, intentional palette. Each color has one job. Don't introduce new colors casually - if a new state shows up, ask whether an existing color already covers it.
 
 | Name | Hex | Usage |
 |------|-----|-------|
-| Canvas | `#F0F0E8` | Page background — warm off-white, never pure white |
+| Canvas | `#F0F0E8` | Page background - warm off-white, never pure white |
 | Ink | `#000000` | Body text, borders, primary structural lines |
 | Hyper Blue | `#1D4ED8` | Links, primary actions, focus rings |
 | Signal Green | `#15803D` | Success, confirmation, downloads |
@@ -27,7 +27,7 @@ Canvas (`#F0F0E8`) is the default surface. Pure white is jarring against the har
 ### Color rules
 
 - One primary action per screen (Hyper Blue)
-- Status colors are loud — they stop you, so use them sparingly
+- Status colors are loud - they stop you, so use them sparingly
 - Steel Grey is your only "soft" color; never invent additional greys
 
 ---
@@ -37,17 +37,17 @@ Canvas (`#F0F0E8`) is the default surface. Pure white is jarring against the har
 Three fonts. That's the whole hierarchy.
 
 ```css
-font-serif   /* Headers — Georgia, Times, "Times New Roman" */
-font-sans    /* Body text — Inter, Helvetica, system-ui */
-font-mono    /* Metadata, labels — SF Mono, Consolas, "Courier New" */
+font-serif   /* Headers - Georgia, Times, "Times New Roman" */
+font-sans    /* Body text - Inter, Helvetica, system-ui */
+font-mono    /* Metadata, labels - SF Mono, Consolas, "Courier New" */
 ```
 
 ### Role mapping
 
 | Use | Font | Size | Weight | Notes |
 |-----|------|------|--------|-------|
-| Page headers | serif | 3xl–5xl | bold | Set the tone of the page |
-| Section headers | serif | xl–2xl | bold | Anchor major sections |
+| Page headers | serif | 3xl-5xl | bold | Set the tone of the page |
+| Section headers | serif | xl-2xl | bold | Anchor major sections |
 | Body | sans | base | normal | Default for paragraphs |
 | Labels | mono | sm | medium, **uppercase** | Form labels, table headers |
 | Metadata | mono | xs | light | Timestamps, IDs, captions |
@@ -79,7 +79,7 @@ A 4px-based scale. Stick to it. Custom paddings break the rhythm.
 ```
 xs:  4px    (p-1)
 sm:  8px    (p-2)
-md:  16px   (p-4)   ← default for most cases
+md:  16px   (p-4)   <- default for most cases
 lg:  24px   (p-6)
 xl:  32px   (p-8)
 2xl: 48px   (p-12)

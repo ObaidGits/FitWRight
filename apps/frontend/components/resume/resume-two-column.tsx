@@ -251,7 +251,7 @@ export const ResumeTwoColumn: React.FC<ResumeTwoColumnProps> = ({
                     >
                       <span>
                         {exp.company}
-                        {exp.location && <> • {exp.location}</>}
+                        {exp.location && <> - {exp.location}</>}
                       </span>
                     </div>
 
@@ -261,7 +261,7 @@ export const ResumeTwoColumn: React.FC<ResumeTwoColumnProps> = ({
                       >
                         {exp.description.map((desc, index) => (
                           <li key={index} className="flex">
-                            <span className="mr-1.5 flex-shrink-0">•&nbsp;</span>
+                            <span className="mr-1.5 flex-shrink-0">-&nbsp;</span>
                             <span>
                               <SafeHtml html={desc} />
                             </span>
@@ -351,7 +351,7 @@ export const ResumeTwoColumn: React.FC<ResumeTwoColumnProps> = ({
                         >
                           {project.description.map((desc, index) => (
                             <li key={index} className="flex">
-                              <span className="mr-1.5 flex-shrink-0">•&nbsp;</span>
+                              <span className="mr-1.5 flex-shrink-0">-&nbsp;</span>
                               <span>
                                 <SafeHtml html={desc} />
                               </span>
@@ -374,7 +374,7 @@ export const ResumeTwoColumn: React.FC<ResumeTwoColumnProps> = ({
               <ul className={`ml-4 ${baseStyles['resume-list']} ${baseStyles['resume-text-xs']}`}>
                 {certificationsTraining.map((cert, index) => (
                   <li key={index} className="flex">
-                    <span className="mr-1.5 flex-shrink-0">•&nbsp;</span>
+                    <span className="mr-1.5 flex-shrink-0">-&nbsp;</span>
                     <span>{cert}</span>
                   </li>
                 ))}
@@ -463,7 +463,7 @@ export const ResumeTwoColumn: React.FC<ResumeTwoColumnProps> = ({
               <h3 className={baseStyles['resume-section-title-sm']}>
                 {headingFallbacks.languages}
               </h3>
-              <p className={baseStyles['resume-text-xs']}>{languages.join(' • ')}</p>
+              <p className={baseStyles['resume-text-xs']}>{languages.join(' - ')}</p>
             </div>
           )}
 

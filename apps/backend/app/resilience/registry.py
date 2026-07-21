@@ -2,7 +2,7 @@
 
 Phase 2 runs behind ≥2 workers, so the "how many streams does this user have
 open, and should we start another?" decision cannot live in one process's
-memory — it moves into the :class:`~app.auth.kvstore.KVStore`.
+memory - it moves into the :class:`~app.auth.kvstore.KVStore`.
 
 Design (design §Streaming, "Task registry & cancellation"):
 
@@ -124,7 +124,7 @@ class StreamRegistry:
         streams (the caller returns a retryable 429). Prunes expired slots first
         so a leaked stream never permanently consumes the cap. On a KV outage it
         fails **open** for a single stream (availability over a hard cap) but logs
-        it — the in-process max-lifetime reaper still bounds any leak.
+        it - the in-process max-lifetime reaper still bounds any leak.
         """
         now = self._clock()
         lock = self._kv.lock(

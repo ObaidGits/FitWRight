@@ -468,7 +468,7 @@
       "outreachGenerateFailed": "Falha ao gerar mensagem de contato: {error}",
       "interviewPrepGenerateFailed": "Falha ao gerar preparação para entrevista: {error}",
       "aiRequiresConnection": "A geração por IA precisa de conexão com a internet. Reconecte-se e tente novamente.",
-      "aiStreaming": "Gerando com IA…",
+      "aiStreaming": "Gerando com IA...",
       "draftQuarantined": "Um rascunho local salvo estava ilegível e foi isolado para proteger seu trabalho. Seu conteúdo atual está seguro.",
       "storageDegraded": "O armazenamento local está indisponível, então as alterações ficam apenas na memória nesta sessão. Salve no servidor para não perdê-las.",
       "openRecoveryCenter": "Abrir central de recuperação"
@@ -675,7 +675,7 @@
       "ollamaServerUrlPlaceholder": "http://localhost:11434",
       "reasoningEffortLabel": "Esforço de raciocínio",
       "reasoningEffortAuto": "Automático",
-      "reasoningEffortAutoDesc": "Não enviar reasoning_effort — padrão para máxima compatibilidade",
+      "reasoningEffortAutoDesc": "Não enviar reasoning_effort - padrão para máxima compatibilidade",
       "reasoningEffortMinimal": "Mínimo",
       "reasoningEffortLow": "Baixo",
       "reasoningEffortMedium": "Médio",
@@ -872,7 +872,7 @@
     "validationError": "Alguns campos precisam de atenção. Verifique os campos destacados e tente novamente.",
     "boundary": {
       "title": "Algo Deu Errado",
-      "description": "Algo inesperado quebrou. Tente recarregar a página — se continuar acontecendo, nos avise.",
+      "description": "Algo inesperado quebrou. Tente recarregar a página - se continuar acontecendo, nos avise.",
       "tryAgain": "Tentar Novamente",
       "reloadPage": "Recarregar Página"
     }
@@ -901,7 +901,7 @@
     "title": "Assistente de currículo",
     "answerLabel": "Sua resposta",
     "keepAddingPrompt": "O que você gostaria de adicionar ou alterar?",
-    "readyHint": "Você já tem o suficiente para um currículo sólido — revise e finalize quando quiser.",
+    "readyHint": "Você já tem o suficiente para um currículo sólido - revise e finalize quando quiser.",
     "sections": {
       "intro": "Primeiros passos",
       "contact": "Dados de contato",
@@ -987,7 +987,7 @@
       "jobDescription": "Descrição da vaga",
       "noJobDescription": "Nenhuma descrição de vaga registrada.",
       "notes": "Notas",
-      "notesPlaceholder": "Adicione notas sobre esta candidatura…",
+      "notesPlaceholder": "Adicione notas sobre esta candidatura...",
       "saveNotes": "Salvar notas",
       "resumeUnavailable": "O currículo enviado não está mais disponível.",
       "loadFailed": "Não foi possível carregar esta candidatura.",
@@ -995,7 +995,7 @@
     },
     "bulk": {
       "selected": "{count} selecionada(s)",
-      "moveTo": "Mover para…",
+      "moveTo": "Mover para...",
       "clear": "Limpar",
       "deleteConfirmTitle": "Excluir candidaturas?",
       "deleteConfirmDescription": "Excluir {count} candidatura(s) selecionada(s)? Isso não pode ser desfeito."
@@ -1006,7 +1006,7 @@
       "resume": "Currículo",
       "untitledResume": "Currículo sem título",
       "jobDescription": "Descrição da vaga",
-      "jobDescriptionPlaceholder": "Cole a descrição da vaga aqui…",
+      "jobDescriptionPlaceholder": "Cole a descrição da vaga aqui...",
       "company": "Empresa",
       "role": "Cargo",
       "optional": "Opcional",

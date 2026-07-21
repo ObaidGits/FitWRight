@@ -37,7 +37,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 # Partial-index predicate for the single-master invariant. SQLite stores
 # booleans as integers (``is_master = 1``), but Postgres is strictly typed and
-# rejects ``boolean = integer`` — it needs ``is_master = true``. Using a single
+# rejects ``boolean = integer`` - it needs ``is_master = true``. Using a single
 # ``is_master = 1`` for both dialects fails on Postgres with
 # "operator does not exist: boolean = integer", so the predicate is
 # dialect-specific (mirrors ``Resume.__table_args__`` in ``app/models.py``).

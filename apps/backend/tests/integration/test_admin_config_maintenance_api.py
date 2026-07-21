@@ -10,7 +10,7 @@ Covers:
 - Config authz matrix (anon 401, non-admin 403, admin 200) + secret-free body
   (Req 15.1 / 10.2 / 15.8);
 - Config access is audited ``admin.config_viewed`` (Req 15.3);
-- Config audit-failure → 500 ``audit_failed`` and NO config returned (Req 15.9);
+- Config audit-failure -> 500 ``audit_failed`` and NO config returned (Req 15.9);
 - Maintenance authz matrix for each of the four actions (Req 18.2);
 - Maintenance idempotent/already-running when the underlying lock is held (Req 18.3);
 - Maintenance access is audited ``admin.maintenance_action`` with meta.action (Req 18.2);
@@ -84,7 +84,7 @@ class TestRoleCapabilityModel:
 
 
 # ---------------------------------------------------------------------------
-# Config diagnostics — authz + secret-free (Req 15.1 / 10.2 / 15.8)
+# Config diagnostics - authz + secret-free (Req 15.1 / 10.2 / 15.8)
 # ---------------------------------------------------------------------------
 
 
@@ -113,7 +113,7 @@ class TestConfigAuthz:
 
 
 # ---------------------------------------------------------------------------
-# Config diagnostics — audited (Req 15.3) + audit-failure → 500 (Req 15.9)
+# Config diagnostics - audited (Req 15.3) + audit-failure -> 500 (Req 15.9)
 # ---------------------------------------------------------------------------
 
 
@@ -153,7 +153,7 @@ class TestConfigAudit:
 
 
 # ---------------------------------------------------------------------------
-# Maintenance — authz matrix per action (Req 18.2)
+# Maintenance - authz matrix per action (Req 18.2)
 # ---------------------------------------------------------------------------
 
 
@@ -161,7 +161,7 @@ class TestMaintenanceAuthz:
     @pytest.mark.parametrize("action", _MAINTENANCE_ACTIONS)
     async def test_anonymous_401(self, auth_env, hosted, action):
         async with _client() as client:
-            # No session → CSRF middleware allows through to the guard → 401.
+            # No session -> CSRF middleware allows through to the guard -> 401.
             assert (await client.post(_maint_url(action))).status_code == 401
 
     @pytest.mark.parametrize("action", _MAINTENANCE_ACTIONS)
@@ -185,13 +185,13 @@ class TestMaintenanceAuthz:
 
 
 # ---------------------------------------------------------------------------
-# Maintenance — idempotent / already-running (Req 18.3)
+# Maintenance - idempotent / already-running (Req 18.3)
 # ---------------------------------------------------------------------------
 
 
 class TestMaintenanceIdempotency:
     async def test_lock_held_returns_already_running(self, auth_env, hosted):
-        """Holding the rollup single-flight lock → run-rollup is already_running."""
+        """Holding the rollup single-flight lock -> run-rollup is already_running."""
         from app.auth.runtime import get_kvstore
 
         kv = get_kvstore()
@@ -214,7 +214,7 @@ class TestMaintenanceIdempotency:
 
 
 # ---------------------------------------------------------------------------
-# Maintenance — audited (Req 18.2)
+# Maintenance - audited (Req 18.2)
 # ---------------------------------------------------------------------------
 
 
@@ -231,7 +231,7 @@ class TestMaintenanceAudit:
 
 
 # ---------------------------------------------------------------------------
-# Maintenance — no destructive/SQL/config-edit route (Req 18.5)
+# Maintenance - no destructive/SQL/config-edit route (Req 18.5)
 # ---------------------------------------------------------------------------
 
 
@@ -260,7 +260,7 @@ class TestMaintenanceNoDestructiveSurface:
                     assert token not in path, f"destructive maintenance route exposed: {r.path}"
 
     def test_config_is_get_only_no_mutation_verb(self):
-        """``/admin/config`` accepts only GET — no PUT/POST/PATCH/DELETE (Req 10.3)."""
+        """``/admin/config`` accepts only GET - no PUT/POST/PATCH/DELETE (Req 10.3)."""
         routes = self._admin_routes()
         config_methods: set[str] = set()
         for r in routes:

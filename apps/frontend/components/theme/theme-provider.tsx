@@ -50,7 +50,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     try {
       localStorage.setItem(STORAGE_KEY, next);
     } catch {
-      /* storage unavailable — non-fatal */
+      /* storage unavailable - non-fatal */
     }
     applyThemeClass(next);
   }, []);
@@ -78,7 +78,7 @@ export function useTheme(): ThemeContextValue {
 /**
  * Inline script placed in <head> before hydration. Reads the persisted theme
  * (defaulting to light) and applies the `.dark` class synchronously so the
- * first paint is already correct — no flash of the wrong theme.
+ * first paint is already correct - no flash of the wrong theme.
  *
  * Rendered via dangerouslySetInnerHTML with a static, non-user string.
  */

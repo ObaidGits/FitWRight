@@ -2,7 +2,7 @@
 (ARCHITECTURE §9, Amendment E; IMPLEMENTATION_PLAN Phase 7).
 
 A module owns its tables, and its ``repo`` (the sole writer of those tables) is
-private to the module. No *other* module may import a foreign ``repo`` — cross
+private to the module. No *other* module may import a foreign ``repo`` - cross
 -module access must go through the owning module's service/use-case layer. This
 makes "the owning module is the only writer" structurally enforced.
 

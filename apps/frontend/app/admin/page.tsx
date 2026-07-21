@@ -12,7 +12,7 @@
  * labeled value (Req 13.8); a KPI the backend reports as `unavailable` (or a
  * null value) renders an explicit "Unavailable" indicator instead of a bogus
  * number (Req 13.10); `errorRate24h` renders as a percentage ("1.25%"). While
- * the snapshot's age exceeds 60 seconds — or the backend `stale` flag is set —
+ * the snapshot's age exceeds 60 seconds - or the backend `stale` flag is set -
  * every card shows a "Stale" badge and the page offers a working refresh control
  * that re-fetches and clears the indicator on success (Req 13.9 / 11.9 / 11.10).
  *
@@ -23,7 +23,7 @@
  * `aria-live` region (Req 11.12) and every control is keyboard-operable.
  *
  * NOTE: the Product-usage section (feature usage + resume analytics) is added to
- * this page by tasks 16.3 / 17.3 — this page is structured to leave room for it
+ * this page by tasks 16.3 / 17.3 - this page is structured to leave room for it
  * but does not stub it here.
  */
 import * as React from 'react';
@@ -55,7 +55,7 @@ import {
 import type { KpiValue, MetricName, MetricWindow } from '@/lib/api/admin';
 
 // ---------------------------------------------------------------------------
-// Windowed-chart config — the metric + window options folded in from the former
+// Windowed-chart config - the metric + window options folded in from the former
 // Analytics page. Default window is 30 days (Req 11.1).
 // ---------------------------------------------------------------------------
 
@@ -68,8 +68,8 @@ const METRICS: { value: MetricName; label: string }[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// KPI formatting — count KPIs are non-negative integers; the error-rate KPI is a
-// percentage bounded 0.00–100.00 rendered with two decimals ("1.25%").
+// KPI formatting - count KPIs are non-negative integers; the error-rate KPI is a
+// percentage bounded 0.00-100.00 rendered with two decimals ("1.25%").
 // ---------------------------------------------------------------------------
 
 function formatCount(value: number): string {
@@ -88,7 +88,7 @@ function formatPercent(value: number): string {
  * One KPI card: a labeled value (Req 13.8). When the KPI is `unavailable` (or
  * its value is null) it renders an explicit "Unavailable" indicator in place of
  * the number (Req 13.10). While the snapshot is stale it shows a "Stale" badge
- * (text + colour, never colour alone — a11y) on the card (Req 13.9).
+ * (text + colour, never colour alone - a11y) on the card (Req 13.9).
  */
 function KpiCard({
   icon: Icon,
@@ -206,7 +206,7 @@ function UsageSection() {
 }
 
 // ---------------------------------------------------------------------------
-// Product Usage — feature usage analytics (Req 16, 19.1)
+// Product Usage - feature usage analytics (Req 16, 19.1)
 //
 // This is a DISTINCT bounded context from observability. It renders below the
 // operational KPIs/chart as a visually-separate section so admins can see product
@@ -235,7 +235,7 @@ function featureLabel(feature: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Resume analytics (Req 14, 19.1) — the second product-analytics panel, living
+// Resume analytics (Req 14, 19.1) - the second product-analytics panel, living
 // in the SAME "Product usage" section as feature usage. Source split (where
 // resumes come from), the most-used templates, and a compact growth summary.
 // ---------------------------------------------------------------------------
@@ -303,7 +303,7 @@ function ResumeAnalyticsPanel() {
           <LoadingSkeleton rows={2} />
         ) : (
           <div className="space-y-6">
-            {/* Source split — counts + percentages for each origin. */}
+            {/* Source split - counts + percentages for each origin. */}
             <div>
               <h4 className="mb-2 text-xs font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
                 Source split
@@ -329,7 +329,7 @@ function ResumeAnalyticsPanel() {
               </div>
             </div>
 
-            {/* Popular templates — name + usage count, or an empty state. */}
+            {/* Popular templates - name + usage count, or an empty state. */}
             <div>
               <h4 className="mb-2 text-xs font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
                 Popular templates
@@ -365,7 +365,7 @@ function ResumeAnalyticsPanel() {
               )}
             </div>
 
-            {/* Compact growth summary — total new resumes over the window. */}
+            {/* Compact growth summary - total new resumes over the window. */}
             <p className="text-sm text-[var(--muted-foreground)]">
               <span className="font-semibold tabular-nums text-[var(--foreground)]">
                 {growthTotal.toLocaleString()}
@@ -391,7 +391,7 @@ function ProductUsageSection() {
           <div>
             <h2 className="text-lg font-semibold">Product usage</h2>
             <p className="text-sm text-[var(--muted-foreground)]">
-              Feature adoption across the product — separate from platform health.
+              Feature adoption across the product - separate from platform health.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -454,7 +454,7 @@ function ProductUsageSection() {
         </div>
       </Card>
 
-      {/* Resume analytics — second product-analytics panel in the same section. */}
+      {/* Resume analytics - second product-analytics panel in the same section. */}
       <ResumeAnalyticsPanel />
     </section>
   );
@@ -503,7 +503,7 @@ export default function AdminOverviewPage() {
         </Button>
       </div>
 
-      {/* KPI cards — aria-live so async results are announced (Req 11.12). */}
+      {/* KPI cards - aria-live so async results are announced (Req 11.12). */}
       <div aria-live="polite" aria-busy={isFetching}>
         {isError ? (
           <ErrorState
@@ -543,7 +543,7 @@ export default function AdminOverviewPage() {
       {/* Windowed usage chart (folded in from the former Analytics page). */}
       <UsageSection />
 
-      {/* Product usage — distinct bounded context from observability (Req 19.1). */}
+      {/* Product usage - distinct bounded context from observability (Req 19.1). */}
       <ProductUsageSection />
     </div>
   );

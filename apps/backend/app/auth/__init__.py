@@ -2,12 +2,12 @@
 
 This package houses the pluggable infrastructure the auth flows are built on:
 
-- ``kvstore`` — a pluggable key/value store (session cache, rate-limit counters,
+- ``kvstore`` - a pluggable key/value store (session cache, rate-limit counters,
   transient OAuth state, single-flight locks) with in-process, Redis/Upstash,
   and DB-backed adapters selected by ``KVSTORE_URL`` (ADR-6).
-- ``email`` — a pluggable ``EmailSender`` (default: dev console/log adapter).
-- ``captcha`` — a pluggable ``CaptchaVerifier`` (default: fail-open allow).
-- ``breach`` — a pluggable ``BreachedPasswordCheck`` (default: fail-open allow).
+- ``email`` - a pluggable ``EmailSender`` (default: dev console/log adapter).
+- ``captcha`` - a pluggable ``CaptchaVerifier`` (default: fail-open allow).
+- ``breach`` - a pluggable ``BreachedPasswordCheck`` (default: fail-open allow).
 
 Later waves add passwords, sessions, csrf, oauth, verification, reset, ratelimit,
 stepup, principal, and audit modules alongside these (see design.md).

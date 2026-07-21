@@ -83,7 +83,7 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({ value, onCha
 };
 
 /**
- * Template Thumbnail — visual representation of each template layout.
+ * Template Thumbnail - visual representation of each template layout.
  * Exported for use in FormattingControls.
  */
 interface TemplateThumbnailProps {

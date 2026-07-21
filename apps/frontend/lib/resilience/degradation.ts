@@ -1,5 +1,5 @@
 /**
- * Degradation levels (P4 R6.4, R9) — deterministic capability tiers.
+ * Degradation levels (P4 R6.4, R9) - deterministic capability tiers.
  *
  * Every failure maps to a *named* level with a fixed capability set, so behavior
  * is predictable and communicable to the user via the DegradationBanner. The
@@ -93,7 +93,7 @@ export function computeDegradation(signals: DegradationSignals): DegradationLeve
   if (signals.apiVersionSkew) return 'safe-mode';
   if (!signals.backendReachable) {
     // Offline: if local storage works we can read + edit + queue; otherwise the
-    // safety net is gone → read-only to avoid losing edits we can't persist.
+    // safety net is gone -> read-only to avoid losing edits we can't persist.
     return signals.storageOk ? 'offline-read-write' : 'read-only';
   }
   if (!signals.aiAvailable) return 'degraded-ai';
@@ -127,7 +127,7 @@ export function describeDegradation(level: DegradationLevel): {
       };
     case 'safe-mode':
       return {
-        label: 'Safe mode — reload needed',
+        label: 'Safe mode - reload needed',
         message:
           'A new version is available. Your work is saved locally. Reload when ready to continue saving.',
       };

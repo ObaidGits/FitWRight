@@ -9,10 +9,10 @@
 # Usage:
 #   deploy/supabase/backup.sh "postgresql://user:pass@host:5432/db" [out_dir]
 #
-# IMPORTANT: use the DIRECT (non-pooled) connection string for dumps — the
+# IMPORTANT: use the DIRECT (non-pooled) connection string for dumps - the
 # transaction pooler (Supabase 6543) is not suited to long dump sessions. Use
 # the 5432 direct endpoint. Do NOT pass the SQLAlchemy "+asyncpg"/"+psycopg"
-# suffix here — this is libpq, so a plain postgresql:// URL.
+# suffix here - this is libpq, so a plain postgresql:// URL.
 set -euo pipefail
 
 DB_URL="${1:-}"

@@ -4,23 +4,23 @@ This module turns a resolved session into an authorization decision and wires
 the request-time plumbing (design `§RBAC & capabilities`, `§Session mechanics`,
 R8.1/8.2/9.1/12.1/12.2/12.3):
 
-- :class:`Principal` — the immutable ``{user_id, role, capabilities, aal,
-  step_up_at, …}`` attached to each authenticated request.
-- :func:`capabilities_for` — the **single** role→capability map (extension point
+- :class:`Principal` - the immutable ``{user_id, role, capabilities, aal,
+  step_up_at, ...}`` attached to each authenticated request.
+- :func:`capabilities_for` - the **single** role->capability map (extension point
   for future ``support``/``superadmin``/org roles).
-- FastAPI dependencies — :func:`get_principal` (401 if unauthenticated),
+- FastAPI dependencies - :func:`get_principal` (401 if unauthenticated),
   :func:`require_capability` (403 if the capability is absent, audited), and
   :func:`require_step_up` (401 ``step_up_required`` outside the sudo window).
-- :class:`SecurityHeadersMiddleware` — HSTS, ``X-Content-Type-Options``,
+- :class:`SecurityHeadersMiddleware` - HSTS, ``X-Content-Type-Options``,
   ``Referrer-Policy``, and a strict CSP with ``frame-ancestors 'none'`` (R12.3).
-- :class:`AuthMiddleware` — resolves the ``__Host-`` session cookie into
+- :class:`AuthMiddleware` - resolves the ``__Host-`` session cookie into
   ``request.state.principal`` and enforces the per-session double-submit CSRF
   check on state-changing requests (GET/HEAD/OPTIONS exempt; logout included).
   CSRF enforcement is gated so local zero-config (``SINGLE_USER_MODE``) boot and
   the existing unauthenticated routes keep working; hosted turns it on.
-- Cookie helpers — set/clear the ``__Host-`` session cookie and the JS-readable
+- Cookie helpers - set/clear the ``__Host-`` session cookie and the JS-readable
   ``csrf`` cookie with the correct hardened attributes (R12.1).
-- ``auth_csrf_router`` — ``GET /auth/csrf`` issuing the pre-session token.
+- ``auth_csrf_router`` - ``GET /auth/csrf`` issuing the pre-session token.
 """
 
 from __future__ import annotations
@@ -70,7 +70,7 @@ class Capabilities:
     ADMIN_MANAGE = "admin.manage"
 
 
-# Single source of truth for role → capabilities (R8.1). Adding a role or a
+# Single source of truth for role -> capabilities (R8.1). Adding a role or a
 # capability is a one-line change here; nothing else hard-codes a role name.
 _ROLE_CAPABILITIES: dict[str, frozenset[str]] = {
     "user": frozenset(),
@@ -157,7 +157,7 @@ async def get_effective_user_id(request: Request) -> str:
     """Resolve the owning ``user_id`` every owned-resource endpoint scopes to.
 
     - **Hosted** (multi-user): the authenticated principal's ``user_id``; an
-      anonymous request raises 401 (no principal ⇒ no owned data).
+      anonymous request raises 401 (no principal => no owned data).
     - **Local** (``SINGLE_USER_MODE``): the implicit bootstrap owner, lazily
       ensured (created + owned-row backfill) so local zero-config behaves exactly
       like today while still routing every query through the ``user_id`` scope.
@@ -174,8 +174,8 @@ async def get_effective_user_id(request: Request) -> str:
         return principal.user_id
 
     # No principal on the request: the composition root's IdentityProvider
-    # decides whether there is an implicit owner (local → bootstrap owner;
-    # hosted → None). This replaces the former ``if settings.single_user_mode``
+    # decides whether there is an implicit owner (local -> bootstrap owner;
+    # hosted -> None). This replaces the former ``if settings.single_user_mode``
     # branch, keeping the deployment axis in the composition seam (Phase 5).
     from app.platform import get_container
 
@@ -197,7 +197,7 @@ async def require_verified_user_id(request: Request) -> str:
     provider-cost endpoints (resume tailoring/generation). It resolves the owning
     user id exactly like :func:`get_effective_user_id` (so the LLM api-key
     context var is still published and anonymous hosted requests still 401), then
-    — only when email verification is required for this deployment — refuses an
+    - only when email verification is required for this deployment - refuses an
     account whose email is unverified with ``403 email_verification_required``.
 
     Verification is a *gate on sensitive actions*, not a block on basic use
@@ -351,8 +351,8 @@ def _api_version_string() -> str:
     """Build the ``X-API-Version`` value: ``<semver>+<build-id>`` (P4 R9.8).
 
     ``build-id`` is the first platform-provided deploy identifier found
-    (``BUILD_ID`` → Render ``RENDER_GIT_COMMIT`` → Netlify ``COMMIT_REF``),
-    truncated. Absent all of them (local dev), just the semantic version — so a
+    (``BUILD_ID`` -> Render ``RENDER_GIT_COMMIT`` -> Netlify ``COMMIT_REF``),
+    truncated. Absent all of them (local dev), just the semantic version - so a
     real deploy that ships a new commit always changes the string and is
     detectable even when the semver is unchanged.
     """
@@ -385,7 +385,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # prompt a reload at a safe point. The value includes a per-deploy build
         # id when the platform provides one (Render's ``RENDER_GIT_COMMIT``, or an
         # explicit ``BUILD_ID``), so even a *same-semver* redeploy changes it and
-        # is detected — falling back to the semantic version otherwise.
+        # is detected - falling back to the semantic version otherwise.
         headers.setdefault("X-API-Version", _api_version_string())
         # HSTS only over HTTPS (and only meaningful in hosted/secure mode).
         if self._config.cookie_secure:
@@ -397,7 +397,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
-    """Resolve the session cookie → ``request.state.principal`` + CSRF guard.
+    """Resolve the session cookie -> ``request.state.principal`` + CSRF guard.
 
     Resolution is best-effort (an anonymous request simply gets no principal);
     the authoritative 401/403 happen in the route dependencies. CSRF is enforced
@@ -459,7 +459,7 @@ def _json_error(status_code: int, code: str) -> Response:
 
 
 # ---------------------------------------------------------------------------
-# GET /auth/csrf — pre-session token (login-CSRF defense)
+# GET /auth/csrf - pre-session token (login-CSRF defense)
 # ---------------------------------------------------------------------------
 
 auth_csrf_router = APIRouter(prefix="/auth", tags=["auth"])

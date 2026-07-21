@@ -1,8 +1,8 @@
-"""Integration tests for Profile P3–P6 endpoints (real isolated DB).
+"""Integration tests for Profile P3-P6 endpoints (real isolated DB).
 
 Import (preview + apply), synchronization (draft apply + submitted-resume lock),
 AI memory + suggestions + skill autocomplete, and the public/portfolio/JSON
-Resume projections — all user-scoped and version-CAS guarded.
+Resume projections - all user-scoped and version-CAS guarded.
 """
 
 from __future__ import annotations
@@ -155,7 +155,7 @@ class TestSync:
         async with _client() as c:
             gen = await c.post(f"{BASE}/generate-resume", json={"persist": True})
             rid = gen.json()["resume_id"]
-            # Link a submitted application to the resume → locks it.
+            # Link a submitted application to the resume -> locks it.
             await isolated_db.create_application(
                 owner_id, job_id="j1", resume_id=rid, status="applied"
             )

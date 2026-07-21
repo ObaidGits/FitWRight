@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * JdMatchCard — JD-vs-resume keyword match, ported into the atelier resume
+ * JdMatchCard - JD-vs-resume keyword match, ported into the atelier resume
  * editor (previously only in the legacy /builder advanced editor). Self-contained
  * (reuses only the pure keyword-matcher utils), so the legacy tree can be retired
  * without touching the atelier editor.
@@ -182,7 +182,7 @@ export function JdMatchCard({
             </div>
           ) : (
             <p className="text-sm text-[var(--muted-foreground)]">
-              See which keywords from the target job appear in your resume — highlighted inline so
+              See which keywords from the target job appear in your resume - highlighted inline so
               you can spot gaps.
             </p>
           )}
@@ -211,7 +211,7 @@ export function JdMatchCard({
                       <HighlightedText text={exp.title || ''} keywords={keywords} />
                       {exp.company && (
                         <>
-                          {' — '}
+                          {' - '}
                           <HighlightedText text={exp.company} keywords={keywords} />
                         </>
                       )}

@@ -1,11 +1,11 @@
 'use client';
 
 /**
- * Guided resume wizard (Task 7.3 / Req 8.5) — Atelier rebuild.
+ * Guided resume wizard (Task 7.3 / Req 8.5) - Atelier rebuild.
  *
  * A conversational, single-surface builder: a question card on the left with
  * step progress, an always-visible live preview on the right (reuses the
- * render engine → matches the PDF). Reuses the existing `/resume-wizard/*`
+ * render engine -> matches the PDF). Reuses the existing `/resume-wizard/*`
  * backend turn/finalize API unchanged. Answers persist as a local draft so an
  * accidental reload never loses progress.
  */
@@ -70,7 +70,7 @@ export default function WizardPage() {
   const [finalizing, setFinalizing] = React.useState(false);
   // Live-preview template. Defaults to the standard template on the server and
   // adopts the user's gallery choice (localStorage) after mount, so the wizard
-  // opens rendered in whatever template they picked — without a hydration
+  // opens rendered in whatever template they picked - without a hydration
   // mismatch (server + first client render are identical).
   const [previewSettings, setPreviewSettings] =
     React.useState<TemplateSettings>(DEFAULT_TEMPLATE_SETTINGS);
@@ -80,7 +80,7 @@ export default function WizardPage() {
   // Pending structured-section edits (W-P1.1) + whether they pass validation.
   const [structured, setStructured] = React.useState<ResumeWizardStructuredUpdate | null>(null);
   const [structuredValid, setStructuredValid] = React.useState(false);
-  // Once the resume is saved we stop guarding — the intentional redirect to the
+  // Once the resume is saved we stop guarding - the intentional redirect to the
   // new resume must not be treated as "leaving with unsaved work".
   const [saved, setSaved] = React.useState(false);
 
@@ -94,7 +94,7 @@ export default function WizardPage() {
   }, [hasMaster]);
 
   // Real draft persistence (W-P0.2). The full wizard state is serialisable, so
-  // persist it to localStorage on every change and rehydrate on mount — a reload
+  // persist it to localStorage on every change and rehydrate on mount - a reload
   // or accidental navigation no longer loses progress. Cleared on finalize.
   const draft = useDraft<ResumeWizardState>('resume-wizard');
   const { save: saveDraft, clear: clearDraft, recovered } = draft;
@@ -110,7 +110,7 @@ export default function WizardPage() {
 
   // Prefill from the user's profile on first load (W-P3.2). Best-effort and
   // non-blocking: the empty initial state renders instantly; if the server
-  // returns a profile-prefilled state we adopt it — but only while the wizard is
+  // returns a profile-prefilled state we adopt it - but only while the wizard is
   // still pristine (no typing, no recovered draft), so we never clobber work.
   const prefillTriedRef = React.useRef(false);
   React.useEffect(() => {
@@ -141,7 +141,7 @@ export default function WizardPage() {
 
   React.useEffect(() => {
     if (saved) return;
-    // Don't persist the pristine initial state — only real progress.
+    // Don't persist the pristine initial state - only real progress.
     const pristine =
       state.step === 'intro' &&
       state.history.length === 0 &&
@@ -186,7 +186,7 @@ export default function WizardPage() {
       setSaved(true);
       clearDraft();
       // Persist the template the user picked (shown in the live preview) onto
-      // the newly created resume so it opens in that design — best-effort, never
+      // the newly created resume so it opens in that design - best-effort, never
       // blocks navigation.
       void updateResumeTemplateSettings(res.resume_id, previewSettings).catch(() => {
         /* best-effort */
@@ -250,7 +250,7 @@ export default function WizardPage() {
   const dirty =
     !saved && (state.history.length > 0 || state.step !== 'intro' || canAnswer || structuredDirty);
 
-  // The wizard is entirely AI-driven — block it up front (rather than letting
+  // The wizard is entirely AI-driven - block it up front (rather than letting
   // the first turn fail) when no provider is configured.
   if (aiUnconfigured) {
     return (
@@ -290,7 +290,7 @@ export default function WizardPage() {
       <UnsavedChangesGuard
         when={dirty}
         title="Leave the wizard?"
-        description="Your answers so far haven’t been saved into a resume. If you leave now, they’ll be lost."
+        description="Your answers so far haven't been saved into a resume. If you leave now, they'll be lost."
         confirmLabel="Leave wizard"
         cancelLabel="Keep building"
       />
@@ -338,7 +338,7 @@ export default function WizardPage() {
                   Quality{' '}
                   <strong className="text-[var(--foreground)]">{state.scores.completeness}%</strong>
                 </span>
-                <span aria-hidden>·</span>
+                <span aria-hidden>-</span>
                 <span>
                   ATS <strong className="text-[var(--foreground)]">{state.scores.ats}%</strong>
                 </span>
@@ -353,7 +353,7 @@ export default function WizardPage() {
             >
               {state.warnings.map((warning) => (
                 <li key={warning} className="flex gap-1.5">
-                  <span aria-hidden>•</span>
+                  <span aria-hidden>-</span>
                   <span>{warning}</span>
                 </li>
               ))}
@@ -453,7 +453,7 @@ export default function WizardPage() {
               ) : busy ? (
                 <div className="space-y-2" role="status" aria-live="polite" aria-busy>
                   <p className="flex items-center gap-1.5 text-xs text-[var(--muted-foreground)]">
-                    <Wand className="h-3.5 w-3.5 text-[var(--at-ai)]" /> Working on your resume…
+                    <Wand className="h-3.5 w-3.5 text-[var(--at-ai)]" /> Working on your resume...
                   </p>
                   <Skeleton className="h-4 w-3/4" />
                   <Skeleton className="h-4 w-full" />
@@ -463,7 +463,7 @@ export default function WizardPage() {
                 <Textarea
                   value={answer}
                   onChange={(e) => setAnswer(e.target.value)}
-                  placeholder="Type your answer…"
+                  placeholder="Type your answer..."
                   className="min-h-28"
                   disabled={busy}
                   onKeyDown={(e) => {

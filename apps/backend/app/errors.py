@@ -71,5 +71,5 @@ async def _handle_api_error(_request: Request, exc: ApiError) -> JSONResponse:
 
 
 def install_error_handlers(app) -> None:
-    """Register the :class:`ApiError` → envelope handler on ``app``."""
+    """Register the :class:`ApiError` -> envelope handler on ``app``."""
     app.add_exception_handler(ApiError, _handle_api_error)

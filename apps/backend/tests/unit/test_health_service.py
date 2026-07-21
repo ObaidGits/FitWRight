@@ -1,7 +1,7 @@
 """Unit tests for the admin System Health composer (Task 6.6).
 
 Exercises :class:`app.admin.health_service.HealthService.compose_health` and its
-per-source probe methods in isolation — no real DB/KVStore/provider round-trip.
+per-source probe methods in isolation - no real DB/KVStore/provider round-trip.
 Dependencies are driven two ways, matching the design's injection points:
 
 - **DB / KVStore** are driven by *injecting fakes* (``HealthService(async_engine=,
@@ -59,7 +59,7 @@ class _OkEngine:
 
 
 class _RaisingEngine:
-    """An engine whose ``connect()`` fails — drives the Database tile to down."""
+    """An engine whose ``connect()`` fails - drives the Database tile to down."""
 
     def connect(self):
         raise RuntimeError("database unavailable")
@@ -74,7 +74,7 @@ class _OkKV:
 
 
 class _RaisingKV:
-    """A KVStore whose round-trip fails — drives the KVStore tile to down."""
+    """A KVStore whose round-trip fails - drives the KVStore tile to down."""
 
     async def set(self, *a, **k):
         raise RuntimeError("kvstore unavailable")
@@ -123,7 +123,7 @@ _VALID_STATUSES = {"ok", "degraded", "down"}
 
 
 # ===========================================================================
-# Composition — exactly six tiles, in the documented order (Req 3.2)
+# Composition - exactly six tiles, in the documented order (Req 3.2)
 # ===========================================================================
 
 
@@ -145,7 +145,7 @@ class TestComposition:
 
 
 # ===========================================================================
-# Tile mapping — degraded / down driven by the underlying source (Req 3.6)
+# Tile mapping - degraded / down driven by the underlying source (Req 3.6)
 # ===========================================================================
 
 
@@ -196,7 +196,7 @@ class TestAiTile:
         assert tile.status == "degraded"
 
     async def test_not_configured_is_degraded(self, monkeypatch):
-        # No api_key + a key-requiring provider → "not configured" → degraded.
+        # No api_key + a key-requiring provider -> "not configured" -> degraded.
         self._patch_llm(monkeypatch, api_key="", provider="openai", healthy=False)
         tile = await HealthService()._compose_ai()
         assert tile.status == "degraded"
@@ -210,7 +210,7 @@ class TestStorageTile:
         assert tile.name == "Storage provider" and tile.status == "ok"
 
     async def test_cloudinary_unconfigured_is_degraded(self, monkeypatch):
-        # hermetic env leaves cloudinary_* blank → cloudinary_configured is False.
+        # hermetic env leaves cloudinary_* blank -> cloudinary_configured is False.
         monkeypatch.setattr(app_settings, "storage_provider", "cloudinary")
         assert app_settings.cloudinary_configured is False
         tile = await HealthService()._compose_storage()
@@ -218,7 +218,7 @@ class TestStorageTile:
 
 
 # ===========================================================================
-# Migrations — head-vs-applied mapping + release flow-through (Req 3.3 / 17.2)
+# Migrations - head-vs-applied mapping + release flow-through (Req 3.3 / 17.2)
 # ===========================================================================
 
 

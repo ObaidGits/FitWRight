@@ -1,5 +1,5 @@
 /**
- * SyncController — offline outbox replay (P4 R2.2, R5.2, Property 4).
+ * SyncController - offline outbox replay (P4 R2.2, R5.2, Property 4).
  *
  * Replays queued edits **in FIFO order** through the version-CAS path when
  * connectivity returns. Guarantees:

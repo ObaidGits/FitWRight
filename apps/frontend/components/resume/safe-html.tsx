@@ -2,7 +2,7 @@ import React from 'react';
 import { sanitizeHtml } from '@/lib/utils/html-sanitizer';
 import { cn } from '@/lib/utils';
 
-// No 'use client' — this component does no client-only work (no hooks, no
+// No 'use client' - this component does no client-only work (no hooks, no
 // event handlers, no browser APIs). Sanitization runs on the server via
 // sanitize-html (DOM-free). Parent resume templates (resume-single-column,
 // resume-modern, etc.) are also Server Components, so this can render on

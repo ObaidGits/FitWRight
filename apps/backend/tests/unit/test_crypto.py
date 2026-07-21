@@ -36,7 +36,7 @@ class TestCrypto:
         assert crypto.decrypt("") == ""
 
     def test_undecryptable_returns_empty(self, isolated_secret):
-        # Garbage / wrong-secret ciphertext must not raise — treated as empty.
+        # Garbage / wrong-secret ciphertext must not raise - treated as empty.
         assert crypto.decrypt("not-a-valid-token") == ""
 
     def test_rotated_secret_yields_empty(self, isolated_secret, monkeypatch, tmp_path):

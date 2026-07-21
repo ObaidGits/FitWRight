@@ -108,7 +108,7 @@ class TestPasswordChangeGate:
         await _seed_active_user(auth_env, "pc-gate@example.com")
         async with _client() as client:
             await _login(client, "pc-gate@example.com")
-            # No recent step-up → gated.
+            # No recent step-up -> gated.
             resp = await _change_password(client)
         assert resp.status_code == 401
         assert resp.json()["error"]["code"] == "step_up_required"

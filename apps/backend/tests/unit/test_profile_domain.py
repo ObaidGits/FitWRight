@@ -2,8 +2,8 @@
 
 Covers the schema (uid minting, coercion), the Canonical Skill Engine, the
 Completion Engine (weights + suggestions), the Projection Engine
-(ProfileData → ResumeData), and the non-destructive resume→profile backfill.
-No I/O — these are the deterministic building blocks the service composes.
+(ProfileData -> ResumeData), and the non-destructive resume->profile backfill.
+No I/O - these are the deterministic building blocks the service composes.
 """
 
 from __future__ import annotations
@@ -178,7 +178,7 @@ class TestProjection:
         assert "Docker" in additional["technicalSkills"]  # tools folded in
         assert additional["languages"] == ["English"]
         assert additional["awards"] == ["Best Eng"]
-        assert additional["certificationsTraining"] == ["AWS SA — Amazon"]
+        assert additional["certificationsTraining"] == ["AWS SA - Amazon"]
 
     def test_provenance_stamped(self):
         resume = ProjectionEngine.project_resume(self._profile(), profile_version=7)
@@ -202,7 +202,7 @@ class TestProjection:
 
 
 # ---------------------------------------------------------------------------
-# Backfill (resume → profile, non-destructive)
+# Backfill (resume -> profile, non-destructive)
 # ---------------------------------------------------------------------------
 
 

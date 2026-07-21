@@ -1,7 +1,7 @@
-"""Non-destructive backfill: master resume ``processed_data`` → ``ProfileData``.
+"""Non-destructive backfill: master resume ``processed_data`` -> ``ProfileData``.
 
 Pure derivation used by :class:`app.profile.service.ProfileService` when a user
-has no profile yet (lazy migration — ADR-14). The resume is **never modified**;
+has no profile yet (lazy migration - ADR-14). The resume is **never modified**;
 we only *read* its structured data and the identity-level fallbacks on the user
 record (headline/location/links/avatar_url). Missing input yields an empty but
 valid profile so onboarding can proceed.

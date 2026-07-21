@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * ProfileSettings (P3 §H / Requirements 13–14) — avatar + reusable profile.
+ * ProfileSettings (P3 §H / Requirements 13-14) - avatar + reusable profile.
  *
  * Avatar upload posts the raw file; the backend sniffs magic bytes, re-encodes
  * to WebP, strips EXIF, and returns the served/CDN URL (the client only shows a
@@ -84,7 +84,7 @@ export function ProfileSettings() {
         <p className="text-xs text-[var(--muted-foreground)]">Reused to prefill new resumes.</p>
       </div>
 
-      {/* Avatar — shared canonical-photo uploader (identical to the resume builder). */}
+      {/* Avatar - shared canonical-photo uploader (identical to the resume builder). */}
       <AvatarUploader
         avatarUrl={avatarUrl}
         onUploaded={(result) => {

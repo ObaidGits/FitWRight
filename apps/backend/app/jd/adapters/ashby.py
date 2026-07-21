@@ -4,7 +4,7 @@ Ashby exposes a public posting API at:
   https://api.ashbyhq.com/posting-api/job-board/{org}/posting/{posting_id}
 
 This returns structured JSON with title, descriptionHtml, team, location,
-employmentType — no auth required, no scraping needed.
+employmentType - no auth required, no scraping needed.
 """
 
 from __future__ import annotations

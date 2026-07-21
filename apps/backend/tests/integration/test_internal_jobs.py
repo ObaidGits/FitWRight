@@ -4,7 +4,7 @@ Exercises ``POST /api/v1/internal/run-jobs`` (the external-cron reaper hook) and
 ``GET /api/v1/internal/metrics`` end-to-end over an ASGI transport against an
 isolated temp database:
 
-- shared-secret auth: no token → 401, wrong token → 403, correct token → runs;
+- shared-secret auth: no token -> 401, wrong token -> 403, correct token -> runs;
 - the reaper actually deletes an expired session + expired token (seed, call,
   assert gone);
 - single-flight: concurrent run-jobs calls are safe (no double-run / error);
@@ -124,7 +124,7 @@ def internal_token(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# run-jobs — auth
+# run-jobs - auth
 # ---------------------------------------------------------------------------
 
 
@@ -145,7 +145,7 @@ class TestRunJobsAuth:
         assert resp.json()["error"]["code"] == "forbidden"
 
     async def test_no_configured_token_rejects_everyone(self, auth_env, monkeypatch):
-        # Zero-config default: no token → the endpoint is closed to all callers,
+        # Zero-config default: no token -> the endpoint is closed to all callers,
         # even one presenting an empty/blank token.
         monkeypatch.setattr(app_settings, "internal_job_token", "")
         async with _client() as client:
@@ -158,7 +158,7 @@ class TestRunJobsAuth:
 
 
 # ---------------------------------------------------------------------------
-# run-jobs — behaviour
+# run-jobs - behaviour
 # ---------------------------------------------------------------------------
 
 
@@ -189,7 +189,7 @@ class TestRunJobsBehaviour:
         self, auth_env, internal_token, monkeypatch
     ):
         # Hosted mode turns on per-session CSRF, but a machine call carries no
-        # session cookie → the middleware never applies the CSRF check. The POST
+        # session cookie -> the middleware never applies the CSRF check. The POST
         # (no X-CSRF-Token) still succeeds purely on the shared secret.
         monkeypatch.setattr(app_settings, "single_user_mode", False)
         async with _client() as client:

@@ -60,8 +60,8 @@ const PROJECT_TYPES = [
 const BUDGETS = [
   'Not sure yet',
   '< $5k',
-  '$5k – $15k',
-  '$15k – $50k',
+  '$5k - $15k',
+  '$15k - $50k',
   '$50k+',
   'Ongoing / retainer',
 ];
@@ -104,12 +104,12 @@ function validate(v: Values): Errors {
   if (!v.name.trim()) e.name = 'Please tell me your name.';
   else if (v.name.trim().length > 100) e.name = 'That name is a little too long.';
   if (!v.email.trim()) e.email = 'An email lets me reply.';
-  else if (!EMAIL_RE.test(v.email.trim())) e.email = 'That doesn’t look like a valid email.';
+  else if (!EMAIL_RE.test(v.email.trim())) e.email = "That doesn't look like a valid email.";
   if (!v.subject.trim()) e.subject = 'A short subject helps me triage.';
   else if (v.subject.trim().length > 150)
     e.subject = 'Please keep the subject under 150 characters.';
   const msg = v.message.trim();
-  if (!msg) e.message = 'Your message can’t be empty.';
+  if (!msg) e.message = "Your message can't be empty.";
   else if (msg.length < MESSAGE_MIN)
     e.message = `A little more detail helps (at least ${MESSAGE_MIN} characters).`;
   else if (msg.length > MESSAGE_MAX) e.message = `Please keep it under ${MESSAGE_MAX} characters.`;
@@ -283,7 +283,7 @@ export function ContactForm({ defaultPurpose = 'general' }: { defaultPurpose?: s
 
         <div className="grid gap-5 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label htmlFor="contact-purpose">What’s this about?</Label>
+            <Label htmlFor="contact-purpose">What's this about?</Label>
             <Select value={values.purpose} onValueChange={(v) => set('purpose', v)}>
               <SelectTrigger id="contact-purpose" aria-label="Purpose of your message">
                 <SelectValue />
@@ -317,7 +317,7 @@ export function ContactForm({ defaultPurpose = 'general' }: { defaultPurpose?: s
           </Field>
         </div>
 
-        {/* Progressive disclosure — only relevant for hiring/collaboration. */}
+        {/* Progressive disclosure - only relevant for hiring/collaboration. */}
         {showProjectFields && (
           <div className="grid gap-5 rounded-[var(--radius-at-md)] border border-[var(--border)] bg-[var(--at-surface-2)]/50 p-4 sm:grid-cols-2">
             <div className="space-y-1.5">
@@ -327,7 +327,7 @@ export function ContactForm({ defaultPurpose = 'general' }: { defaultPurpose?: s
                 value={values.company}
                 maxLength={120}
                 autoComplete="organization"
-                placeholder="Where you’re reaching out from"
+                placeholder="Where you're reaching out from"
                 onChange={(e) => set('company', e.target.value)}
               />
             </div>
@@ -338,7 +338,7 @@ export function ContactForm({ defaultPurpose = 'general' }: { defaultPurpose?: s
                 value={values.linkedin}
                 maxLength={200}
                 inputMode="url"
-                placeholder="linkedin.com/in/…"
+                placeholder="linkedin.com/in/..."
                 onChange={(e) => set('linkedin', e.target.value)}
               />
             </div>
@@ -395,7 +395,7 @@ export function ContactForm({ defaultPurpose = 'general' }: { defaultPurpose?: s
             id="contact-message"
             value={values.message}
             maxLength={MESSAGE_MAX + 100}
-            placeholder="Tell me what you’re thinking about — the more context, the better."
+            placeholder="Tell me what you're thinking about - the more context, the better."
             className="min-h-40"
             aria-invalid={Boolean(touched.message && errors.message)}
             aria-describedby={touched.message && errors.message ? 'contact-message-err' : undefined}
@@ -419,7 +419,7 @@ export function ContactForm({ defaultPurpose = 'general' }: { defaultPurpose?: s
 
         <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
           <p className="text-xs text-[var(--muted-foreground)]">
-            I’ll never share your details. Typically reply within 1–2 business days.
+            I'll never share your details. Typically reply within 1-2 business days.
           </p>
           <Button type="submit" size="lg" loading={submitting} disabled={submitting}>
             <Send className="h-4 w-4" /> Send message
@@ -486,11 +486,11 @@ function SuccessCard({ result, onReset }: { result: ContactResult; onReset: () =
           tabIndex={-1}
           className="mt-5 text-2xl font-semibold tracking-tight focus:outline-none"
         >
-          Message sent — thank you
+          Message sent - thank you
         </h2>
         <p className="mx-auto mt-2 max-w-md text-[var(--muted-foreground)]">
           Your note landed safely. I read every message and reply {result.estimated_response}. If
-          it’s time-sensitive, just reply to the confirmation email.
+          it's time-sensitive, just reply to the confirmation email.
         </p>
         <p className="mt-4 inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--at-surface-2)] px-3 py-1 text-xs text-[var(--muted-foreground)]">
           Reference <span className="font-mono text-[var(--foreground)]">{result.reference}</span>

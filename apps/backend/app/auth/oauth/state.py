@@ -1,8 +1,8 @@
 """Signed, short-lived transient OAuth state cookie + PKCE helpers (Task 7.1).
 
 The authorization-code + PKCE flow needs three secrets to survive the round-trip
-to the IdP and back — ``state`` (CSRF/replay), ``nonce`` (id_token binding), and
-the PKCE ``code_verifier`` — plus an optional validated ``next`` path. They must
+to the IdP and back - ``state`` (CSRF/replay), ``nonce`` (id_token binding), and
+the PKCE ``code_verifier`` - plus an optional validated ``next`` path. They must
 never be exposed to JavaScript and must expire quickly (design `§Google OAuth`,
 ADR-5, R4.1).
 
@@ -12,7 +12,7 @@ signed with ``SESSION_SECRET`` and read back with a dual-key window
 (``SESSION_SECRET`` + ``SESSION_SECRET_PREV``) so secret rotation is seamless
 (R16.3). The serializer's embedded timestamp enforces the 5-minute TTL on read
 (``max_age``), so a stale or forged cookie is rejected without any server-side
-storage — keeping the flow stateless and multi-worker-safe (ADR-6).
+storage - keeping the flow stateless and multi-worker-safe (ADR-6).
 
 Using one signed blob (rather than several cookies) makes the transient state
 atomic: it is set once at ``/start`` and cleared as a unit on both success and
@@ -99,7 +99,7 @@ def generate_nonce(*, nbytes: int = 32) -> str:
 
 def generate_pkce_verifier(*, nbytes: int = 48) -> str:
     """Random PKCE ``code_verifier`` (RFC 7636: 43-128 URL-safe chars)."""
-    # 48 bytes → 64 base64url chars, comfortably inside the 43-128 window.
+    # 48 bytes -> 64 base64url chars, comfortably inside the 43-128 window.
     return secrets.token_urlsafe(nbytes)
 
 
@@ -136,7 +136,7 @@ def deserialize_transaction(
             payload = serializer.loads(value, max_age=OAUTH_TXN_TTL_SECONDS)
         except (SignatureExpired, BadSignature):
             continue
-        except Exception:  # noqa: BLE001 - malformed token → fail closed
+        except Exception:  # noqa: BLE001 - malformed token -> fail closed
             continue
         try:
             return OAuthTransaction.from_payload(payload)

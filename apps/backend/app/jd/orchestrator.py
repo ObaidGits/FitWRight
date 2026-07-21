@@ -1,6 +1,6 @@
 """JD extraction v2 orchestrator (§4 of enhancement plan).
 
-Coordinates the extraction cascade: API → JSON-LD → Hydration → DOM → Playwright.
+Coordinates the extraction cascade: API -> JSON-LD -> Hydration -> DOM -> Playwright.
 Stops at the first HIGH confidence result. Respects the global timeout budget.
 Integrates: multi-layer cache (L2/L5), SingleFlight dedup, drift/circuit-breaker.
 """
@@ -109,7 +109,7 @@ def _finalize(result: ExtractionResult) -> ExtractionResult:
             pass
 
     # ML content scoring (Phase 4): extra confidence signal for the AMBIGUOUS
-    # extraction paths only (DOM/headless/PDF) — never overrides authoritative
+    # extraction paths only (DOM/headless/PDF) - never overrides authoritative
     # API/JSON-LD, never fabricates content. Off by default (jd_ml_scoring_enabled).
     try:
         from app.config import settings
@@ -122,14 +122,14 @@ def _finalize(result: ExtractionResult) -> ExtractionResult:
             ml = score_content(result.content)
             result.confidence.reasons.append(f"ML content score {ml:.2f}")
             if ml < 0.35 and result.confidence.level != "LOW":
-                # Model strongly doubts this is a real JD → downgrade + warn.
+                # Model strongly doubts this is a real JD -> downgrade + warn.
                 result.confidence.level = "LOW"
                 result.confidence.score = min(result.confidence.score, 40)
                 result.explanation.warnings.append(
                     "Automated quality check flagged this content as possibly not a job description."
                 )
             elif ml >= 0.8 and result.confidence.level == "MEDIUM":
-                # Model is confident → nudge MEDIUM up a little.
+                # Model is confident -> nudge MEDIUM up a little.
                 result.confidence.score = min(100, result.confidence.score + 5)
     except Exception:
         logger.debug("JD ML scoring failed", exc_info=True)
@@ -139,7 +139,7 @@ def _finalize(result: ExtractionResult) -> ExtractionResult:
 async def _link_and_meter(result: ExtractionResult) -> None:
     """Post-cascade: near-duplicate linking (§22) + observability metrics (§34).
 
-    Runs outside the timeout envelope — all steps are cheap and best-effort.
+    Runs outside the timeout envelope - all steps are cheap and best-effort.
     """
     try:
         from app.productivity.metrics import get_productivity_metrics
@@ -244,7 +244,7 @@ async def _extract_pdf_stage(url, canonical, traces, settings) -> ExtractionResu
             stage="pdf_classify", duration_ms=0, status="skipped",
             detail="not a PDF; continuing HTML cascade",
         ))
-        return None  # not actually a PDF → let the HTML cascade handle it
+        return None  # not actually a PDF -> let the HTML cascade handle it
 
     result = extract_pdf(data, url, ocr_enabled=settings.jd_ocr_enabled)
     result.canonical_url = canonical
@@ -275,7 +275,7 @@ async def orchestrate_v2(
 ) -> ExtractionResult:
     """Run the full v2 extraction cascade with timeout envelope.
 
-    Returns ExtractionResult (always — even on failure, wraps in LOW confidence).
+    Returns ExtractionResult (always - even on failure, wraps in LOW confidence).
     """
     try:
         result = await asyncio.wait_for(
@@ -299,7 +299,7 @@ async def orchestrate_v2(
 
 
 async def _run_cascade(user_id: str, url: str, *, use_ai: bool = False, force_refresh: bool = False) -> ExtractionResult:
-    """Execute the extraction cascade: Cache → API → JSON-LD → Hydration → DOM → Playwright."""
+    """Execute the extraction cascade: Cache -> API -> JSON-LD -> Hydration -> DOM -> Playwright."""
     traces: list[StageTrace] = []
     canonical = canonicalize_url(url)
     start = time.perf_counter()
@@ -323,7 +323,7 @@ async def _run_cascade(user_id: str, url: str, *, use_ai: bool = False, force_re
             logger.debug("JD v2: cache hit for %s", redact_url(canonical))
             return cached
 
-        # Check error cache (L5) — avoid hammering broken URLs
+        # Check error cache (L5) - avoid hammering broken URLs
         err = await cache.get_error(canonical)
         if err:
             traces.append(StageTrace(
@@ -389,7 +389,7 @@ async def _run_cascade(user_id: str, url: str, *, use_ai: bool = False, force_re
                 ),
                 submitted_url=url, canonical_url=canonical, error_code="ROBOTS_DISALLOWED",
             )
-        # Respect Crawl-delay when the site declares one (bounded — §26/ADR-13).
+        # Respect Crawl-delay when the site declares one (bounded - §26/ADR-13).
         if decision is not None and decision.crawl_delay > 0:
             await _enforce_crawl_delay(urlparse(url).hostname or "", decision.crawl_delay)
         traces.append(StageTrace(
@@ -473,7 +473,7 @@ async def _run_cascade(user_id: str, url: str, *, use_ai: bool = False, force_re
             status="failed", detail=exc.reason
         ))
         # SECURITY: never surface the SSRF reason (blocked IP / port / scheme)
-        # to the client — it would turn this endpoint into an internal scanner.
+        # to the client - it would turn this endpoint into an internal scanner.
         # The reason is logged server-side and cached internally only.
         logger.info("JD v2: fetch blocked/failed for %s: %s", redact_url(canonical), exc.reason)
         await cache.set_error(canonical, f"fetch_failed:{exc.reason}")
@@ -637,7 +637,7 @@ async def _run_cascade(user_id: str, url: str, *, use_ai: bool = False, force_re
     dom_chars = len(dom_result.content) if dom_result else 0
     domain = (urlparse(url).hostname or "")
     # Cost guard: Playwright is the only paid step in the cascade. Skip it if the
-    # user/global budget is exhausted (§25) — degrade to the LOW-confidence
+    # user/global budget is exhausted (§25) - degrade to the LOW-confidence
     # fallback rather than incur runaway cost.
     within_budget = True
     if settings.jd_cost_monitoring_enabled:

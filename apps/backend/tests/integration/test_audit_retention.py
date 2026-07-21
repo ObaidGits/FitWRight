@@ -12,7 +12,7 @@ paths against an isolated temp database + a fresh in-process KVStore:
   group's rows + leaves its key unchanged while other groups still process
   (Req 1.9);
 - resume-after-interruption: repeated bounded runs drain the backlog with no
-  double-count — the final key total equals the aged-row count exactly once
+  double-count - the final key total equals the aged-row count exactly once
   (Req 1.6);
 - shared per-invocation budget: downsampled + deleted <= batch (Req 1.7);
 - single-flight lock: a held lock makes the job a no-op returning
@@ -25,7 +25,7 @@ DB / metric-store / kvstore wiring
 - ``auth_env`` (integration conftest) rebinds the process singletons to the
   isolated temp DB. The Audit_Retention_Job uses the process ``MetricStore``
   singleton (``get_metric_store()``), which lazily binds to ``app.database.db``
-  the first time it is built — so the ``retention_env`` fixture calls
+  the first time it is built - so the ``retention_env`` fixture calls
   :func:`reset_metric_store` after the DB is swapped, forcing the singleton to
   rebuild against the temp DB. Metric assertions read ``metrics_daily`` through
   the same isolated ``session_factory``.
@@ -154,7 +154,7 @@ class TestTiering:
     async def test_security_critical_aged_deleted_recent_kept(self, retention_env, kvstore):
         db = retention_env
         # LOGIN is Security_Critical (not Never_Dropped): past the 365d hot window
-        # → deleted; inside the window → kept.
+        # -> deleted; inside the window -> kept.
         await _seed_audit(db, AuditEvent.LOGIN, ts=_ts_days_ago(400))
         await _seed_audit(db, AuditEvent.LOGIN, ts=_ts_days_ago(10))
 
@@ -168,7 +168,7 @@ class TestTiering:
     async def test_never_dropped_events_survive_regardless_of_age(self, retention_env, kvstore):
         db = retention_env
         # The three Never_Dropped events are also Security_Critical, but excluded
-        # via set subtraction — they must survive even far past the hot window.
+        # via set subtraction - they must survive even far past the hot window.
         never_dropped = (
             AuditEvent.ROLE_CHANGED,
             AuditEvent.ADMIN_USER_SOFT_DELETED,
@@ -186,8 +186,8 @@ class TestTiering:
 
     async def test_downsamplable_aged_aggregated_recent_kept(self, retention_env, kvstore):
         db = retention_env
-        # ADMIN_USER_VIEWED is Downsamplable: past the 90d window → aggregated +
-        # deleted; inside the window → kept.
+        # ADMIN_USER_VIEWED is Downsamplable: past the 90d window -> aggregated +
+        # deleted; inside the window -> kept.
         aged_ts = _ts_days_ago(100)
         await _seed_audit(db, AuditEvent.ADMIN_USER_VIEWED, ts=aged_ts)
         await _seed_audit(db, AuditEvent.ADMIN_USER_VIEWED, ts=_ts_days_ago(10))

@@ -2,13 +2,13 @@
 
 These are the pure functions where local-LLM (Ollama / openai_compatible) bugs
 live, and they pin behavior we recently shipped:
-  - get_model_name        — LiteLLM provider prefixing (Ollama, OpenRouter nesting)
-  - _normalize_api_base   — the /v1/v1 duplicate-path fix (issue #751) + Ollama suffixes
-  - resolve_api_key       — the security rule that local providers do NOT inherit
+  - get_model_name        - LiteLLM provider prefixing (Ollama, OpenRouter nesting)
+  - _normalize_api_base   - the /v1/v1 duplicate-path fix (issue #751) + Ollama suffixes
+  - resolve_api_key       - the security rule that local providers do NOT inherit
                             the env LLM_API_KEY (so a paid key can't leak to a
                             self-hosted server)
-  - _effective_api_key    — blank-key sentinel for openai_compatible
-  - _strip_thinking_tags  — deepseek-r1 / qwq <think> stripping
+  - _effective_api_key    - blank-key sentinel for openai_compatible
+  - _strip_thinking_tags  - deepseek-r1 / qwq <think> stripping
 """
 
 import pytest
@@ -28,7 +28,7 @@ def _cfg(provider: str, model: str) -> LLMConfig:
 
 
 # ---------------------------------------------------------------------------
-# get_model_name — provider prefixing
+# get_model_name - provider prefixing
 # ---------------------------------------------------------------------------
 
 
@@ -37,7 +37,7 @@ class TestGetModelName:
         assert get_model_name(_cfg("openai", "gpt-4")) == "gpt-4"
 
     def test_ollama_uses_ollama_chat_prefix(self):
-        # ollama_chat/ routes to /api/chat (messages array) — the working path.
+        # ollama_chat/ routes to /api/chat (messages array) - the working path.
         assert get_model_name(_cfg("ollama", "llama3")) == "ollama_chat/llama3"
 
     def test_ollama_does_not_double_prefix(self):
@@ -73,12 +73,12 @@ class TestGetModelName:
         assert get_model_name(_cfg("groq", "llama-3.1-70b")) == "groq/llama-3.1-70b"
 
     def test_existing_known_prefix_is_preserved(self):
-        # Model already carries a known prefix → don't add the provider's.
+        # Model already carries a known prefix -> don't add the provider's.
         assert get_model_name(_cfg("anthropic", "anthropic/claude-3-opus")) == "anthropic/claude-3-opus"
 
 
 # ---------------------------------------------------------------------------
-# _normalize_api_base — the /v1/v1 duplicate-path fix (issue #751)
+# _normalize_api_base - the /v1/v1 duplicate-path fix (issue #751)
 # ---------------------------------------------------------------------------
 
 
@@ -101,7 +101,7 @@ class TestNormalizeApiBase:
         assert _normalize_api_base("openai_compatible", "http://localhost:8080/v1/") == "http://localhost:8080/v1"
 
     def test_anthropic_strips_v1(self):
-        # Anthropic handler appends /v1/messages → avoid /v1/v1/messages.
+        # Anthropic handler appends /v1/messages -> avoid /v1/v1/messages.
         assert _normalize_api_base("anthropic", "https://api.anthropic.com/v1") == "https://api.anthropic.com"
 
     def test_gemini_strips_v1(self):
@@ -127,7 +127,7 @@ class TestNormalizeApiBase:
 
 
 # ---------------------------------------------------------------------------
-# resolve_api_key — local providers must NOT inherit the env key
+# resolve_api_key - local providers must NOT inherit the env key
 # ---------------------------------------------------------------------------
 
 
@@ -136,7 +136,7 @@ class TestResolveApiKey:
         assert resolve_api_key({"api_key": "sk-top"}, "openai") == "sk-top"
 
     def test_falls_back_to_provider_keymap(self):
-        # gemini → "google" in the api_keys dict.
+        # gemini -> "google" in the api_keys dict.
         assert resolve_api_key({"api_keys": {"google": "g-key"}}, "gemini") == "g-key"
 
     def test_ollama_does_not_inherit_env_key(self, monkeypatch):
@@ -154,7 +154,7 @@ class TestResolveApiKey:
 
 
 # ---------------------------------------------------------------------------
-# _effective_api_key — blank-key sentinel for openai_compatible
+# _effective_api_key - blank-key sentinel for openai_compatible
 # ---------------------------------------------------------------------------
 
 
@@ -175,7 +175,7 @@ class TestEffectiveApiKey:
 
 
 # ---------------------------------------------------------------------------
-# _strip_thinking_tags — deepseek-r1 / qwq reasoning models
+# _strip_thinking_tags - deepseek-r1 / qwq reasoning models
 # ---------------------------------------------------------------------------
 
 
@@ -188,7 +188,7 @@ class TestStripThinkingTags:
         assert _strip_thinking_tags(content) == "the answer"
 
     def test_strips_unclosed_block(self):
-        # Model still "thinking" at the token limit — drop the trailing tag.
+        # Model still "thinking" at the token limit - drop the trailing tag.
         assert _strip_thinking_tags("<think>still reasoning with no close") == ""
 
     def test_no_tags_unchanged(self):

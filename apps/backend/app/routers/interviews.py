@@ -1,6 +1,6 @@
 """Interview scheduling endpoints (P3 §F, Requirement 11).
 
-Nested under an application (parent-ownership → 404), user-scoped, feature-flag
+Nested under an application (parent-ownership -> 404), user-scoped, feature-flag
 gated, idempotency-key aware. Reschedule re-arms lead-time notifications; overlap
 is a soft warning (never blocks). ICS export is timezone-correct + escaped.
 """

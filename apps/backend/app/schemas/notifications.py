@@ -1,4 +1,4 @@
-"""Pydantic schemas for the notifications API (P3 §B, Requirements 4–6)."""
+"""Pydantic schemas for the notifications API (P3 §B, Requirements 4-6)."""
 
 from __future__ import annotations
 

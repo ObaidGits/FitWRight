@@ -74,7 +74,7 @@ describe('InterviewPrepCard', () => {
   });
 
   it('shows the stage timeline (not a bare spinner) while generating', async () => {
-    // Never resolves → stays generating.
+    // Never resolves -> stays generating.
     generateInterviewPrepMock.mockReturnValue(new Promise(() => {}));
     render(<InterviewPrepCard resumeId="r1" initialPrep={null} isTailored />);
 

@@ -1,13 +1,13 @@
 'use client';
 
 /**
- * <TemplateGallery> — the premium, metadata-driven template browser.
+ * <TemplateGallery> - the premium, metadata-driven template browser.
  *
  * Renders the {@link RESUME_TEMPLATES} catalog with search, category + photo +
  * ATS filtering, sorting, favorites, and (optionally) personalized "Recommended
  * for you" ranking. Every card thumbnail is a REAL render of the template via
  * the shared {@link ResumeDocument} engine (page 1, lazily mounted), so what the
- * user browses is exactly what they'll get — no separate preview art to drift.
+ * user browses is exactly what they'll get - no separate preview art to drift.
  */
 import * as React from 'react';
 import Star from 'lucide-react/dist/esm/icons/star';
@@ -188,7 +188,7 @@ export function TemplateGallery({
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search templates — role, industry, style, country…"
+            placeholder="Search templates - role, industry, style, country..."
             aria-label="Search templates"
             className="pl-9"
           />
@@ -237,7 +237,7 @@ export function TemplateGallery({
               <option value="recommended">Recommended</option>
               <option value="popular">Most popular</option>
               <option value="ats">Best ATS</option>
-              <option value="name">Name (A–Z)</option>
+              <option value="name">Name (A-Z)</option>
             </select>
           </div>
         </div>

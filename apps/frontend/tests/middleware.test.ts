@@ -3,7 +3,7 @@ import { NextRequest } from 'next/server';
 
 /**
  * Presence-guard middleware (Task 8.2). It is UX-only: redirect to
- * `/login?next=…` when the session cookie is absent on a protected route, with
+ * `/login?next=...` when the session cookie is absent on a protected route, with
  * `next` propagation. In SINGLE_USER_MODE it is a no-op.
  *
  * The config flag is read at module load from the env var, so each scenario
@@ -32,7 +32,7 @@ describe('route-guard middleware', () => {
     else process.env.NEXT_PUBLIC_SINGLE_USER_MODE = original;
   });
 
-  it('redirects to /login?next=… on a protected route with no session (hosted)', async () => {
+  it('redirects to /login?next=... on a protected route with no session (hosted)', async () => {
     const { middleware } = await loadMiddleware(false);
     const res = middleware(request('/home'));
     const location = res.headers.get('location');

@@ -8,5 +8,5 @@ Requirements: 4+ years of professional Python experience; deep knowledge of asyn
 with asyncio; experience with containerization via Docker and orchestration with Kubernetes or
 ECS; strong grasp of SQL query optimization, indexing strategies, and Redis caching patterns;
 familiarity with CI/CD pipelines (GitHub Actions or CircleCI) and observability tooling
-(Datadog, OpenTelemetry). You take ownership of reliability — on-call rotations, runbooks, and
+(Datadog, OpenTelemetry). You take ownership of reliability - on-call rotations, runbooks, and
 postmortems are part of the role.

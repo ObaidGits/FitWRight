@@ -28,7 +28,7 @@ APP_DIR = Path(app_pkg.__file__).parent
 APP_ROOT = APP_DIR.parent
 
 # Every Domain_Metrics_Service, mapped to its dotted module path. MANY of these
-# do not exist yet — they are created in later tasks. The test tolerates that
+# do not exist yet - they are created in later tasks. The test tolerates that
 # (see ``_module_file``); the rule is enforced for each as it appears.
 DOMAIN_SERVICES: dict[str, str] = {
     # Observability bounded context

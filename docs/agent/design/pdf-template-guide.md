@@ -6,12 +6,12 @@
 
 ```
 Backend: GET /resumes/{id}/pdf
-├── Build URL: {frontend}/print/resumes/{id}?params
-├── Playwright opens headless Chrome
-├── Waits for .resume-print selector
-├── Waits for document.fonts.ready
-├── Generates PDF (zero margins, print_background=true)
-└── Returns PDF bytes
++-- Build URL: {frontend}/print/resumes/{id}?params
++-- Playwright opens headless Chrome
++-- Waits for .resume-print selector
++-- Waits for document.fonts.ready
++-- Generates PDF (zero margins, print_background=true)
++-- Returns PDF bytes
 ```
 
 ## Print Routes
@@ -54,9 +54,9 @@ In `globals.css`, whitelist print classes or PDFs will be blank:
 
 ```
 components/resume/
-├── index.ts                    # Template exports
-├── resume-single-column.tsx    # Full-width vertical
-└── resume-two-column.tsx       # 65% main + 35% sidebar
++-- index.ts                    # Template exports
++-- resume-single-column.tsx    # Full-width vertical
++-- resume-two-column.tsx       # 65% main + 35% sidebar
 ```
 
 ## Adding New Templates

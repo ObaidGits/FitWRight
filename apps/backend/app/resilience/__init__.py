@@ -1,4 +1,4 @@
-"""P4 Resilience — server-side building blocks.
+"""P4 Resilience - server-side building blocks.
 
 Streaming AI (SSE relay + cross-worker task registry, cap, reaper), version-CAS
 conflict resolution helpers, idempotency-key dedupe for autosave, and the

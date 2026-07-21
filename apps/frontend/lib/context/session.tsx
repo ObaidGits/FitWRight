@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Session provider (Task 8.1) — the real, backend-hydrated session.
+ * Session provider (Task 8.1) - the real, backend-hydrated session.
  *
  * Responsibilities:
  * - Hydrate the current user from `GET /auth/session` via TanStack Query
@@ -12,7 +12,7 @@
  *   (admin), so local zero-config boot behaves exactly like today (R14.3/15.5).
  * - Register the global 401 interceptor: on an expired session it clears the
  *   cached session, broadcasts a multi-tab logout, and routes to
- *   `/login?next=…` (R11.3).
+ *   `/login?next=...` (R11.3).
  *
  * SECURITY NOTE: this is for conditional rendering + UX only. The server always
  * enforces access (`user_id` scoping, admin capability). Hiding UI is never the
@@ -27,7 +27,7 @@ import { SINGLE_USER_MODE } from '@/lib/config/auth';
 import { OWNER_USER } from '@/lib/api/session-owner';
 
 export type { UserRole };
-/** Back-compat alias — the session user is the backend `SafeUser`. */
+/** Back-compat alias - the session user is the backend `SafeUser`. */
 export type AuthUser = SafeUser;
 export type SessionStatus = 'authenticated' | 'loading' | 'guest';
 
@@ -145,7 +145,7 @@ function MultiUserSessionProvider({
         channel?.postMessage({ type: 'logout' });
         window.localStorage.setItem(STORAGE_LOGOUT_KEY, String(Date.now()));
       } catch {
-        /* storage/broadcast unavailable — local handling still runs */
+        /* storage/broadcast unavailable - local handling still runs */
       }
       handleExpired();
     });

@@ -1,7 +1,7 @@
 """Unit tests for the IdentityProvider port (IMPLEMENTATION_PLAN Phase 5).
 
 Verifies the two adapters' behavior and that the composition root selects the
-correct adapter per profile — the behavior-preserving replacement for the old
+correct adapter per profile - the behavior-preserving replacement for the old
 ``if settings.single_user_mode`` owner-fallback branch.
 """
 
@@ -50,7 +50,7 @@ class TestContainerSelection:
     def test_identity_provider_resolves_live_when_profile_changes(self):
         # Not cached: flipping the profile flips the selected adapter (this is
         # what makes it correct under a process-singleton container + runtime
-        # mode changes — the regression that broke the hosted 401 tests).
+        # mode changes - the regression that broke the hosted 401 tests).
         settings_like = _fake("desktop", is_local=True)
         c = Container(settings_like)
         assert isinstance(c.identity_provider(), OwnerIdentityProvider)

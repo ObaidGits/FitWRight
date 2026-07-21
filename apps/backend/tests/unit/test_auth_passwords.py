@@ -2,7 +2,7 @@
 
 Covers Argon2id hash/verify + rehash detection, the password policy (length
 floor/cap, denylist, zxcvbn-style strength gate), the breach hook (fail-open),
-and — the security-critical piece — the dummy-hash timing equalization that keeps
+and - the security-critical piece - the dummy-hash timing equalization that keeps
 the unknown-account branch from being measurably faster (R1.2, R2.2, Property 4).
 
 Requirements: 1.2, 1.3, 1.5, 2.2, 13.3
@@ -24,7 +24,7 @@ from app.auth.passwords import (
 pytestmark = pytest.mark.unit
 
 
-# Fast Argon2 params for tests — real security params come from settings in prod.
+# Fast Argon2 params for tests - real security params come from settings in prod.
 def _service(breach_check: BreachedPasswordCheck | None = None) -> PasswordService:
     return PasswordService(
         time_cost=1,
@@ -158,7 +158,7 @@ class TestTimingEqualization:
 
         Both branches run one Argon2 verify, so their timings should be within
         the same order of magnitude. Tolerance is deliberately generous to avoid
-        CI flakiness — the assertion only fails if the None branch clearly skips
+        CI flakiness - the assertion only fails if the None branch clearly skips
         the hash (near-zero time).
         """
         svc = _service()

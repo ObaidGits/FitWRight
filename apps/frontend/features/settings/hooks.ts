@@ -1,6 +1,6 @@
 'use client';
 
-/** Settings data hooks (Task 13) — wrap the existing config API via Query. */
+/** Settings data hooks (Task 13) - wrap the existing config API via Query. */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/query/client';
 import {

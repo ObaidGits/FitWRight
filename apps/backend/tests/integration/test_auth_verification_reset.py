@@ -3,14 +3,14 @@
 Exercises the real routers end-to-end over an ASGI transport against an isolated
 temp database:
 
-- ``POST /auth/verify/request`` — uniform/enumeration-safe response, per-IP rate
+- ``POST /auth/verify/request`` - uniform/enumeration-safe response, per-IP rate
   limiting, and prior-token invalidation on re-issue.
-- ``POST /auth/verify/confirm`` — single-use, expired, invalid, and the
-  ``pending_verification`` → ``active`` state transition.
-- The sensitive-action gate (provider-cost generation) — 403 when the caller's
+- ``POST /auth/verify/confirm`` - single-use, expired, invalid, and the
+  ``pending_verification`` -> ``active`` state transition.
+- The sensitive-action gate (provider-cost generation) - 403 when the caller's
   email is unverified vs. allowed once verified.
-- ``POST /auth/password/forgot`` — uniform for existing/non-existent emails.
-- ``POST /auth/password/reset`` — single-use, policy/breach reject, revoke ALL
+- ``POST /auth/password/forgot`` - uniform for existing/non-existent emails.
+- ``POST /auth/password/reset`` - single-use, policy/breach reject, revoke ALL
   sessions, fresh session, and OAuth-only set-password.
 
 Also asserts the emailed token is single-use and that only its ``sha256`` is
@@ -83,7 +83,7 @@ def _install_sender(monkeypatch) -> _CapturingSender:
 
 
 def _token_from(message: EmailMessage) -> str:
-    """Extract the raw token from an email link (``…?token=<raw>``)."""
+    """Extract the raw token from an email link (``...?token=<raw>``)."""
     match = re.search(r"token=([^\s]+)", message.text_body)
     assert match, f"no token in email body: {message.text_body!r}"
     return unquote(match.group(1))
@@ -126,7 +126,7 @@ async def _stored_tokens(db, model):
 
 
 # ---------------------------------------------------------------------------
-# signup → verification email is actually sent (regression: previously the
+# signup -> verification email is actually sent (regression: previously the
 # signup handler created a pending_verification user but never issued a token
 # or sent an email, so "check your inbox" was a lie until the user resent).
 # ---------------------------------------------------------------------------
@@ -138,7 +138,7 @@ class TestSignupSendsVerificationEmail:
     ):
         from tests.integration.test_auth_api import _signup
 
-        # Hosted mode → email verification on.
+        # Hosted mode -> email verification on.
         monkeypatch.setattr(app_settings, "single_user_mode", False)
         sender = _install_sender(monkeypatch)
 
@@ -148,7 +148,7 @@ class TestSignupSendsVerificationEmail:
             assert resp.json() == {"status": "pending_verification"}
 
             # The signup itself sent a verification email (post-response
-            # background task) carrying a real, single-use token — the whole
+            # background task) carrying a real, single-use token - the whole
             # point of the fix.
             assert sender.messages, "signup did not send a verification email"
             msg = sender.last
@@ -157,7 +157,7 @@ class TestSignupSendsVerificationEmail:
             assert "verify" in msg.subject.lower()
             token = _token_from(msg)
 
-            # And the emailed token verifies the account (pending → active).
+            # And the emailed token verifies the account (pending -> active).
             confirm = await client.post(
                 "/api/v1/auth/verify/confirm", json={"token": token}
             )
@@ -235,7 +235,7 @@ class TestVerifyRequest:
         raw = _token_from(sender.last)
         assert sender.last.to == "hash-vr@example.com"
 
-        # Only sha256(raw) is persisted — never the raw token.
+        # Only sha256(raw) is persisted - never the raw token.
         rows = await _stored_tokens(auth_env, EmailVerificationToken)
         assert len(rows) == 1
         assert rows[0].token_hash == hash_token_value(raw)
@@ -339,7 +339,7 @@ class TestVerifyConfirm:
             resp = await client.post("/api/v1/auth/verify/confirm", json={"token": token})
         assert resp.status_code == 400
         assert resp.json()["error"]["code"] == "invalid_token"
-        # Still pending — an expired token must not verify.
+        # Still pending - an expired token must not verify.
         assert (await get_by_id(record.id, db=auth_env)).status == "pending_verification"
 
     async def test_confirm_invalid_token_rejected(self, auth_env, monkeypatch):
@@ -359,7 +359,7 @@ class TestVerifyConfirm:
 
 class TestSensitiveActionGate:
     async def test_unverified_user_is_gated_from_generation(self, auth_env, monkeypatch):
-        # Hosted mode → verification required → an active-but-unverified session
+        # Hosted mode -> verification required -> an active-but-unverified session
         # is blocked from provider-cost generation.
         monkeypatch.setattr(app_settings, "single_user_mode", False)
         await _seed_active_unverified(auth_env, "gated@example.com")
@@ -376,7 +376,7 @@ class TestSensitiveActionGate:
 
     async def test_verified_user_passes_the_gate(self, auth_env, monkeypatch):
         # A verified session clears the gate (the endpoint then 404s on the
-        # missing resume — the point is the gate did NOT reject it).
+        # missing resume - the point is the gate did NOT reject it).
         monkeypatch.setattr(app_settings, "single_user_mode", False)
         await _seed_active_user(auth_env, "ungated@example.com")
 

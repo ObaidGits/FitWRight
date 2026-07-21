@@ -1,11 +1,11 @@
-"""Synchronization Engine — refresh a resume from the profile (P4).
+"""Synchronization Engine - refresh a resume from the profile (P4).
 
 A resume is only ever a **projection** of the profile at a point in time; sync
 re-projects the current profile and lets the user preview the field-level diff
 before applying it back to a *draft* resume (optimistic-concurrency guarded).
 
 Hard invariant (design §P4): **submitted resumes are immutable forever.** A
-resume referenced by any application in a non-``saved`` status is locked — sync
+resume referenced by any application in a non-``saved`` status is locked - sync
 previews still work (read-only) but apply is refused; the user regenerates a new
 resume instead. This keeps the historical record of what was actually sent
 truthful.
@@ -30,7 +30,7 @@ __all__ = [
     "apply_sync",
 ]
 
-# An application in any of these statuses means its resume was sent → immutable.
+# An application in any of these statuses means its resume was sent -> immutable.
 SUBMITTED_STATUSES = frozenset(
     {"applied", "no_response", "response", "interview", "accepted", "rejected"}
 )
@@ -134,10 +134,10 @@ async def apply_sync(
     """Apply the profile projection to a draft resume (resume version CAS).
 
     Returns ``(status, resume_dict)``:
-    - ``("updated", dict)`` — applied.
-    - ``("immutable", dict)`` — the resume is submitted/locked (no change).
-    - ``("conflict", dict)`` — stale ``base_version``.
-    - ``("not_found", None)`` — no such resume for this user.
+    - ``("updated", dict)`` - applied.
+    - ``("immutable", dict)`` - the resume is submitted/locked (no change).
+    - ``("conflict", dict)`` - stale ``base_version``.
+    - ``("not_found", None)`` - no such resume for this user.
 
     A ``manual`` snapshot ("Synced from profile") is captured after applying so
     the pre-sync state is always recoverable (non-destructive).

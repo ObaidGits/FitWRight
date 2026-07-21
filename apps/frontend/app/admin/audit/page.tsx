@@ -1,11 +1,11 @@
 'use client';
 
 /**
- * Admin audit view (Task 8.2) — cursor-paginated, filterable, append-only.
+ * Admin audit view (Task 8.2) - cursor-paginated, filterable, append-only.
  *
  * The audit log is read-only (no mutate API); this page only filters + paginates
  * it. Filters (event/actor/target) are URL-synced. Long lists are page-bounded
- * (virtualization-friendly) — we render a bounded page and paginate by cursor.
+ * (virtualization-friendly) - we render a bounded page and paginate by cursor.
  */
 import * as React from 'react';
 import { Suspense } from 'react';
@@ -35,7 +35,7 @@ import type { AuditListParams } from '@/lib/api/admin';
 const PAGE_SIZE = 25;
 
 // ---------------------------------------------------------------------------
-// Security strip (Req 9 / task 13.3) — a compact, self-contained row of the
+// Security strip (Req 9 / task 13.3) - a compact, self-contained row of the
 // trailing-24h security counts, surfaced here because the Audit log is the
 // natural security-adjacent home. It owns its OWN observability query
 // (`useSecurity`) so it loads, errors and refreshes independently of the audit
@@ -56,7 +56,7 @@ function SecurityStat({
   value: number;
   /** When true AND the count is non-zero, draw attention with color + text. */
   highlight?: boolean;
-  /** When true, this signal has no durable source — show an explicit
+  /** When true, this signal has no durable source - show an explicit
    *  "Not instrumented" indicator instead of a misleading 0. */
   notInstrumented?: boolean;
 }) {
@@ -71,7 +71,7 @@ function SecurityStat({
       {notInstrumented ? (
         <p
           className="mt-1 text-xs font-medium text-[var(--muted-foreground)]"
-          title="No durable metric source — not instrumented"
+          title="No durable metric source - not instrumented"
         >
           Not instrumented
         </p>
@@ -121,7 +121,7 @@ function SecurityStrip() {
       {/* aria-live so the counts are announced when the async fetch resolves. */}
       <div aria-live="polite">
         {security.isError ? (
-          // Compact inline error — deliberately NOT the full-page ErrorState, so
+          // Compact inline error - deliberately NOT the full-page ErrorState, so
           // a security-metrics failure never blocks the audit list below.
           <div
             role="alert"
@@ -227,14 +227,14 @@ function AdminAuditPageInner() {
         <Input
           value={eventInput}
           onChange={(e) => setEventInput(e.target.value)}
-          placeholder="Filter by event (e.g. user.disabled)…"
+          placeholder="Filter by event (e.g. user.disabled)..."
           className="max-w-xs"
           aria-label="Filter by event"
         />
         {(actor || target) && (
           <div className="flex items-center gap-2 text-xs text-[var(--muted-foreground)]">
-            {actor && <Badge variant="ai">actor: {actor.slice(0, 8)}…</Badge>}
-            {target && <Badge variant="ai">target: {target.slice(0, 8)}…</Badge>}
+            {actor && <Badge variant="ai">actor: {actor.slice(0, 8)}...</Badge>}
+            {target && <Badge variant="ai">target: {target.slice(0, 8)}...</Badge>}
             <Button
               size="sm"
               variant="ghost"
@@ -282,10 +282,10 @@ function AdminAuditPageInner() {
                       </TableCell>
                       <TableCell className="font-mono text-xs">{a.event}</TableCell>
                       <TableCell className="font-mono text-xs text-[var(--muted-foreground)]">
-                        {a.actorUserId ? a.actorUserId.slice(0, 8) + '…' : '—'}
+                        {a.actorUserId ? a.actorUserId.slice(0, 8) + '...' : '-'}
                       </TableCell>
                       <TableCell className="font-mono text-xs text-[var(--muted-foreground)]">
-                        {a.targetUserId ? a.targetUserId.slice(0, 8) + '…' : '—'}
+                        {a.targetUserId ? a.targetUserId.slice(0, 8) + '...' : '-'}
                       </TableCell>
                     </TableRow>
                   ))}

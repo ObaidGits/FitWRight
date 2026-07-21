@@ -1,4 +1,4 @@
-"""Workday platform adapter (Phase 1 — browser-required).
+"""Workday platform adapter (Phase 1 - browser-required).
 
 Workday renders job postings entirely via JavaScript (React SPA). There is no
 public API. Detection is domain-based; extraction uses Playwright + known DOM
@@ -59,11 +59,11 @@ class WorkdayAdapter:
         )
 
     def extract_api_url(self, parsed: ParseResult) -> str | None:
-        # Workday has no public API — always returns None
+        # Workday has no public API - always returns None
         return None
 
     def parse_response(self, data: dict, source_url: str) -> ExtractionResult:
-        # Not used for Workday (no API) — this is for interface compliance
+        # Not used for Workday (no API) - this is for interface compliance
         return ExtractionResult(content="", source="platform_api")
 
     def parse_rendered_html(self, html: str, source_url: str) -> ExtractionResult | None:

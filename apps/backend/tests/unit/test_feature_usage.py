@@ -6,18 +6,18 @@ model (see :mod:`app.analytics.feature_usage`), all served from durable
 :class:`~app.admin.metric_store.MetricStore`:
 
 - **Increment-only aggregation (Req 16.1).** The service reads only daily
-  aggregate ``(day, value)`` rows produced by ``MetricStore.add`` — never a
+  aggregate ``(day, value)`` rows produced by ``MetricStore.add`` - never a
   per-user or per-invocation row. Seeding an increment shows up in the feature
   total; there is no user identity anywhere in the shape.
 - **Window validation (Req 16.3).** ``series(window)`` accepts only {7, 30, 90};
   any other value raises ``ValueError`` (surfaced by the endpoint as a 400
   ``invalid_window``).
 - **O(1) read (Req 16.5).** A single ``series()`` issues a fixed, bounded number
-  of store reads (exactly 8 — one ``series`` call per feature key) regardless of
+  of store reads (exactly 8 - one ``series`` call per feature key) regardless of
   how many days/rows are seeded.
 - **Aggregate-only / no user data (Req 16.6).** The response model exposes only
   ``window`` / ``series`` / ``computedAt`` (and per-feature ``feature`` /
-  ``points`` / ``total``) — no user id, funnel, cohort, retention, or session
+  ``points`` / ``total``) - no user id, funnel, cohort, retention, or session
   field. ``extra="forbid"`` makes any stray field a hard error.
 - **Secret-free (Req 15.8).** The serialized ``FeatureUsage`` passes the
   response-boundary forbidden-field guard.
@@ -89,7 +89,7 @@ class _CountingStore:
     """A ``MetricStore``-shaped wrapper that counts ``series`` / ``sum`` calls.
 
     Delegates every read to the wrapped real store so the returned data is real,
-    while tallying how many bounded reads a single ``series()`` issues — the proof
+    while tallying how many bounded reads a single ``series()`` issues - the proof
     of O(1)-w.r.t.-data-volume (Req 16.5). ``add`` / ``upsert`` are delegated so
     tests can seed increments through the wrapper.
     """
@@ -131,7 +131,7 @@ class TestShape:
             # Exactly the 8 tracked features, in registry order.
             assert [fs.feature for fs in usage.series] == list(_FEATURE_KEYS)
             for fs in usage.series:
-                # Zero-filled: exactly `window` points, all zero, oldest→newest.
+                # Zero-filled: exactly `window` points, all zero, oldest->newest.
                 assert len(fs.points) == window
                 assert all(p.value == 0 for p in fs.points)
                 assert fs.total == 0
@@ -141,7 +141,7 @@ class TestShape:
 
 
 # ===========================================================================
-# 2. Increment-only aggregation (Req 16.1) — add shows up in the total
+# 2. Increment-only aggregation (Req 16.1) - add shows up in the total
 # ===========================================================================
 
 
@@ -183,7 +183,7 @@ class TestIncrementAggregation:
 
 
 # ===========================================================================
-# 3. Window validation (Req 16.3) — {7,30,90} only, else ValueError
+# 3. Window validation (Req 16.3) - {7,30,90} only, else ValueError
 # ===========================================================================
 
 
@@ -203,7 +203,7 @@ class TestWindowValidation:
 
 
 # ===========================================================================
-# 4. O(1) read (Req 16.5) — fixed store-read count regardless of data volume
+# 4. O(1) read (Req 16.5) - fixed store-read count regardless of data volume
 # ===========================================================================
 
 
@@ -229,7 +229,7 @@ class TestO1Read:
         # Fixed shape: exactly one series read per feature key (8), zero sum reads.
         assert small.series_calls == len(_FEATURE_KEYS) == 8
         assert small.sum_calls == 0
-        # Identical regardless of how much data was seeded — O(1) w.r.t. volume.
+        # Identical regardless of how much data was seeded - O(1) w.r.t. volume.
         assert big.series_calls == small.series_calls
         assert big.sum_calls == small.sum_calls
 
@@ -254,7 +254,7 @@ class TestSecretFree:
 
 
 # ===========================================================================
-# 6. No user data (Req 16.6) — structural assertion on the serialized shape
+# 6. No user data (Req 16.6) - structural assertion on the serialized shape
 # ===========================================================================
 
 
@@ -268,7 +268,7 @@ class TestNoUserData:
         usage = await _service(store).series(7)
         dumped = usage.model_dump(by_alias=True)
 
-        # Top-level: exactly the aggregate fields — no user/funnel/cohort/session.
+        # Top-level: exactly the aggregate fields - no user/funnel/cohort/session.
         assert set(dumped.keys()) == {"window", "series", "computedAt"}
         # Per-feature: exactly feature/points/total.
         for fs in dumped["series"]:
@@ -304,7 +304,7 @@ def _assert_no_substrings(payload, markers) -> None:
 
 
 # ===========================================================================
-# 7. Singleton management (defensive — get/reset consistency)
+# 7. Singleton management (defensive - get/reset consistency)
 # ===========================================================================
 
 

@@ -1,16 +1,16 @@
 """Centralized owned-resource scoping (ADR-4, R10.2/10.6/10.8).
 
 Every owned-table query in the data layer is composed through :class:`Repo`, so
-the *scope key* — the column(s) that decide ownership — lives in exactly one
+the *scope key* - the column(s) that decide ownership - lives in exactly one
 place. Today that key is ``user_id``; a future team/org scope (R10.8) becomes a
 ``(org_id, user_id)`` change **here** and every owned query picks it up without
 touching a single call site.
 
 Two composition helpers cover the whole data layer:
 
-- :meth:`Repo.scoped` — append ``WHERE user_id = :uid`` to a ``select`` /
+- :meth:`Repo.scoped` - append ``WHERE user_id = :uid`` to a ``select`` /
   ``update`` / ``delete`` statement built for an owned model.
-- :meth:`Repo.owns` — the in-Python ownership predicate used after a bare
+- :meth:`Repo.owns` - the in-Python ownership predicate used after a bare
   primary-key load (``session.get``) to decide 404 vs. hit.
 
 The set of owned tables is declared once in :data:`Repo.OWNED_TABLES` and is what
@@ -82,7 +82,7 @@ class Repo:
         """Return ``statement`` narrowed to rows owned by ``user_id``.
 
         Works for ``select`` / ``update`` / ``delete`` statements built for an
-        owned ``model``. ``user_id`` is mandatory — passing ``None`` is a
+        owned ``model``. ``user_id`` is mandatory - passing ``None`` is a
         programming error (unscoped owned access) and raises immediately rather
         than silently returning another user's rows.
         """
@@ -100,7 +100,7 @@ class Repo:
         """Whether ``row`` is owned by ``user_id`` across every scope key.
 
         Used after a bare primary-key load so a foreign row is treated as
-        absent (404, no existence disclosure — R10.3).
+        absent (404, no existence disclosure - R10.3).
         """
         if row is None or user_id is None:
             return False

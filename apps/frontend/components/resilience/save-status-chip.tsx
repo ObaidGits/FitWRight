@@ -3,8 +3,8 @@
 /**
  * SaveStatusChip (P4 R4.1, R6.5).
  *
- * Communicates autosave status — saved / dirty / saving / retrying / offline /
- * conflict — plus a last-saved relative time. Text + SR label, never color
+ * Communicates autosave status - saved / dirty / saving / retrying / offline /
+ * conflict - plus a last-saved relative time. Text + SR label, never color
  * alone (a11y). Drives off the {@link SaveStatus} from the SaveController.
  */
 import * as React from 'react';
@@ -44,7 +44,7 @@ const CONFIG: Record<
   },
   dirty: { label: () => 'Unsaved changes', Icon: Circle, tone: 'text-[var(--muted-foreground)]' },
   saving: {
-    label: () => 'Saving…',
+    label: () => 'Saving...',
     Icon: Loader,
     spin: true,
     tone: 'text-[var(--muted-foreground)]',
@@ -55,12 +55,12 @@ const CONFIG: Record<
     tone: 'text-[var(--at-warning)]',
   },
   offline: {
-    label: () => 'Offline — saved locally',
+    label: () => 'Offline - saved locally',
     Icon: CloudOff,
     tone: 'text-[var(--at-warning)]',
   },
   conflict: {
-    label: () => 'Conflict — needs review',
+    label: () => 'Conflict - needs review',
     Icon: AlertTriangle,
     tone: 'text-[var(--at-warning)]',
   },
@@ -71,8 +71,8 @@ export interface SaveStatusChipProps {
   lastSavedAt: number | null;
   /**
    * True when this tab is a follower (another tab is the autosave leader). A
-   * follower's local `offline`/`retrying` states are not real network failures —
-   * the leader owns saving — so we show an accurate, non-alarming label (R7).
+   * follower's local `offline`/`retrying` states are not real network failures -
+   * the leader owns saving - so we show an accurate, non-alarming label (R7).
    */
   isFollower?: boolean;
 }
@@ -88,7 +88,7 @@ export function SaveStatusChip({ status, lastSavedAt, isFollower }: SaveStatusCh
         className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--muted-foreground)]"
       >
         <Check className="h-3.5 w-3.5" aria-hidden="true" />
-        <span>Saved locally · syncing in another tab</span>
+        <span>Saved locally - syncing in another tab</span>
       </span>
     );
   }

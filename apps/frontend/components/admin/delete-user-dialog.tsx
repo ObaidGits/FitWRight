@@ -1,11 +1,11 @@
 'use client';
 
 /**
- * Destructive delete confirmation (R13.5) — pessimistic, typed-email confirm.
+ * Destructive delete confirmation (R13.5) - pessimistic, typed-email confirm.
  *
  * Requires typing the target's exact email, warns the purge is irreversible
  * after the grace period, and summarizes what will be removed. The mutation is
- * pessimistic (await the server; no optimistic UI for a destructive action —
+ * pessimistic (await the server; no optimistic UI for a destructive action -
  * R10.4). Server-mirrored errors (last-active-admin, confirm mismatch) surface
  * inline + as a toast.
  */
@@ -121,7 +121,7 @@ export function DeleteUserDialog({
             disabled={!matches || del.isPending}
             aria-disabled={!matches || del.isPending}
           >
-            {del.isPending ? 'Deleting…' : 'Delete user'}
+            {del.isPending ? 'Deleting...' : 'Delete user'}
           </Button>
         </DialogFooter>
       </DialogContent>

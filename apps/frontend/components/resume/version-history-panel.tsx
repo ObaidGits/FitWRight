@@ -39,8 +39,8 @@ function badgeVariant(source: ResumeVersion['source']) {
 }
 
 function formatValue(v: unknown): string {
-  if (v === null || v === undefined) return '—';
-  if (typeof v === 'string') return v || '—';
+  if (v === null || v === undefined) return '-';
+  if (typeof v === 'string') return v || '-';
   return JSON.stringify(v);
 }
 
@@ -169,7 +169,7 @@ export function VersionHistoryPanel({ resumeId, onRestored, trigger }: VersionHi
       <SheetContent side="right" className="flex flex-col p-6">
         <SheetTitle className="mb-1 text-lg font-semibold">Version history</SheetTitle>
         <p className="mb-4 text-sm text-[var(--muted-foreground)]">
-          Roll back safely — these actions never overwrite your work without confirmation.
+          Roll back safely - these actions never overwrite your work without confirmation.
         </p>
 
         {/* Diff view */}
@@ -287,7 +287,7 @@ export function VersionHistoryPanel({ resumeId, onRestored, trigger }: VersionHi
 
               <div className="min-h-0 flex-1 overflow-y-auto">
                 {loading ? (
-                  <p className="text-sm text-[var(--muted-foreground)]">Loading…</p>
+                  <p className="text-sm text-[var(--muted-foreground)]">Loading...</p>
                 ) : versions.length === 0 ? (
                   <EmptyState
                     icon={History}

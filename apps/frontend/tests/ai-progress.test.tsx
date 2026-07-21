@@ -27,7 +27,7 @@ describe('useDeterministicStages', () => {
     expect(result.current.activeIndex).toBe(1);
     expect(result.current.complete).toBe(false);
 
-    // Real work resolves → jumps to final stage + complete.
+    // Real work resolves -> jumps to final stage + complete.
     rerender({ done: true });
     expect(result.current.activeIndex).toBe(2);
     expect(result.current.complete).toBe(true);

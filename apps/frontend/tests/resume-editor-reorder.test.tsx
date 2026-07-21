@@ -3,9 +3,9 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 /**
- * Resume editor — identity-based item reordering.
+ * Resume editor - identity-based item reordering.
  * Moving an experience item must (a) change the saved order and (b) preserve
- * fields the UI doesn't edit (stable id, location) — the guarantee of the
+ * fields the UI doesn't edit (stable id, location) - the guarantee of the
  * source-carrying, order-driven previewData rebuild.
  */
 
@@ -92,7 +92,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe('Resume editor — item reordering', () => {
+describe('Resume editor - item reordering', () => {
   it('swaps experience order on move-down and preserves non-edited fields on save', async () => {
     renderPage();
 
@@ -109,10 +109,10 @@ describe('Resume editor — item reordering', () => {
     await waitFor(() => expect(updateResumeMock).toHaveBeenCalled());
     const [, payload] = updateResumeMock.mock.calls[0];
     const exp = payload.workExperience;
-    // Order swapped…
+    // Order swapped...
     expect(exp[0].title).toBe('Second Job');
     expect(exp[1].title).toBe('First Job');
-    // …and non-edited fields preserved with each moved item.
+    // ...and non-edited fields preserved with each moved item.
     expect(exp[0].location).toBe('LA');
     expect(exp[0].id).toBe(2);
     expect(exp[1].location).toBe('NYC');

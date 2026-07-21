@@ -48,7 +48,7 @@ type SortKey = 'updated' | 'created' | 'name';
 const SORT_LABELS: Record<SortKey, string> = {
   updated: 'Recently updated',
   created: 'Recently added',
-  name: 'Name (A–Z)',
+  name: 'Name (A-Z)',
 };
 
 function StatusBadge({ status }: { status: string }) {
@@ -73,7 +73,7 @@ export default function ResumesPage() {
     return (r.title || r.filename || 'Untitled resume').toLowerCase();
   }
 
-  // filter tab → text search → sort. Memoized so it scales to large libraries.
+  // filter tab -> text search -> sort. Memoized so it scales to large libraries.
   const filtered = React.useMemo(() => {
     const q = search.trim().toLowerCase();
     const byTab = resumes.filter((r) =>
@@ -152,7 +152,7 @@ export default function ResumesPage() {
               type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search resumes…"
+              placeholder="Search resumes..."
               aria-label="Search resumes"
               className="pl-9"
             />
@@ -197,7 +197,7 @@ export default function ResumesPage() {
         <EmptyState
           icon={Search}
           title="No matches"
-          description={`No resumes match “${search.trim()}”.`}
+          description={`No resumes match "${search.trim()}".`}
           action={
             <Button variant="outline" onClick={() => setSearch('')}>
               Clear search

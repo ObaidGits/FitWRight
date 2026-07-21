@@ -1,11 +1,11 @@
 /**
- * Resume Sample Library — realistic, ready-to-use example resumes.
+ * Resume Sample Library - realistic, ready-to-use example resumes.
  *
  * Distinct from the *template* catalog (which is appearance/layout): a sample is
  * fully-authored **content** (`ResumeData`) for a profession, that a user can
  * preview, use (creates a new resume via `POST /resumes/from-data`), or copy the
  * structure of. Samples reuse the shared renderer and pair with a recommended
- * template. Adding a sample = one entry here (metadata + `data`) — no core code.
+ * template. Adding a sample = one entry here (metadata + `data`) - no core code.
  */
 import type { ResumeData } from '@/components/dashboard/resume-component';
 import type { ExperienceLevel, TemplateCategory } from '@/lib/resume/template-catalog';
@@ -106,7 +106,7 @@ export const RESUME_SAMPLES: ResumeSample[] = [
       ],
       {
         technicalSkills: ['Go', 'Python', 'PostgreSQL', 'Kafka', 'AWS', 'Kubernetes', 'gRPC'],
-        certificationsTraining: ['AWS Solutions Architect – Professional'],
+        certificationsTraining: ['AWS Solutions Architect - Professional'],
         awards: ['Engineering Excellence Award, 2023'],
       },
       [
@@ -544,7 +544,7 @@ export const RESUME_SAMPLES: ResumeSample[] = [
       [
         {
           id: 1,
-          title: 'Registered Nurse — Medical/Surgical',
+          title: 'Registered Nurse - Medical/Surgical',
           company: 'Houston General Hospital',
           location: 'Houston, TX',
           years: 'Aug 2018 - Present',
@@ -655,7 +655,7 @@ export const RESUME_SAMPLES: ResumeSample[] = [
           location: 'Portland, OR',
           years: 'Jan 2019 - Present',
           description: [
-            'Coordinated cross-functional launches — the same discovery + facilitation UX depends on.',
+            'Coordinated cross-functional launches - the same discovery + facilitation UX depends on.',
             'Ran user interviews for an internal tool, redesigning its flow to cut task time 30%.',
           ],
         },
@@ -706,7 +706,7 @@ export function filterSamples(samples: ResumeSample[], filter: SampleFilter): Re
   });
 }
 
-/** Samples in the same category (excluding the given one) — for "related". */
+/** Samples in the same category (excluding the given one) - for "related". */
 export function relatedSamples(sample: ResumeSample, limit = 3): ResumeSample[] {
   return RESUME_SAMPLES.filter((s) => s.id !== sample.id && s.category === sample.category).slice(
     0,

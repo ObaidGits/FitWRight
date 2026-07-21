@@ -14,7 +14,7 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Cache state — accessed without a lock because:
+# Cache state - accessed without a lock because:
 # 1. The app runs single-worker uvicorn (one thread, cooperative async).
 # 2. The GIL protects dict/float assignment; worst-case TOCTOU is a
 #    redundant disk read (benign, same file, same result).

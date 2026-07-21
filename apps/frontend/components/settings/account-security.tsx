@@ -1,12 +1,12 @@
 'use client';
 
 /**
- * Settings → Account security (Task 8.3 / R7.3, R7.4, R3.2, R3.5).
+ * Settings -> Account security (Task 8.3 / R7.3, R7.4, R3.2, R3.5).
  *
  * Change password, change email (verify-before-switch), the active-device list
  * with per-device revoke, and log-out-everywhere. Sensitive actions are wrapped
  * with `useStepUp().run(...)`, which transparently handles the backend's
- * `step_up_required` challenge (re-auth modal → retry). Rendered only in hosted
+ * `step_up_required` challenge (re-auth modal -> retry). Rendered only in hosted
  * (multi-user) mode; local single-user mode has no password/session surface.
  */
 import * as React from 'react';
@@ -159,7 +159,7 @@ function ChangeEmailCard() {
       <div>
         <p className="text-sm font-medium">Change email</p>
         <p className="text-xs text-[var(--muted-foreground)]">
-          Current: {user?.email || '—'}. We&apos;ll verify the new address before switching.
+          Current: {user?.email || '-'}. We&apos;ll verify the new address before switching.
         </p>
       </div>
       <form onSubmit={onSubmit} className="space-y-3" noValidate>

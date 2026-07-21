@@ -2,7 +2,7 @@
 
 Local/dev on SQLite gets its schema from ``create_all`` (``init_models_sync``),
 so migrations are a no-op there. On **hosted Postgres** the schema is owned by
-the Alembic chain and *nothing* previously applied it at boot — a fresh database
+the Alembic chain and *nothing* previously applied it at boot - a fresh database
 would start "healthy" and then fail every query on a missing relation. This
 module closes that gap: on startup it brings the database up to ``head``.
 
@@ -15,13 +15,13 @@ Safety properties (why this is safe to run on every boot / every worker):
   processes running the chain at once.
 - **Idempotent.** ``alembic upgrade head`` is a no-op when already current.
 - **Off the event loop.** Alembic's ``env.py`` runs its own ``asyncio.run``,
-  which cannot nest inside the running app loop — so the upgrade executes in a
+  which cannot nest inside the running app loop - so the upgrade executes in a
   worker thread (``asyncio.to_thread``) that has no active loop.
 - **Fail-fast.** Any migration error propagates so the app refuses to serve a
   half-migrated/misconfigured database (the caller aborts startup).
 
 Controlled by ``DB_AUTO_MIGRATE`` (default on); set false to manage migrations
-out-of-band (e.g. a dedicated release phase) — then this becomes a no-op that
+out-of-band (e.g. a dedicated release phase) - then this becomes a no-op that
 only *verifies* the DB is reachable.
 """
 
@@ -59,11 +59,11 @@ def _alembic_config():
 
 
 def _migration_url() -> str:
-    """The connection string migrations run against — the DIRECT endpoint.
+    """The connection string migrations run against - the DIRECT endpoint.
 
     Prefers ``MIGRATION_DATABASE_URL`` (set to the non-pooled 5432 endpoint on
     Supabase/PgBouncer deployments); falls back to ``DATABASE_URL`` when the app
-    already talks to a direct connection (local, Neon-direct, …).
+    already talks to a direct connection (local, Neon-direct, ...).
     """
     from app.config import settings
 
@@ -112,7 +112,7 @@ def _run_upgrade_with_lock() -> dict:
                         "Timed out waiting for the migration advisory lock "
                         f"({_LOCK_TIMEOUT_SECONDS}s); another instance may be stuck."
                     )
-                logger.info("Migration lock held by another instance; waiting…")
+                logger.info("Migration lock held by another instance; waiting...")
                 time.sleep(_LOCK_POLL_SECONDS)
             acquired = True
             logger.info("Migration lock acquired; upgrading schema to head")

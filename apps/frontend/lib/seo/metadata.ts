@@ -13,7 +13,7 @@ import type { Metadata } from 'next';
 import { SITE_NAME, SITE_DESCRIPTION, OG_IMAGE, TWITTER_IMAGE } from './config';
 
 type BuildMetadataInput = {
-  /** Page title (without the site-name suffix — the template appends it). */
+  /** Page title (without the site-name suffix - the template appends it). */
   title: string;
   description?: string;
   /** Site-relative path, e.g. `/contact`. Used for canonical + OG url. */
@@ -44,7 +44,7 @@ export function buildMetadata({
   noindex,
 }: BuildMetadataInput): Metadata {
   const canonicalPath = path === '/' ? '/' : path.replace(/\/+$/, '');
-  const ogTitle = socialTitle ?? `${title} · ${SITE_NAME}`;
+  const ogTitle = socialTitle ?? `${title} - ${SITE_NAME}`;
 
   return {
     title,

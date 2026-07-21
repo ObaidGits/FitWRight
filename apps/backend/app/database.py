@@ -1,4 +1,4 @@
-"""SQLAlchemy data layer for FitWright (SQLite local, Postgres hosted — ADR-13).
+"""SQLAlchemy data layer for FitWright (SQLite local, Postgres hosted - ADR-13).
 
 This is a behavior-preserving replacement for the original TinyDB wrapper. The
 ``Database`` facade keeps the same method names/signatures and returns **plain
@@ -9,7 +9,7 @@ Two engines back one database, resolved from ``settings.effective_database_url``
   applications;
 - a **sync** engine (SQLite DBAPI / ``psycopg`` v3) for the encrypted
   ``api_keys`` table, which is read on the synchronous LLM hot path
-  (``get_llm_config`` → ``resolve_api_key``).
+  (``get_llm_config`` -> ``resolve_api_key``).
 
 Locally both engines point at one SQLite file (zero-config); hosted they point
 at the same Postgres server (schema owned by Alembic). See ``app.db_engine`` for
@@ -88,7 +88,7 @@ class Database:
     Every owned-resource method takes a **mandatory** ``user_id`` and routes its
     query through :class:`app.repository.Repo` so cross-user reads/writes are
     impossible (ADR-4, R10.2). A foreign or absent id resolves to ``None`` (the
-    router turns that into a 404 — no existence disclosure, R10.3). This is the
+    router turns that into a 404 - no existence disclosure, R10.3). This is the
     multi-tenant isolation boundary; see ``app/scripts/check_scoping.py`` for the
     CI guard that forbids unscoped owned queries.
     """
@@ -376,7 +376,7 @@ class Database:
 
         Uses a **per-user** asyncio.Lock to prevent race conditions when multiple
         uploads for the same user happen concurrently and both try to become
-        master (the single-master invariant is per user — R10.4).
+        master (the single-master invariant is per user - R10.4).
         """
         lock = await self._master_lock(user_id)
         async with lock:
@@ -473,7 +473,7 @@ class Database:
         *,
         base_version: int,
     ) -> tuple[str, dict[str, Any] | None]:
-        """Atomic optimistic-concurrency update (version CAS — P4 R3.1/3.4).
+        """Atomic optimistic-concurrency update (version CAS - P4 R3.1/3.4).
 
         Applies ``updates`` only when the stored ``version`` still equals
         ``base_version``; the read-check-write happens in a single transaction so
@@ -483,14 +483,14 @@ class Database:
 
         Returns a ``(status, resume_dict)`` tuple:
 
-        - ``("updated", <dict>)`` — CAS matched and the write was applied.
-        - ``("conflict", <current_dict>)`` — the base version was stale; the
+        - ``("updated", <dict>)`` - CAS matched and the write was applied.
+        - ``("conflict", <current_dict>)`` - the base version was stale; the
           returned dict is the *current* server state so the caller can build the
           409 ``{your_base_version, current_version, current_data}`` payload.
-        - ``("not_found", None)`` — no such resume for this user.
+        - ``("not_found", None)`` - no such resume for this user.
 
         The guard is a single-row **conditional UPDATE**
-        (``... SET …, version = version + 1 WHERE resume_id = ? AND user_id = ?
+        (``... SET ..., version = version + 1 WHERE resume_id = ? AND user_id = ?
         AND version = :base``) rather than a read-check-write, so it is atomic at
         the storage layer: two concurrent writers with the same base cannot both
         match (the first bumps the version, the second's guard then matches zero
@@ -580,7 +580,7 @@ class Database:
             await session.commit()
             return True
 
-    # -- Resume version history (P3 §A, R1–R3) ------------------------------
+    # -- Resume version history (P3 §A, R1-R3) ------------------------------
 
     @staticmethod
     def _version_meta(row: ResumeVersion) -> dict[str, Any]:
@@ -653,7 +653,7 @@ class Database:
         """Return the cached artifact for an exact reuse key (None on miss).
 
         The reuse key ``(user_id, artifact_type, source_id, checksum, version)``
-        is unique, so this is at most one row — an exact content+algorithm hit.
+        is unique, so this is at most one row - an exact content+algorithm hit.
         """
         async with self._session() as session:
             result = await session.execute(
@@ -723,7 +723,7 @@ class Database:
                 try:
                     await session.commit()
                 except IntegrityError:
-                    # Lost an insert race on the unique reuse key — reload and
+                    # Lost an insert race on the unique reuse key - reload and
                     # update the winner's row so the result is still stored.
                     await session.rollback()
                     result = await session.execute(
@@ -766,7 +766,7 @@ class Database:
         """Delete artifacts that depend on ``resource_id`` (dependency-aware).
 
         Matches rows whose ``source_id`` **or** ``related_id`` is
-        ``resource_id`` — so editing a resume invalidates both the artifacts
+        ``resource_id`` - so editing a resume invalidates both the artifacts
         keyed directly on it and the multi-source artifacts (e.g. a job-fit
         analysis) that merely referenced it. When ``artifact_types`` is given,
         only those kinds are invalidated (so a resume edit can drop tailoring/
@@ -888,7 +888,7 @@ class Database:
                 return 0
             # Retain the oldest ``original`` snapshot no matter what, then fill
             # the remaining budget with the newest rows so the TOTAL never
-            # exceeds ``cap`` (rows is newest→oldest).
+            # exceeds ``cap`` (rows is newest->oldest).
             originals = [r for r in rows if r.source == "original"]
             protected_id = originals[-1].id if originals else None
             keep: set[str] = set()
@@ -934,7 +934,7 @@ class Database:
                 .scalars()
                 .all()
             )
-            # rows are newest→oldest; find the first ``ai`` then the next row.
+            # rows are newest->oldest; find the first ``ai`` then the next row.
             for i, row in enumerate(rows):
                 if row.source == "ai" and i + 1 < len(rows):
                     return self._version_meta(rows[i + 1])
@@ -969,7 +969,7 @@ class Database:
             row.content_type = "json"
             row.processing_status = "ready"
             # Restore the snapshot's appearance too (Bug #3). Older snapshots
-            # captured no template → leave the current one untouched.
+            # captured no template -> leave the current one untouched.
             if template_settings is not None:
                 row.template_settings = template_settings
             row.updated_at = _now()
@@ -1133,7 +1133,7 @@ class Database:
             return self._profile_to_dict(row)
 
     async def get_profile_by_slug(self, slug: str) -> dict[str, Any] | None:
-        """Anonymous lookup by public slug (no user scoping — public surface).
+        """Anonymous lookup by public slug (no user scoping - public surface).
 
         Returns the profile dict regardless of visibility; the caller enforces
         the private/unlisted/public gate. ``None`` if the slug is unclaimed.
@@ -1346,7 +1346,7 @@ class Database:
 
         Core columns are set directly; every other key is merged into
         ``metadata_json`` so dynamic pipeline fields (``preview_hash``,
-        ``job_keywords``, ``company``/``role``, …) round-trip through
+        ``job_keywords``, ``company``/``role``, ...) round-trip through
         ``get_job`` as top-level keys.
         """
         async with self._session() as session:
@@ -1538,7 +1538,7 @@ class Database:
                 await session.commit()
             except IntegrityError:
                 # A concurrent create won the (job_id, resume_id) unique
-                # constraint — return the existing card instead of duplicating.
+                # constraint - return the existing card instead of duplicating.
                 await session.rollback()
                 dup = await session.execute(
                     Repo.scoped(
@@ -1760,7 +1760,7 @@ class Database:
 
         A single transaction means a failure mid-write can't leave the store
         half-cleared and wipe a user's previously saved keys. Only this user's
-        keys are cleared/replaced — other users' keys are untouched (R10.6).
+        keys are cleared/replaced - other users' keys are untouched (R10.6).
         """
         with self._sync() as session:
             session.execute(Repo.scoped(delete(ApiKey), ApiKey, user_id))
@@ -1813,7 +1813,7 @@ class Database:
         Clears the user's resumes/jobs/improvements **and** tracker applications
         (leaving orphaned cards after a full data reset would be a bug). Scoped
         to ``user_id`` so a reset never touches another user's data. Encrypted
-        ``api_keys`` are preserved — matching the pre-existing behavior where a
+        ``api_keys`` are preserved - matching the pre-existing behavior where a
         reset never wiped the user's stored credentials.
         """
         async with self._session() as session:
@@ -1856,7 +1856,7 @@ class Database:
 
         Transactional outbox: the event commits atomically with the owning
         change, so the async SearchIndexer (and any future consumer) sees it
-        exactly when the change is durable — a consumer failure never fails the
+        exactly when the change is durable - a consumer failure never fails the
         user's write. Payload is a lightweight ``{node_id}``; the indexer
         re-reads current, content-safe fields from the source at index time.
         """
@@ -1867,10 +1867,10 @@ class Database:
     async def purge_user_owned_data(self, user_id: str) -> dict[str, int]:
         """Irreversibly delete every owned row for ``user_id`` (admin purge, R8.3).
 
-        Deletes the user's owned rows in **FK-safe order** (improvements →
-        applications → jobs → resumes → api_keys) inside a single transaction, so
+        Deletes the user's owned rows in **FK-safe order** (improvements ->
+        applications -> jobs -> resumes -> api_keys) inside a single transaction, so
         the purge is atomic per user. Set-based deletes (no per-row N+1) scoped to
-        ``user_id`` via ``Repo.scoped`` — the same tenant-isolation boundary as
+        ``user_id`` via ``Repo.scoped`` - the same tenant-isolation boundary as
         every other owned mutation, and idempotent (a second run deletes nothing).
         Returns per-table deletion counts. Non-owned rows (sessions,
         oauth_identities, the user row itself) are handled by the purge job, which

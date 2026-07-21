@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Lightweight toast system (Atelier) — transient notifications (Req 33.1).
+ * Lightweight toast system (Atelier) - transient notifications (Req 33.1).
  * Dependency-free (no external toast lib); accessible via aria-live region.
  */
 import * as React from 'react';

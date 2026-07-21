@@ -1,9 +1,9 @@
 """Integration tests for verify-before-switch email change (Task 6.2).
 
-Exercises ``POST /users/me/email`` (step-up required, uniqueness 409, and — the
-core guarantee — the primary email is NOT switched until confirmation) and
+Exercises ``POST /users/me/email`` (step-up required, uniqueness 409, and - the
+core guarantee - the primary email is NOT switched until confirmation) and
 ``POST /users/me/email/confirm`` (single-use token swaps the email, uniqueness
-race → 409, token invalidated after use). Runs in hosted mode so the step-up +
+race -> 409, token invalidated after use). Runs in hosted mode so the step-up +
 CSRF gates are live.
 
 Requirements: 7.4, 9.1
@@ -63,7 +63,7 @@ class TestBeginEmailChange:
         await _seed_active_user(auth_env, "ec-gate@example.com")
         async with _client() as client:
             await _login(client, "ec-gate@example.com")
-            # No recent step-up → gated.
+            # No recent step-up -> gated.
             resp = await _begin_change(client, NEW_EMAIL)
         assert resp.status_code == 401
         assert resp.json()["error"]["code"] == "step_up_required"

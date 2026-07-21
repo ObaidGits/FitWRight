@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Admin data hooks (Task 8.1/8.3) — typed query keys + correct invalidation.
+ * Admin data hooks (Task 8.1/8.3) - typed query keys + correct invalidation.
  *
  * - Queries: stats, usage-series, users (keyset paginated), user detail, audit.
  * - Mutations invalidate the user list + detail + stats so the UI reflects
@@ -74,7 +74,7 @@ export function useAdminUsers(params: UserListParams) {
 
 export function useAdminUserDetail(id: string | null) {
   return useQuery({
-    queryKey: adminKeys.userDetail(id ?? '—'),
+    queryKey: adminKeys.userDetail(id ?? '-'),
     queryFn: () => adminApi.getUserDetail(id as string),
     enabled: !!id,
   });
@@ -93,7 +93,7 @@ export function useAdminAudit(params: AuditListParams) {
  *
  * Reads from the observability-context client. Composed server-side from
  * `/health/ready`, `/status`, gauges, Alembic head-vs-applied and release
- * fields — the hook simply surfaces `isLoading` / `isError` / `refetch` so the
+ * fields - the hook simply surfaces `isLoading` / `isError` / `refetch` so the
  * page can render an explicit loading state and an error state with a working
  * retry control (Req 3.9).
  */
@@ -125,7 +125,7 @@ export function useJobs() {
  * A standalone observability query so the read-only Config tab on the Health
  * page loads, errors and refreshes independently of the health tiles/jobs.
  * The payload is secret-free (presence booleans only); this hook never triggers
- * a write — configuration is strictly read-only (Req 10.3 / 11.4). Surfaces
+ * a write - configuration is strictly read-only (Req 10.3 / 11.4). Surfaces
  * `isLoading` / `isError` / `refetch` for the tab's loading/error/retry states.
  */
 export function useConfig() {
@@ -142,7 +142,7 @@ export function useConfig() {
  * independently. Mirrors {@link useSystemHealth}: surfaces `isLoading` /
  * `isError` / `refetch` for the page's loading/error/retry states. The `window`
  * is part of the query key so changing it (7 / 30 / 90) refetches the series
- * (default 30). The backend validates the 1–365 range server-side.
+ * (default 30). The backend validates the 1-365 range server-side.
  */
 export function useAiAnalytics(window = 30) {
   return useQuery({
@@ -159,7 +159,7 @@ export function useAiAnalytics(window = 30) {
  * {@link useAiAnalytics}: surfaces `isLoading` / `isError` / `refetch` for the
  * card's loading/error/retry states. The `window` (7 / 30 / 90, default 30) is
  * part of the query key so changing it refetches the summary; the backend
- * rejects any other window with a 400 `invalid_window`. Grouped buckets only —
+ * rejects any other window with a 400 `invalid_window`. Grouped buckets only -
  * never raw logs/stacks/traces (Req 21.2).
  */
 export function useErrors(window: MetricWindow = 30) {
@@ -175,7 +175,7 @@ export function useErrors(window: MetricWindow = 30) {
  * A standalone observability query so the Performance card on the Health page
  * loads, errors and refreshes independently of the health tiles/jobs/errors.
  * Mirrors {@link useErrors}: surfaces `isLoading` / `isError` / `refetch` for the
- * card's loading/error/retry states. Takes no window — the endpoint reads only
+ * card's loading/error/retry states. Takes no window - the endpoint reads only
  * from aggregates the backend already produces (O(1), no new instrumentation).
  */
 export function usePerformance() {
@@ -191,7 +191,7 @@ export function usePerformance() {
  * A standalone observability query so the Storage page loads, errors and
  * refreshes independently. Mirrors {@link usePerformance}: surfaces `isLoading` /
  * `isError` / `refetch` for the page's loading/error/retry states. Takes no
- * params — the endpoint returns a cheap, cached snapshot (DB/object-storage
+ * params - the endpoint returns a cheap, cached snapshot (DB/object-storage
  * size samples, counts and an estimated growth), never a live-queried size.
  * Size/growth fields can be `null` with paired `*Stale` / `growthUnavailable`
  * markers so the UI degrades to an explicit indicator instead of a bogus zero.
@@ -210,7 +210,7 @@ export function useStorage() {
  * page loads, errors and refreshes independently of the audit list. Mirrors
  * {@link useStorage}: surfaces `isLoading` / `isError` / `refetch` so the strip
  * renders its own loading/error/retry states without blocking the audit list.
- * Takes no params — the endpoint returns a cheap, trailing-24h aggregate of
+ * Takes no params - the endpoint returns a cheap, trailing-24h aggregate of
  * security counts (failed logins, admin logins, authz denials, rate-limited,
  * suspicious) read from the `SEC_*` aggregates; counts are zero (never null)
  * when there is no data for the window.
@@ -232,7 +232,7 @@ export function useSecurity() {
  * when the snapshot age exceeds 60s (Req 13.9) and clear it on refresh (Req
  * 11.10). Each KPI is a `KpiValue` carrying an explicit `unavailable` marker so
  * a card degrades to an "Unavailable" indicator rather than a bogus zero (Req
- * 13.10). Takes no params — every KPI is an O(1) read from existing snapshots.
+ * 13.10). Takes no params - every KPI is an O(1) read from existing snapshots.
  */
 export function useKpis() {
   return useQuery({
@@ -244,7 +244,7 @@ export function useKpis() {
 /**
  * Feature-usage analytics for a trailing `window` (Req 16, 19.1, task 16.3).
  *
- * Reads from the PRODUCT-ANALYTICS context client ({@link analyticsApi}) — a
+ * Reads from the PRODUCT-ANALYTICS context client ({@link analyticsApi}) - a
  * bounded context kept distinct from observability so product-adoption metrics
  * never share mutable state with operational health. Powers the "Product usage"
  * section on the Overview page. The `window` (7 / 30 / 90, default 30) is part
@@ -263,7 +263,7 @@ export function useFeatureUsage(window: MetricWindow = 30) {
 /**
  * Resume analytics for a trailing `window` (Req 14, 19.1, task 17.3).
  *
- * Reads from the PRODUCT-ANALYTICS context client ({@link analyticsApi}) — the
+ * Reads from the PRODUCT-ANALYTICS context client ({@link analyticsApi}) - the
  * same bounded context as {@link useFeatureUsage}, kept distinct from
  * observability. Powers the resume-analytics block in the "Product usage"
  * section on the Overview page (source split + popular templates + growth). The
@@ -295,7 +295,7 @@ function useInvalidateAdmin() {
 }
 
 /**
- * Optimistic status toggle (reversible → optimistic with rollback, R10.4).
+ * Optimistic status toggle (reversible -> optimistic with rollback, R10.4).
  * Patches every cached user-list page + the detail immediately, then reconciles
  * with the server response (or rolls back on error).
  */
@@ -335,7 +335,7 @@ export function useSetUserRole() {
   });
 }
 
-/** Pessimistic delete (destructive → await server, no optimistic UI, R10.4). */
+/** Pessimistic delete (destructive -> await server, no optimistic UI, R10.4). */
 export function useDeleteUser() {
   const invalidate = useInvalidateAdmin();
   return useMutation({
@@ -361,7 +361,7 @@ export function useBulkDisable() {
 }
 
 /**
- * Trigger a maintenance action (Req 18, task 8.3) — the only observability write.
+ * Trigger a maintenance action (Req 18, task 8.3) - the only observability write.
  *
  * Re-invokes one of the four fixed, idempotent single-flighted jobs under
  * `admin.manage` (enforced + audited + rate-limited + CSRF-protected server-side).

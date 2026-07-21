@@ -5,7 +5,7 @@ import { invalidateResumeLists, invalidateApplicationLists, queryKeys } from '@/
 /**
  * Auto-refresh contract: the shared invalidation helpers must refresh the LIST
  * surfaces (so create/update/delete are seen instantly) without blanket-matching
- * the editor detail (['resumes', id]) — which would clobber in-progress edits.
+ * the editor detail (['resumes', id]) - which would clobber in-progress edits.
  */
 describe('invalidateResumeLists', () => {
   it('refreshes home, library, and tailor-source lists but NOT the editor detail', () => {

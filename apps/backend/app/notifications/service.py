@@ -1,4 +1,4 @@
-"""NotificationService — the single notification writer (design §B, R4–R6).
+"""NotificationService - the single notification writer (design §B, R4-R6).
 
 Every notification (in-app + optional email) is created here so dedupe,
 preferences, priority, grouping, and the unread counter are enforced in exactly
@@ -31,7 +31,7 @@ PRIORITIES: tuple[str, ...] = ("low", "normal", "high")
 _TITLE_MAX = 200
 _BODY_MAX = 500
 
-# node_type → frontend path for the deep link (content-carrying, never content).
+# node_type -> frontend path for the deep link (content-carrying, never content).
 # Paths match the real app routes (see the sidebar/command-palette NAV_HREF).
 _NODE_PATHS = {
     "resume": "/resumes/{id}",
@@ -49,7 +49,7 @@ def _now() -> str:
 def _sanitize(text: str | None, limit: int) -> str | None:
     """Strip control chars (incl. CR/LF) + collapse whitespace + length-bound.
 
-    Notification text is plain (never HTML — React escapes on render) and a title
+    Notification text is plain (never HTML - React escapes on render) and a title
     can become an email subject, so control characters must never survive
     (header-injection / log-injection safety).
     """
@@ -58,7 +58,7 @@ def _sanitize(text: str | None, limit: int) -> str | None:
     cleaned = "".join(ch for ch in text if ch == " " or (ch.isprintable() and ch not in "\r\n"))
     cleaned = " ".join(cleaned.split()).strip()
     if len(cleaned) > limit:
-        cleaned = cleaned[: limit - 1].rstrip() + "…"
+        cleaned = cleaned[: limit - 3].rstrip() + "..."
     return cleaned
 
 
@@ -86,7 +86,7 @@ class NotificationService:
 
         ``None`` when the user has fully opted out of the category (no in-app and
         no email) or when a same-``dedupe_key`` notification already exists
-        (idempotent — duplicate delivery impossible, R5.2).
+        (idempotent - duplicate delivery impossible, R5.2).
         """
         if category not in CATEGORIES:
             category = "system"
@@ -152,7 +152,7 @@ class NotificationService:
         lines = ["Here's what's new on FitWright:", ""]
         for n in items:
             link = self._deep_link(n.get("node_type"), n.get("node_id"))
-            lines.append(f"• {n['title']}" + (f" — {link}" if link else ""))
+            lines.append(f"- {n['title']}" + (f" - {link}" if link else ""))
         return EmailMessage(to=to, subject=subject, text_body="\n".join(lines))
 
     async def process_pending_emails(self, *, limit: int = 100) -> dict[str, int]:
@@ -199,7 +199,7 @@ class NotificationService:
 
                 get_productivity_metrics().notification_emailed()
                 sent += 1
-            # On failure leave emailed_at unset → retried next pass (DLQ-like).
+            # On failure leave emailed_at unset -> retried next pass (DLQ-like).
         return {"sent": sent, "skipped": skipped, "deferred": deferred}
 
     async def process_digests(self, *, limit_users: int = 500) -> dict[str, int]:
@@ -216,7 +216,7 @@ class NotificationService:
         sender = get_email_sender()
         sent = 0
         for user_id, items in batches.items():
-            # Re-check per-category email prefs — only email-on categories are
+            # Re-check per-category email prefs - only email-on categories are
             # digested (digest_batches filters priority, not per-category prefs).
             emailable = []
             for n in items:
@@ -224,7 +224,7 @@ class NotificationService:
                 if delivery["email"]:
                     emailable.append(n)
                 else:
-                    await self._repo.mark_emailed(n["id"])  # skip → don't rescan
+                    await self._repo.mark_emailed(n["id"])  # skip -> don't rescan
             if not emailable:
                 continue
             email = await self._user_email(user_id)
@@ -237,7 +237,7 @@ class NotificationService:
 
 
     # -- maintenance (module-owned; retention calls this instead of the repo
-    #    directly so notifications remains the sole writer — Amendment E) ------
+    #    directly so notifications remains the sole writer - Amendment E) ------
 
     async def prune_read_before(self, cutoff_iso: str) -> int:
         """Retention: prune read/dismissed notifications older than ``cutoff_iso``."""

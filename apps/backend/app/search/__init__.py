@@ -1,4 +1,4 @@
-"""P3 Productivity — Global search (design §C, Requirements 7–8).
+"""P3 Productivity - Global search (design §C, Requirements 7-8).
 
 A user-scoped, outbox-fed search index behind a dialect-aware ``SearchRepo``
 port: SQLite uses an FTS5 mirror (bm25 ranking), Postgres uses ``tsvector`` + a

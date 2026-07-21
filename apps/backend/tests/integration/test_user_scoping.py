@@ -2,7 +2,7 @@
 
 Proves the isolation boundary *through the real routers*: a request scoped to
 user B can never read or mutate user A's owned rows, and a foreign id returns
-**404** (never 403 — no existence disclosure). Multi-user resolution is
+**404** (never 403 - no existence disclosure). Multi-user resolution is
 simulated by overriding the ``get_effective_user_id`` dependency (real sessions
 arrive in Task 4); the persistence and 404 logic exercised here are the actual
 production paths.

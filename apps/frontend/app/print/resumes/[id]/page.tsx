@@ -146,7 +146,7 @@ function parseMargin(value: string | undefined, defaultValue: number): number {
  * Validate template type
  */
 function parseTemplate(value: string | undefined): TemplateType {
-  // Allow-list mirrors TEMPLATE_OPTIONS in lib/types/template-settings.ts — keep in sync.
+  // Allow-list mirrors TEMPLATE_OPTIONS in lib/types/template-settings.ts - keep in sync.
   if (
     value === 'swiss-single' ||
     value === 'swiss-two-column' ||

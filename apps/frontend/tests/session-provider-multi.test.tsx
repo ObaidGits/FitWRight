@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 /**
- * SessionProvider in hosted (multi-user) mode: the loading → authenticated /
+ * SessionProvider in hosted (multi-user) mode: the loading -> authenticated /
  * guest states from hydrating `GET /auth/session`, plus the 401 interceptor
  * (clear session + multi-tab broadcast + redirect to /login?next).
  */
@@ -62,7 +62,7 @@ function renderWithClient(ui: React.ReactNode) {
   return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
 }
 
-describe('SessionProvider — multi-user mode', () => {
+describe('SessionProvider - multi-user mode', () => {
   beforeEach(() => {
     replaceMock.mockClear();
     fetchSessionMock.mockReset();

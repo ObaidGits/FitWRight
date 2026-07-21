@@ -1,4 +1,4 @@
-"""Unit tests for ``MetricsFlushStep`` — durable flush of in-process metrics (Task 4.3).
+"""Unit tests for ``MetricsFlushStep`` - durable flush of in-process metrics (Task 4.3).
 
 Covers the four Requirement-2 guarantees the step provides when it bridges the
 ephemeral, cumulative-since-start in-process ``AdminMetrics`` request buckets
@@ -56,7 +56,7 @@ def _today() -> str:
 class _FakeAdminMetrics:
     """Minimal ``AdminMetrics`` stand-in exposing a controllable snapshot.
 
-    The step reads ``get_admin_metrics().snapshot()["counters"]`` — this fake lets
+    The step reads ``get_admin_metrics().snapshot()["counters"]`` - this fake lets
     each simulated worker present its own cumulative-since-start counters.
     """
 
@@ -187,7 +187,7 @@ class TestCrossWorkerSummation:
 
 
 # ===========================================================================
-# Idempotent re-run — no double-count (Req 2.6)
+# Idempotent re-run - no double-count (Req 2.6)
 # ===========================================================================
 
 
@@ -209,7 +209,7 @@ class TestIdempotentRerun:
         assert (await step.run(_CLOSED_DAY_ARG)).ok is True
         assert await store.sum([REQUEST_2XX], today, today) == 12
 
-        # Re-run with the counters unchanged → delta 0 → nothing added.
+        # Re-run with the counters unchanged -> delta 0 -> nothing added.
         assert (await step.run(_CLOSED_DAY_ARG)).ok is True
         assert await store.sum([REQUEST_2XX], today, today) == 12
         assert await _row_count(isolated_db.session_factory, today, REQUEST_2XX) == 1
@@ -268,7 +268,7 @@ class TestRestartPreservesTotals:
 
 
 # ===========================================================================
-# Per-key failure isolation (Req 2.5 — supports 15.8)
+# Per-key failure isolation (Req 2.5 - supports 15.8)
 # ===========================================================================
 
 

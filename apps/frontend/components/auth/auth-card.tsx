@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Shared login/signup card (Task 8.3) — wired to the real auth API.
+ * Shared login/signup card (Task 8.3) - wired to the real auth API.
  *
  * Features: inline validation, a single non-leaky error banner, disabled-submit
  * while pending, password-manager `autocomplete`, password reveal + caps-lock
@@ -22,7 +22,7 @@ import { authApi, AuthApiError } from '@/lib/api/auth';
 import { useSession } from '@/lib/context/session';
 
 // Official multi-colour Google "G" mark (inline SVG so it renders in brand
-// colours regardless of the button's text colour — `currentColor` would make it
+// colours regardless of the button's text colour - `currentColor` would make it
 // monochrome). Decorative: the button text ("Continue with Google") is the label.
 const GoogleMark = () => (
   <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden focusable="false">
@@ -120,7 +120,7 @@ export function AuthCard({ mode, initialNext, oauthFailed = false }: AuthCardPro
       setPassword(''); // never keep a secret around after a failure (R15.2)
       // An unverified account that authenticates correctly is guided to the
       // verify/resend screen (email prefilled) rather than shown a dead-end
-      // error — smooth recovery for "please verify your email before logging in".
+      // error - smooth recovery for "please verify your email before logging in".
       if (err instanceof AuthApiError && err.code === 'email_unverified') {
         router.replace(`/verify?email=${encodeURIComponent(email)}`);
         return;
@@ -132,7 +132,7 @@ export function AuthCard({ mode, initialNext, oauthFailed = false }: AuthCardPro
   }
 
   function onGoogle() {
-    // Full-page navigation — the backend runs the IdP round-trip and issues the
+    // Full-page navigation - the backend runs the IdP round-trip and issues the
     // session cookie server-side, then redirects back to `next` or /home.
     window.location.href = authApi.oauthStartUrl('google', next);
   }

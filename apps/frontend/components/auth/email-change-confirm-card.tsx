@@ -50,7 +50,7 @@ export function EmailChangeConfirmCard() {
     <Card className="space-y-4 p-6 text-center">
       <h1 className="text-xl font-semibold">Confirm email change</h1>
       {state === 'confirming' && (
-        <p className="text-sm text-[var(--muted-foreground)]">Confirming your new email…</p>
+        <p className="text-sm text-[var(--muted-foreground)]">Confirming your new email...</p>
       )}
       {state === 'ok' && (
         <>

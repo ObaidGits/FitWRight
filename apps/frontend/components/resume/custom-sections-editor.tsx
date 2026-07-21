@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * CustomSectionsEditor — section ordering/visibility + custom sections, ported
+ * CustomSectionsEditor - section ordering/visibility + custom sections, ported
  * into the atelier resume editor (previously only in the legacy /builder tree).
  * Self-contained (reuses only the pure section-helpers utils) so the legacy tree
  * can be retired without touching the atelier editor.
@@ -163,7 +163,7 @@ export function CustomSectionsEditor({ sectionMeta, customSections, onChange }: 
               >
                 {s.displayName}
               </span>
-              {/* Type hint is secondary — hide on the narrowest screens to keep
+              {/* Type hint is secondary - hide on the narrowest screens to keep
                   tap targets from crowding. */}
               <Badge variant="neutral" className="hidden shrink-0 sm:inline-flex">
                 {TYPE_LABEL[s.sectionType]}
@@ -257,7 +257,7 @@ function CustomSectionContent({
             value={section?.text ?? ''}
             onChange={(e) => onUpdate({ text: e.target.value })}
             className="min-h-24"
-            placeholder={`Write the ${meta.displayName.toLowerCase()} content…`}
+            placeholder={`Write the ${meta.displayName.toLowerCase()} content...`}
           />
         </div>
       )}

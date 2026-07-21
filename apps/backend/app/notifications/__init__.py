@@ -1,4 +1,4 @@
-"""P3 Productivity — Notifications (design §B, Requirements 4–6).
+"""P3 Productivity - Notifications (design §B, Requirements 4-6).
 
 A single-writer :class:`~app.notifications.service.NotificationService` (dedupe,
 per-category preferences, priority, grouping, and an O(1) unread counter) fed by

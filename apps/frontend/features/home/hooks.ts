@@ -1,6 +1,6 @@
 'use client';
 
-/** Home data hooks (Task 6) — reuse the existing API via TanStack Query. */
+/** Home data hooks (Task 6) - reuse the existing API via TanStack Query. */
 import { useQuery } from '@tanstack/react-query';
 import { fetchResumeList, type ResumeListItem } from '@/lib/api/resume';
 import { listApplications, type ApplicationListResponse } from '@/lib/api/tracker';

@@ -41,7 +41,7 @@ async def _app(db, owner_id):
 
 
 # ---------------------------------------------------------------------------
-# Security: IDOR across users (data layer — the authz matrix covers anon→401)
+# Security: IDOR across users (data layer - the authz matrix covers anon->401)
 # ---------------------------------------------------------------------------
 
 
@@ -87,7 +87,7 @@ class TestAiCostGuard:
             async with _client() as c:
                 resp = await c.post("/api/v1/jobs/fetch-url", json={"url": "https://x.example.com/j", "use_ai": False})
         assert resp.status_code == 200
-        mock_llm.assert_not_called()  # opt-in only — never auto-fires
+        mock_llm.assert_not_called()  # opt-in only - never auto-fires
         reset_container()
 
 
@@ -105,7 +105,7 @@ class TestConcurrency:
         await svc.notify(owner_id, type="t", title="b")
         await svc.notify(owner_id, type="t", title="c")
         await svc._repo.mark_read(owner_id, a["id"])
-        # 3 created, 1 read → 2 unread; reconcile must agree with the counter.
+        # 3 created, 1 read -> 2 unread; reconcile must agree with the counter.
         assert await svc._repo.unread_count(owner_id) == 2
         assert await svc._repo.reconcile_unread(owner_id) == 2
 
@@ -137,7 +137,7 @@ class TestConcurrency:
 
 class TestFailureRecovery:
     async def test_search_rebuild_after_indexer_down(self, isolated_db, owner_id):
-        # "Indexer down": create data but never drain the outbox → index empty.
+        # "Indexer down": create data but never drain the outbox -> index empty.
         await isolated_db.create_resume(owner_id, content="{}", content_type="json", processed_data={"summary": "recoverable token"})
         from app.search.indexer import rebuild_user_index, search_drift
         from app.search.repo import get_search_repo
@@ -155,6 +155,6 @@ class TestFailureRecovery:
         with patch("app.auth.email.send_email_safe", new=AsyncMock(return_value=False)):
             result = await svc.process_pending_emails()
         assert result["sent"] == 0
-        # Not marked emailed → will retry next pass (DLQ-like behavior).
+        # Not marked emailed -> will retry next pass (DLQ-like behavior).
         pending = await svc._repo.emails_pending(limit=10)
         assert any(p["title"] == "Security" for p in pending)

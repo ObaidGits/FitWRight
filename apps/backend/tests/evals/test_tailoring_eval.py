@@ -8,7 +8,7 @@ costs a model call, so:
 * it is marked ``@pytest.mark.eval`` (excluded from the default selection in
   CI / quick runs), and
 * it SKIPS unless the developer has an LLM key configured, using their own
-  key/provider via ``app.llm`` — exactly the policy in
+  key/provider via ``app.llm`` - exactly the policy in
   ``docs/agent/testing-strategy.md`` §3.1.
 
 CRITICAL: in a keyless environment this test must skip *before* it ever builds
@@ -38,7 +38,7 @@ def _needs_key() -> None:
     """
     try:
         cfg = get_llm_config()
-    except Exception as exc:  # corrupt/unreadable config.json — skip, don't hard-fail
+    except Exception as exc:  # corrupt/unreadable config.json - skip, don't hard-fail
         pytest.skip(f"could not read LLM config ({exc}); skipping LLM-judge eval")
     if not cfg.api_key and cfg.provider not in ("ollama", "openai_compatible"):
         pytest.skip("no LLM key configured; set one to run LLM-judge evals")
@@ -47,10 +47,10 @@ def _needs_key() -> None:
 _JUDGE_RUBRIC = (
     "You are a strict but fair technical recruiter grading how well a resume "
     "was tailored to a job description. Grade on three axes:\n"
-    "1. RELEVANCE — does the resume emphasize skills/experience the JD asks for?\n"
-    "2. TRUTHFULNESS — does it avoid inventing employers, titles, or facts not "
+    "1. RELEVANCE - does the resume emphasize skills/experience the JD asks for?\n"
+    "2. TRUTHFULNESS - does it avoid inventing employers, titles, or facts not "
     "implied by the candidate's history?\n"
-    "3. FORMATTING — is it coherent, well-structured, and free of obvious "
+    "3. FORMATTING - is it coherent, well-structured, and free of obvious "
     "artifacts?\n\n"
     "Return ONLY JSON of the form "
     '{{"score": <integer 1-5>, "reasons": "<one or two sentences>"}}. '
@@ -73,9 +73,9 @@ async def test_llm_judge_scores_good_tailoring_highly():
     """A real LLM judge should rate a faithful, JD-aware tailoring >= 3/5.
 
     In keyless environments this skips at ``_needs_key()`` before any request
-    is constructed or sent — it must NEVER make an ungated real call.
+    is constructed or sent - it must NEVER make an ungated real call.
     """
-    _needs_key()  # MUST be first — gates every line below behind a real key.
+    _needs_key()  # MUST be first - gates every line below behind a real key.
 
     case = GOLDEN_CASES[0]
     prompt = _build_judge_prompt(case["job_description"], case["tailored_good"])

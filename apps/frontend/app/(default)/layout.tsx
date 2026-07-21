@@ -8,7 +8,7 @@ import { LocalizedErrorBoundary } from '@/components/common/error-boundary';
 import { getServerSession } from '@/lib/api/session-server';
 import { NOINDEX } from '@/lib/seo/metadata';
 
-// Authenticated resume builder — never indexable.
+// Authenticated resume builder - never indexable.
 export const metadata: Metadata = { robots: NOINDEX };
 
 export default async function DefaultLayout({ children }: { children: React.ReactNode }) {
@@ -38,8 +38,8 @@ export default async function DefaultLayout({ children }: { children: React.Reac
           <LocalizedErrorBoundary>
             {/* The builder (the only (default) route) is fully migrated to the
                 Atelier design system, whose tokens are scoped under `.atelier`
-                (see styles/atelier.css). Wrapping here provides those tokens —
-                matching the (app) group — so light/dark render correctly. */}
+                (see styles/atelier.css). Wrapping here provides those tokens -
+                matching the (app) group - so light/dark render correctly. */}
             <main className="atelier flex min-h-screen flex-col bg-[var(--background)] text-[var(--foreground)]">
               {children}
             </main>

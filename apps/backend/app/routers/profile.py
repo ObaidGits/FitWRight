@@ -2,12 +2,12 @@
 
 The profile is the user's canonical career document; resumes are generated
 snapshots produced from it. All routes are user-scoped
-(``get_effective_user_id``) and gated by the ``PROFILE_ENABLED`` flag (off → 404
-so the surface can be dark-launched / killed without a redeploy — ADR-14).
+(``get_effective_user_id``) and gated by the ``PROFILE_ENABLED`` flag (off -> 404
+so the surface can be dark-launched / killed without a redeploy - ADR-14).
 
 Endpoint map:
 - ``GET   /profile``                      the canonical document + completeness + CAS version
-- ``PATCH /profile``                      apply an edited document (version CAS → 409 on stale)
+- ``PATCH /profile``                      apply an edited document (version CAS -> 409 on stale)
 - ``GET   /profile/completeness``         weighted score + prioritized suggestions
 - ``POST  /profile/generate-resume``      project the profile into a resume (preview or persist)
 - ``GET   /profile/versions``             snapshot metadata (keyset cursor)
@@ -326,7 +326,7 @@ async def sync_apply(
     request: SyncApplyRequest,
     user_id: str = Depends(get_effective_user_id),
 ) -> dict:
-    """Apply the profile projection to a *draft* resume (submitted → 409 locked)."""
+    """Apply the profile projection to a *draft* resume (submitted -> 409 locked)."""
     _require_enabled()
     status, updated = await profile_service.apply_sync(
         user_id,

@@ -1,10 +1,10 @@
-/** Auth route group (Task 5) — centered-card layout, Atelier-scoped. */
+/** Auth route group (Task 5) - centered-card layout, Atelier-scoped. */
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import ArrowLeft from 'lucide-react/dist/esm/icons/arrow-left';
 import { NOINDEX } from '@/lib/seo/metadata';
 
-// Authentication flows — never indexable.
+// Authentication flows - never indexable.
 export const metadata: Metadata = { robots: NOINDEX };
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {

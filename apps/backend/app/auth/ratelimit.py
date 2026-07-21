@@ -5,17 +5,17 @@ controls the design (`§Abuse`, R13.1/13.2/13.4/13.5) requires:
 
 - **Fixed-window counters** per ``(ip, route-class)`` and per ``user_id`` via the
   KVStore's atomic :meth:`~app.auth.kvstore.base.KVStore.incr` (TTL applied on
-  key creation → the window). This is the token-bucket-equivalent used across
+  key creation -> the window). This is the token-bucket-equivalent used across
   workers because the counter lives in shared state (ADR-6).
 - **Exponential backoff + account lockout.** Repeated auth failures for an
   account/IP raise a backoff delay (``base * 2^(failures-1)``, capped) and, past
-  a hard threshold, lock the account for a cooldown — audited by the caller as
+  a hard threshold, lock the account for a cooldown - audited by the caller as
   ``auth.login_failed`` / lockout.
 - **CAPTCHA gating.** Past a *soft* failure threshold, :meth:`captcha_gate`
   requires a challenge, verified through the pluggable
   :class:`~app.auth.captcha.CaptchaVerifier` (fail-open when unconfigured).
 - **Fail-closed on outage.** If the KVStore is unavailable, auth rate-limit
-  checks **deny** with a ``Retry-After`` (R13.5) — an attacker must not get an
+  checks **deny** with a ``Retry-After`` (R13.5) - an attacker must not get an
   unlimited window just because the shared store blinked. (Read-path scoping
   fails *open* elsewhere; that asymmetry is intentional.)
 
@@ -60,7 +60,7 @@ AUTH_RULES: dict[str, RateLimitRule] = {
     # Login/signup: tight per-IP window to blunt credential stuffing.
     "login": RateLimitRule(limit=10, window_seconds=60),
     "signup": RateLimitRule(limit=5, window_seconds=60),
-    # Token issuance endpoints (verification/reset resend) — email amplification.
+    # Token issuance endpoints (verification/reset resend) - email amplification.
     "verify": RateLimitRule(limit=5, window_seconds=300),
     "reset": RateLimitRule(limit=5, window_seconds=300),
     # Step-up re-auth.
@@ -263,7 +263,7 @@ class RateLimiter:
         """Decide whether a CAPTCHA is required and, if so, verify it.
 
         Below the soft threshold no challenge is needed (allowed). At/above it,
-        the injected verifier decides — which, when unconfigured, fails open
+        the injected verifier decides - which, when unconfigured, fails open
         (allows) by design (R13.2/13.3). A ``None`` token past the threshold with
         a *configured* verifier is rejected.
         """

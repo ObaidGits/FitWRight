@@ -3,11 +3,11 @@
 Exercises the two job-time Rollup_Steps and the request-path read model in
 :mod:`app.admin.storage_metrics`:
 
-- :class:`DbSizeSampleStep` — the ≤-hourly KV guard (Req 7.1), the ``None``
+- :class:`DbSizeSampleStep` - the ≤-hourly KV guard (Req 7.1), the ``None``
   retain-and-retry path (Req 7.6), and the marker-advance-on-success behaviour.
-- :class:`StorageSnapshotStep` — writing the named ``"storage"`` snapshot with
+- :class:`StorageSnapshotStep` - writing the named ``"storage"`` snapshot with
   the storage counts + object-storage usage (Req 7.2).
-- :class:`StorageMetricsService.panel` — the CRITICAL cached-only read (Req
+- :class:`StorageMetricsService.panel` - the CRITICAL cached-only read (Req
   7.4/21.5: never a live DB-size query or object walk on the request path), the
   30-day growth estimate + insufficient-samples handling (Req 7.8), and the DB-
   size / object-storage staleness markers (Req 7.6/7.7).
@@ -71,13 +71,13 @@ def _trailing_days(days: int) -> list[str]:
 class _FakeStore:
     """In-memory ``MetricStore`` stand-in that records every method it serves.
 
-    - ``series(key, days)`` zero-fills the trailing window from ``_series`` — the
-      exact contract the real store provides — so the panel's non-zero "latest"
+    - ``series(key, days)`` zero-fills the trailing window from ``_series`` - the
+      exact contract the real store provides - so the panel's non-zero "latest"
       and growth rules are exercised faithfully.
     - ``snapshot_get`` / ``snapshot_put`` share a single ``snapshots`` dict.
     - ``upsert`` records ``(day, key, value)`` tuples.
 
-    ``calls`` is the ordered list of method names invoked — the cached-only read
+    ``calls`` is the ordered list of method names invoked - the cached-only read
     invariant (Req 7.4/21.5) asserts panel() touches ONLY ``series`` +
     ``snapshot_get`` (never ``upsert`` / ``snapshot_put``).
     """
@@ -126,7 +126,7 @@ class _SpyRepo:
 
 
 # ===========================================================================
-# 1. DbSizeSampleStep — hourly KV guard (Req 7.1)
+# 1. DbSizeSampleStep - hourly KV guard (Req 7.1)
 # ===========================================================================
 
 
@@ -134,7 +134,7 @@ class TestHourlyGuard:
     """Validates: Requirements 7.1"""
 
     async def test_recent_marker_is_noop_success_no_query_no_upsert(self):
-        # Marker taken *now* (< the 60m default interval ago) → guard holds:
+        # Marker taken *now* (< the 60m default interval ago) -> guard holds:
         # neither the size query nor an upsert runs, and the step still succeeds.
         recent_ts = _iso(_now())
         store = _FakeStore(snapshots={_DB_SIZE_LAST_SAMPLE: {"ts": recent_ts}})
@@ -181,7 +181,7 @@ class TestHourlyGuard:
 
 
 # ===========================================================================
-# 2. DbSizeSampleStep — None retains + does NOT advance marker (Req 7.6)
+# 2. DbSizeSampleStep - None retains + does NOT advance marker (Req 7.6)
 # ===========================================================================
 
 
@@ -189,7 +189,7 @@ class TestDbSizeNoneRetain:
     """Validates: Requirements 7.6"""
 
     async def test_none_size_no_upsert_marker_unchanged(self):
-        old_ts = _iso(_now() - timedelta(hours=2))  # guard passes → sampling attempted
+        old_ts = _iso(_now() - timedelta(hours=2))  # guard passes -> sampling attempted
         store = _FakeStore(snapshots={_DB_SIZE_LAST_SAMPLE: {"ts": old_ts}})
         repo = _SpyRepo(db_size=None)  # query failed / unsupported dialect
         step = DbSizeSampleStep(metric_store=store, repo=repo)
@@ -199,12 +199,12 @@ class TestDbSizeNoneRetain:
         assert result.ok is True  # no-op success (retain last recorded size)
         assert repo.db_size_calls == 1  # it *did* attempt the sample
         assert store.upserts == []  # DB_SIZE_BYTES not overwritten (Req 7.6)
-        # Marker NOT advanced → next run retries rather than waiting a full cycle.
+        # Marker NOT advanced -> next run retries rather than waiting a full cycle.
         assert store.snapshots[_DB_SIZE_LAST_SAMPLE]["ts"] == old_ts
 
 
 # ===========================================================================
-# 3. StorageSnapshotStep — writes the named "storage" snapshot (Req 7.2)
+# 3. StorageSnapshotStep - writes the named "storage" snapshot (Req 7.2)
 # ===========================================================================
 
 
@@ -231,7 +231,7 @@ class TestStorageSnapshotStep:
         assert "sampledAt" in payload
 
     async def test_unavailable_object_usage_marked_stale(self, monkeypatch):
-        # Remote provider / walk failure → (None, True): step still succeeds.
+        # Remote provider / walk failure -> (None, True): step still succeeds.
         monkeypatch.setattr(storage_metrics, "_object_storage_usage", lambda: (None, True))
         store = _FakeStore()
         repo = _SpyRepo(counts={"avatarCount": 1, "resumeCount": 2, "resumeVersionCount": 4})
@@ -246,7 +246,7 @@ class TestStorageSnapshotStep:
 
 
 # ===========================================================================
-# 4. panel() cached-only — never a live query/walk (Req 7.4 / 21.5) — CRITICAL
+# 4. panel() cached-only - never a live query/walk (Req 7.4 / 21.5) - CRITICAL
 # ===========================================================================
 
 
@@ -277,7 +277,7 @@ class TestPanelCachedOnly:
                 },
             },
         )
-        # The service is constructed with a store ONLY — it structurally holds no
+        # The service is constructed with a store ONLY - it structurally holds no
         # repo, so it *cannot* issue a live cross-user/DB-size query.
         service = StorageMetricsService(metric_store=store)
         assert "_repo" not in vars(service)
@@ -299,7 +299,7 @@ class TestPanelCachedOnly:
 
 
 # ===========================================================================
-# 5. panel() — 30-day growth + insufficient samples (Req 7.8)
+# 5. panel() - 30-day growth + insufficient samples (Req 7.8)
 # ===========================================================================
 
 
@@ -307,7 +307,7 @@ class TestGrowth:
     """Validates: Requirements 7.8"""
 
     async def test_two_samples_linear_slope(self):
-        # day-10 = 1000, day-0 = 4000 → slope (4000-1000)/10 = 300 bytes/day.
+        # day-10 = 1000, day-0 = 4000 -> slope (4000-1000)/10 = 300 bytes/day.
         store = _FakeStore(
             series={DB_SIZE_BYTES: {_day(10): 1000, _day(0): 4000}},
             snapshots={_DB_SIZE_LAST_SAMPLE: {"ts": _iso(_now())}},
@@ -341,7 +341,7 @@ class TestGrowth:
 
 
 # ===========================================================================
-# 6. panel() — stale markers (Req 7.6 / 7.7)
+# 6. panel() - stale markers (Req 7.6 / 7.7)
 # ===========================================================================
 
 
@@ -360,7 +360,7 @@ class TestDbSizeStaleness:
 
     async def test_marker_older_than_two_intervals_is_stale(self, monkeypatch):
         monkeypatch.setattr(settings, "admin_db_size_sample_minutes", 60)
-        # 3h ago > 2×60m → stale, even though a sample exists.
+        # 3h ago > 2×60m -> stale, even though a sample exists.
         store = _FakeStore(
             series={DB_SIZE_BYTES: {_day(0): 5000}},
             snapshots={_DB_SIZE_LAST_SAMPLE: {"ts": _iso(_now() - timedelta(hours=3))}},
@@ -404,13 +404,13 @@ class TestObjectStorageStaleness:
         panel = await StorageMetricsService(metric_store=store).panel()
         assert panel.objectStorageBytes is None
         assert panel.objectStorageStale is True
-        # Missing snapshot → counts default to zero.
+        # Missing snapshot -> counts default to zero.
         assert panel.avatarCount == 0
         assert panel.resumeCount == 0
         assert panel.resumeVersionCount == 0
 
     async def test_old_sampled_at_forces_stale(self):
-        # sampledAt older than the 2-day snapshot-stale threshold → stale even
+        # sampledAt older than the 2-day snapshot-stale threshold -> stale even
         # though the snapshot's own flag says fresh.
         store = _FakeStore(
             snapshots={

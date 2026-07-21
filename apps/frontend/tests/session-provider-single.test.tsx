@@ -4,7 +4,7 @@ import { SessionProvider, useSession } from '@/lib/context/session';
 
 /**
  * SessionProvider in SINGLE_USER_MODE (the default local env): the owner is
- * always authenticated as admin, with no backend hydration — local zero-config
+ * always authenticated as admin, with no backend hydration - local zero-config
  * boot is unchanged (R14.3/15.5).
  */
 function Probe() {
@@ -18,7 +18,7 @@ function Probe() {
   );
 }
 
-describe('SessionProvider — single-user mode', () => {
+describe('SessionProvider - single-user mode', () => {
   it('presents the owner as an authenticated admin', () => {
     render(
       <SessionProvider>

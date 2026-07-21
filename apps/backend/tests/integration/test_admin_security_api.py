@@ -6,9 +6,9 @@ capability all apply. Reuses the ``_client`` / ``_admin_client`` / ``_seed`` /
 ``hosted`` harness from :mod:`tests.integration.test_admin_api`.
 
 Covers the ``require_admin_read`` authz matrix (anon 401, non-admin 403, admin
-200 — Req 9.4 / 15.1) with a secret-free ``SecurityView`` body (Property 3 /
+200 - Req 9.4 / 15.1) with a secret-free ``SecurityView`` body (Property 3 /
 Req 15.8). With an empty store the view degrades to all-zero counts rather than
-erroring (no ``audit_log`` fallback — Req 9.5).
+erroring (no ``audit_log`` fallback - Req 9.5).
 
 Requirements: 9.4, 15.1, 15.8.
 """
@@ -53,7 +53,7 @@ class TestSecurityAuthz:
         for field in ("loginFailed", "adminLogin", "authzDenied", "rateLimited", "suspicious"):
             assert field in body
             assert body[field] >= 0
-        # Empty store → all-zero counts, no audit_log fallback (Req 9.5).
+        # Empty store -> all-zero counts, no audit_log fallback (Req 9.5).
         assert body["loginFailed"] == 0
         assert body["adminLogin"] == 0
         assert body["authzDenied"] == 0

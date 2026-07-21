@@ -1,4 +1,4 @@
-"""The opt-in gate — every expensive move calls ``ensure_enabled()`` first.
+"""The opt-in gate - every expensive move calls ``ensure_enabled()`` first.
 
 Two independent locks must both be open:
   1. ``RM_E2E_MONITOR=1`` in the environment (deliberate enable), and
@@ -33,7 +33,7 @@ def ensure_enabled(*, require_key: bool = True) -> None:
     """
     if os.environ.get("RM_E2E_MONITOR") != "1":
         raise MonitorDisabled(
-            "e2e monitor is disabled by default — it makes real, billed LLM calls "
+            "e2e monitor is disabled by default - it makes real, billed LLM calls "
             "and boots servers. Set RM_E2E_MONITOR=1 to enable."
         )
     if require_key and not _key_is_configured():

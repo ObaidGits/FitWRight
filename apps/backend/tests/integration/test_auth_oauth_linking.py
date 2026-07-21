@@ -88,7 +88,7 @@ class TestLinkOrCreate:
         assert result.user_id == acct.id
 
     async def test_refuses_unverified_password_account(self, auth_env):
-        # Password account, email NOT verified, request NOT authenticated → refuse.
+        # Password account, email NOT verified, request NOT authenticated -> refuse.
         await _seed(
             auth_env,
             "unverified@example.com",
@@ -109,7 +109,7 @@ class TestLinkOrCreate:
 
     async def test_authenticated_self_may_link_unverified_password_account(self, auth_env):
         # Same unverified password account, but the request is authenticated as
-        # that user (linking from Settings) → allowed.
+        # that user (linking from Settings) -> allowed.
         acct = await _seed(
             auth_env,
             "settings@example.com",

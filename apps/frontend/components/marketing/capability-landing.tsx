@@ -1,11 +1,11 @@
 /**
- * <CapabilityLanding> — the single renderer for every feature landing page.
+ * <CapabilityLanding> - the single renderer for every feature landing page.
  *
  * Server component (SEO-first): emits a WebPage + HowTo + FAQPage +
  * BreadcrumbList entity graph, a single <h1>, semantic sections, and a
  * cross-linked "related capabilities" block that turns the feature pages into a
  * proper topic cluster (hub = home, spokes = capabilities). All content comes
- * from CAPABILITIES data — no per-page duplication.
+ * from CAPABILITIES data - no per-page duplication.
  */
 import Link from 'next/link';
 import type { ComponentType } from 'react';
@@ -117,7 +117,7 @@ export function CapabilityLanding({ capability: c }: { capability: Capability })
         </Reveal>
       </section>
 
-      {/* Definition — entity-first, AI/LLM friendly */}
+      {/* Definition - entity-first, AI/LLM friendly */}
       <section className="border-y border-[var(--border)] bg-[var(--at-surface-2)]">
         <div className="mx-auto w-full max-w-3xl px-4 py-16 md:px-8">
           <Reveal>

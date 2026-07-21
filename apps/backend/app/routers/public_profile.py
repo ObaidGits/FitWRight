@@ -2,13 +2,13 @@
 
 These are the **only** unauthenticated profile routes: they serve the safe,
 visibility-gated public projection of a shared profile by slug. There is no user
-scoping here by design — the resource is public — so the projection layer
+scoping here by design - the resource is public - so the projection layer
 (``app/profile/public.py``) is responsible for never emitting private fields
 (salary, visa, phone unless the user exposed it), and the service gates on
-``visibility`` (``private`` → 404, indistinguishable from an unknown slug to
+``visibility`` (``private`` -> 404, indistinguishable from an unknown slug to
 prevent enumeration disclosure).
 
-Gated by the ``PROFILE_ENABLED`` flag (off → 404). Rate-limited via the shared
+Gated by the ``PROFILE_ENABLED`` flag (off -> 404). Rate-limited via the shared
 public limiter to deter slug scraping.
 """
 

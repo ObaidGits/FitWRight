@@ -1,7 +1,7 @@
 /**
  * Landing-page product mockups (homepage enhancement).
  *
- * Realistic FitWright UI rendered natively with Atelier tokens + inline SVG —
+ * Realistic FitWright UI rendered natively with Atelier tokens + inline SVG -
  * no external images, no network requests, and truthful (these mirror the real
  * product surfaces). Pure presentational; safe in server or client trees.
  */
@@ -92,7 +92,7 @@ export function TailorMock() {
       <div className="mb-4 flex items-center justify-between">
         <div>
           <p className="text-sm font-semibold text-[var(--foreground)]">Senior Backend Engineer</p>
-          <p className="text-xs text-[var(--muted-foreground)]">Tailored · just now</p>
+          <p className="text-xs text-[var(--muted-foreground)]">Tailored - just now</p>
         </div>
         <span className="inline-flex items-center gap-1 rounded-full bg-[var(--at-ai-surface)] px-2 py-1 text-[10px] font-medium text-[var(--at-ai)]">
           <Sparkles className="h-3 w-3" /> AI
@@ -124,7 +124,7 @@ export function TailorMock() {
       <div className="mt-4 flex items-center gap-2 rounded-[var(--radius-at-md)] bg-[var(--at-surface-2)] p-2.5">
         <ShieldCheck className="h-4 w-4 shrink-0 text-[var(--at-success)]" />
         <span className="text-[11px] text-[var(--muted-foreground)]">
-          Grounded in your real experience — nothing invented.
+          Grounded in your real experience - nothing invented.
         </span>
       </div>
     </div>
@@ -145,8 +145,8 @@ export function AiSuggestionCard({ className }: { className?: string }) {
         <span className="text-[11px] font-medium text-[var(--at-ai)]">Suggestion</span>
       </div>
       <p className="text-[11px] leading-relaxed text-[var(--foreground)]">
-        Quantify impact: “Cut API latency <span className="font-semibold">40%</span> by adding Redis
-        caching.”
+        Quantify impact: "Cut API latency <span className="font-semibold">40%</span> by adding Redis
+        caching."
       </p>
     </div>
   );

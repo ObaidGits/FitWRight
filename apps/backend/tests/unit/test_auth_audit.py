@@ -33,7 +33,7 @@ class TestSanitizeLogValue:
 
     def test_strips_control_chars(self):
         cleaned = sanitize_log_value("a\x00b\x1fc\x7fd")
-        assert cleaned == "a b c d"  # control chars → spaces
+        assert cleaned == "a b c d"  # control chars -> spaces
         assert "\x00" not in cleaned
 
     def test_length_bounded(self):

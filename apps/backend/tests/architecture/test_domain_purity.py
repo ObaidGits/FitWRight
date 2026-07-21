@@ -1,6 +1,6 @@
 """Architecture fitness function: domain purity (ARCHITECTURE §10, §14, §18).
 
-The domain (``app/services`` — the AI pipeline + business logic) must not import
+The domain (``app/services`` - the AI pipeline + business logic) must not import
 infrastructure or framework. This test scans real import statements and fails if
 any forbidden dependency appears, making the dependency rule mechanical rather
 than a matter of discipline (IMPLEMENTATION_PLAN Phase 2/6).
@@ -32,7 +32,7 @@ FORBIDDEN_ROOTS = {
 FORBIDDEN_APP_MODULES = {
     "app.database",
     "app.db_engine",
-    "app.platform",  # deployment profile / composition — domain must not know it
+    "app.platform",  # deployment profile / composition - domain must not know it
     "app.repository",
 }
 

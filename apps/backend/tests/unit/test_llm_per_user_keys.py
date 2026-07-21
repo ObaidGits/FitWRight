@@ -58,7 +58,7 @@ class TestPerUserKeyResolution:
         _, user_a, user_b = two_user_db
         token = set_current_user_id(user_b)
         try:
-            # No explicit user_id → falls back to the request-scoped effective user.
+            # No explicit user_id -> falls back to the request-scoped effective user.
             assert get_llm_config().api_key == "key-B"
         finally:
             reset_current_user_id(token)

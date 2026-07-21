@@ -3,7 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 
 // The gallery renders one live ResumeDocument thumbnail per card. That engine is
 // covered by its own test (resume-document.test.tsx); here we stub it so the
-// gallery's own behaviour (filter/search/select) is what's exercised — and so 26
+// gallery's own behaviour (filter/search/select) is what's exercised - and so 26
 // full document renders don't dominate the suite.
 vi.mock('@/components/resume/resume-document', () => ({
   ResumeDocument: () => <div data-testid="doc-stub" />,
@@ -68,7 +68,7 @@ describe('TemplateGallery', () => {
 describe('preferred-template bridge', () => {
   it('persists and resolves the preferred template settings', () => {
     expect(getPreferredTemplateId()).toBeNull();
-    // Unknown / unset → defaults.
+    // Unknown / unset -> defaults.
     expect(getPreferredTemplateSettings()).toEqual(DEFAULT_TEMPLATE_SETTINGS);
 
     setPreferredTemplateId('finance-banking');

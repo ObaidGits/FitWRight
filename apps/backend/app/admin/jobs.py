@@ -1,16 +1,16 @@
 """Scheduled admin jobs: RollupJob + PurgeJob (Tasks 0.3, 2.1, 6.2).
 
 Both jobs are **single-flighted** via the KVStore lock (TTL + auto-expiry so a
-crashed holder can't wedge them) and **resumable** — each run re-scans the work
+crashed holder can't wedge them) and **resumable** - each run re-scans the work
 from scratch, so a crash mid-batch is recovered on the next run. They run under
 ``SCHEDULER_MODE`` (ADR-15): the free tier's external cron calls
 ``POST /api/v1/internal/run-jobs`` (which invokes :func:`run_admin_jobs`); the
 premium in-process scheduler calls the same functions on an interval. The job
-logic and lock are identical across modes — only the trigger differs.
+logic and lock are identical across modes - only the trigger differs.
 
-- :func:`run_rollup_job` — UPSERT closed-day metrics + reconcile the denormalized
+- :func:`run_rollup_job` - UPSERT closed-day metrics + reconcile the denormalized
   usage counters; refresh the purge-backlog gauge.
-- :func:`run_purge_job` — purge users whose grace period has elapsed: delete
+- :func:`run_purge_job` - purge users whose grace period has elapsed: delete
   owned data (FK-safe, via the user-scoped facade) then the non-owned rows
   (sessions/oauth/tokens) and finally the user row, in one transaction per user;
   ``audit_log`` is **never** touched (R8.4). Idempotent, chunked, resumable.
@@ -65,13 +65,13 @@ ALERTING_LOCK_KEY = "admin:alerting"
 
 # --- Audit retention tiers (R1.3/1.4/1.5) -----------------------------------
 # Single source of truth for the audit-log retention job (task 3.x). Each tier
-# is a frozenset derived from the ``AuditEvent`` catalog (app/auth/audit.py) —
+# is a frozenset derived from the ``AuditEvent`` catalog (app/auth/audit.py) -
 # never hardcode raw event strings here, so the catalog stays authoritative.
 #
 # - SECURITY_CRITICAL_EVENTS: retained on the long (security) horizon.
 # - DOWNSAMPLABLE_EVENTS: high-volume, safe to thin over time.
 # - NEVER_DROPPED_EVENTS: a subset that must be excluded from BOTH the delete
-#   path and the downsample path — these rows survive all retention pruning.
+#   path and the downsample path - these rows survive all retention pruning.
 SECURITY_CRITICAL_EVENTS: frozenset[str] = frozenset(
     {
         AuditEvent.LOGIN_FAILED,
@@ -118,10 +118,10 @@ _ALERTING_LOCK_TTL = 120
 
 # --- Minimal threshold alerting (Req 12) ------------------------------------
 # The FIXED, closed set of operational conditions the Alerting_Job evaluates
-# (Req 12.2). This is intentionally NOT dynamically extensible — the ≤8 names
+# (Req 12.2). This is intentionally NOT dynamically extensible - the ≤8 names
 # below are the entire alert surface; adding one is a deliberate edit here.
 # Each is evaluated independently over ALREADY-COMPUTED health tiles / gauges /
-# durable metrics — the job performs NO new data collection (Req 12.1/21.8).
+# durable metrics - the job performs NO new data collection (Req 12.1/21.8).
 ALERT_CONDITIONS: tuple[str, ...] = (
     "db_unhealthy",           # Database health tile is down/degraded
     "kv_unavailable",         # KVStore/Queue health tile is down/degraded
@@ -134,7 +134,7 @@ ALERT_CONDITIONS: tuple[str, ...] = (
 )
 
 # Per-alert KV state lives under this MetricStore snapshot-name prefix, so the
-# full underlying KVStore key is ``admin:snapshot:alert:{name}`` — namespaced
+# full underlying KVStore key is ``admin:snapshot:alert:{name}`` - namespaced
 # away from job markers / auth / rate-limit keys sharing the same KVStore.
 _ALERT_STATE_PREFIX = "alert"
 
@@ -159,7 +159,7 @@ async def run_rollup_job(*, kvstore=None, lookback_days: int = 3) -> dict:
     :func:`~app.admin.rollup_pipeline.run_rollup_pipeline`, whose first step
     (:class:`~app.admin.rollup_pipeline.ExistingRollupStep`) performs the exact
     same generic ``metrics_daily`` UPSERTs + ``_TOTALS_DAY`` totals snapshot +
-    counter reconciliation as before. This is a pure refactor — the produced rows
+    counter reconciliation as before. This is a pure refactor - the produced rows
     and this function's return shape are unchanged; the pipeline only adds ordered,
     per-step failure isolation (R2.5) that later steps build on.
     """
@@ -194,7 +194,7 @@ async def run_rollup_job(*, kvstore=None, lookback_days: int = 3) -> dict:
 async def run_purge_job(*, kvstore=None) -> dict:
     """Purge grace-elapsed soft-deleted users, single-flighted + resumable (R8.3/8.5).
 
-    No-op (and logged) when ``ADMIN_DESTRUCTIVE_ACTIONS`` is off — the kill-switch
+    No-op (and logged) when ``ADMIN_DESTRUCTIVE_ACTIONS`` is off - the kill-switch
     stops all irreversible erasure without a code change.
     """
     if not settings.admin_destructive_actions:
@@ -239,7 +239,7 @@ async def run_purge_job(*, kvstore=None) -> dict:
                 except Exception:  # pragma: no cover - KV purge is best-effort
                     logger.debug("JD KV purge failed for %s", user_id, exc_info=True)
                 # Delete the non-owned rows (FK-safe) then the user row itself.
-                # audit_log is intentionally NOT touched (R8.4) — it has no FK and
+                # audit_log is intentionally NOT touched (R8.4) - it has no FK and
                 # is excluded here, so the security trail survives erasure.
                 # Capture the avatar storage key BEFORE deleting the row so we can
                 # GC the stored master (Photo System: erasure must not orphan the
@@ -299,7 +299,7 @@ async def _downsample_aged_audit_rows(*, downsample_cutoff: str, limit: int) -> 
     deleted) this call.
 
     ``limit`` is the **remaining per-invocation budget** (Req 1.7) handed down by
-    :func:`run_audit_retention_job`, not the raw config batch size — the caller
+    :func:`run_audit_retention_job`, not the raw config batch size - the caller
     owns the shared budget and each path consumes only its slice, so the total
     rows processed across both paths never exceeds the configured maximum. A
     ``limit`` of ``0`` (or less) is a no-op.
@@ -315,11 +315,11 @@ async def _downsample_aged_audit_rows(*, downsample_cutoff: str, limit: int) -> 
     3. For each group, ``MetricStore.add`` the group's row **count** into the
        fixed key at that ``day``. ``add`` runs its own UPSERT + commit, so the
        aggregate is **durably committed before any delete**.
-    4. Delete **exactly** the IDs that were just aggregated — never a broader
+    4. Delete **exactly** the IDs that were just aggregated - never a broader
        predicate. Because we only ever delete rows we have already counted, and
        we only ever count rows that still exist, a normal run can neither
        double-count nor drop an uncounted row. (The sole residual double-count
-       window — a crash after the aggregate commit but before the delete commit —
+       window - a crash after the aggregate commit but before the delete commit -
        is the inherent, accepted semantics of aggregate-then-delete; the exact-ID
        coupling keeps that window as small as possible and its full mitigation is
        task 3.4/Req 1.6.)
@@ -333,7 +333,7 @@ async def _downsample_aged_audit_rows(*, downsample_cutoff: str, limit: int) -> 
         return 0
 
     # Downsamplable events actually eligible for pruning: exclude any that are
-    # also Never_Dropped (defensive — the two sets are disjoint today, Req 1.5).
+    # also Never_Dropped (defensive - the two sets are disjoint today, Req 1.5).
     eligible_events = DOWNSAMPLABLE_EVENTS - NEVER_DROPPED_EVENTS
     if not eligible_events:
         return 0
@@ -395,7 +395,7 @@ async def _delete_aged_security_critical_rows(*, hot_cutoff: str, limit: int) ->
     """Delete Security_Critical rows older than the hot window (Req 1.3/1.5).
 
     The delete path for the Audit_Retention_Job. Unlike the downsample path,
-    Security_Critical rows are **not** aggregated — once they age past the
+    Security_Critical rows are **not** aggregated - once they age past the
     configured hot-retention window they are simply removed (their long-horizon
     value has expired), so there is no ``metrics_daily`` write here, only a
     bounded delete. Returns the number of rows deleted this call.
@@ -404,7 +404,7 @@ async def _delete_aged_security_critical_rows(*, hot_cutoff: str, limit: int) ->
     the downsample path has consumed its slice (``batch - downsampled``), handed
     down by :func:`run_audit_retention_job`. This is what enforces a single shared
     budget across both paths so their combined work never exceeds the configured
-    maximum. A ``limit`` of ``0`` (or less) is a no-op — the budget is spent.
+    maximum. A ``limit`` of ``0`` (or less) is a no-op - the budget is spent.
 
     Never_Dropped exclusion via set subtraction (Req 1.5): three Never_Dropped
     events (``role.changed``, ``user.soft_deleted``, ``user.purged``) are also
@@ -414,7 +414,7 @@ async def _delete_aged_security_critical_rows(*, hot_cutoff: str, limit: int) ->
     regardless of the hot window.
 
     Bounded like the downsample helper (Req 1.7): select at most ``limit`` aged
-    row **IDs** (ordered by ``ts`` so the oldest go first — resumable draining),
+    row **IDs** (ordered by ``ts`` so the oldest go first - resumable draining),
     then delete exactly those IDs.
     """
     # Nothing to do if the shared per-invocation budget is already exhausted.
@@ -463,7 +463,7 @@ async def run_audit_retention_job(*, kvstore=None) -> dict:
     job's own ``admin:audit_retention`` KVStore lock **non-blocking** before doing
     any work, and if it is already held, terminate the invocation WITHOUT any
     deletion or aggregation (Req 1.1). The lock has a TTL so a crashed holder can't
-    wedge the job — the next run recovers it.
+    wedge the job - the next run recovers it.
 
     It establishes the lock + reads the configured retention windows and batch
     size (Req 1.8), then runs the two pruning paths under a single shared
@@ -476,7 +476,7 @@ async def run_audit_retention_job(*, kvstore=None) -> dict:
     - ``hot_days`` (default 365): Security_Critical rows older than this are deleted.
     - ``downsample_days`` (default 90): Downsamplable rows older than this are
       aggregated into ``metrics_daily`` then deleted.
-    - ``batch`` (default 1000, range 1–100,000): max rows processed per invocation.
+    - ``batch`` (default 1000, range 1-100,000): max rows processed per invocation.
     Never_Dropped_Event rows are excluded from BOTH paths (Req 1.5).
 
     **Shared per-invocation budget (Req 1.7).** ``batch`` is one overall budget
@@ -485,20 +485,20 @@ async def run_audit_retention_job(*, kvstore=None) -> dict:
     honor "no more than the configured maximum batch size per invocation", the
     downsample path runs first with the full ``batch`` budget and reports how many
     rows it processed; the Security_Critical delete path then runs with only the
-    leftover budget (``batch - downsampled``, floored at 0 — skipped when 0). Thus
+    leftover budget (``batch - downsampled``, floored at 0 - skipped when 0). Thus
     ``downsampled + deleted <= batch`` always holds.
 
     **Resumability + no double-count (Req 1.6).** Each invocation is bounded, and
     both paths select their oldest eligible rows first (``ORDER BY ts``), so
     repeated invocations drain the backlog oldest-first and each run resumes where
-    the last one stopped — no cursor state is needed. Correctness under
+    the last one stopped - no cursor state is needed. Correctness under
     interruption comes from the aggregate-then-delete-exact-IDs design in the
     downsample path: a group's count is durably committed to its Metric_Key
     *before* the exact aggregated rows are deleted, and only rows that still exist
     are ever aggregated. A re-run therefore never re-aggregates a row that a prior
     run already counted-and-deleted, so no aggregated event count is added to
-    ``metrics_daily`` more than once. (The sole residual window — a crash after the
-    aggregate commit but before the delete commit — is the inherent, accepted
+    ``metrics_daily`` more than once. (The sole residual window - a crash after the
+    aggregate commit but before the delete commit - is the inherent, accepted
     semantics of aggregate-then-delete; exact-ID coupling keeps it minimal.)
     """
     if kvstore is None:
@@ -518,7 +518,7 @@ async def run_audit_retention_job(*, kvstore=None) -> dict:
         downsample_days = settings.admin_audit_downsample_days
         batch = settings.admin_audit_retention_batch
 
-        # Age cutoffs (ISO, UTC) — rows with an event timestamp OLDER than these
+        # Age cutoffs (ISO, UTC) - rows with an event timestamp OLDER than these
         # are eligible for their tier's pruning. Computed once per run.
         now = _now()
         hot_cutoff = (now - timedelta(days=hot_days)).isoformat()
@@ -539,11 +539,11 @@ async def run_audit_retention_job(*, kvstore=None) -> dict:
         )
         # Delete path (Req 1.3): delete Security_Critical rows older than
         #   `hot_cutoff` with the REMAINING budget (`batch - downsampled`, floored
-        #   at 0 — skipped when the downsample path already spent the budget).
+        #   at 0 - skipped when the downsample path already spent the budget).
         #   Never_Dropped rows are excluded via set subtraction
         #   (SECURITY_CRITICAL_EVENTS - NEVER_DROPPED_EVENTS), so the three
         #   overlapping Never_Dropped events are retained indefinitely (Req 1.5).
-        #   No aggregate — aged security rows are simply removed.
+        #   No aggregate - aged security rows are simply removed.
         remaining = max(batch - downsampled, 0)
         deleted = await _delete_aged_security_critical_rows(
             hot_cutoff=hot_cutoff, limit=remaining
@@ -577,7 +577,7 @@ class _ConditionUnavailable(Exception):
     be obtained (e.g. health compose failed, a required gauge is unreadable, or a
     threshold is misconfigured). The run loop catches it, records the alert as
     *skipped* with a logged reason, and continues evaluating the other conditions
-    — one bad condition never aborts the rest (per-condition isolation).
+    - one bad condition never aborts the rest (per-condition isolation).
     """
 
 
@@ -586,7 +586,7 @@ def _alert_state_name(name: str) -> str:
     return f"{_ALERT_STATE_PREFIX}:{name}"
 
 
-# Operational alerts are delivered at this log severity — the "existing log
+# Operational alerts are delivered at this log severity - the "existing log
 # path" that operators/log-based alerting already watch. Kept as a WARNING so it
 # stands out from routine INFO run summaries without the crash-level noise of
 # ERROR (these are conditions, not process failures).
@@ -597,7 +597,7 @@ def _deliver_alert(name: str, message: str) -> None:
     """Deliver a freshly-raised alert via the existing LOG path (Req 12.2).
 
     **Delivery decision (log-only, deliberate).** Delivery uses the standard
-    structured WARNING log — the honest "existing log path" the design allows and
+    structured WARNING log - the honest "existing log path" the design allows and
     that operators / log-based alerting already tail. It emits the alert ``name``,
     its ``message``, and an explicit ``severity`` so the raise is greppable and
     machine-parseable, and is single-lined + control-char-safe against log
@@ -608,7 +608,7 @@ def _deliver_alert(name: str, message: str) -> None:
     intentionally **not** used here: it is strictly *user-scoped* (``notify``
     requires a ``user_id`` and resolves per-user delivery prefs), so fleet-level
     operational alerts have no natural single-user target. Fanning out to every
-    admin user would need a cross-user admin lookup and would be noisy — and the
+    admin user would need a cross-user admin lookup and would be noisy - and the
     spec's minimal-alerting Non-Goal forbids routing/escalation (Req 21.8). So we
     keep the log path as the single, sufficient operational channel; adding admin
     notification fan-out is a deliberate omission, not an oversight. There is no
@@ -673,7 +673,7 @@ async def _apply_alert(
       already ``raised``, only re-raise once ``now - last_raised_at >= cooldown``;
       otherwise suppress (no delivery, no state change) so a continuously-true
       condition alerts at most once per window.
-    - **Resolve → re-raise (Req 12.4).** When NOT ``triggered`` and the prior
+    - **Resolve -> re-raise (Req 12.4).** When NOT ``triggered`` and the prior
       state was ``raised``, record it ``resolved`` (preserving ``last_raised_at``
       for history). Because a later recurrence sees state ``resolved`` (not
       ``raised``), it raises a *fresh* alert immediately rather than being
@@ -699,7 +699,7 @@ async def _apply_alert(
                 },
             )
             raised.append(name)
-        # else: within cooldown — suppress, leave state untouched.
+        # else: within cooldown - suppress, leave state untouched.
     elif prior_state == "raised":
         await store.snapshot_put(
             _alert_state_name(name),
@@ -711,16 +711,16 @@ async def _apply_alert(
             },
         )
         resolved.append(name)
-    # else: not triggered and not previously raised — nothing to record.
+    # else: not triggered and not previously raised - nothing to record.
 
 
 async def _high_error_rate(store, now: datetime) -> bool:
     """Trailing-24h server-error rate ≥ ``alert_error_rate_pct`` (Req 12.2).
 
-    Mirrors the Overview ``errorRate24h`` derivation exactly — the trailing-24h
+    Mirrors the Overview ``errorRate24h`` derivation exactly - the trailing-24h
     proxy is the last two UTC days, ``errors = REQUEST_5XX`` and
     ``total = REQUEST_2XX + REQUEST_4XX + REQUEST_5XX`` summed from the durable
-    Metric_Keys via ``MetricStore.sum`` (no new collection). ``total == 0`` ⇒ 0%
+    Metric_Keys via ``MetricStore.sum`` (no new collection). ``total == 0`` => 0%
     (not triggered). Raises :class:`_ConditionUnavailable` if the threshold is
     misconfigured (Req 12.6) or the durable read fails.
     """
@@ -749,8 +749,8 @@ def _job_marker_stuck(marker: dict | None, now: datetime) -> bool:
 
     Reuses the Jobs-panel stuck math from *already-recorded* markers only (no new
     monitoring): a job is only stuck while running (``running_since`` set); when
-    an expected duration exists, stuck ⇔ current > expected * multiplier, else
-    stuck ⇔ current > the absolute ceiling.
+    an expected duration exists, stuck <=> current > expected * multiplier, else
+    stuck <=> current > the absolute ceiling.
     """
     if not marker:
         return False
@@ -780,27 +780,27 @@ async def run_alerting_job(*, kvstore=None) -> dict:
     It performs **no new data collection** (Req 12.1/21.8): it reads the six
     health tiles + migration status from ``HealthService.compose_health()`` (the
     same bounded, cached signals the Health page already composes), the per-job KV
-    run markers, and the durable ``REQUEST_*`` Metric_Keys — then evaluates the
+    run markers, and the durable ``REQUEST_*`` Metric_Keys - then evaluates the
     FIXED ``ALERT_CONDITIONS`` set (≤8), each **independently** (Req 12.2/12.6):
 
-    - ``db_unhealthy`` / ``kv_unavailable`` / ``migration_mismatch`` ← the
+    - ``db_unhealthy`` / ``kv_unavailable`` / ``migration_mismatch`` <- the
       Database / KVStore-Queue / Migrations health tiles being ``down``/``degraded``.
-    - ``ai_provider_unavailable`` ← the AI-provider tile being ``down`` (i.e.
+    - ``ai_provider_unavailable`` <- the AI-provider tile being ``down`` (i.e.
       unreachable; ``degraded`` means merely unconfigured/unhealthy, not down).
-    - ``storage_near_full`` ← **documented gap**: there is no total-capacity signal
+    - ``storage_near_full`` <- **documented gap**: there is no total-capacity signal
       to compute a near-full percentage against, so this condition is always
       skipped-unavailable + logged (Req 12.5 misconfig/unavailable-skip). It never
       fabricates a capacity ceiling.
-    - ``rollup_failed`` ← the ``rollup`` run marker's ``last_outcome == "failure"``.
-    - ``high_error_rate`` ← trailing-24h 5xx rate ≥ ``alert_error_rate_pct``.
-    - ``background_job_stuck`` ← any tracked job marker looking potentially stuck.
+    - ``rollup_failed`` <- the ``rollup`` run marker's ``last_outcome == "failure"``.
+    - ``high_error_rate`` <- trailing-24h 5xx rate ≥ ``alert_error_rate_pct``.
+    - ``background_job_stuck`` <- any tracked job marker looking potentially stuck.
 
     Every threshold/cooldown is read from config (Req 12.5). A condition whose
     source or config is missing/invalid is **skipped + logged** and the remaining
     conditions still evaluate (Req 12.6). For each true condition an alert is
     raised at most once per ``alert_cooldown_seconds`` (Req 12.3); a condition that
     turns false is recorded ``resolved`` so a later recurrence raises afresh
-    (Req 12.4). Delivery is via :func:`_deliver_alert` — the existing structured
+    (Req 12.4). Delivery is via :func:`_deliver_alert` - the existing structured
     WARNING log path (see that function for why the user-scoped platform
     notification channel is intentionally not used). This job is wired into
     :func:`run_admin_jobs`, so it runs through ``POST /api/v1/internal/run-jobs``
@@ -857,14 +857,14 @@ async def run_alerting_job(*, kvstore=None) -> dict:
                 raise _ConditionUnavailable("health signal unavailable")
             return tiles.get(name, "unknown")
 
-        # Fixed condition evaluators (closed set — mirrors ALERT_CONDITIONS).
+        # Fixed condition evaluators (closed set - mirrors ALERT_CONDITIONS).
         async def _eval(name: str) -> bool:
             if name == "db_unhealthy":
                 return _tile("Database") in _HEALTH_BAD_STATUSES
             if name == "kv_unavailable":
                 return _tile("KVStore/Queue") in _HEALTH_BAD_STATUSES
             if name == "ai_provider_unavailable":
-                # "unreachable" ⇒ the tile is down (degraded = unconfigured/unhealthy).
+                # "unreachable" => the tile is down (degraded = unconfigured/unhealthy).
                 return _tile("AI provider") == "down"
             if name == "migration_mismatch":
                 return _tile("Migrations") in _HEALTH_BAD_STATUSES
@@ -887,7 +887,7 @@ async def run_alerting_job(*, kvstore=None) -> dict:
 
         # Cooldown is shared across raises (Req 12.3/12.5). If it is misconfigured
         # we cannot honor "raise ≤ once per cooldown", so every true condition is
-        # skipped this run (Req 12.6) — but resolves still process below.
+        # skipped this run (Req 12.6) - but resolves still process below.
         try:
             cooldown = _cooldown_seconds()
             cooldown_ok = True
@@ -913,7 +913,7 @@ async def run_alerting_job(*, kvstore=None) -> dict:
                 continue
 
             # A true condition needs the cooldown to gate its raise; if cooldown is
-            # misconfigured, skip the raise (but still allow a false→resolved
+            # misconfigured, skip the raise (but still allow a false->resolved
             # transition to be recorded).
             if triggered and not cooldown_ok:
                 skipped.append(name)
@@ -945,7 +945,7 @@ async def _run_job_with_markers(job_name: str, coro_factory) -> dict:
 
     Wraps a single job call so the System Health page and Jobs panel can read
     *when it ran*, *its outcome*, *whether it is running*, and *its typical
-    duration* — all from KV run markers written here, never per-event storage.
+    duration* - all from KV run markers written here, never per-event storage.
 
     Sequence: write the start marker (sets ``running_since``), run the job, then
     write the completion marker with the outcome derived from the job's return
@@ -984,20 +984,20 @@ async def run_admin_jobs(*, kvstore=None) -> dict:
     never double-counts or double-processes. Wiring :func:`run_audit_retention_job`
     here is what makes the Audit_Retention_Job run through the existing job runner
     (Req 1.2), and wiring :func:`run_alerting_job` likewise makes the minimal
-    threshold Alerting_Job run on every tick (Req 12.2) — no separate scheduling
+    threshold Alerting_Job run on every tick (Req 12.2) - no separate scheduling
     path is introduced for either.
 
     The alerting job is a fast, read-only evaluation over already-computed signals
     and is not marker-wrapped: unlike rollup/purge/audit_retention it has no run
     marker that the Health page / Jobs panel surfaces, and the alerting evaluator
     only inspects those three jobs' markers for its ``rollup_failed`` /
-    ``background_job_stuck`` conditions — so a self-marker would be unread noise.
+    ``background_job_stuck`` conditions - so a self-marker would be unread noise.
     Its own single-flight lock still prevents overlapping runs. Its failure is
     isolated best-effort here so it can never stop the other jobs' results.
 
     Each job call is wrapped in :func:`_run_job_with_markers`, which persists that
     job's per-job run marker to KV (last run/outcome/running-since/last-success/
-    duration/expected-duration — Req 3.4/8.8/8.9) so the Health page and Jobs panel
+    duration/expected-duration - Req 3.4/8.8/8.9) so the Health page and Jobs panel
     can read job status without any per-event storage. Marker persistence and a
     single job's failure are both isolated best-effort, so neither can stop the
     other jobs from running and recording their own markers. Markers are recorded
@@ -1009,7 +1009,7 @@ async def run_admin_jobs(*, kvstore=None) -> dict:
     audit_retention = await _run_job_with_markers(
         "audit_retention", lambda: run_audit_retention_job(kvstore=kvstore)
     )
-    # Alerting runs unwrapped (no run marker — see docstring) but still isolated:
+    # Alerting runs unwrapped (no run marker - see docstring) but still isolated:
     # a failure here must not discard the other jobs' results.
     try:
         alerting = await run_alerting_job(kvstore=kvstore)

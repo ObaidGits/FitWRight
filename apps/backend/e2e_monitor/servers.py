@@ -11,7 +11,7 @@ NOT the bundle copy). That is intentional: the run uses the dev's configured
 provider, and the opt-in gate (``e2e_monitor.gate``) has already verified that
 real config carries a usable key before any move runs.
 
-Process stdout/stderr stream into the bundle's log files — a durable log trail
+Process stdout/stderr stream into the bundle's log files - a durable log trail
 with no change to app/ logging.
 """
 
@@ -71,7 +71,7 @@ class Servers:
 
         if not _port_is_free(8000):
             raise RuntimeError(
-                "port 8000 is already in use — stop any running backend so the "
+                "port 8000 is already in use - stop any running backend so the "
                 "monitor can bind its own isolated instance (DATA_DIR isolation "
                 "depends on owning the port)."
             )
@@ -97,7 +97,7 @@ class Servers:
 
         if with_frontend and shutil.which("node") and shutil.which("npm"):
             if not _port_is_free(3000):
-                # Something is on :3000 — require a 200 from the root before trusting
+                # Something is on :3000 - require a 200 from the root before trusting
                 # it as the frontend (it proxies to our :8000). _wait() accepts any
                 # <500 (incl. 404), so an unrelated HTTP service squatting the port
                 # would be mistaken for a frontend; demand 200. Any failure leaves

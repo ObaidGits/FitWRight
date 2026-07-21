@@ -11,7 +11,7 @@ function clearCsrf() {
   document.cookie = 'csrf=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
 }
 
-describe('api client — auth plumbing', () => {
+describe('api client - auth plumbing', () => {
   let fetchMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {

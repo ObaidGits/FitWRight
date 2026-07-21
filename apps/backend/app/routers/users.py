@@ -1,11 +1,11 @@
 """Profile + device-management endpoints (Task 4.2).
 
-- ``GET /users/me`` — the caller's ``SafeUser``.
-- ``PATCH /users/me`` — update the display name only; ``role``/``status`` are
-  ignored (R7.2, R8.4). Optional optimistic-concurrency via ``updated_at`` → 409.
-- ``GET /users/me/sessions`` — active sessions for device management, never the
+- ``GET /users/me`` - the caller's ``SafeUser``.
+- ``PATCH /users/me`` - update the display name only; ``role``/``status`` are
+  ignored (R7.2, R8.4). Optional optimistic-concurrency via ``updated_at`` -> 409.
+- ``GET /users/me/sessions`` - active sessions for device management, never the
   raw token (R3.5).
-- ``DELETE /users/me/sessions/{id}`` — revoke one of the caller's sessions;
+- ``DELETE /users/me/sessions/{id}`` - revoke one of the caller's sessions;
   CSRF-protected; a session id that isn't the caller's returns 404 (no
   cross-user disclosure, R10.3).
 
@@ -127,7 +127,7 @@ async def update_my_profile(
     payload: ProfileUpdateRequest,
     principal: Principal = Depends(require_session),
 ) -> ProfileResponse:
-    """Update the caller's reusable profile fields (validated) — R14.1."""
+    """Update the caller's reusable profile fields (validated) - R14.1."""
     links = [link.model_dump() for link in payload.links] if payload.links is not None else None
     record = await update_profile(
         principal.user_id,
@@ -150,7 +150,7 @@ async def upload_avatar(
     file: UploadFile = File(...),
     principal: Principal = Depends(require_session),
 ) -> AvatarResponse:
-    """Upload → canonical master → store → set url+metadata (Photo System).
+    """Upload -> canonical master -> store -> set url+metadata (Photo System).
 
     Pipeline (``app.storage.image``): magic-byte sniff (no SVG/polyglot), byte +
     pixel caps, decompression-bomb guard, EXIF-orientation normalize, EXIF/GPS
@@ -177,7 +177,7 @@ async def upload_avatar(
             "That image couldn't be processed. Use a JPEG, PNG, WebP, AVIF, or HEIC photo.",
         )
 
-    # Content-addressed dedup: identical bytes → reuse the current master, no
+    # Content-addressed dedup: identical bytes -> reuse the current master, no
     # wasted CDN write (ABSOLUTE RULE: never duplicate image storage).
     current = await get_by_id(principal.user_id)
     if current and current.avatar_checksum == processed.checksum and current.avatar_url:
@@ -189,7 +189,7 @@ async def upload_avatar(
         url = await get_storage_provider().put(
             key, processed.data, content_type=processed.content_type
         )
-    except Exception as exc:  # storage outage → clean failure, no dangling url
+    except Exception as exc:  # storage outage -> clean failure, no dangling url
         logger.error("Avatar storage failed: %s", exc)
         raise ApiError(503, "storage_unavailable", "Couldn't save your photo right now. Try again.")
 
@@ -315,11 +315,11 @@ async def begin_email_change(
 ) -> MessageResponse:
     """Begin an email change: verify the *new* address before switching (R7.4).
 
-    Requires a recent step-up (``require_stepped_up_session`` → 401
+    Requires a recent step-up (``require_stepped_up_session`` -> 401
     ``step_up_required`` otherwise, Property 6). Enforces uniqueness up front (a
-    new address already registered to any account → 409 ``email_unavailable``),
+    new address already registered to any account -> 409 ``email_unavailable``),
     then issues a hashed single-use token to the **new** address and emails a
-    confirmation link. The account's primary ``email`` is **not** touched here —
+    confirmation link. The account's primary ``email`` is **not** touched here -
     it only switches once the link is confirmed (``POST /users/me/email/confirm``),
     so the account never moves to an unverified address.
     """
@@ -352,7 +352,7 @@ async def begin_email_change(
 
 
 # ---------------------------------------------------------------------------
-# POST /users/me/email/confirm  (redeem the email-change token → switch)
+# POST /users/me/email/confirm  (redeem the email-change token -> switch)
 # ---------------------------------------------------------------------------
 
 
@@ -364,11 +364,11 @@ async def confirm_email_change(
     """Confirm a pending email change, switching the primary email (R7.4).
 
     The token was delivered to the new address, so redeeming it proves ownership
-    of that address (verify-before-switch). It is token-only (no session needed —
+    of that address (verify-before-switch). It is token-only (no session needed -
     the link may be opened on the device holding the new mailbox) and single-use:
     a missing/used/expired token collapses to one generic ``invalid_token``. On
     success the account's primary ``email`` switches to the confirmed address
-    (uniqueness re-checked at the DB layer — a lost race → 409
+    (uniqueness re-checked at the DB layer - a lost race -> 409
     ``email_unavailable``) and the change is audited as ``email_changed``.
     """
     result = await get_token_service().consume_email_change(payload.token)

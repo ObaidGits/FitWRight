@@ -12,7 +12,7 @@ interface RichTextToolbarProps {
 }
 
 /**
- * Rich Text Toolbar — Atelier-styled formatting toolbar (B/I/U/Link).
+ * Rich Text Toolbar - Atelier-styled formatting toolbar (B/I/U/Link).
  * Active states use the primary accent.
  */
 export const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ editor, onLinkClick }) => {

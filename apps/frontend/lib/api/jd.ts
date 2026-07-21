@@ -56,7 +56,7 @@ export async function fetchJdFromUrl(url: string, useAi = false): Promise<JdFrom
     throw new Error('Too many imports right now. Please wait a moment and try again.');
   }
   if (!res.ok) {
-    // Opaque backend failure — show a friendly, non-leaky message.
+    // Opaque backend failure - show a friendly, non-leaky message.
     throw new Error("We couldn't read that job posting. Paste the description instead.");
   }
   const body = (await res.json()) as RawJd;

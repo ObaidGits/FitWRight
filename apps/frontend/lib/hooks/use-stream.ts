@@ -1,12 +1,12 @@
 'use client';
 
 /**
- * useStream — progressive streaming AI generation (P4 R1.1, R1.3, R6.5).
+ * useStream - progressive streaming AI generation (P4 R1.1, R1.3, R6.5).
  *
  * Wraps {@link StreamController} + the fetch-based transport. Accumulates tokens
  * into `text` (rendered in an `aria-live="polite"` region by the consumer),
  * exposes `cancel()`, and transparently falls back to the non-stream path on
- * error. Streamed output is a **preview** — the caller persists only via the
+ * error. Streamed output is a **preview** - the caller persists only via the
  * existing accept/confirm path.
  */
 import * as React from 'react';

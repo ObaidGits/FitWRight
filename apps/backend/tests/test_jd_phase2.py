@@ -85,7 +85,7 @@ class TestDriftMonitor:
 
     @pytest.mark.asyncio
     async def test_trips_on_high_failure_rate(self, drift):
-        # Record 6 failures, 1 success → 86% failure rate → trips
+        # Record 6 failures, 1 success -> 86% failure rate -> trips
         for _ in range(6):
             await drift.record_failure("ashby")
         await drift.record_success("ashby")
@@ -94,7 +94,7 @@ class TestDriftMonitor:
 
     @pytest.mark.asyncio
     async def test_does_not_trip_below_threshold(self, drift):
-        # 2 failures, 8 successes → 20% failure rate → healthy
+        # 2 failures, 8 successes -> 20% failure rate -> healthy
         for _ in range(2):
             await drift.record_failure("lever")
         for _ in range(8):
@@ -104,7 +104,7 @@ class TestDriftMonitor:
 
     @pytest.mark.asyncio
     async def test_does_not_trip_below_min_samples(self, drift):
-        # Only 3 failures (below min_samples=5) → don't trip
+        # Only 3 failures (below min_samples=5) -> don't trip
         for _ in range(3):
             await drift.record_failure("greenhouse")
 
@@ -148,7 +148,7 @@ class TestDriftMonitor:
 class TestSingleFlightLocal:
     @pytest.mark.asyncio
     async def test_deduplicates_concurrent_calls(self):
-        """Multiple concurrent calls for same URL → only one pipeline execution."""
+        """Multiple concurrent calls for same URL -> only one pipeline execution."""
         from app.jd.concurrency import _local_flight
 
         call_count = 0
@@ -219,12 +219,12 @@ class TestOrchestratorCache:
 
         monkeypatch.setattr(orchestrator, "fetch_url_safely", mock_fetch)
 
-        # First call — hits network
+        # First call - hits network
         r1 = await orchestrator.orchestrate_v2("t", "https://example.com/jobs/cached-role")
         assert r1.content != ""
         assert fetch_count == 1
 
-        # Second call — should come from cache (no fetch)
+        # Second call - should come from cache (no fetch)
         r2 = await orchestrator.orchestrate_v2("t", "https://example.com/jobs/cached-role")
         assert r2.content == r1.content
         assert fetch_count == 1  # No additional fetch!
@@ -319,7 +319,7 @@ class TestOrchestratorCache:
         test_drift._tripped["ashby"] = _time.time()
         assert await test_drift.is_healthy("ashby") is False
 
-        # Now try an Ashby URL — adapter should be skipped
+        # Now try an Ashby URL - adapter should be skipped
         html = '''<html><head>
         <script type="application/ld+json">
         {"@type": "JobPosting", "title": "Fallback Engineer", "description": "''' + ("Fallback content. " * 50) + '''"}

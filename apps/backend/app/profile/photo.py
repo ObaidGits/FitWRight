@@ -1,4 +1,4 @@
-"""Resume Photo Configuration — the render+provenance contract (Photo System).
+"""Resume Photo Configuration - the render+provenance contract (Photo System).
 
 A resume's photo is described by a structured :class:`PhotoConfig`, **not** a
 boolean and **not** a copy of the image. It lives in the resume's
@@ -9,13 +9,13 @@ border/shadow/background, opacity, and margin.
 
 Two orthogonal concerns are separated on purpose:
 
-1. **Presentation** (shape/size/position/…): pure render hints. Templates map
+1. **Presentation** (shape/size/position/...): pure render hints. Templates map
    the *position slot* + *size token* to their own layout; they never hardcode a
    pixel layout, and unknown slots fall back to the template default.
 2. **Provenance** (``ref`` + ``snapshot``): where the pixels come from.
-   - ``ref="canonical"`` → the resume tracks the user's *live* profile photo.
+   - ``ref="canonical"`` -> the resume tracks the user's *live* profile photo.
      Replacing the profile photo later updates this resume too (opt-in freshness).
-   - ``ref="snapshot"`` → the resume is pinned to the exact master captured at
+   - ``ref="snapshot"`` -> the resume is pinned to the exact master captured at
      generation time (``snapshot.url``/checksum/dims). A later profile-photo
      change never mutates this already-generated resume.
 
@@ -46,7 +46,7 @@ PhotoPosition = Literal[
 PhotoCrop = Literal["cover", "contain", "fill"]
 PhotoRef = Literal["canonical", "snapshot"]
 
-# Size token → rendered edge length in px (the render layer maps these; kept
+# Size token -> rendered edge length in px (the render layer maps these; kept
 # here so preview and PDF agree and future surfaces reuse one scale).
 SIZE_PX: dict[str, int] = {"xs": 48, "sm": 64, "md": 96, "lg": 128, "xl": 160}
 
@@ -121,10 +121,10 @@ DEFAULT_PHOTO_CONFIG = PhotoConfig()
 def resolve_photo_url(config: PhotoConfig | None, profile_avatar_url: str | None) -> str | None:
     """Resolve the URL a resume should render for its photo (provenance-aware).
 
-    - Hidden / no config → ``None`` (template renders its no-photo fallback).
-    - ``ref="snapshot"`` → the pinned ``snapshot.url`` (frozen; immune to a later
+    - Hidden / no config -> ``None`` (template renders its no-photo fallback).
+    - ``ref="snapshot"`` -> the pinned ``snapshot.url`` (frozen; immune to a later
       profile-photo change).
-    - ``ref="canonical"`` → the *live* ``profile_avatar_url`` (tracks the profile).
+    - ``ref="canonical"`` -> the *live* ``profile_avatar_url`` (tracks the profile).
 
     This single function is the authority reused by projection, read-time
     re-resolution, and public projection so the rule is enforced in one place.

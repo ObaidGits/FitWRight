@@ -6,7 +6,7 @@ capability all apply. Reuses the ``_client`` / ``_admin_client`` / ``_seed`` /
 ``hosted`` harness from :mod:`tests.integration.test_admin_api`.
 
 Covers the ``require_admin_read`` authz matrix (anon 401, non-admin 403, admin
-200 — Req 15.1) with a secret-free ``StoragePanel`` body (Property 3 / Req 15.8).
+200 - Req 15.1) with a secret-free ``StoragePanel`` body (Property 3 / Req 15.8).
 The panel is served from cached/pre-aggregated values only; with an empty store
 it degrades to stale/unavailable markers rather than erroring (Req 7.6/7.7).
 
@@ -52,7 +52,7 @@ class TestStorageAuthz:
         assert body["avatarCount"] == 0
         assert body["resumeCount"] == 0
         assert body["resumeVersionCount"] == 0
-        # Empty store → nothing sampled yet → degraded markers (Req 7.6/7.7/7.8).
+        # Empty store -> nothing sampled yet -> degraded markers (Req 7.6/7.7/7.8).
         assert body["dbSizeStale"] is True
         assert body["objectStorageStale"] is True
         assert body["growthUnavailable"] is True

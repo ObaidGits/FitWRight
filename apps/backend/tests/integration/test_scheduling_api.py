@@ -1,7 +1,7 @@
 """Integration tests for reminders, interviews, scheduler, agenda (P3 §E/§F/§G).
 
 Covers CRUD + ownership 404, presets/snooze, bounded recurrence, the claim-based
-scheduler (fire → notification, materialize next occurrence, no double-fire),
+scheduler (fire -> notification, materialize next occurrence, no double-fire),
 interview lead-time notifications + reschedule re-arm + overlap warning + ICS,
 the merged agenda, idempotency-keys, caps, and feature flags.
 """
@@ -115,7 +115,7 @@ class TestReminderCrud:
 
 
 # ---------------------------------------------------------------------------
-# Scheduler: claim → fire → notify, materialize, no double-fire
+# Scheduler: claim -> fire -> notify, materialize, no double-fire
 # ---------------------------------------------------------------------------
 
 
@@ -194,7 +194,7 @@ class TestInterviews:
                     json={"starts_at": _future(60), "lead_times": [30]},
                 )
             ).json()
-        # Mark the lead fired, then reschedule → fired_leads reset.
+        # Mark the lead fired, then reschedule -> fired_leads reset.
         await get_scheduling_repo().mark_lead_fired(iv["id"], 30)
         async with _client() as c:
             await c.patch(
@@ -207,7 +207,7 @@ class TestInterviews:
 
     async def test_lead_time_notification_fires(self, isolated_db, owner_id):
         card = await _app(isolated_db, owner_id)
-        # Interview in 20 min with a 30-min lead → lead is already due.
+        # Interview in 20 min with a 30-min lead -> lead is already due.
         await get_scheduling_repo().create_interview(
             owner_id, card["application_id"], starts_at=_future(20), tz="UTC",
             duration_min=60, kind="screen", location=None, notes=None, lead_times=[30],

@@ -6,7 +6,7 @@
  * Wires resume + cover-letter PDF export to the EXISTING `/print/*` pipeline
  * (via `downloadResumePdf` / `downloadCoverLetterPdf`) with explicit progress
  * and error states. The engine is reused unchanged, so the generated PDF is
- * byte-for-byte the pre-revamp output — this component only adds the download
+ * byte-for-byte the pre-revamp output - this component only adds the download
  * UX (loading spinner, success/error toast, blob save).
  */
 import * as React from 'react';

@@ -27,7 +27,7 @@ import {
 } from '@/lib/resilience/stream-client';
 import { encryptJSON, decryptJSON, generateKey } from '@/lib/resilience/crypto';
 
-// Generous ceilings — orders of magnitude above expected, so only a real
+// Generous ceilings - orders of magnitude above expected, so only a real
 // regression trips them (not CI noise).
 const BUDGET = {
   idbWriteMsAvg: 60,
@@ -41,7 +41,7 @@ beforeEach(() => {
   (globalThis as unknown as { indexedDB: IDBFactory }).indexedDB = new IDBFactory();
 });
 
-describe('perf — autosave debounce/coalesce ratio', () => {
+describe('perf - autosave debounce/coalesce ratio', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
 
@@ -60,7 +60,7 @@ describe('perf — autosave debounce/coalesce ratio', () => {
     c.setBaseVersion(1);
     for (let i = 0; i < 50; i++) c.update({ v: i });
     await vi.advanceTimersByTimeAsync(100);
-    // 50 edits → exactly 1 save (coalescing invariant, R4.2).
+    // 50 edits -> exactly 1 save (coalescing invariant, R4.2).
     expect(save).toHaveBeenCalledTimes(1);
     expect(save.mock.calls[0][0]).toEqual({ v: 49 });
   });
@@ -89,7 +89,7 @@ describe('perf — autosave debounce/coalesce ratio', () => {
   });
 });
 
-describe('perf — IndexedDB latency budget', () => {
+describe('perf - IndexedDB latency budget', () => {
   it('draft write/read average under budget over 25 ops', async () => {
     const store = new ResilienceStore(new IndexedDbEngine(), 'perf-user');
     const payload = {
@@ -115,7 +115,7 @@ describe('perf — IndexedDB latency budget', () => {
   });
 });
 
-describe('perf — encryption overhead budget', () => {
+describe('perf - encryption overhead budget', () => {
   it('AES-GCM encrypt+decrypt round-trip average under budget', async () => {
     const key = await generateKey();
     const payload = { summary: 'y'.repeat(4000) };
@@ -131,7 +131,7 @@ describe('perf — encryption overhead budget', () => {
   });
 });
 
-describe('perf — outbox replay throughput + ordering', () => {
+describe('perf - outbox replay throughput + ordering', () => {
   it('replays 60 ordered entries above the throughput floor', async () => {
     const store = new ResilienceStore(new IndexedDbEngine(), 'perf-user');
     const N = 60;
@@ -153,7 +153,7 @@ describe('perf — outbox replay throughput + ordering', () => {
   });
 });
 
-describe('perf — streaming first-token latency', () => {
+describe('perf - streaming first-token latency', () => {
   it('measures time-to-first-token under the budget', async () => {
     const events: SseEvent[] = [
       { event: 'heartbeat', data: {} },

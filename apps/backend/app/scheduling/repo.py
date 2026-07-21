@@ -1,8 +1,8 @@
-"""Reminder + interview data access (design §E/§F) — centralized + user-scoped.
+"""Reminder + interview data access (design §E/§F) - centralized + user-scoped.
 
 Allow-listed in the scoping guard (same trust model as ``app/admin/repo.py``);
 every method is scoped by ``user_id`` (or is a system scheduler scan). The
-scheduler uses an **atomic claim** (conditional UPDATE ``pending|snoozed →
+scheduler uses an **atomic claim** (conditional UPDATE ``pending|snoozed ->
 firing`` guarded on the current status) so multiple workers never double-fire the
 same reminder (Property 3). A crashed claim is reclaimed after a lease timeout.
 """
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 __all__ = ["SchedulingRepo", "get_scheduling_repo"]
 
 # A claimed-but-not-fired reminder older than this (seconds) is presumed crashed
-# and reclaimed on the next scan (self-healing — design §Reliability).
+# and reclaimed on the next scan (self-healing - design §Reliability).
 _CLAIM_LEASE_SECONDS = 300
 
 
@@ -138,7 +138,7 @@ class SchedulingRepo:
             )
 
     async def claim_due_reminders(self, now_iso: str, limit: int) -> list[dict[str, Any]]:
-        """Atomically claim due pending/snoozed reminders (pending→firing).
+        """Atomically claim due pending/snoozed reminders (pending->firing).
 
         Also reclaims stale ``firing`` rows whose claim lease elapsed (crashed
         worker). Each claim is a guarded conditional UPDATE, so across workers a
@@ -195,7 +195,7 @@ class SchedulingRepo:
             row.fired_at = _now()
             if next_due is not None:
                 # Recurring: re-arm the same row for the next occurrence (no
-                # infinite rows — R10.2). Reset claim bookkeeping.
+                # infinite rows - R10.2). Reset claim bookkeeping.
                 row.due_at = next_due
                 row.status = "pending"
                 row.claimed_at = None

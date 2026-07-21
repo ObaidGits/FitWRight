@@ -7,12 +7,12 @@ resolved from the *same* database URL so the two views never diverge.
 
 The dialect is selected from the resolved URL, **not** a hardcoded path:
 
-* **SQLite** (``sqlite+aiosqlite://`` async / ``sqlite://`` sync) — the local,
+* **SQLite** (``sqlite+aiosqlite://`` async / ``sqlite://`` sync) - the local,
   zero-config default. WAL/busy_timeout/foreign_keys PRAGMAs are applied per
   connection (SQLite only). Schema evolves locally via ``create_all`` +
   ``init_models_sync`` (see below).
 * **Postgres** (``postgresql+asyncpg://`` async / ``postgresql+psycopg://`` sync)
-  — the hosted target (Neon). Pooling is configured from ``settings.db_pool_size``
+  - the hosted target (Neon). Pooling is configured from ``settings.db_pool_size``
   / ``settings.db_use_pooler``; no SQLite PRAGMAs and no local schema mutation
   (Postgres schema is owned by Alembic).
 
@@ -94,9 +94,9 @@ def _extract_pg_ssl_mode(url: str) -> tuple[str, str | None]:
     URL; return ``(clean_url, mode)``.
 
     ``mode`` is a resolved libpq-style sslmode string (``require``,
-    ``verify-full``, ``disable`` …) or ``None`` when SSL is unspecified.
+    ``verify-full``, ``disable`` ...) or ``None`` when SSL is unspecified.
 
-    Besides ``sslmode``/``ssl``, this also drops ``pgbouncer`` — a
+    Besides ``sslmode``/``ssl``, this also drops ``pgbouncer`` - a
     Prisma/PgBouncer hint (``?pgbouncer=true``) that Supabase's copy-paste
     connection strings sometimes carry. Neither asyncpg nor psycopg accept it as
     a connect kwarg, and SQLAlchemy forwards unknown query params to the driver,
@@ -128,7 +128,7 @@ def _extract_pg_ssl_mode(url: str) -> tuple[str, str | None]:
             else:
                 url_mode = lv or None
         elif lk in _DROP_PARAMS:
-            continue  # incompatible pooler hint — drop (see docstring)
+            continue  # incompatible pooler hint - drop (see docstring)
         else:
             kept.append((key, value))
     clean = urlunsplit(
@@ -138,7 +138,7 @@ def _extract_pg_ssl_mode(url: str) -> tuple[str, str | None]:
     configured = (settings.db_ssl or "").strip().lower() or None
     mode = configured or url_mode
     if mode is None and not settings.single_user_mode:
-        # Hosted deployments talk to managed Postgres over TLS — secure default.
+        # Hosted deployments talk to managed Postgres over TLS - secure default.
         mode = "require"
     return clean, mode
 
@@ -146,10 +146,10 @@ def _extract_pg_ssl_mode(url: str) -> tuple[str, str | None]:
 def _asyncpg_ssl_arg(mode: str | None):
     """Translate a libpq sslmode into an asyncpg ``ssl`` connect arg.
 
-    ``verify-ca``/``verify-full`` → a CA-verifying default context; ``require``
-    (and any other encrypt-but-don't-verify value) → an encrypted, non-verifying
+    ``verify-ca``/``verify-full`` -> a CA-verifying default context; ``require``
+    (and any other encrypt-but-don't-verify value) -> an encrypted, non-verifying
     context (Supabase pooler presents a cert that may not chain to a public CA);
-    ``disable`` → ``False``; unspecified/prefer/allow → ``None`` (driver default).
+    ``disable`` -> ``False``; unspecified/prefer/allow -> ``None`` (driver default).
     """
     if mode == "disable":
         return False
@@ -174,7 +174,7 @@ def _normalize_url(url: str, *, async_: bool) -> str:
     """Normalize a database URL to the driver required for the requested engine.
 
     Mirrors ``alembic/env.py``: a bare ``postgresql://`` (or ``postgres://``,
-    ``postgresql+psycopg2://``, …) is rewritten to ``postgresql+asyncpg://`` for
+    ``postgresql+psycopg2://``, ...) is rewritten to ``postgresql+asyncpg://`` for
     the async engine and ``postgresql+psycopg://`` for the sync engine. SQLite
     URLs are pinned to ``aiosqlite`` (async) / the default DBAPI (sync).
     """
@@ -197,8 +197,8 @@ def _normalize_url(url: str, *, async_: bool) -> str:
 def resolve_database_url(source: Path | str | None, *, async_: bool) -> str:
     """Resolve ``source`` to a concrete, driver-correct database URL.
 
-    ``None`` → ``settings.effective_database_url`` (single source of truth so the
-    runtime and Alembic agree); a :class:`Path` → a SQLite file URL; a ``str`` →
+    ``None`` -> ``settings.effective_database_url`` (single source of truth so the
+    runtime and Alembic agree); a :class:`Path` -> a SQLite file URL; a ``str`` ->
     normalized to the async/sync driver appropriate for the engine being built.
     """
     if source is None:
@@ -215,8 +215,8 @@ def _pg_async_options() -> dict[str, Any]:
     """Engine kwargs for the async (asyncpg) Postgres engine.
 
     When ``db_use_pooler`` is set (Neon/PgBouncer transaction pooling), server-
-    side prepared statements are unsafe — a pooled connection may serve a
-    different backend between Parse and Bind — so we disable asyncpg's statement
+    side prepared statements are unsafe - a pooled connection may serve a
+    different backend between Parse and Bind - so we disable asyncpg's statement
     cache (``statement_cache_size=0``) *and* SQLAlchemy's asyncpg prepared-
     statement cache (``prepared_statement_cache_size=0``). Non-pooler Postgres
     uses an in-process pool sized from ``db_pool_size`` with liveness pre-ping.
@@ -234,7 +234,7 @@ def _pg_async_options() -> dict[str, Any]:
     ``QueuePool`` of live client connections to the external pooler instead of
     ``NullPool``. ``NullPool`` disposed every connection after use, so each
     logical DB operation paid a full TCP+TLS+startup handshake to the pooler
-    (~2.6 s to a cross-region Supabase pooler; ~10-40 ms co-located) — the
+    (~2.6 s to a cross-region Supabase pooler; ~10-40 ms co-located) - the
     dominant request-latency source. A transaction pooler (pgbouncer) is
     explicitly designed to hold many persistent client connections and multiplex
     them onto fewer server backends per-transaction, so a warm client pool is the
@@ -243,7 +243,7 @@ def _pg_async_options() -> dict[str, Any]:
     pooler dropped on its idle timeout is transparently replaced, not surfaced as
     an error), and ``pool_recycle`` proactively rotates connections before that
     timeout. Server-side prepared statements stay disabled (transaction-pool
-    safety), so nothing about correctness changes — only the reconnect cost.
+    safety), so nothing about correctness changes - only the reconnect cost.
     """
     if settings.db_use_pooler:
         from uuid import uuid4
@@ -272,7 +272,7 @@ def _pg_sync_options() -> dict[str, Any]:
     Under a transaction pooler, disable psycopg's server-side prepared
     statements (``prepare_threshold=None``). We keep a warm client-side pool
     (not ``NullPool``) for the same reason as the async engine: this engine is
-    read on the *synchronous* LLM hot path (``get_llm_config`` → encrypted
+    read on the *synchronous* LLM hot path (``get_llm_config`` -> encrypted
     ``api_keys`` read), and a per-read reconnect to a cross-region pooler added
     seconds to every LLM-touching request. ``pool_pre_ping`` + ``pool_recycle``
     keep the warm connections safe against the pooler's idle timeout.
@@ -298,7 +298,7 @@ def _pg_sync_options() -> dict[str, Any]:
 def make_async_engine(source: Path | str | None = None) -> AsyncEngine:
     """Create the async engine for the document tables (SQLite or Postgres).
 
-    ``source`` may be a :class:`Path` (SQLite file — used by isolated tests), a
+    ``source`` may be a :class:`Path` (SQLite file - used by isolated tests), a
     URL string, or ``None`` (resolve ``settings.effective_database_url``).
     """
     url = resolve_database_url(source, async_=True)
@@ -317,7 +317,7 @@ def make_async_engine(source: Path | str | None = None) -> AsyncEngine:
 def make_sync_engine(source: Path | str | None = None) -> Engine:
     """Create the sync engine used for the encrypted api_keys table.
 
-    Key reads happen synchronously (``get_llm_config`` → ``load_config_file`` →
+    Key reads happen synchronously (``get_llm_config`` -> ``load_config_file`` ->
     ``resolve_api_key``), so a sync engine avoids threading async through
     ``llm.py``. It points at the same database as the async engine (SQLite file
     on both engines locally; the same Postgres server hosted).
@@ -352,16 +352,16 @@ def init_models_sync(engine: Engine) -> None:
 
     **SQLite (local, zero-config):** ``create_all`` creates missing tables
     (fresh local DBs get the full ``user_id``-scoped schema) but never ALTERs
-    existing ones. The additive steps below keep older local databases — created
-    before a column existed — loadable and, critically, add the ``user_id``
+    existing ones. The additive steps below keep older local databases - created
+    before a column existed - loadable and, critically, add the ``user_id``
     scope column to any owned table missing it. This is the local ``create_all``
     equivalent of Alembic migration 0003; the runtime owner backfill
     (``app.auth.owner.ensure_owner``) then claims those rows for the bootstrap
     owner so single-user local keeps working with zero data loss.
 
     **Postgres (hosted):** the schema is owned by the Alembic migration chain
-    (``0001``→``0006``). Running ``create_all``/``ALTER`` here would race and
-    diverge from the migrations, so this function is a **no-op** on Postgres —
+    (``0001``->``0006``). Running ``create_all``/``ALTER`` here would race and
+    diverge from the migrations, so this function is a **no-op** on Postgres -
     guarded on the engine dialect. SQLite-specific ``PRAGMA table_info`` calls
     would not even be valid SQL on Postgres.
     """
@@ -378,7 +378,7 @@ def init_models_sync(engine: Engine) -> None:
 
         # Add a nullable ``user_id`` to any owned table missing it (older DBs).
         # Kept nullable + index-only here (a PK/NOT NULL change on an existing
-        # SQLite table needs a rebuild — hosted does that via migration 0005).
+        # SQLite table needs a rebuild - hosted does that via migration 0005).
         for table in _OWNED_TABLES_LOCAL:
             info = conn.exec_driver_sql(f"PRAGMA table_info({table})").mappings().all()
             if info and "user_id" not in {column["name"] for column in info}:

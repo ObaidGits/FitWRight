@@ -1,6 +1,6 @@
 """Canonical profile-image pipeline + metadata + CDN derivation (Photo System).
 
-This is the storage/processing core of the Profile Photo System — the single
+This is the storage/processing core of the Profile Photo System - the single
 canonical-master pipeline (it replaced an earlier square-cropping avatar path):
 a single, aspect-ratio-preserving, EXIF-stripped, orientation-normalized,
 downscaled WebP that every downstream surface (resume header, PDF, public
@@ -12,7 +12,7 @@ Design invariants (map 1:1 to the feature's ABSOLUTE RULES):
   master. Shaping (circle/square), cropping, and repositioning are *render-time*
   decisions expressed by :class:`app.profile.photo.PhotoConfig` and realized via
   CSS ``object-fit``/``object-position`` (preview + PDF) or on-the-fly Cloudinary
-  transforms (public/OG) — so the original is never mutated and quality never
+  transforms (public/OG) - so the original is never mutated and quality never
   degrades.
 - **Never store multiple copies.** Responsive variants are *URL transforms* of
   the master (Cloudinary), not new uploads. On the local dev provider the master
@@ -62,7 +62,7 @@ _HEIF_BRANDS = frozenset(
 _AVIF_BRANDS = frozenset({b"avif", b"avis"})
 
 # Register the HEIC/HEIF opener once if the plugin is present. This is a no-op
-# when pillow-heif isn't installed — those inputs are then rejected with a clean
+# when pillow-heif isn't installed - those inputs are then rejected with a clean
 # "unsupported_type" instead of a decode crash.
 _HEIF_SUPPORTED = False
 try:  # pragma: no cover - depends on optional dependency being installed
@@ -75,7 +75,7 @@ except Exception:  # pragma: no cover - plugin absent is the common case
 
 
 class ImageError(Exception):
-    """Invalid/oversized/unsafe image → router returns 422 ``invalid_file``.
+    """Invalid/oversized/unsafe image -> router returns 422 ``invalid_file``.
 
     The ``reason`` is intentionally coarse and stays server-side (never leaks the
     precise decode failure to the client).
@@ -99,7 +99,7 @@ class ProcessedImage:
     checksum: str  # sha256 hex of the *original* upload bytes (dedup key)
     source_format: str  # jpeg | png | webp | avif | heic
     byte_size: int  # len(data) of the encoded master
-    dominant_color: str  # "#rrggbb" — for skeletons / theme accents
+    dominant_color: str  # "#rrggbb" - for skeletons / theme accents
 
 
 def sniff_image_type(data: bytes) -> str | None:
@@ -141,11 +141,11 @@ def process_profile_image(data: bytes) -> ProcessedImage:
     """Validate + normalize + re-encode an upload into the canonical master.
 
     Steps (all bounded, all deterministic):
-    byte-cap → magic sniff → decompression-bomb guard → decode →
-    EXIF-orientation transpose → RGB → downscale (aspect preserved, never upscale)
-    → strip metadata → WebP re-encode → metadata (dims/aspect/checksum/colour).
+    byte-cap -> magic sniff -> decompression-bomb guard -> decode ->
+    EXIF-orientation transpose -> RGB -> downscale (aspect preserved, never upscale)
+    -> strip metadata -> WebP re-encode -> metadata (dims/aspect/checksum/colour).
 
-    Raises :class:`ImageError` on any violation. Pure (no I/O) → trivially tested.
+    Raises :class:`ImageError` on any violation. Pure (no I/O) -> trivially tested.
     """
     from app.config import settings
     from PIL import Image, ImageOps, UnidentifiedImageError
@@ -195,7 +195,7 @@ def process_profile_image(data: bytes) -> ProcessedImage:
                 )
 
             out = io.BytesIO()
-            # No exif/metadata passed → the master is metadata-free (GPS stripped).
+            # No exif/metadata passed -> the master is metadata-free (GPS stripped).
             img.save(
                 out,
                 format="WEBP",
@@ -240,7 +240,7 @@ def _assert_format_matches(kind: str, decoded_fmt: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# CDN derivation — responsive/optimized variants WITHOUT re-uploading.
+# CDN derivation - responsive/optimized variants WITHOUT re-uploading.
 # ---------------------------------------------------------------------------
 
 
@@ -264,7 +264,7 @@ def derive_cdn_url(
     """Return a transformed delivery URL derived from the canonical master.
 
     For a Cloudinary master this injects a transformation segment right after
-    ``/image/upload/`` — a **pure URL rewrite**, so no extra bytes are stored and
+    ``/image/upload/`` - a **pure URL rewrite**, so no extra bytes are stored and
     the original is untouched. For any non-Cloudinary URL (local dev provider,
     external avatar) the master URL is returned unchanged (graceful degradation).
 

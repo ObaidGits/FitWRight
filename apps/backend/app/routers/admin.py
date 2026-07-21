@@ -183,7 +183,7 @@ async def get_admin_health(_admin: Principal = Depends(require_admin_read)) -> A
 
     Composed from signals the backend already produces (readiness DB/KVStore
     probes, cached ``/status`` LLM health, storage config, Alembic head-vs-applied)
-    under a per-source 2s timeout — never a new infra probe (R3.1/3.6, R21.3/4/5).
+    under a per-source 2s timeout - never a new infra probe (R3.1/3.6, R21.3/4/5).
     """
     return await get_health_service().compose_health()
 
@@ -193,7 +193,7 @@ async def get_admin_jobs(_admin: Principal = Depends(require_admin_read)) -> Job
     """Background jobs panel: per-job state + stuck detection + gauges (R8).
 
     An O(1) read (<500ms, Req 8.4) served from the KV run markers written by the
-    job runner + the worker-independent purge-backlog gauge — it never scans
+    job runner + the worker-independent purge-backlog gauge - it never scans
     ``audit_log``/``users`` rows. Each row surfaces last/next run, last-success,
     running-since, current vs expected duration, potentially-stuck (from markers +
     ``admin_job_stuck_*`` config), and best-effort lock state; queue length is
@@ -208,7 +208,7 @@ async def get_admin_config(
     admin: Principal = Depends(require_admin_read),
 ) -> ConfigDiagnostics:
     """Read-only configuration diagnostics (R10): env, providers, flags,
-    kill-switches, grace period, versions — secrets as presence booleans only.
+    kill-switches, grace period, versions - secrets as presence booleans only.
 
     This is a Sensitive_Endpoint (config diagnostics), so the access is audited
     ``admin.config_viewed`` before the payload is returned (R15.3). Per R15.9 the
@@ -249,8 +249,8 @@ async def get_admin_ai_analytics(
     An O(1) read (Req 4.9) served from the durable ``AI_*`` ``metrics_daily`` keys
     (via the shared Metric_Store) plus the current in-process accumulator so
     today's not-yet-flushed activity is included. ``window`` is validated to the
-    inclusive 1–365 range (default 30, Req 4.3); an out-of-range value is rejected
-    with a 422 by the framework — an authz-independent request validation.
+    inclusive 1-365 range (default 30, Req 4.3); an out-of-range value is rejected
+    with a 422 by the framework - an authz-independent request validation.
     ``require_admin_read`` enforces the kill-switch, authN (401), status recheck +
     capability (403), and the per-admin rate limit (429) before any data is read
     (Req 4.4 / 15.1). Success + failure rates always sum to 1.0 when calls>0 and
@@ -268,7 +268,7 @@ async def get_admin_errors(
     """Errors summary: grouped 4xx/5xx counts + by-source + trend (R5).
 
     An O(1) read (Req 5.7) served from durable ``metrics_daily`` keys via the
-    shared Metric_Store — grouped buckets only, never a raw log/stack/trace/
+    shared Metric_Store - grouped buckets only, never a raw log/stack/trace/
     exception/replay explorer (Non-Goal, Req 21.2). ``require_admin_read``
     enforces the kill-switch, authN (401), status recheck + capability (403),
     and the per-admin rate limit (429) before any data is read (Req 5.6).
@@ -299,15 +299,15 @@ async def get_admin_performance(
     """Performance signals: per-route-class latency + slow routes/jobs (R6).
 
     An O(1) read (Req 6.6) served entirely from aggregates the backend already
-    produces — one in-process ``AdminMetrics`` snapshot (route-class latency +
-    cache ratio) plus a fixed handful of KV job-run marker reads — never a row
+    produces - one in-process ``AdminMetrics`` snapshot (route-class latency +
+    cache ratio) plus a fixed handful of KV job-run marker reads - never a row
     scan and never new instrumentation (Req 21.4). No query params.
     ``require_admin_read`` enforces the kill-switch, authN (401), status recheck +
     capability (403), and the per-admin rate limit (429) before any data is read
     (Req 15.1).
 
     ``response_model_exclude_none=True`` drops every ``None`` field from the
-    payload — this is the Req 6.5 omission mechanism for the optional host
+    payload - this is the Req 6.5 omission mechanism for the optional host
     metrics (``memoryBytes`` / ``cpuPercent`` / ``diskBytes``), which are a
     Non-Goal (Req 21.4) and are never produced. ``dbQueryTimeMs`` is likewise
     omitted; the client learns it is a wired-but-empty signal from its presence
@@ -324,7 +324,7 @@ async def get_admin_storage(
     """Storage panel: cached DB size + object storage + counts + growth (R7).
 
     An O(1) read (Req 7.5) served entirely from cached/pre-aggregated values the
-    Rollup_Job already produced — the ``DB_SIZE_BYTES`` daily series (a bounded
+    Rollup_Job already produced - the ``DB_SIZE_BYTES`` daily series (a bounded
     30-day read), the ``db_size_last_sample`` freshness marker, and the named
     ``"storage"`` snapshot (counts + object-storage usage). It NEVER issues a
     live storage-size or object-enumeration query on the request path
@@ -350,7 +350,7 @@ async def get_admin_security(
     """Security view: trailing-24h security counts from audit aggregates (R9).
 
     An O(1) read (Req 9.7) served EXCLUSIVELY from the durable ``SEC_*``
-    ``metrics_daily`` keys (via the shared Metric_Store) — failed logins, admin
+    ``metrics_daily`` keys (via the shared Metric_Store) - failed logins, admin
     logins, authz denials, rate-limit hits, and suspicious/blocked requests over
     a trailing-24h window (approximated as the last two UTC days of daily
     aggregates; see :class:`~app.admin.security_metrics.SecurityMetricsService`).
@@ -371,7 +371,7 @@ async def get_admin_kpis(_admin: Principal = Depends(require_admin_read)) -> Ove
 
     An O(1) read served from the ``_TOTALS_DAY`` snapshot, durable ``AI_CALLS`` /
     ``REQUEST_*`` keys, a single day-bounded live signups count, and the in-process
-    purge-backlog gauge — never a full-table scan. Each KPI is computed in
+    purge-backlog gauge - never a full-table scan. Each KPI is computed in
     isolation, so a source that cannot be computed is returned as an explicit
     ``unavailable`` card while the rest still return (Req 13.7). All day/window
     boundaries are UTC (Req 13.3). ``require_admin_read`` enforces the kill-switch,
@@ -404,7 +404,7 @@ async def get_feature_usage(
 
     An O(1) read (Req 16.5) served from the durable ``FEAT_*`` ``metrics_daily``
     keys via the shared Metric_Store. Returns zero-filled daily series per
-    tracked feature — aggregate totals only, no user-level data (Req 16.6).
+    tracked feature - aggregate totals only, no user-level data (Req 16.6).
 
     ``window`` must be one of the fixed dashboard windows {7, 30, 90} (default
     30 when omitted); any other value is rejected with a 400 ``invalid_window``
@@ -497,7 +497,7 @@ async def get_user_detail(
     activity = await repo.user_activity(user_id)
     recent = await repo.recent_audit_for_target(user_id, limit=20)
 
-    # Audit the sensitive cross-user read (R5.3) — traceable admin access.
+    # Audit the sensitive cross-user read (R5.3) - traceable admin access.
     await get_audit_service().record(
         AuditEvent.ADMIN_USER_VIEWED,
         actor_user_id=admin.user_id,
@@ -547,7 +547,7 @@ async def patch_user(
     rid = getattr(request.state, "request_id", None)
     try:
         if payload.role is not None and payload.status is not None:
-            # Both fields → single atomic transaction (no partial apply, M2 fix).
+            # Both fields -> single atomic transaction (no partial apply, M2 fix).
             outcome = await svc.set_role_and_status(
                 actor_id=admin.user_id,
                 target_id=user_id,
@@ -741,7 +741,7 @@ async def list_audit(
 
 
 # ---------------------------------------------------------------------------
-# Maintenance actions (the ONLY writes here beyond user lifecycle) — Req 18
+# Maintenance actions (the ONLY writes here beyond user lifecycle) - Req 18
 #
 # Exactly four ``admin.manage`` POST actions, each of which only re-invokes an
 # existing single-flighted job/refresh. ``require_admin_manage`` applies the

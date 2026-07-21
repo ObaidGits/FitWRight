@@ -2,7 +2,7 @@
 
 Concrete recipes for the building blocks of a Swiss-style interface. Every component here uses tokens defined in [tokens.md](tokens.md).
 
-> Sibling docs: [tokens](tokens.md) · [layouts](layouts.md) · [anti-patterns](anti-patterns.md)
+> Sibling docs: [tokens](tokens.md) - [layouts](layouts.md) - [anti-patterns](anti-patterns.md)
 
 ---
 
@@ -39,7 +39,7 @@ Square corners, 2px black border, hard shadow, press-in hover.
 
 ### Don't
 
-- Don't add `transition` curves — Swiss style is binary, not animated
+- Don't add `transition` curves - Swiss style is binary, not animated
 - Don't use icons inside buttons unless absolutely necessary; if you do, use a single mono-colored icon, never decorative
 
 ---
@@ -60,7 +60,7 @@ Square corners, 2px black border, hard shadow, press-in hover.
 />
 ```
 
-- 1px black border (not 2px — inputs are denser)
+- 1px black border (not 2px - inputs are denser)
 - Focus state: 1px Hyper Blue ring, no glow
 - White background only (so they read as elevated against the canvas)
 
@@ -142,7 +142,7 @@ For the one or two most important cards on a page:
 ```
 
 - Centered, `max-w-md` by default (wider only if the form genuinely demands it)
-- Backdrop is `bg-black/30` — never blurred
+- Backdrop is `bg-black/30` - never blurred
 - The dialog itself is just a card with extra emphasis
 
 ---

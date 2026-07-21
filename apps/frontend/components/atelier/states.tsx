@@ -46,7 +46,7 @@ export function EmptyState({
 export function LoadingSkeleton({ rows = 3, className }: { rows?: number; className?: string }) {
   return (
     <div className={cn('space-y-3', className)} role="status" aria-busy="true" aria-live="polite">
-      <span className="sr-only">Loading…</span>
+      <span className="sr-only">Loading...</span>
       {Array.from({ length: rows }).map((_, i) => (
         <Skeleton key={i} className="h-16 w-full" />
       ))}

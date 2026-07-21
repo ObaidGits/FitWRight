@@ -1,10 +1,10 @@
-"""FeatureUsageService — daily per-feature aggregate totals (Req 16).
+"""FeatureUsageService - daily per-feature aggregate totals (Req 16).
 
 A read-only Product Analytics service that queries the shared Metric_Store for
 the 8 tracked feature-usage keys and returns a zero-filled daily series per
 feature over a validated window (7/30/90 days). Exposes ONLY daily aggregate
-totals — no user identity, funnel, cohort, retention, or session-level data
-(Req 16.6). All reads are O(1) bounded — one ``MetricStore.series()`` call per
+totals - no user identity, funnel, cohort, retention, or session-level data
+(Req 16.6). All reads are O(1) bounded - one ``MetricStore.series()`` call per
 fixed feature key (Req 16.5).
 
 Follows the singleton pattern (``get_feature_usage_service`` /

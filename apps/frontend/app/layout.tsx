@@ -43,11 +43,11 @@ const geist = Geist({
 
 export const metadata: Metadata = {
   // metadataBase makes every relative canonical/OG/Twitter URL resolve to an
-  // absolute, environment-correct URL — the foundation for correct indexing.
+  // absolute, environment-correct URL - the foundation for correct indexing.
   metadataBase: new URL(SITE_URL),
   title: {
-    default: `${SITE_NAME} — AI Resume Builder & Tailor`,
-    template: `%s · ${SITE_NAME}`,
+    default: `${SITE_NAME} - AI Resume Builder & Tailor`,
+    template: `%s - ${SITE_NAME}`,
   },
   description: SITE_DESCRIPTION,
   applicationName: SITE_NAME,
@@ -74,7 +74,7 @@ export const metadata: Metadata = {
   },
   verification: buildVerification(),
   openGraph: {
-    title: `${SITE_NAME} — AI Resume Builder & Tailor`,
+    title: `${SITE_NAME} - AI Resume Builder & Tailor`,
     description: SITE_DESCRIPTION,
     siteName: SITE_NAME,
     url: '/',
@@ -84,7 +84,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: `${SITE_NAME} — AI Resume Builder & Tailor`,
+    title: `${SITE_NAME} - AI Resume Builder & Tailor`,
     description: SITE_DESCRIPTION,
     images: [TWITTER_IMAGE],
   },
@@ -102,7 +102,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <ThemeScript />
       </head>
       <body className={`${geist.variable} ${spaceGrotesk.variable} antialiased min-h-full`}>
-        {/* Site-wide entity graph (Organization ⇄ WebSite ⇄ Person/founder)
+        {/* Site-wide entity graph (Organization <-> WebSite <-> Person/founder)
             for rich results and AI retrieval. Page-level schemas reference
             these nodes by @id, so the founder identity resolves on every page. */}
         <JsonLd data={[organizationSchema(), websiteSchema(), personSchema()]} />

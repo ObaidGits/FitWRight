@@ -11,7 +11,7 @@ description. Cards are drag-and-drop reorderable within and across columns.
 
 ## Columns (stable keys, decoupled from i18n labels)
 
-`saved` · `applied` · `no_response` · `response` · `interview` · `accepted` · `rejected`
+`saved` - `applied` - `no_response` - `response` - `interview` - `accepted` - `rejected`
 
 Auto-created cards from the tailor flow land in **`applied`**. Manual cards
 default to `applied` but can be created as `saved`.
@@ -20,7 +20,7 @@ default to `applied` but can be created as `saved`.
 
 1. **Auto-create:** `POST /resumes/improve/confirm` (and the legacy
    `POST /resumes/improve`) create an `applied` card after persisting the
-   tailored resume — best-effort (a tracker failure never breaks tailoring).
+   tailored resume - best-effort (a tracker failure never breaks tailoring).
    Company/role come from the cached keyword-extraction pass, so there is **no
    extra LLM call** on this path.
 2. **Manual add:** `POST /applications` creates the job from the pasted JD then
@@ -36,7 +36,7 @@ default to `applied` but can be created as `saved`.
 
 `Application` (SQLite, `apps/backend/app/models.py`): `application_id` (PK),
 `job_id`, `resume_id` (the applied/tailored resume), `master_resume_id`
-(optional base — powers the "shared resume" badge), `status` (7-key enum),
+(optional base - powers the "shared resume" badge), `status` (7-key enum),
 `company`, `role`, `applied_at`, `notes`, `position` (per-column order,
 server-renumbered on PATCH), `created_at`, `updated_at`. `create_application`
 dedupes on `(job_id, resume_id)` to survive double-submit.

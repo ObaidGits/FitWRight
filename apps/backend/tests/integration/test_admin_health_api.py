@@ -6,7 +6,7 @@ capability all apply. Mirrors the ``_client`` / ``_admin_client`` / ``_login``
 setup used by :mod:`tests.integration.test_admin_api` (reusing its helpers).
 
 Covers the ``require_admin_read`` authz matrix (anon 401, non-admin 403, admin
-200 — Req 15.1) and asserts the admin body carries the six subsystem tiles +
+200 - Req 15.1) and asserts the admin body carries the six subsystem tiles +
 secret-free release fields (Req 3.2 / 17.3, Property 3).
 """
 

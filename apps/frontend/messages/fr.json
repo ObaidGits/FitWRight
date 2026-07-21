@@ -468,7 +468,7 @@
       "outreachGenerateFailed": "Impossible de générer le message de contact : {error}",
       "interviewPrepGenerateFailed": "Impossible de générer la préparation d'entretien : {error}",
       "aiRequiresConnection": "La génération par IA nécessite une connexion internet. Reconnectez-vous et réessayez.",
-      "aiStreaming": "Génération par IA…",
+      "aiStreaming": "Génération par IA...",
       "draftQuarantined": "Un brouillon local enregistré était illisible et a été mis de côté pour protéger votre travail. Votre contenu actuel est en sécurité.",
       "storageDegraded": "Le stockage local est indisponible ; les modifications ne sont conservées qu'en mémoire pour cette session. Enregistrez sur le serveur pour ne pas les perdre.",
       "openRecoveryCenter": "Ouvrir le centre de récupération"
@@ -675,7 +675,7 @@
       "ollamaServerUrlPlaceholder": "http://localhost:11434",
       "reasoningEffortLabel": "Effort de raisonnement",
       "reasoningEffortAuto": "Automatique",
-      "reasoningEffortAutoDesc": "Ne pas envoyer reasoning_effort — valeur par défaut pour une compatibilité maximale",
+      "reasoningEffortAutoDesc": "Ne pas envoyer reasoning_effort - valeur par défaut pour une compatibilité maximale",
       "reasoningEffortMinimal": "Minimal",
       "reasoningEffortLow": "Faible",
       "reasoningEffortMedium": "Moyen",
@@ -872,7 +872,7 @@
     "validationError": "Certains champs nécessitent votre attention. Vérifiez les champs mis en évidence et réessayez.",
     "boundary": {
       "title": "Une erreur s'est produite",
-      "description": "Une erreur inattendue est survenue. Essayez de recharger la page — si le problème persiste, contactez-nous.",
+      "description": "Une erreur inattendue est survenue. Essayez de recharger la page - si le problème persiste, contactez-nous.",
       "tryAgain": "Réessayer",
       "reloadPage": "Recharger la page"
     }
@@ -901,7 +901,7 @@
     "title": "Assistant CV",
     "answerLabel": "Votre réponse",
     "keepAddingPrompt": "Que souhaitez-vous ajouter ou modifier ?",
-    "readyHint": "Vous avez suffisamment pour un CV solide — vérifiez et terminez quand vous êtes prêt.",
+    "readyHint": "Vous avez suffisamment pour un CV solide - vérifiez et terminez quand vous êtes prêt.",
     "sections": {
       "intro": "Démarrage",
       "contact": "Coordonnées",
@@ -987,7 +987,7 @@
       "jobDescription": "Fiche de poste",
       "noJobDescription": "Aucune fiche de poste enregistrée.",
       "notes": "Notes",
-      "notesPlaceholder": "Ajoutez des notes sur cette candidature…",
+      "notesPlaceholder": "Ajoutez des notes sur cette candidature...",
       "saveNotes": "Enregistrer les notes",
       "resumeUnavailable": "Le CV soumis n'est plus disponible.",
       "loadFailed": "Impossible de charger cette candidature.",
@@ -995,7 +995,7 @@
     },
     "bulk": {
       "selected": "{count} sélectionné(s)",
-      "moveTo": "Déplacer vers…",
+      "moveTo": "Déplacer vers...",
       "clear": "Effacer",
       "deleteConfirmTitle": "Supprimer les candidatures ?",
       "deleteConfirmDescription": "Supprimer {count} candidature(s) sélectionnée(s) ? Cette action est irréversible."
@@ -1006,7 +1006,7 @@
       "resume": "CV",
       "untitledResume": "CV sans titre",
       "jobDescription": "Fiche de poste",
-      "jobDescriptionPlaceholder": "Collez la fiche de poste ici…",
+      "jobDescriptionPlaceholder": "Collez la fiche de poste ici...",
       "company": "Entreprise",
       "role": "Poste",
       "optional": "Optionnel",

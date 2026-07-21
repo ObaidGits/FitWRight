@@ -24,7 +24,7 @@ const data: ResumeData = {
   sectionMeta: [],
 };
 
-describe('ResumeDocument — WYSIWYG page surface', () => {
+describe('ResumeDocument - WYSIWYG page surface', () => {
   it('renders the unified resume content on a real page surface', () => {
     render(<ResumeDocument data={data} settings={DEFAULT_TEMPLATE_SETTINGS} />);
     // The canonical renderer output is present (name shows on the page).

@@ -35,7 +35,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
     title,
     description: t.description,
     alternates: { canonical: `/templates/${t.id}` },
-    openGraph: { title: `${title} — FitWright`, description: t.description, type: 'article' },
+    openGraph: { title: `${title} - FitWright`, description: t.description, type: 'article' },
   };
 }
 

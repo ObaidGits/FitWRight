@@ -1,9 +1,9 @@
-"""Idempotent one-time importer: legacy TinyDB ``database.json`` → SQLite.
+"""Idempotent one-time importer: legacy TinyDB ``database.json`` -> SQLite.
 
 Safe to run repeatedly and on every startup:
-- no legacy file present  → no-op;
-- SQLite already has rows  → skip (assume already migrated);
-- otherwise               → copy resumes/jobs/improvements 1:1 (preserving
+- no legacy file present  -> no-op;
+- SQLite already has rows  -> skip (assume already migrated);
+- otherwise               -> copy resumes/jobs/improvements 1:1 (preserving
   primary keys and timestamps), enforce the single-master invariant, then
   rename the legacy file to ``database.json.migrated`` as a rollback artifact.
 
@@ -41,7 +41,7 @@ async def migrate(database: Database | None = None) -> dict[str, Any]:
     if not legacy.exists():
         return {"status": "no_legacy_file"}
 
-    # System-level, pre-multi-user existence check (intentionally unscoped —
+    # System-level, pre-multi-user existence check (intentionally unscoped -
     # this one-time importer runs before any owner exists; ``app/scripts`` is
     # excluded from the user-scoping guard for exactly this reason).
     async with database._session() as session:
@@ -54,7 +54,7 @@ async def migrate(database: Database | None = None) -> dict[str, Any]:
         logger.info("SQLite already populated; skipping TinyDB import.")
         return {"status": "already_populated"}
 
-    # Gated import — tinydb is only needed for this one-time migration.
+    # Gated import - tinydb is only needed for this one-time migration.
     from tinydb import TinyDB
 
     tdb = TinyDB(legacy)
@@ -137,7 +137,7 @@ async def migrate(database: Database | None = None) -> dict[str, Any]:
         "jobs": len(jobs),
         "improvements": len(improvements),
     }
-    logger.info("TinyDB → SQLite import complete: %s", summary)
+    logger.info("TinyDB -> SQLite import complete: %s", summary)
     return summary
 
 

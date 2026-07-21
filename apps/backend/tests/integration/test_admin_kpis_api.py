@@ -6,11 +6,11 @@ capability all apply. Reuses the ``_client`` / ``_admin_client`` / ``_seed`` /
 ``hosted`` harness from :mod:`tests.integration.test_admin_api`.
 
 Covers the ``require_admin_read`` authz matrix (anon 401, non-admin 403, admin
-200 — Req 15.1) with a secret-free ``OverviewKpis`` body (Property 3 / Req 15.8):
+200 - Req 15.1) with a secret-free ``OverviewKpis`` body (Property 3 / Req 15.8):
 all five KPI cards present as ``{value?, unavailable}``, plus ``computedAt`` and
 ``stale``. Each KPI is computed in isolation, so on a fresh store the response is
 still well-formed (each card either a value or an explicit ``unavailable`` marker
-— Req 13.7).
+- Req 13.7).
 
 Requirements: 15.1, 15.8.
 """

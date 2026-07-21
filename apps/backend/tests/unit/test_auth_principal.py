@@ -1,6 +1,6 @@
 """Unit tests for Principal, RBAC, deps, cookies, and middleware (Task 2.3).
 
-Covers the role→capability map, the ``Principal`` object + step-up window, the
+Covers the role->capability map, the ``Principal`` object + step-up window, the
 FastAPI deps (401/403/step_up_required), the hardened ``__Host-`` / csrf cookie
 attributes, the security-headers middleware, the per-session CSRF gate in
 ``AuthMiddleware``, and the ``GET /auth/csrf`` pre-session endpoint.
@@ -321,7 +321,7 @@ class TestAuthMiddlewareCsrf:
         assert resp.status_code == 200
 
     def test_anonymous_mutation_passes_middleware(self, app_and_secret):
-        # No session → no principal → CSRF gate does not apply here (route-level
+        # No session -> no principal -> CSRF gate does not apply here (route-level
         # auth would 401 in a real endpoint); middleware must not 403 anon.
         app, _ = app_and_secret
         client = TestClient(app)

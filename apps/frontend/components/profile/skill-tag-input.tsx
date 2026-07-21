@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Skill tag input — chips + autocomplete over the Canonical Skill Engine.
+ * Skill tag input - chips + autocomplete over the Canonical Skill Engine.
  *
  * Replaces free-text comma lists with a proper token editor: existing skills
  * render as removable chips, typing queries the backend skill autocomplete
@@ -125,7 +125,7 @@ export function SkillTagInput({
           <Input
             id={id}
             value={draft}
-            placeholder={values.length === 0 ? placeholder : 'Add…'}
+            placeholder={values.length === 0 ? placeholder : 'Add...'}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={onKeyDown}
             onBlur={() => setTimeout(() => setOpen(false), 120)}

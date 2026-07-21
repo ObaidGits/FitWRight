@@ -7,7 +7,7 @@ rate-limit/capability all apply. Mirrors the ``_client`` / ``_admin_client`` /
 helpers), matching the shape of :mod:`tests.integration.test_admin_health_api`.
 
 Covers the ``require_admin_read`` authz matrix (anon 401, non-admin 403, admin
-200 — Req 15.1) and asserts the admin body carries the jobs array + the queue/
+200 - Req 15.1) and asserts the admin body carries the jobs array + the queue/
 purge-backlog gauge fields + ``computedAt``, and that it is secret-free
 (Req 15.8 / Property 3).
 """

@@ -1,8 +1,8 @@
 """Unit tests for the observability + product-analytics response models (Task 5.1).
 
 Property 3 (Req 15.7 / 10.4 / 17.3): *No content or secret ever leaves the new
-surface.* Every one of the eleven new response models — plus their shared
-submodels — must serialize to a body that passes ``assert_no_forbidden_fields``
+surface.* Every one of the eleven new response models - plus their shared
+submodels - must serialize to a body that passes ``assert_no_forbidden_fields``
 (zero forbidden substrings) and must be strict (``extra="forbid"``) so a widened
 model can never silently ride a new column/secret into an admin response.
 
@@ -195,7 +195,7 @@ def _config_diagnostics() -> ConfigDiagnostics:
         gracePeriodDays=30,
         killSwitches={"ai": False, "signups": False},
         versions={"backend": "1.2.3", "alembic": "0021"},
-        # Presence booleans ONLY — keys deliberately avoid forbidden substrings.
+        # Presence booleans ONLY - keys deliberately avoid forbidden substrings.
         configured={"aiConfigured": True, "smtpConfigured": True, "oauthConfigured": False},
         computedAt=_TS,
     )
@@ -266,7 +266,7 @@ class TestObservabilityModelsAreSecretFree:
     def test_model_dump_passes_forbidden_field_guard(self, name):
         instance = _MODEL_BUILDERS[name]()
         payload = instance.model_dump(by_alias=True)
-        # Must not raise — a raise means a forbidden (secret) key leaked.
+        # Must not raise - a raise means a forbidden (secret) key leaked.
         assert_no_forbidden_fields(payload)
 
     def test_all_eleven_models_covered(self):

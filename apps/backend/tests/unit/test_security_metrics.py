@@ -2,17 +2,17 @@
 
 Two units under test, both in :mod:`app.admin.security_metrics`:
 
-- :class:`SecurityMetricsService` — the request-path read model whose ``view()``
+- :class:`SecurityMetricsService` - the request-path read model whose ``view()``
   assembles a :class:`~app.admin.schemas.SecurityView` from the durable ``SEC_*``
   ``metrics_daily`` keys via an injected :class:`~app.admin.metric_store.MetricStore`.
-- :class:`SecurityAggregateStep` — the rollup-time step that reads a day's
+- :class:`SecurityAggregateStep` - the rollup-time step that reads a day's
   ``SEC_*`` counts from :meth:`AdminRepo.security_daily` and UPSERTs each into the
   store, with per-day + per-key failure isolation over a bounded lookback window.
 
 The headline guarantee (Req 9.6/9.7/15.4) is that the **request path never scans
-``audit_log``**. We prove it two ways: *structurally* — the service holds only a
+``audit_log``**. We prove it two ways: *structurally* - the service holds only a
 ``MetricStore`` (no repo / session), so it has nothing through which it *could*
-reach ``audit_log`` — and *behaviourally* — a spy store shows ``view()`` issues
+reach ``audit_log`` - and *behaviourally* - a spy store shows ``view()`` issues
 exactly five ``MetricStore.sum`` reads and touches no other store method, a fixed
 O(1) cost independent of how many days/rows are seeded.
 
@@ -75,7 +75,7 @@ class _CountingStore:
 
     Delegates ``sum`` / ``upsert`` to the wrapped real store (so returned data is
     real) while tallying each call. ``series`` / ``snapshot_get`` / ``snapshot_put``
-    are present so we can assert ``view()`` *never* touches them — a request-path
+    are present so we can assert ``view()`` *never* touches them - a request-path
     read that only sums indexed aggregates and never scans anything.
     """
 
@@ -167,7 +167,7 @@ async def _seed_day(store: MetricStore, day: str, values: dict[str, int]) -> Non
 
 
 # ===========================================================================
-# 1. view() aggregates vs baseline (Req 9.3) — two-day sum, out-of-window excluded
+# 1. view() aggregates vs baseline (Req 9.3) - two-day sum, out-of-window excluded
 # ===========================================================================
 
 
@@ -185,7 +185,7 @@ class TestViewAggregates:
             SEC_LOGIN_FAILED: 10, SEC_ADMIN_LOGIN: 2, SEC_AUTHZ_DENIED: 1,
             SEC_RATE_LIMITED: 0, SEC_SUSPICIOUS: 6,
         })
-        # OUTSIDE the two-day window (two days ago) — must be excluded entirely.
+        # OUTSIDE the two-day window (two days ago) - must be excluded entirely.
         await _seed_day(store, _day(2), {
             SEC_LOGIN_FAILED: 100, SEC_ADMIN_LOGIN: 100, SEC_AUTHZ_DENIED: 100,
             SEC_RATE_LIMITED: 100, SEC_SUSPICIOUS: 100,
@@ -202,7 +202,7 @@ class TestViewAggregates:
         assert isinstance(view, SecurityView)
         # Honesty guard (audit fix): rate-limited + suspicious have no durable
         # source, so they are surfaced as explicitly not-instrumented rather than
-        # a misleading 0 — never silently return a fabricated zero.
+        # a misleading 0 - never silently return a fabricated zero.
         assert set(view.notInstrumented) == {"rateLimited", "suspicious"}
 
     async def test_view_counts_are_non_negative_and_window_fixed(self, isolated_db):
@@ -218,7 +218,7 @@ class TestViewAggregates:
 
 
 # ===========================================================================
-# 2. Zero-data (Req 9.5) — empty store → all-zero counts, no error, no fallback
+# 2. Zero-data (Req 9.5) - empty store -> all-zero counts, no error, no fallback
 # ===========================================================================
 
 
@@ -237,7 +237,7 @@ class TestZeroData:
 
 
 # ===========================================================================
-# 3. No audit_log scan on the request path (Req 9.6 / 9.7 / 15.4) — CRITICAL
+# 3. No audit_log scan on the request path (Req 9.6 / 9.7 / 15.4) - CRITICAL
 # ===========================================================================
 
 
@@ -245,8 +245,8 @@ class TestNoAuditLogScan:
     """Validates: Requirements 9.6, 9.7, 15.4"""
 
     def test_service_structurally_holds_only_a_store(self, isolated_db):
-        # Structural proof: the service owns ONLY a MetricStore — no repo, no
-        # session/session_factory — so there is nothing through which it could
+        # Structural proof: the service owns ONLY a MetricStore - no repo, no
+        # session/session_factory - so there is nothing through which it could
         # reach audit_log on the request path.
         service = _service(_store(isolated_db))
         attrs = vars(service)
@@ -283,7 +283,7 @@ class TestNoAuditLogScan:
 
 
 # ===========================================================================
-# 4. O(1) independent of row count (Req 9.7) — fixed 5 reads, any data volume
+# 4. O(1) independent of row count (Req 9.7) - fixed 5 reads, any data volume
 # ===========================================================================
 
 
@@ -329,7 +329,7 @@ class TestSecretFree:
 
 
 # ===========================================================================
-# 6. SecurityAggregateStep — aggregates the lookback window + idempotent (Req 9.1)
+# 6. SecurityAggregateStep - aggregates the lookback window + idempotent (Req 9.1)
 # ===========================================================================
 
 
@@ -367,14 +367,14 @@ class TestAggregateStep:
         await step.run(_day(1))  # re-run the same closed day
         second = await store.sum([SEC_LOGIN_FAILED], _day(1), _day(1))
 
-        # UPSERT of an absolute value → re-running recomputes the same count, not
+        # UPSERT of an absolute value -> re-running recomputes the same count, not
         # a doubled one (idempotent per closed day).
         assert first == self._COUNTS[SEC_LOGIN_FAILED]
         assert second == first
 
 
 # ===========================================================================
-# 7. SecurityAggregateStep — failure isolation / preserve-last (Req 9.2)
+# 7. SecurityAggregateStep - failure isolation / preserve-last (Req 9.2)
 # ===========================================================================
 
 
@@ -389,7 +389,7 @@ class TestAggregateStepFailureIsolation:
     async def test_repo_failure_preserves_that_day_and_processes_others(self, isolated_db):
         store = _store(isolated_db)
         fail_day = _day(1)  # the just-closed day's read will raise
-        # Pre-seed a known good value on the failing day — it must be preserved.
+        # Pre-seed a known good value on the failing day - it must be preserved.
         await store.upsert(fail_day, SEC_LOGIN_FAILED, 42)
 
         repo = _FailingDayRepo(self._COUNTS, fail_day=fail_day)
@@ -410,7 +410,7 @@ class TestAggregateStepFailureIsolation:
     async def test_per_key_upsert_failure_preserves_that_key_only(self, isolated_db):
         real = _store(isolated_db)
         day = _day(1)
-        # Pre-seed the key whose upsert will fail — its value must survive.
+        # Pre-seed the key whose upsert will fail - its value must survive.
         await real.upsert(day, SEC_AUTHZ_DENIED, 99)
 
         failing = _FailingKeyStore(real, fail_key=SEC_AUTHZ_DENIED)

@@ -1,8 +1,8 @@
 /**
- * Version-history API (P3 §A, Requirements 1–3) — wired to the real backend.
+ * Version-history API (P3 §A, Requirements 1-3) - wired to the real backend.
  *
- * Snapshots are captured server-side on meaningful changes (initial parse →
- * `original`, accepted AI generation → `ai`, manual save → `manual`) with
+ * Snapshots are captured server-side on meaningful changes (initial parse ->
+ * `original`, accepted AI generation -> `ai`, manual save -> `manual`) with
  * content-hash dedupe, gzip storage, and a per-resume cap. This module exposes
  * the typed operations the `VersionHistoryPanel` (and future diff viewer) use:
  * list metadata, fetch one snapshot's data on demand, restore (non-destructive),
@@ -107,7 +107,7 @@ export interface HistoryApi {
 export async function listVersions(resumeId: string, cursor?: string): Promise<ResumeVersion[]> {
   const qs = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
   const res = await apiFetch(`/resumes/${resumeId}/versions${qs}`, { credentials: 'include' });
-  // Feature flag off / no resume → treat as no history rather than an error.
+  // Feature flag off / no resume -> treat as no history rather than an error.
   if (res.status === 404) return [];
   const body = await asJson<RawVersionList>(res, 'Failed to load version history');
   return body.items.map(mapVersion);

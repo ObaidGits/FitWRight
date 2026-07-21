@@ -1,6 +1,6 @@
 """add nullable user_id to owned tables + indexes
 
-Adds a nullable ``user_id`` column (FK → users.id, ON DELETE CASCADE) and a
+Adds a nullable ``user_id`` column (FK -> users.id, ON DELETE CASCADE) and a
 ``ix_<table>_user_id`` index to every owned table: resumes, jobs, improvements,
 applications, and api_keys. Nullable now so the online add is non-blocking and
 existing rows stay valid; migration 0004 backfills the bootstrap owner and 0005

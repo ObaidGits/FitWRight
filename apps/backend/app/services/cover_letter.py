@@ -23,7 +23,7 @@ def _resolve_feature_prompt(
     Returns ``(template, is_custom)``. If the stored custom prompt is
     empty or absent, returns the default template. The ``is_custom`` flag
     lets callers decide whether to fall back to the default on a format
-    failure (defensive — save-time validation should have caught a
+    failure (defensive - save-time validation should have caught a
     malformed custom prompt).
     """
     stored = load_config_file()
@@ -176,18 +176,18 @@ def compose_resume_title(
 ) -> str:
     """Compose a concise, human-readable resume title.
 
-    Produces ``"<Name> — <Role @ Company>"`` when a candidate name is known,
+    Produces ``"<Name> - <Role @ Company>"`` when a candidate name is known,
     otherwise falls back to just the role/company fragment. The result is
     always a short single line (never a sentence/paragraph).
     """
     role = _clean_title_fragment(role_and_company)
     name = _clean_title_fragment(candidate_name or "", max_len=40)
     if name and role:
-        return f"{name} — {role}"[:80]
+        return f"{name} - {role}"[:80]
     if role:
         return role[:80]
     if name:
-        return f"{name} — Resume"[:80]
+        return f"{name} - Resume"[:80]
     return "Tailored resume"
 
 
@@ -202,10 +202,10 @@ async def generate_resume_title(
         job_description: Target job description text
         language: Output language code (en, es, zh, ja)
         candidate_name: The candidate's name (from resume personalInfo). When
-            provided, the title is composed as ``"<Name> — <Role @ Company>"``.
+            provided, the title is composed as ``"<Name> - <Role @ Company>"``.
 
     Returns:
-        Generated title like "Jane Doe — Senior Frontend Engineer @ Stripe"
+        Generated title like "Jane Doe - Senior Frontend Engineer @ Stripe"
         (or "Senior Frontend Engineer @ Stripe" when the name is unknown).
     """
     output_language = get_language_name(language)

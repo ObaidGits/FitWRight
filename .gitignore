@@ -57,7 +57,7 @@ apps/backend/data/config.json
 .cursor/
 .cursorrules
 
-# Claude Code — personal AI workflow, never tracked
+# Claude Code - personal AI workflow, never tracked
 .claude/
 skills-lock.json
 
@@ -75,7 +75,7 @@ AGENTS.md
 GEMINI.md
 CODEX.md
 
-# Local-only deploy notes (contain real secrets — never commit)
+# Local-only deploy notes (contain real secrets - never commit)
 HEROKU_DEPLOY_INSTRUCTIONS.md
 
 .DS_Store
@@ -129,7 +129,7 @@ next-env.d.ts
 config.json
 **/config.json
 
-# Agentic E2E monitor — runtime evidence bundles (local only)
+# Agentic E2E monitor - runtime evidence bundles (local only)
 /artifacts/
 
 # Kiro spec/workflow files (local only, not tracked)

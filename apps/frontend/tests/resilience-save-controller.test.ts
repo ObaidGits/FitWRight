@@ -91,7 +91,7 @@ describe('SaveController', () => {
     await vi.advanceTimersByTimeAsync(1000); // starts first save (in-flight)
     expect(save).toHaveBeenCalledTimes(1);
 
-    // Edits arrive while in-flight → coalesced into a single trailing save.
+    // Edits arrive while in-flight -> coalesced into a single trailing save.
     controller.update({ summary: 'second' });
     controller.update({ summary: 'third' });
     await vi.advanceTimersByTimeAsync(1000);
@@ -130,7 +130,7 @@ describe('SaveController', () => {
     // Simulate the outbox drain persisting this exact content externally.
     controller.noteExternalSave(2, { summary: 'queued offline' });
     await vi.advanceTimersByTimeAsync(1000);
-    // The pending flush sees identical content already saved → no network call.
+    // The pending flush sees identical content already saved -> no network call.
     expect(save).not.toHaveBeenCalled();
     expect(controller.getState().baseVersion).toBe(2);
   });

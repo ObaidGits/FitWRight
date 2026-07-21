@@ -32,7 +32,7 @@ jobs:
           python-version: "3.13"
       - name: Sync dependencies
         # `uv.lock` is not committed (see .gitignore), so `--frozen` cannot be
-        # used here — uv resolves from the pinned versions in pyproject.toml.
+        # used here - uv resolves from the pinned versions in pyproject.toml.
         run: uv sync --extra dev
       - name: Run backend test suite
         # LLM evals are excluded via pyproject addopts (`-m "not eval"`). The
@@ -57,7 +57,7 @@ jobs:
       - name: Install dependencies
         # `npm install` (not `npm ci`) so platform-specific optional deps
         # (sharp's @emnapi/*) resolve correctly regardless of the runner's npm
-        # version — the same approach the Dockerfile uses. Keeps CI reliable.
+        # version - the same approach the Dockerfile uses. Keeps CI reliable.
         run: npm install --no-audit --no-fund
       - name: Lint
         run: npm run lint
@@ -69,8 +69,8 @@ jobs:
           NEXT_TELEMETRY_DISABLED: "1"
 
   # Auto-deploy the container to Heroku on green pushes to main only.
-  # Requires the repository secret HEROKU_API_KEY (Heroku account → Account
-  # settings → API Key). Never runs on pull requests or forks (no secrets).
+  # Requires the repository secret HEROKU_API_KEY (Heroku account -> Account
+  # settings -> API Key). Never runs on pull requests or forks (no secrets).
   deploy:
     needs: [backend, frontend]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -82,10 +82,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Guard — HEROKU_API_KEY must be set
+      - name: Guard - HEROKU_API_KEY must be set
         run: |
           if [ -z "${HEROKU_API_KEY}" ]; then
-            echo "::error::HEROKU_API_KEY secret is not set. Add it in repo Settings → Secrets → Actions."
+            echo "::error::HEROKU_API_KEY secret is not set. Add it in repo Settings -> Secrets -> Actions."
             exit 1
           fi
 

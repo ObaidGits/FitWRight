@@ -468,7 +468,7 @@
       "outreachGenerateFailed": "No se pudo generar el mensaje de contacto: {error}",
       "interviewPrepGenerateFailed": "No se pudo generar la preparación de entrevista: {error}",
       "aiRequiresConnection": "La generación con IA necesita conexión a internet. Reconéctate e inténtalo de nuevo.",
-      "aiStreaming": "Generando con IA…",
+      "aiStreaming": "Generando con IA...",
       "draftQuarantined": "Un borrador local guardado no se pudo leer y se apartó para proteger tu trabajo. Tu contenido actual está a salvo.",
       "storageDegraded": "El almacenamiento local no está disponible, así que los cambios se guardan solo en memoria durante esta sesión. Guarda en el servidor para no perderlos.",
       "openRecoveryCenter": "Abrir centro de recuperación"
@@ -675,7 +675,7 @@
       "ollamaServerUrlPlaceholder": "http://localhost:11434",
       "reasoningEffortLabel": "Esfuerzo de razonamiento",
       "reasoningEffortAuto": "Automático",
-      "reasoningEffortAutoDesc": "No enviar reasoning_effort — valor por defecto para máxima compatibilidad",
+      "reasoningEffortAutoDesc": "No enviar reasoning_effort - valor por defecto para máxima compatibilidad",
       "reasoningEffortMinimal": "Mínimo",
       "reasoningEffortLow": "Bajo",
       "reasoningEffortMedium": "Medio",
@@ -872,7 +872,7 @@
     "validationError": "Algunos campos necesitan atención. Revisa los campos marcados e inténtalo de nuevo.",
     "boundary": {
       "title": "Algo salió mal",
-      "description": "Algo inesperado se rompió. Intenta recargar la página — si sigue ocurriendo, avísanos.",
+      "description": "Algo inesperado se rompió. Intenta recargar la página - si sigue ocurriendo, avísanos.",
       "tryAgain": "Reintentar",
       "reloadPage": "Recargar página"
     }
@@ -987,7 +987,7 @@
       "jobDescription": "Descripción del empleo",
       "noJobDescription": "No hay descripción del empleo.",
       "notes": "Notas",
-      "notesPlaceholder": "Añade notas sobre esta candidatura…",
+      "notesPlaceholder": "Añade notas sobre esta candidatura...",
       "saveNotes": "Guardar notas",
       "resumeUnavailable": "El currículum enviado ya no está disponible.",
       "loadFailed": "No se pudo cargar esta candidatura.",
@@ -995,7 +995,7 @@
     },
     "bulk": {
       "selected": "{count} seleccionadas",
-      "moveTo": "Mover a…",
+      "moveTo": "Mover a...",
       "clear": "Limpiar",
       "deleteConfirmTitle": "¿Eliminar candidaturas?",
       "deleteConfirmDescription": "¿Eliminar {count} candidatura(s) seleccionada(s)? Esto no se puede deshacer."
@@ -1006,7 +1006,7 @@
       "resume": "Currículum",
       "untitledResume": "Currículum sin título",
       "jobDescription": "Descripción del empleo",
-      "jobDescriptionPlaceholder": "Pega aquí la descripción del empleo…",
+      "jobDescriptionPlaceholder": "Pega aquí la descripción del empleo...",
       "company": "Empresa",
       "role": "Puesto",
       "optional": "Opcional",

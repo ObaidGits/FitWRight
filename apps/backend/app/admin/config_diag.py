@@ -7,7 +7,7 @@ maintenance-mode state, ``SCHEDULER_MODE``, the delete grace period, the
 kill-switch states, and the version identifiers.
 
 **Strictly read-only (Req 10.3 / 21.7).** This service exposes exactly one
-method — ``diagnostics()`` — and offers NO create/update/delete/toggle operation.
+method - ``diagnostics()`` - and offers NO create/update/delete/toggle operation.
 It only reads ``app.config.settings`` and ``app.__version__``; it never writes.
 
 **Secret-free (Req 10.4 / 10.5).** No secret or credential value is ever placed
@@ -16,7 +16,7 @@ indicator in ``configured`` whose *key* deliberately avoids every
 :data:`~app.admin.schemas.FORBIDDEN_SUBSTRINGS` entry (so, e.g., the session
 signing secret is reported as ``sessionSigningConfigured``, the ip-hash HMAC key
 as ``ipHmacConfigured``, the internal job token as ``internalJobAuthConfigured``)
-— no secret name or value ever serializes, and the model passes
+- no secret name or value ever serializes, and the model passes
 ``assert_no_forbidden_fields``.
 
 **Bounded-context purity (Req 19.2/19.3/19.5).** This Domain_Metrics_Service
@@ -56,7 +56,7 @@ class ConfigService:
         """Assemble the full diagnostics payload from settings + version.
 
         Every field is derived from ``app.config.settings`` (plus
-        ``app.__version__``); no secret value is included — secrets appear only
+        ``app.__version__``); no secret value is included - secrets appear only
         as the boolean presence indicators in ``configured`` (Req 10.4).
         """
         return ConfigDiagnostics(
@@ -94,7 +94,7 @@ class ConfigService:
 
     @staticmethod
     def _active_ai_providers() -> list[str]:
-        """The active AI provider name(s) — names only, never keys (Req 10.4).
+        """The active AI provider name(s) - names only, never keys (Req 10.4).
 
         The backend selects a single default LLM provider via ``LLM_PROVIDER``
         (per-user provider keys live in the encrypted store and are intentionally
@@ -155,8 +155,8 @@ class ConfigService:
         """Maintenance-mode state.
 
         The current configuration has no maintenance-mode toggle (Task 8.2's
-        MaintenanceService triggers maintenance *actions* — re-running existing
-        jobs — not a platform-wide maintenance *mode*). There is therefore no
+        MaintenanceService triggers maintenance *actions* - re-running existing
+        jobs - not a platform-wide maintenance *mode*). There is therefore no
         honest signal to derive it from, so this reports ``False``. Documented
         gap: introduce a dedicated ``MAINTENANCE_MODE`` setting if/when a
         read-through maintenance state is added.
@@ -195,9 +195,9 @@ class ConfigService:
         """Presence booleans for each configured secret/credential (Req 10.4).
 
         Each entry is ``True`` when a non-empty value is configured and ``False``
-        otherwise. NO secret value is ever included — only the boolean. Keys are
+        otherwise. NO secret value is ever included - only the boolean. Keys are
         chosen to avoid every FORBIDDEN_SUBSTRINGS entry (``secret``/``token``/
-        ``hash``/``apikey``/``credential``/…), which is why they read
+        ``hash``/``apikey``/``credential``/...), which is why they read
         ``sessionSigningConfigured`` / ``ipHmacConfigured`` /
         ``internalJobAuthConfigured`` rather than the raw secret names.
         """

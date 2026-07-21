@@ -4,7 +4,7 @@ Counters/gauges backing the design's alerts:
 - ``stream_first_token_ms`` (histogram-ish: sum+count for a mean), ``stream_*_total``,
   ``stream_active_gauge`` (per snapshot), ``stream_reaped_total`` (abandoned-stream
   reaper signal), ``stream_tokens_total`` (cost accounting, R1.7);
-- ``autosave_conflict_total`` (409 rate — concurrent-edit signal);
+- ``autosave_conflict_total`` (409 rate - concurrent-edit signal);
 - ``autosave_idempotent_replay_total`` (dedupe working).
 
 Gauges that are naturally point-in-time (active streams) are tracked with an

@@ -9,7 +9,7 @@ class FetchUrlRequest(BaseModel):
     """Fetch a job posting by URL for the tailor flow."""
 
     url: str = Field(min_length=1, max_length=2048)
-    # Opt-in AI cleanup (R15 — never auto-fires; cost-aware).
+    # Opt-in AI cleanup (R15 - never auto-fires; cost-aware).
     use_ai: bool = False
 
 

@@ -31,26 +31,26 @@ import { KEYWORDS } from '@/lib/seo/page-keywords';
 import { profilePageSchema, breadcrumbSchema } from '@/lib/seo/structured-data';
 
 export const metadata: Metadata = buildMetadata({
-  title: 'Connect — Ideas, feedback & collaboration',
+  title: 'Connect - Ideas, feedback & collaboration',
   description:
     'Connect with the developer behind FitWright. Share feedback, report a bug, request a feature, leave a review, or start a collaboration. I read and reply to every message.',
   path: '/connect',
   keywords: KEYWORDS.connect,
-  socialTitle: 'Connect with the developer · FitWright',
+  socialTitle: 'Connect with the developer - FitWright',
 });
 
 const CHANNELS = [
   {
     icon: Linkedin,
     label: 'LinkedIn',
-    desc: 'Professional network — roles, intros, and opportunities.',
+    desc: 'Professional network - roles, intros, and opportunities.',
     href: 'https://www.linkedin.com/in/obaidullah-zeeshan/',
     external: true,
   },
   {
     icon: Github,
     label: 'GitHub',
-    desc: 'Code, open source, and this project’s source.',
+    desc: "Code, open source, and this project's source.",
     href: 'https://github.com/ObaidGits',
     external: true,
   },
@@ -95,12 +95,12 @@ const COLLAB = [
 
 const FAQ = [
   {
-    q: 'What’s the best reason to reach out?',
-    a: 'Roles and collaborations, product feedback, bug reports, and feature ideas are all welcome — and genuinely read.',
+    q: "What's the best reason to reach out?",
+    a: 'Roles and collaborations, product feedback, bug reports, and feature ideas are all welcome - and genuinely read.',
   },
   {
     q: 'How fast will I hear back?',
-    a: 'Usually within 1–2 business days. If it’s time-sensitive, say so in the message and I’ll prioritize it.',
+    a: "Usually within 1-2 business days. If it's time-sensitive, say so in the message and I'll prioritize it.",
   },
   {
     q: 'Which channel should I use?',
@@ -162,7 +162,7 @@ export default function ConnectPage() {
             </span>
           </h1>
           <p className="mt-5 max-w-xl text-lg text-[var(--muted-foreground)]">
-            I’m Obaidullah — the engineer behind FitWright. Ideas, feedback, bug reports, or a role
+            I'm Obaidullah - the engineer behind FitWright. Ideas, feedback, bug reports, or a role
             worth exploring: I read every message and reply thoughtfully. Your feedback genuinely
             shapes where this product goes next.
           </p>
@@ -183,8 +183,8 @@ export default function ConnectPage() {
               </div>
             </div>
             <div className="grid gap-3 sm:grid-cols-3 md:border-l md:border-[var(--border)] md:pl-6">
-              <Stat icon={Clock} label="Response time" value="~1–2 days" />
-              <Stat icon={MapPin} label="Working style" value="Remote · any TZ" />
+              <Stat icon={Clock} label="Response time" value="~1-2 days" />
+              <Stat icon={MapPin} label="Working style" value="Remote - any TZ" />
               <Stat icon={Brain} label="Current focus" value="AI-native products" />
             </div>
           </Card>
@@ -195,8 +195,8 @@ export default function ConnectPage() {
           <Reveal>
             <SectionHeading
               eyebrow="Ways to connect"
-              title="Pick whatever’s easiest"
-              sub="Every channel reaches me — choose the one that fits."
+              title="Pick whatever's easiest"
+              sub="Every channel reaches me - choose the one that fits."
             />
           </Reveal>
           <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -242,7 +242,7 @@ export default function ConnectPage() {
             <SectionHeading
               eyebrow="Feedback center"
               title="Tell me what you think"
-              sub="Send a message for anything — a bug, a feature idea, or a hello — or leave a quick review."
+              sub="Send a message for anything - a bug, a feature idea, or a hello - or leave a quick review."
             />
           </Reveal>
           <div className="mt-6 grid gap-6 lg:grid-cols-2 lg:items-start">
@@ -260,7 +260,7 @@ export default function ConnectPage() {
         <section className="mt-16" aria-labelledby="collab">
           <Reveal>
             <SectionHeading
-              eyebrow="Let’s build together"
+              eyebrow="Let's build together"
               title="Where I can help"
               sub="Open to freelance, full-time, research, and open-source collaboration."
             />
@@ -294,19 +294,19 @@ export default function ConnectPage() {
                 Why I built FitWright
               </h2>
               <p className="mt-3 max-w-2xl text-[var(--muted-foreground)]">
-                Job hunting shouldn’t mean rewriting your resume by hand for every role. I wanted a
-                tool that reshapes your real experience to fit each job — honestly, transparently,
+                Job hunting shouldn't mean rewriting your resume by hand for every role. I wanted a
+                tool that reshapes your real experience to fit each job - honestly, transparently,
                 and without inventing things. FitWright is my take on an AI-native product that
                 respects your data and your intelligence: bring your own key, see every change, own
                 your work.
               </p>
               <p className="mt-3 max-w-2xl text-[var(--muted-foreground)]">
-                It’s built in the open and improved continuously. If something feels off or could be
-                better, that feedback is a gift — tell me, and it shapes the roadmap.
+                It's built in the open and improved continuously. If something feels off or could be
+                better, that feedback is a gift - tell me, and it shapes the roadmap.
               </p>
               <p className="mt-5 inline-flex items-center gap-1.5 text-xs text-[var(--muted-foreground)]">
-                <ShieldCheck className="h-3.5 w-3.5 text-[var(--at-success)]" /> Privacy-first ·
-                open source · always improving
+                <ShieldCheck className="h-3.5 w-3.5 text-[var(--at-success)]" /> Privacy-first -
+                open source - always improving
               </p>
             </Card>
           </Reveal>

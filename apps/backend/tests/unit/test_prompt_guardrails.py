@@ -5,7 +5,7 @@ Two invariants this locks:
 2. The anti-fabrication clauses stay present. Per the truthfulness audit,
    invented bullet *narrative* (e.g. "led 12 engineers") is NOT caught by
    verify_diff_result (its metric regex misses bare counts) or verify_alignment
-   (which only checks skills/certs/companies) — so these prompt clauses are the
+   (which only checks skills/certs/companies) - so these prompt clauses are the
    ONLY guard. If a future edit drops them, this test fails loudly.
 """
 

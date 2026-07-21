@@ -1,8 +1,8 @@
-"""Resume version-history endpoints (P3 §A, Requirements 1–3).
+"""Resume version-history endpoints (P3 §A, Requirements 1-3).
 
 All routes are user-scoped (``get_effective_user_id``), parent-ownership checked
-(a foreign/absent resume → 404, no existence disclosure), and gated by the
-``VERSION_HISTORY`` feature flag (off → 404 ``version_history_disabled`` so the
+(a foreign/absent resume -> 404, no existence disclosure), and gated by the
+``VERSION_HISTORY`` feature flag (off -> 404 ``version_history_disabled`` so the
 feature can be dark-launched / killed without a redeploy). Snapshot payloads are
 metadata-only on the list; the (decompressed) data is fetched on demand.
 
@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/resumes", tags=["Version History"])
 
-# Map service error codes → HTTP status.
+# Map service error codes -> HTTP status.
 _STATUS = {"not_found": 404, "conflict": 409, "invalid": 422}
 
 
@@ -50,7 +50,7 @@ def _require_enabled() -> None:
 
 
 async def _require_owned_resume(user_id: str, resume_id: str) -> dict:
-    """Load the resume or 404 (parent-ownership check — R17.1)."""
+    """Load the resume or 404 (parent-ownership check - R17.1)."""
     resume = await db.get_resume(user_id, resume_id)
     if resume is None:
         raise HTTPException(status_code=404, detail="Resume not found")
@@ -147,7 +147,7 @@ async def restore_version(
     user_id: str = Depends(get_effective_user_id),
     _: None = Depends(_require_enabled),
 ) -> RestoreResponse:
-    """Non-destructively restore a snapshot (snapshot-current-first + CAS — R2.1/2.3)."""
+    """Non-destructively restore a snapshot (snapshot-current-first + CAS - R2.1/2.3)."""
     await _require_owned_resume(user_id, resume_id)
     try:
         updated = await version_service.restore_version(

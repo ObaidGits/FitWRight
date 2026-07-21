@@ -12,4 +12,4 @@ Requirements: 4+ years of product management experience in a SaaS environment; d
 ability to translate ambiguous business problems into clear product requirements; proficiency
 with analytics tools (Amplitude, Mixpanel, or Looker) and SQL for ad-hoc analysis; experience
 with A/B testing and experimentation frameworks; excellent written communication and stakeholder
-management skills. Technical background appreciated but not required — you will not write code.
+management skills. Technical background appreciated but not required - you will not write code.

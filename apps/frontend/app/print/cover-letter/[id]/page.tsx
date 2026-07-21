@@ -42,7 +42,7 @@ async function fetchCoverLetterData(
   resumeId: string,
   printToken?: string
 ): Promise<CoverLetterData> {
-  // See print/resumes/[id]/page.tsx — authenticate the server-side render with
+  // See print/resumes/[id]/page.tsx - authenticate the server-side render with
   // the short-lived print token (PDF export), or forward cookies (direct view).
   let url: string;
   const init: RequestInit = { cache: 'no-store' };

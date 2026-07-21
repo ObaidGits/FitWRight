@@ -4,7 +4,7 @@ import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 /**
- * Admin mutation hooks (Task 8.3) — the reversible status toggle must be
+ * Admin mutation hooks (Task 8.3) - the reversible status toggle must be
  * OPTIMISTIC with ROLLBACK (R10.4/R13.3): the cached user-list pages flip
  * immediately, and revert if the server rejects. Network layer is mocked.
  */
@@ -62,7 +62,7 @@ function statusOf(qc: QueryClient): string {
   return data.items[0].status;
 }
 
-describe('useSetUserStatus — optimistic + rollback', () => {
+describe('useSetUserStatus - optimistic + rollback', () => {
   beforeEach(() => vi.clearAllMocks());
   afterEach(() => vi.restoreAllMocks());
 

@@ -1,7 +1,7 @@
-"""Projection Engine — the sole ``ProfileData -> ResumeData`` boundary (ADR-6).
+"""Projection Engine - the sole ``ProfileData -> ResumeData`` boundary (ADR-6).
 
 Every resume produced from a profile funnels through
-:meth:`ProjectionEngine.project_resume`, so the profile→resume contract is
+:meth:`ProjectionEngine.project_resume`, so the profile->resume contract is
 enforced in exactly one place (templates/section ordering evolve here only).
 The projection is **pure** (no I/O) and deterministic, so it is trivially
 testable and safe to reuse for preview, persistence, and future portfolio/public
@@ -9,7 +9,7 @@ exports.
 
 Provenance stamping (ADR-9/10): each generated resume item carries the
 originating ``profileUid`` and the resume ``meta`` records
-``derivedFromProfileVersion`` so a later profile↔resume sync (P4) can refresh
+``derivedFromProfileVersion`` so a later profile<->resume sync (P4) can refresh
 only non-overridden items without breaking the immutable-snapshot invariant.
 """
 
@@ -80,7 +80,7 @@ class ProjectionEngine:
         - ``template`` (str): template id recorded in ``meta.template`` for the
           render engine to pick up.
         - ``sections`` (dict[str, bool]): per-section visibility override keyed by
-          the section ``key`` (e.g. ``{"education": False}``) — applied on top of
+          the section ``key`` (e.g. ``{"education": False}``) - applied on top of
           the profile's ``sectionMeta`` so a generated resume can hide sections
           without mutating the profile.
         - ``overrides`` (dict): resume-specific top-level overrides shallow-merged
@@ -145,7 +145,7 @@ class ProjectionEngine:
             for i, proj in enumerate(profile.personalProjects)
         ]
 
-        # Skills → additional{}. Technical + tools fold into technicalSkills.
+        # Skills -> additional{}. Technical + tools fold into technicalSkills.
         technical = cls._skill_names(profile.skills.technical) + cls._skill_names(
             profile.skills.tools
         )
@@ -161,7 +161,7 @@ class ProjectionEngine:
             a.title for a in profile.achievements if a.kind in ("award", "achievement") and a.title
         ]
         certifications_training = [
-            (f"{c.name} — {c.issuer}" if c.issuer else c.name)
+            (f"{c.name} - {c.issuer}" if c.issuer else c.name)
             for c in profile.certifications
             if c.name
         ]

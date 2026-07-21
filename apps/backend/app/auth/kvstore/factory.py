@@ -2,11 +2,11 @@
 
 ``KVSTORE_URL`` chooses the adapter with zero code change:
 
-- empty / ``local`` / ``memory`` / ``inproc``  → :class:`LocalKVStore`
+- empty / ``local`` / ``memory`` / ``inproc``  -> :class:`LocalKVStore`
   (single-worker local dev default);
-- ``redis://…`` / ``rediss://…``               → :class:`RedisKVStore`
+- ``redis://...`` / ``rediss://...``               -> :class:`RedisKVStore`
   (Upstash free or managed Redis premium);
-- ``db`` / ``database`` / ``sqlite`` / ``db://`` → :class:`DBKVStore`
+- ``db`` / ``database`` / ``sqlite`` / ``db://`` -> :class:`DBKVStore`
   (the "no Redis at all" fallback; requires the primary DB engine).
 
 Config/env parsing (reading ``KVSTORE_URL`` off settings, wiring the app's DB

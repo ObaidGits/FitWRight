@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/contact", tags=["Contact"])
 
-_ESTIMATED_RESPONSE = "within 1–2 business days"
+_ESTIMATED_RESPONSE = "within 1-2 business days"
 
 
 def _fingerprint(payload: ContactRequest) -> str:
@@ -56,7 +56,7 @@ async def submit_contact(request: Request, payload: ContactRequest) -> ContactRe
     if looks_like_bot(payload.company_website, payload.elapsed_ms):
         logger.info("Contact submission dropped by spam heuristics (ref=%s)", reference)
         return ContactResponse(
-            message="Thanks — your message has been received.",
+            message="Thanks - your message has been received.",
             reference=reference,
             estimated_response=_ESTIMATED_RESPONSE,
         )
@@ -66,7 +66,7 @@ async def submit_contact(request: Request, payload: ContactRequest) -> ContactRe
     if existing:
         logger.info("Duplicate contact submission collapsed (ref=%s)", existing)
         return ContactResponse(
-            message="Thanks — your message has already been received.",
+            message="Thanks - your message has already been received.",
             reference=existing,
             estimated_response=_ESTIMATED_RESPONSE,
         )
@@ -97,8 +97,8 @@ async def submit_contact(request: Request, payload: ContactRequest) -> ContactRe
         payload.subject,
     )
 
-    # Deliver (best-effort). Owner notification → configured recipient (or
-    # EMAIL_FROM fallback); acknowledgement → the submitter.
+    # Deliver (best-effort). Owner notification -> configured recipient (or
+    # EMAIL_FROM fallback); acknowledgement -> the submitter.
     sender = get_email_sender()
     recipient = (settings.contact_recipient_email or settings.email_from or "").strip()
     if recipient:
@@ -136,7 +136,7 @@ async def submit_contact(request: Request, payload: ContactRequest) -> ContactRe
     )
 
     return ContactResponse(
-        message="Thanks — your message has been received.",
+        message="Thanks - your message has been received.",
         reference=reference,
         estimated_response=_ESTIMATED_RESPONSE,
     )

@@ -41,7 +41,7 @@ class TestResolveProfile:
         )
 
     def test_invalid_explicit_profile_falls_back_to_derivation(self):
-        # A bogus value must not crash — it falls back to the derived profile.
+        # A bogus value must not crash - it falls back to the derived profile.
         assert resolve_profile(fake(single_user_mode=True, deployment_profile="nonsense")) is (
             DeploymentProfile.DESKTOP
         )

@@ -80,7 +80,7 @@ class TestPurgeResumability:
 
 class TestLastAdminRace:
     async def test_two_last_admins_disabled_concurrently_one_wins(self, auth_env):
-        """Property 3 (M5): the REAL race — two concurrent disables of the only
+        """Property 3 (M5): the REAL race - two concurrent disables of the only
         two active admins must resolve to exactly one success + one
         ``last_active_admin`` 409, leaving ≥1 active admin.
         """
@@ -174,7 +174,7 @@ class TestCursorStability:
 
         page2, _ = await repo.list_users(cursor=cursor, limit=10)
         seen_page2 = {u.id for u in page2}
-        # No overlap between the two pages (stable keyset — no duplicates).
+        # No overlap between the two pages (stable keyset - no duplicates).
         assert seen_page1.isdisjoint(seen_page2)
 
 

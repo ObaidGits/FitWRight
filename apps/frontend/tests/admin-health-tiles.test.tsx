@@ -7,7 +7,7 @@ import { render, screen } from '@testing-library/react';
  * Lightweight component-level "tiles render" check: with a composed
  * `AdminHealth` snapshot from the `useSystemHealth` hook, the page renders all
  * six subsystem tiles, each with its literal text status label (never color
- * alone — Req 3.8), plus the release version. The full cross-browser E2E
+ * alone - Req 3.8), plus the release version. The full cross-browser E2E
  * tiles-render assertion is owned by task 19.1 (which extends
  * `e2e/admin.spec.ts`); this component test covers the render contract here.
  */
@@ -81,7 +81,7 @@ function query(over: Partial<ReturnType<typeof useSystemHealthMock>> = {}) {
 
 afterEach(() => vi.clearAllMocks());
 
-describe('AdminHealthPage — tiles render', () => {
+describe('AdminHealthPage - tiles render', () => {
   it('renders all six subsystem tiles with their names', () => {
     useSystemHealthMock.mockReturnValue(query());
     render(<AdminHealthPage />);
@@ -102,7 +102,7 @@ describe('AdminHealthPage — tiles render', () => {
     useSystemHealthMock.mockReturnValue(query());
     render(<AdminHealthPage />);
 
-    // Five OK tiles → four "OK" labels (Backend/Database/KVStore/Storage),
+    // Five OK tiles -> four "OK" labels (Backend/Database/KVStore/Storage),
     // plus the degraded + down labels for AI + Migrations.
     expect(screen.getAllByText('OK').length).toBeGreaterThanOrEqual(4);
     expect(screen.getByText('Degraded')).toBeInTheDocument();

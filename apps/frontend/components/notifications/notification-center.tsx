@@ -38,7 +38,7 @@ export function NotificationCenter() {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const [items, setItems] = React.useState<AppNotification[]>([]);
-  // Server-authoritative unread badge (O(1) counter) — kept fresh by polling
+  // Server-authoritative unread badge (O(1) counter) - kept fresh by polling
   // the interval the backend advertises, active tab only.
   const [serverUnread, setServerUnread] = React.useState<number | null>(null);
 

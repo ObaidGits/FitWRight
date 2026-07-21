@@ -1,10 +1,10 @@
-"""SearchIndexer — outbox → search_documents (design §C, R7.1/7.3/16.1).
+"""SearchIndexer - outbox -> search_documents (design §C, R7.1/7.3/16.1).
 
 Idempotent consumers translate resume/job/application change events into
 content-safe search documents via the extensible **node-type registry**
 (``NODE_TYPES``): each entry knows how to load the current source record (scoped
 by the event's ``user_id``) and project it to a ``(title, body, status)`` search
-doc. A missing source record ⇒ the doc is removed (handles create-then-delete
+doc. A missing source record => the doc is removed (handles create-then-delete
 races). Because indexing is driven off the outbox it never blocks the user's
 write, and it is fully **rebuildable** with **drift detection** for recovery.
 """
@@ -43,7 +43,7 @@ def _db():
 
 
 # ---------------------------------------------------------------------------
-# Node-type registry (extensible — new node types add an entry, no API change)
+# Node-type registry (extensible - new node types add an entry, no API change)
 # ---------------------------------------------------------------------------
 
 
@@ -71,14 +71,14 @@ def _project_resume(r: dict[str, Any]) -> dict[str, Any]:
 def _project_job(j: dict[str, Any]) -> dict[str, Any]:
     company = j.get("company") or ""
     role = j.get("role") or ""
-    title = (f"{company} — {role}".strip(" —")) or "Job description"
+    title = (f"{company} - {role}".strip(" -")) or "Job description"
     return {"title": title, "body": _clip(j.get("content")), "status": None}
 
 
 def _project_application(a: dict[str, Any]) -> dict[str, Any]:
     company = a.get("company") or ""
     role = a.get("role") or ""
-    title = (f"{company} — {role}".strip(" —")) or "Application"
+    title = (f"{company} - {role}".strip(" -")) or "Application"
     body = " ".join(x for x in (company, role, a.get("notes") or "") if x)
     return {"title": title, "body": _clip(body), "status": a.get("status")}
 
@@ -135,7 +135,7 @@ _registered = False
 
 
 def ensure_search_consumers_registered() -> None:
-    """Register the outbox→search handlers once (idempotent)."""
+    """Register the outbox->search handlers once (idempotent)."""
     global _registered
     if _registered:
         return

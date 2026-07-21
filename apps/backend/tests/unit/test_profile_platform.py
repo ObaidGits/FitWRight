@@ -154,7 +154,7 @@ class TestAiGuardrails:
     async def test_summary_needs_content(self, monkeypatch):
         monkeypatch.setattr(ai, "is_llm_available", lambda *a, **k: True)
         result = await ai.suggest_summary(ProfileData())
-        # No existing content → refuses to invent.
+        # No existing content -> refuses to invent.
         assert result["suggestion"] is None
         assert "invent" in (result["note"] or "").lower()
 

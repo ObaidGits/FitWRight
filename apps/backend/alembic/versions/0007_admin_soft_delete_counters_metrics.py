@@ -3,9 +3,9 @@
 Adds the schema the P2 Admin subsystem needs (design "Data Models"):
 
 - ``users.deleted_at`` (soft-delete grace-period marker), ``users.resume_count``
-  / ``users.application_count`` (denormalized usage counters — R11.3), and
+  / ``users.application_count`` (denormalized usage counters - R11.3), and
   ``users.last_active_at`` (session-activity watermark for the active-user calc).
-- ``metrics_daily(day_utc, metric, value, computed_at)`` — the closed-day rollup
+- ``metrics_daily(day_utc, metric, value, computed_at)`` - the closed-day rollup
   target UPSERTed by the ``RollupJob`` (R3.2, R10.3).
 - The admin composite indexes: ``users(role,status)`` (active-admin count),
   ``users(created_at,id)`` (list keyset), ``users(deleted_at)`` (purge scan +
@@ -14,7 +14,7 @@ Adds the schema the P2 Admin subsystem needs (design "Data Models"):
   per-user detail).
 
 On Postgres the indexes are created ``CONCURRENTLY`` (inside an autocommit block,
-so a large hosted table is indexed without a long write lock — design
+so a large hosted table is indexed without a long write lock - design
 "Deployment"); on SQLite (local/test) they are created inline. Reversible down
 verified on a copy by the migration test harness.
 

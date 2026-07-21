@@ -7,7 +7,7 @@ import { DEFAULT_TEMPLATE_SETTINGS } from '@/lib/types/template-settings';
  *
  * The revamped UI wires export through the SAME `/print/*` pipeline via these
  * URL builders. Because the engine is reused unchanged, the generated PDF is
- * identical to the pre-revamp output — this test locks the export CONTRACT
+ * identical to the pre-revamp output - this test locks the export CONTRACT
  * (endpoint + query params) for a fixed sample so any accidental drift in the
  * export wiring is caught before it can change the produced document.
  */
@@ -17,7 +17,7 @@ describe('PDF export URL contract (engine reuse)', () => {
     const parsed = new URL(url, 'http://localhost');
 
     expect(parsed.pathname).toBe('/api/v1/resumes/sample-123/pdf');
-    // Fixed sample → fixed params (the document-shaping contract).
+    // Fixed sample -> fixed params (the document-shaping contract).
     expect(parsed.searchParams.get('template')).toBe('swiss-single');
     expect(parsed.searchParams.get('pageSize')).toBe('A4');
     expect(parsed.searchParams.get('marginTop')).toBe('10');

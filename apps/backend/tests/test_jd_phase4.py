@@ -40,12 +40,12 @@ class TestEnterpriseAdapters:
         assert TaleoAdapter().REQUIRES_JS is True
         assert SuccessFactorsAdapter().REQUIRES_JS is True
         assert RipplingAdapter().REQUIRES_JS is True
-        # BambooHR is server-rendered → no browser needed.
+        # BambooHR is server-rendered -> no browser needed.
         assert BambooHrAdapter().REQUIRES_JS is False
 
     def test_decision_forces_browser_for_js_platforms(self):
         from app.jd.browser.decision import needs_browser
-        # Empty shell + JS-only domain → browser required.
+        # Empty shell + JS-only domain -> browser required.
         assert needs_browser("<html></html>", "x.oraclecloud.com", 0) is True
         assert needs_browser("<html></html>", "acme.taleo.net", 0) is True
         assert needs_browser("<html></html>", "ats.rippling.com", 0) is True
@@ -243,7 +243,7 @@ class TestAdapterHealthAndSelfHealing:
             await drift.record_failure("lever")
         await drift.record_success("lever")
         assert await drift.is_healthy("lever") is False
-        # Time passes → half-open probe allowed.
+        # Time passes -> half-open probe allowed.
         drift._tripped["lever"] = _time.time() - _RESET_AFTER - 1
         assert await drift.is_healthy("lever") is True  # half-open
         # A probe success fully heals + resets counters.
@@ -262,7 +262,7 @@ class TestAdapterHealthAndSelfHealing:
         await drift.record_success("icims")
         drift._tripped["icims"] = _time.time() - _RESET_AFTER - 1
         assert await drift.is_healthy("icims") is True  # half-open probe
-        # Probe fails → immediately re-open.
+        # Probe fails -> immediately re-open.
         await drift.record_failure("icims")
         assert await drift.is_healthy("icims") is False
 

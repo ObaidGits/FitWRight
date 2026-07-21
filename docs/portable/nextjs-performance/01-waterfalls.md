@@ -1,6 +1,6 @@
 # Eliminating Waterfalls (CRITICAL)
 
-> Sibling docs: [bundle size](02-bundle-size.md) · [server actions security](03-server-actions-security.md) · [server-side perf](04-server-side-perf.md) · [checklist](checklist.md)
+> Sibling docs: [bundle size](02-bundle-size.md) - [server actions security](03-server-actions-security.md) - [server-side perf](04-server-side-perf.md) - [checklist](checklist.md)
 
 ---
 
@@ -11,8 +11,8 @@ A waterfall is a sequence of `await`s where each one blocks the next, even thoug
 Waterfalls are the #1 performance killer in App Router code, and they're nearly invisible until you profile.
 
 ```text
-Sequential (waterfall):    [user 200ms][posts 200ms][comments 200ms]  →  600ms
-Parallel:                  [user 200ms]                               →  200ms
+Sequential (waterfall):    [user 200ms][posts 200ms][comments 200ms]  ->  600ms
+Parallel:                  [user 200ms]                               ->  200ms
                            [posts 200ms]
                            [comments 200ms]
 ```
@@ -24,7 +24,7 @@ Parallel:                  [user 200ms]                               →  200ms
 The single most common waterfall: independent data fetches stacked sequentially.
 
 ```tsx
-// ❌ BAD: Sequential — 600ms total
+// BAD: Sequential - 600ms total
 async function getPageData() {
   const user = await fetchUser();
   const posts = await fetchPosts();
@@ -32,7 +32,7 @@ async function getPageData() {
   return { user, posts, comments };
 }
 
-// ✅ GOOD: Parallel — 200ms total
+// GOOD: Parallel - 200ms total
 async function getPageData() {
   const [user, posts, comments] = await Promise.all([
     fetchUser(),
@@ -47,12 +47,12 @@ async function getPageData() {
 
 ### Dependent fetches
 
-When fetch B genuinely needs the result of fetch A, you can't parallelize them — but you can still start fetch C in parallel with A.
+When fetch B genuinely needs the result of fetch A, you can't parallelize them - but you can still start fetch C in parallel with A.
 
 ```tsx
-// ✅ GOOD: A and C run in parallel; B waits on A
+// GOOD: A and C run in parallel; B waits on A
 const userPromise = fetchUser(userId);
-const settingsPromise = fetchSettings();        // independent — start it now
+const settingsPromise = fetchSettings();        // independent - start it now
 
 const user = await userPromise;
 const posts = await fetchUserPosts(user.id);    // depends on user
@@ -66,7 +66,7 @@ const settings = await settingsPromise;
 Don't await things you might not use.
 
 ```tsx
-// ❌ BAD: Always waits for analytics, even when validation fails
+// BAD: Always waits for analytics, even when validation fails
 async function handleSubmit(data: FormData) {
   const analytics = await getAnalytics();
 
@@ -77,7 +77,7 @@ async function handleSubmit(data: FormData) {
   analytics.track('submit');
 }
 
-// ✅ GOOD: Validate first, only await analytics on the success path
+// GOOD: Validate first, only await analytics on the success path
 async function handleSubmit(data: FormData) {
   if (!data.get('email')) {
     return { error: 'Email required' };
@@ -97,7 +97,7 @@ async function handleSubmit(data: FormData) {
 If you can't parallelize but still know in advance what you'll need, kick off the fetch as early as possible and only await right before you use it.
 
 ```tsx
-// ❌ BAD: 200ms wasted between body parse and user fetch
+// BAD: 200ms wasted between body parse and user fetch
 export async function POST(req: Request) {
   const body = await req.json();                            // 50ms
   const user = await getUser(body.userId);                  // 100ms (waits for body)
@@ -105,11 +105,11 @@ export async function POST(req: Request) {
   return Response.json({ user, permissions });
 }
 
-// ✅ GOOD: Chain promises immediately, await all at once
+// GOOD: Chain promises immediately, await all at once
 export async function POST(req: Request) {
   const body = await req.json();
 
-  // Start both immediately — permissions chains off user without blocking
+  // Start both immediately - permissions chains off user without blocking
   const userPromise = getUser(body.userId);
   const permissionsPromise = userPromise.then(u => getPermissions(u.id));
 
@@ -127,10 +127,10 @@ This pattern (start early, await late) is the second-most-common waterfall fix a
 If part of your page is fast and part is slow, don't make the fast part wait. Stream the slow part in with `<Suspense>`.
 
 ```tsx
-// ❌ BAD: Whole page waits for the slow analysis fetch
+// BAD: Whole page waits for the slow analysis fetch
 export default async function ProductPage({ params }: { params: { id: string } }) {
-  const product = await getProduct(params.id);          // 50ms — fast
-  const reviews = await getReviews(params.id);          // 500ms — slow
+  const product = await getProduct(params.id);          // 50ms - fast
+  const reviews = await getReviews(params.id);          // 500ms - slow
 
   return (
     <div>
@@ -140,7 +140,7 @@ export default async function ProductPage({ params }: { params: { id: string } }
   );
 }
 
-// ✅ GOOD: Render product immediately, stream reviews in
+// GOOD: Render product immediately, stream reviews in
 import { Suspense } from 'react';
 
 export default async function ProductPage({ params }: { params: { id: string } }) {
@@ -171,6 +171,6 @@ The user sees the product immediately. The reviews stream in when ready. Time-to
 
 - **Always** when fetching multiple independent resources
 - **Always** when one fetch is significantly slower than another and the user can act on the fast one
-- **Whenever** you spot a function with two consecutive `await`s — pause and ask "do these depend on each other?"
+- **Whenever** you spot a function with two consecutive `await`s - pause and ask "do these depend on each other?"
 
-Next: [02-bundle-size.md](02-bundle-size.md) covers the second-biggest source of waste — JS bundles full of unused code.
+Next: [02-bundle-size.md](02-bundle-size.md) covers the second-biggest source of waste - JS bundles full of unused code.

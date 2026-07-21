@@ -1,6 +1,6 @@
 """Reminder + interview business logic (design §E/§F, R10/R11/R17).
 
-Enforces parent-ownership (the application must belong to the caller → 404),
+Enforces parent-ownership (the application must belong to the caller -> 404),
 per-user abuse caps (429), timezone/recurrence validation (422),
 idempotency-keys on creates (collapse double-submits), snooze presets, interview
 reschedule with lead-time re-arming, and soft overlap detection. All persistence
@@ -28,7 +28,7 @@ _IDEMPOTENCY_TTL = 60 * 60 * 24
 
 
 class SchedulingError(Exception):
-    """code → HTTP: not_found 404, invalid 422, conflict 409, limit 429."""
+    """code -> HTTP: not_found 404, invalid 422, conflict 409, limit 429."""
 
     def __init__(self, code: str, message: str) -> None:
         super().__init__(message)
@@ -290,7 +290,7 @@ class SchedulingService:
 
     # ======================================================================
     # Aggregation reads + maintenance (module-owned; foreign modules call these
-    # instead of touching the repo directly — ARCHITECTURE Amendment E).
+    # instead of touching the repo directly - ARCHITECTURE Amendment E).
     # ======================================================================
 
     async def upcoming_reminders(self, user_id: str, limit: int) -> list[dict[str, Any]]:

@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Resume Template Library — browse, filter, preview, and pick a template.
+ * Resume Template Library - browse, filter, preview, and pick a template.
  *
  * Selecting a template records it as the preferred template (localStorage) and
  * sends the user into the wizard, which opens already rendered in that design.
@@ -61,7 +61,7 @@ export default function TemplatesPage() {
           </p>
         </div>
         <Link href="/samples" className="text-sm font-medium text-[var(--at-ai)] hover:underline">
-          Browse resume samples →
+          Browse resume samples -&gt;
         </Link>
       </header>
       <TemplateGallery

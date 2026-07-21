@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Profile workspace — the single surface for editing the canonical career
+ * Profile workspace - the single surface for editing the canonical career
  * document (docs/architecture/PROFILE_SYSTEM_PLAN.md).
  *
  * All edits mutate a local draft; Save persists through a version-CAS PATCH so a
@@ -93,7 +93,7 @@ export function ProfileWorkspace() {
   const profileQuery = useProfile();
 
   // The profile picture's single source of truth is the ACCOUNT master
-  // (users.avatar_url), read via the account-profile query — the same source
+  // (users.avatar_url), read via the account-profile query - the same source
   // Settings uses, so it works in both hosted and single-user mode (the session
   // user is synthetic/static in single-user mode and must not drive the photo).
   // It is intentionally NOT part of the versioned career-document draft, so
@@ -443,7 +443,7 @@ function OverviewSection({
   const id = draft.identity;
   return (
     <Card className="space-y-4 p-5">
-      {/* Profile photo — the shared canonical-photo uploader (same as Settings +
+      {/* Profile photo - the shared canonical-photo uploader (same as Settings +
           the resume builder). Managed at the account level, so it is not part of
           the versioned career document and never marks it dirty. */}
       <div className="space-y-2">
@@ -497,7 +497,7 @@ function OverviewSection({
           <Input
             id="p-linkedin"
             value={id.linkedin ?? ''}
-            placeholder="https://linkedin.com/in/…"
+            placeholder="https://linkedin.com/in/..."
             onChange={(e) => onIdentity({ linkedin: e.target.value || null })}
           />
         </Field>
@@ -505,7 +505,7 @@ function OverviewSection({
           <Input
             id="p-github"
             value={id.github ?? ''}
-            placeholder="https://github.com/…"
+            placeholder="https://github.com/..."
             onChange={(e) => onIdentity({ github: e.target.value || null })}
           />
         </Field>
@@ -538,7 +538,7 @@ function OverviewSection({
           onChange={(e) => onPatch({ summary: e.target.value })}
         />
         <p className="text-xs text-[var(--muted-foreground)]">
-          AI polishes what you write — it never invents experience.
+          AI polishes what you write - it never invents experience.
         </p>
       </div>
     </Card>
@@ -670,7 +670,7 @@ function ExperienceSection({
                 <Input
                   id={`exp-years-${idx}`}
                   value={exp.years}
-                  placeholder="2021 – Present"
+                  placeholder="2021 - Present"
                   onChange={(e) => update(idx, { years: e.target.value })}
                 />
               </Field>
@@ -710,7 +710,7 @@ function ExperienceSection({
               id={`exp-desc-${idx}`}
               rows={4}
               value={exp.description.join('\n')}
-              placeholder={'Led migration to …\nReduced latency by …'}
+              placeholder={'Led migration to ...\nReduced latency by ...'}
               onChange={(e) => update(idx, { description: linesToList(e.target.value) })}
             />
           </div>

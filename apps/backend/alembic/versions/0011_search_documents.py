@@ -1,4 +1,4 @@
-"""P3 Productivity: search_documents + FTS (global search — R7, R8)
+"""P3 Productivity: search_documents + FTS (global search - R7, R8)
 
 Adds the user-scoped ``search_documents`` store (design §C) plus the dialect-
 specific full-text acceleration:

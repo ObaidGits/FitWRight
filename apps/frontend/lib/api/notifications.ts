@@ -1,5 +1,5 @@
 /**
- * Notifications API (P3 §B, Requirements 4–6) — wired to the real backend.
+ * Notifications API (P3 §B, Requirements 4-6) - wired to the real backend.
  *
  * Persistent, user-scoped notifications (parsing done, AI ready, reminder due,
  * interview upcoming, security) with an O(1) unread badge, per-category

@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * SchedulingPanel (P3 §E/§F) — reminders + interviews for one application.
+ * SchedulingPanel (P3 §E/§F) - reminders + interviews for one application.
  *
  * Fully wired to the backend via `features/scheduling/hooks`: create / snooze /
  * cancel reminders (with presets + bounded recurrence) and create / cancel
@@ -200,8 +200,8 @@ function RemindersSection({ applicationId }: { applicationId: string }) {
                 <p className="truncate text-sm">{r.note || 'Follow-up'}</p>
                 <p className="text-xs text-[var(--muted-foreground)]">
                   {fmt(r.due_at, r.tz)}
-                  {r.recurrence && <span className="ml-1">· repeats</span>}
-                  {r.status === 'snoozed' && <span className="ml-1">· snoozed</span>}
+                  {r.recurrence && <span className="ml-1">- repeats</span>}
+                  {r.status === 'snoozed' && <span className="ml-1">- snoozed</span>}
                 </p>
               </div>
               <Button
@@ -259,7 +259,7 @@ function InterviewsSection({ applicationId }: { applicationId: string }) {
       if (created.overlaps.length > 0) {
         toast({
           title: 'Scheduled',
-          description: 'Heads up — it overlaps another interview.',
+          description: 'Heads up - it overlaps another interview.',
           variant: 'info',
         });
       } else {
@@ -392,7 +392,7 @@ function InterviewsSection({ applicationId }: { applicationId: string }) {
                 </p>
                 <p className="text-xs text-[var(--muted-foreground)]">
                   {fmt(i.starts_at, i.tz)}
-                  {i.location && <span className="ml-1 truncate">· {i.location}</span>}
+                  {i.location && <span className="ml-1 truncate">- {i.location}</span>}
                 </p>
               </div>
               <Button asChild size="icon" variant="ghost" aria-label="Download calendar invite">

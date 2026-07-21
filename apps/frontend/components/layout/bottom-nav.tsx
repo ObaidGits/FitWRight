@@ -1,6 +1,6 @@
 'use client';
 
-/** Mobile bottom navigation (Req 28.2) — Home · Resumes · [Tailor] · Applications. */
+/** Mobile bottom navigation (Req 28.2) - Home - Resumes - [Tailor] - Applications. */
 import * as React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -10,7 +10,7 @@ import { PRIMARY_NAV, TAILOR_HREF } from '@/components/layout/nav-items';
 
 type NavItem = (typeof PRIMARY_NAV)[number];
 
-// Module-level component (not created during render) — receives `active` as a
+// Module-level component (not created during render) - receives `active` as a
 // prop so it stays a stable component identity across renders.
 function NavTab({ item, active }: { item: NavItem; active: boolean }) {
   const { href, label, icon: Icon } = item;
@@ -32,7 +32,7 @@ function NavTab({ item, active }: { item: NavItem; active: boolean }) {
 export function BottomNav() {
   const pathname = usePathname();
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
-  // Home · Resumes · [Tailor FAB] · Applications · Agenda — every primary
+  // Home - Resumes - [Tailor FAB] - Applications - Agenda - every primary
   // destination is reachable on mobile (Agenda was previously dropped).
   const [home, resumes, applications, agenda] = [
     PRIMARY_NAV[0],

@@ -1,6 +1,6 @@
 # Pre-PR Checklist & Config Template
 
-> Sibling docs: [waterfalls](01-waterfalls.md) · [bundle size](02-bundle-size.md) · [server actions security](03-server-actions-security.md) · [server-side perf](04-server-side-perf.md)
+> Sibling docs: [waterfalls](01-waterfalls.md) - [bundle size](02-bundle-size.md) - [server actions security](03-server-actions-security.md) - [server-side perf](04-server-side-perf.md)
 
 ---
 
@@ -10,7 +10,7 @@ Walk through this before opening or merging any PR that touches Next.js applicat
 
 ### Data fetching ([01-waterfalls.md](01-waterfalls.md))
 
-- [ ] No two consecutive `await`s on independent data — wrap them in `Promise.all()`
+- [ ] No two consecutive `await`s on independent data - wrap them in `Promise.all()`
 - [ ] Validation/auth checks happen *before* expensive async work
 - [ ] Slow data is wrapped in `<Suspense>` so the rest of the page can render
 - [ ] Independent fetches in API routes start as early as possible
@@ -27,13 +27,13 @@ Walk through this before opening or merging any PR that touches Next.js applicat
 
 - [ ] Every Server Action calls `auth()` (or equivalent) at the top
 - [ ] Every action that takes a resource ID also verifies **ownership** of that resource
-- [ ] Input is validated with a schema (Zod, Valibot, etc.) — never trust the shape
+- [ ] Input is validated with a schema (Zod, Valibot, etc.) - never trust the shape
 - [ ] Errors are thrown, not silently logged
 
 ### Server-side performance ([04-server-side-perf.md](04-server-side-perf.md))
 
 - [ ] Multi-call data fetchers (`getCurrentUser`, `getCurrentTenant`, etc.) are wrapped in `React.cache()`
-- [ ] Server→Client component props are explicit picks, not full ORM objects
+- [ ] Server->Client component props are explicit picks, not full ORM objects
 - [ ] Analytics, webhooks, and audit logs use `after()` instead of blocking the response
 
 ### Quick sanity pass
@@ -76,8 +76,8 @@ module.exports = {
 
 | Setting | Effect |
 |---------|--------|
-| `optimizePackageImports` | Per-symbol tree-shaking for the listed libraries — typically saves 200–800ms cold start |
-| `images.formats` | Serves AVIF/WebP when the browser supports it — typically 30–60% smaller than JPEG |
+| `optimizePackageImports` | Per-symbol tree-shaking for the listed libraries - typically saves 200-800ms cold start |
+| `images.formats` | Serves AVIF/WebP when the browser supports it - typically 30-60% smaller than JPEG |
 | `reactStrictMode` | Surfaces unsafe lifecycles, double-renders effects in dev to catch bugs |
 
 ---

@@ -29,7 +29,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
     title,
     description: sample.description,
     alternates: { canonical: `/samples/${sample.id}` },
-    openGraph: { title: `${title} — FitWright`, description: sample.description, type: 'article' },
+    openGraph: { title: `${title} - FitWright`, description: sample.description, type: 'article' },
   };
 }
 

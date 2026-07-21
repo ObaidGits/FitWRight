@@ -1,4 +1,4 @@
-"""P3 Productivity — resume version history (design §A, Requirements 1–3).
+"""P3 Productivity - resume version history (design §A, Requirements 1-3).
 
 Immutable, gzip-compressed, content-hash-deduped snapshots of a resume's
 ``processed_data`` with non-destructive restore/undo and a field-level compare.

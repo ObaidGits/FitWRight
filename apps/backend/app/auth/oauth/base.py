@@ -1,17 +1,17 @@
 """Provider-agnostic OAuth interface + shared types (Task 7.1).
 
 Google sign-in is implemented behind a small, stable ``OAuthProvider`` contract
-so a second provider (GitHub/Microsoft, …) is a new implementation + one registry
+so a second provider (GitHub/Microsoft, ...) is a new implementation + one registry
 entry with **no router or UI change** (design `§OAuth provider interface`, R4.1).
 Everything a provider must do is expressed here:
 
-- :meth:`OAuthProvider.authorize_url` — build the IdP consent-screen URL for the
+- :meth:`OAuthProvider.authorize_url` - build the IdP consent-screen URL for the
   authorization-code + PKCE flow (``response_type=code``, ``state``, ``nonce``,
   ``code_challenge``); ``next`` is accepted for interface symmetry but is carried
   in the transient cookie, not the URL (SSRF-safe: no user-supplied endpoints).
-- :meth:`OAuthProvider.exchange` — swap the authorization ``code`` (+ the PKCE
+- :meth:`OAuthProvider.exchange` - swap the authorization ``code`` (+ the PKCE
   ``code_verifier``) for the provider's tokens, **server-side only**.
-- :meth:`OAuthProvider.verify_id_token` — fully verify the ``id_token``
+- :meth:`OAuthProvider.verify_id_token` - fully verify the ``id_token``
   (signature via rotating JWKS, ``iss``/``aud``/``exp``/``iat`` with bounded clock
   skew, ``nonce``) and return the trusted :class:`OAuthUserInfo` claims.
 
@@ -38,7 +38,7 @@ class OAuthError(Exception):
 
     ``reason`` is a short machine tag for server-side logs/metrics
     (``oauth-failure-by-reason``, R16.1); it is **never** surfaced to the browser
-    — the callback always renders the single generic ``oauth_failed`` (R4.6).
+    - the callback always renders the single generic ``oauth_failed`` (R4.6).
     """
 
     def __init__(self, reason: str, message: str | None = None) -> None:
@@ -52,7 +52,7 @@ class OAuthTokens:
 
     Only ``id_token`` is used in P1 (identity proof); access/refresh tokens are
     accepted so the shape is provider-complete but are **discarded** after
-    id_token verification — no provider API calls are made beyond sign-in and
+    id_token verification - no provider API calls are made beyond sign-in and
     the tokens never reach the browser (R4.5).
     """
 

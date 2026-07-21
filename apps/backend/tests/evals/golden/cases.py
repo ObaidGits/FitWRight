@@ -3,23 +3,23 @@
 Each entry in :data:`GOLDEN_CASES` bundles everything the two eval layers need
 for one realistic tailoring scenario:
 
-* ``name``            — a short, human-readable id.
-* ``original``        — the master resume dict (ResumeData-compatible).
-* ``job_description`` — the target JD text.
-* ``jd_keywords``     — keywords the tailored resume is expected to surface
+* ``name``            - a short, human-readable id.
+* ``original``        - the master resume dict (ResumeData-compatible).
+* ``job_description`` - the target JD text.
+* ``jd_keywords``     - keywords the tailored resume is expected to surface
                         (used by ``jd_keywords_present``).
-* ``tailored_good``   — a faithful, JD-aware tailoring of ``original``. Every
+* ``tailored_good``   - a faithful, JD-aware tailoring of ``original``. Every
                         section is preserved, no employers are invented, and
                         the JD keywords appear. Structural scorers should give
                         this a clean bill of health, and the LLM judge should
                         score it >= 3.
-* ``tailored_bad``    — a deliberately broken tailoring (drops a section,
+* ``tailored_bad``    - a deliberately broken tailoring (drops a section,
                         invents an employer, rewrites the candidate's name).
                         Structural scorers MUST flag it. It exists so the
                         scorer tests can prove they detect real violations
                         rather than always returning "OK".
 
-These are plain Python constants — no I/O, no LLM. To add a new golden case,
+These are plain Python constants - no I/O, no LLM. To add a new golden case,
 append another dict with the same keys to ``GOLDEN_CASES``. Keep ``original``
 and ``tailored_good`` valid against ``app.schemas.ResumeData`` so
 ``is_valid_resume`` stays meaningful.
@@ -30,7 +30,7 @@ from __future__ import annotations
 from typing import Any
 
 # ---------------------------------------------------------------------------
-# Case 1 — backend engineer targeting a senior platform role
+# Case 1 - backend engineer targeting a senior platform role
 # ---------------------------------------------------------------------------
 
 _CASE1_ORIGINAL: dict[str, Any] = {
@@ -185,7 +185,7 @@ _CASE1_TAILORED_GOOD: dict[str, Any] = {
 _CASE1_TAILORED_BAD: dict[str, Any] = {
     "personalInfo": {
         **_CASE1_ORIGINAL["personalInfo"],
-        "name": "John Smith",  # identity changed — must be flagged
+        "name": "John Smith",  # identity changed - must be flagged
     },
     "summary": (
         "Senior backend engineer with Python, FastAPI, Kubernetes, Docker, "
@@ -202,7 +202,7 @@ _CASE1_TAILORED_BAD: dict[str, Any] = {
             "description": ["Owned the entire platform on Kubernetes and AWS"],
         }
     ],
-    "education": [],  # education dropped — must be flagged
+    "education": [],  # education dropped - must be flagged
     "personalProjects": list(_CASE1_ORIGINAL["personalProjects"]),
     "additional": {
         "technicalSkills": ["Python", "FastAPI", "Kubernetes", "Docker", "AWS"],
@@ -212,7 +212,7 @@ _CASE1_TAILORED_BAD: dict[str, Any] = {
 }
 
 # ---------------------------------------------------------------------------
-# Case 2 — data analyst pivoting toward a data-engineering role
+# Case 2 - data analyst pivoting toward a data-engineering role
 # ---------------------------------------------------------------------------
 
 _CASE2_ORIGINAL: dict[str, Any] = {

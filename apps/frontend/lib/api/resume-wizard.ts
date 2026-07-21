@@ -157,7 +157,7 @@ export interface ResumeWizardFinalizeResponse {
 }
 
 export const INTRO_QUESTION =
-  "Hi — I'll help you build your master resume. What's your name, and what kind of role are you going for?";
+  "Hi - I'll help you build your master resume. What's your name, and what kind of role are you going for?";
 
 function emptyResumeData(): ResumeData {
   return {

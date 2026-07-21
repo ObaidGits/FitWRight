@@ -34,14 +34,14 @@ class AuthMetrics:
     """Process-wide monotonic counters for the auth surface (R16.1).
 
     Every counter is a non-negative integer keyed by a stable name. Labelled
-    counters (OAuth failures *by reason*) live in their own name→count maps so a
+    counters (OAuth failures *by reason*) live in their own name->count maps so a
     high-cardinality label can never collide with a scalar counter.
     """
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._counters: dict[str, int] = defaultdict(int)
-        # Labelled counters: metric name → {label: count}.
+        # Labelled counters: metric name -> {label: count}.
         self._labelled: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
 
     # -- primitive mutators --------------------------------------------------

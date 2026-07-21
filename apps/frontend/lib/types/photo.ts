@@ -1,5 +1,5 @@
 /**
- * Resume Photo Configuration — frontend contract (Photo System).
+ * Resume Photo Configuration - frontend contract (Photo System).
  *
  * Mirrors the backend `app/profile/photo.py` 1:1. A resume's photo is described
  * by a structured {@link PhotoConfig} (presentation + provenance), never a
@@ -59,7 +59,7 @@ export interface PhotoConfig {
   margin: number; // px around the frame
 }
 
-/** Size token → rendered edge length in px (must match backend SIZE_PX). */
+/** Size token -> rendered edge length in px (must match backend SIZE_PX). */
 export const PHOTO_SIZE_PX: Record<Exclude<PhotoSize, 'custom'>, number> = {
   xs: 48,
   sm: 64,

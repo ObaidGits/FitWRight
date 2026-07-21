@@ -58,7 +58,7 @@ def test_guard_flags_unscoped_repo_method(tmp_path):
             from app.models import Job
 
             async def list_all(session):
-                # No user_id in scope — this is exactly what the guard forbids.
+                # No user_id in scope - this is exactly what the guard forbids.
                 return await session.execute(select(Job))
             """
         )

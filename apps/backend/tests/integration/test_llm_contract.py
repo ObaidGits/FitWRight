@@ -111,7 +111,7 @@ def _ollama_show_response():
 
 
 # ---------------------------------------------------------------------------
-# openai_compatible (llama.cpp / vLLM / LM Studio) — TRUE respx HTTP
+# openai_compatible (llama.cpp / vLLM / LM Studio) - TRUE respx HTTP
 # ---------------------------------------------------------------------------
 
 
@@ -193,7 +193,7 @@ class TestOpenAICompatibleTransport:
 
 
 # ---------------------------------------------------------------------------
-# ollama — TRUE respx HTTP
+# ollama - TRUE respx HTTP
 # ---------------------------------------------------------------------------
 
 
@@ -256,7 +256,7 @@ class TestOllamaTransport:
 
 
 # ---------------------------------------------------------------------------
-# check_llm_health — TRUE respx HTTP (calls litellm.acompletion directly)
+# check_llm_health - TRUE respx HTTP (calls litellm.acompletion directly)
 # ---------------------------------------------------------------------------
 
 
@@ -306,7 +306,7 @@ class TestCheckHealthTransport:
 
         The fake provider echoes the configured ``sk-`` key in its error body
         (as the real OpenAI API does). With ``include_details=True`` the
-        upstream message is surfaced as ``error_detail`` — but every ``sk-``
+        upstream message is surfaced as ``error_detail`` - but every ``sk-``
         token MUST be redacted so a Settings-page viewer can't read the key
         back out.
         """
@@ -337,7 +337,7 @@ class TestCheckHealthTransport:
 
         assert res["healthy"] is False
         # A provider auth failure (401) falls through to the generic failure
-        # code — assert the specific value, not just "truthy", so a silent
+        # code - assert the specific value, not just "truthy", so a silent
         # rename of the code is caught.
         assert res["error_code"] == "health_check_failed"
         # The raw key must never reach the client, even partially.

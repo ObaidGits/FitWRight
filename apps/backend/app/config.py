@@ -17,7 +17,7 @@ def _is_https_or_loopback_http(uri: str) -> bool:
 
     Accepts any ``https://`` URL, plus ``http://`` when the host is a loopback
     address (localhost / 127.0.0.1 / ::1). Plaintext http is safe there because
-    the traffic never leaves the machine — this is the standard local-dev OAuth
+    the traffic never leaves the machine - this is the standard local-dev OAuth
     pattern that Google's console explicitly permits and that RFC 8252 §8.3
     (loopback interface redirection) sanctions. Any non-loopback host must use
     https so OAuth is never carried over the network in cleartext.
@@ -99,7 +99,7 @@ def save_config_file(config: dict[str, Any]) -> None:
     """Save non-secret configuration to config.json.
 
     Secrets (``api_keys`` map and the legacy single ``api_key``) are stripped
-    before writing — they belong to the encrypted store only.
+    before writing - they belong to the encrypted store only.
     """
     config = dict(config)
     config.pop("api_keys", None)
@@ -110,8 +110,8 @@ def save_config_file(config: dict[str, Any]) -> None:
 def resolve_key_user_id(user_id: str | None = None) -> str:
     """Resolve the user whose encrypted key store to read/write (ADR-4, R10.6).
 
-    Priority: an explicit ``user_id`` (a request thread it) → the request-scoped
-    effective user id published by the auth dependency → the bootstrap owner
+    Priority: an explicit ``user_id`` (a request thread it) -> the request-scoped
+    effective user id published by the auth dependency -> the bootstrap owner
     (single-user/local, or the pre-migration owner on hosted). This is the single
     place that decides *whose* provider keys are in play, so one user's key can
     never serve another's LLM calls.
@@ -207,7 +207,7 @@ def migrate_legacy_keys() -> None:
     from app.crypto import encrypt
     from app.database import db
 
-    # Legacy plaintext keys are pre-multi-user data → they belong to the
+    # Legacy plaintext keys are pre-multi-user data -> they belong to the
     # bootstrap owner (same principle as migration 0004 assigning api_keys to
     # the owner).
     owner_id = resolve_key_user_id()
@@ -326,13 +326,13 @@ class Settings(BaseSettings):
     log_level: Literal["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"] = "INFO"
     frontend_base_url: str = "http://localhost:3000"
 
-    # Hard timeout (seconds) for a single resume tailoring/improve request — the
+    # Hard timeout (seconds) for a single resume tailoring/improve request - the
     # backend wraps the improve flow in asyncio.wait_for(timeout=this). It MUST be
     # kept in sync with the two frontend layers (Next.js `proxyTimeout` and the
     # client AbortController, both driven by NEXT_PUBLIC_REQUEST_TIMEOUT_MS):
     # whichever layer is shortest aborts first, so raising only one silently fails
     # (this is why issue #776's backend-only workaround didn't work). Local LLMs
-    # (Ollama, llama.cpp, …) often need longer than the 240s default; bounded to
+    # (Ollama, llama.cpp, ...) often need longer than the 240s default; bounded to
     # [30, 1800]s so a stuck request can't hold a worker indefinitely.
     request_timeout_seconds: int = 240
 
@@ -360,7 +360,7 @@ class Settings(BaseSettings):
 
     # Reasoning effort for models that support it (OpenAI gpt-5 family,
     # Anthropic Claude 3.7+, DeepSeek R1, etc.). None means "do not send the
-    # param" — the default for maximum compatibility. LiteLLM drops this
+    # param" - the default for maximum compatibility. LiteLLM drops this
     # parameter for providers that don't support it (via drop_params=True).
     reasoning_effort: Literal["minimal", "low", "medium", "high"] | None = None
 
@@ -406,8 +406,8 @@ class Settings(BaseSettings):
     single_user_mode: bool = True
 
     # Explicit deployment profile (ARCHITECTURE §3/§4; IMPLEMENTATION_PLAN Phase
-    # 1). Declared intent — ``desktop``/``saas``/``enterprise``/``self_hosted``/
-    # ``development``/``test``/``ci``. Blank → derived from ``single_user_mode``
+    # 1). Declared intent - ``desktop``/``saas``/``enterprise``/``self_hosted``/
+    # ``development``/``test``/``ci``. Blank -> derived from ``single_user_mode``
     # (desktop when true, saas when false), so existing .env files are unchanged.
     # When set, it must not contradict ``single_user_mode`` (validated at boot).
     deployment_profile: str = ""
@@ -422,7 +422,7 @@ class Settings(BaseSettings):
     # required-in-hosted / ephemeral-in-local rules as ``session_secret``.
     ip_hash_secret: str = ""
 
-    # Google OAuth (provider-abstracted, R4). All optional — OAuth is only wired
+    # Google OAuth (provider-abstracted, R4). All optional - OAuth is only wired
     # when both client id and secret are present. A partial pair is rejected.
     google_client_id: str = ""
     google_client_secret: str = ""
@@ -434,7 +434,7 @@ class Settings(BaseSettings):
     owner_email: str = "owner@localhost"
     owner_password: str = ""
 
-    # Email verification (R5). Tri-state: unset → default ON for hosted, OFF for
+    # Email verification (R5). Tri-state: unset -> default ON for hosted, OFF for
     # single-user/local. Read the resolved value via ``email_verification_enabled``.
     email_verification: bool | None = None
 
@@ -469,12 +469,12 @@ class Settings(BaseSettings):
     cookie_secure: bool = True
     cookie_samesite: Literal["lax", "strict", "none"] = "lax"
 
-    # Pluggable shared-state store (ADR-6). Empty → in-process local adapter
-    # (single-worker dev). ``redis://``/``rediss://`` → Redis/Upstash. ``db`` →
+    # Pluggable shared-state store (ADR-6). Empty -> in-process local adapter
+    # (single-worker dev). ``redis://``/``rediss://`` -> Redis/Upstash. ``db`` ->
     # DB-backed fallback (no Redis at all).
     kvstore_url: str = ""
 
-    # Primary database (ADR-13). Empty → the local SQLite file (unchanged
+    # Primary database (ADR-13). Empty -> the local SQLite file (unchanged
     # behavior). Hosted MUST set a Postgres URL (ephemeral disk wipes SQLite).
     database_url: str = ""
     # Dedicated connection string for DDL/migrations. On Supabase (and any
@@ -482,21 +482,21 @@ class Settings(BaseSettings):
     # but migrations MUST use the DIRECT endpoint (5432): CREATE INDEX
     # CONCURRENTLY cannot run through a transaction pooler and the migration
     # advisory lock is session-scoped (unstable when each statement may hit a
-    # different backend). Blank → fall back to DATABASE_URL (correct when the app
+    # different backend). Blank -> fall back to DATABASE_URL (correct when the app
     # already talks to a direct connection, e.g. Neon-direct or local).
     migration_database_url: str = ""
     db_pool_size: int = 5
     db_use_pooler: bool = True
-    # Postgres TLS mode (ADR-13). Blank → derive from the DATABASE_URL's own
+    # Postgres TLS mode (ADR-13). Blank -> derive from the DATABASE_URL's own
     # ``sslmode`` query param, else default to ``require`` in hosted mode and no
     # forced TLS in local single-user mode. Explicit values (disable | prefer |
     # allow | require | verify-ca | verify-full) override the URL/default. This
     # is normalized in ``app.db_engine`` into the per-driver connect arg
     # (asyncpg ``ssl`` context / psycopg ``sslmode``), since asyncpg rejects a
-    # raw ``sslmode`` kwarg — required for Supabase's TLS-only endpoints.
+    # raw ``sslmode`` kwarg - required for Supabase's TLS-only endpoints.
     db_ssl: str = ""
     # Automatically run ``alembic upgrade head`` at startup on hosted Postgres
-    # (SQLite is unaffected — it uses create_all). Serialized across workers by a
+    # (SQLite is unaffected - it uses create_all). Serialized across workers by a
     # Postgres advisory lock and idempotent, so it is safe on every boot. Set
     # false to manage migrations out-of-band (a dedicated release phase); the app
     # then only verifies DB reachability at boot. See app.migrations_runtime.
@@ -507,13 +507,13 @@ class Settings(BaseSettings):
     scheduler_mode: Literal["external_cron", "internal"] = "external_cron"
 
     # Shared secret guarding the internal machine endpoints (session reaper +
-    # auth metrics) — ADR-15. On the free tier (`SCHEDULER_MODE=external_cron`) an
+    # auth metrics) - ADR-15. On the free tier (`SCHEDULER_MODE=external_cron`) an
     # external scheduler (GitHub Actions / cron-job.org) calls
     # ``POST /api/v1/internal/run-jobs`` with this token in the
     # ``X-Internal-Job-Token`` header; the same token guards
     # ``GET /api/v1/internal/metrics``. Compared in constant time. Empty (the
     # zero-config local default) means the internal endpoints reject *every*
-    # caller (no token can match), so they never expose data unauthenticated —
+    # caller (no token can match), so they never expose data unauthenticated -
     # local dev never needs them (the reaper only runs where scheduled). The
     # ``internal`` premium loop does not use the token (it calls the reaper
     # in-process).
@@ -529,10 +529,10 @@ class Settings(BaseSettings):
     # =====================================================================
     # Master feature flag for the admin surface. When off, the guarded admin
     # router still mounts but every endpoint returns 404 ``admin_disabled`` (the
-    # rollout "deploy flag-off → enable read → enable manage" step).
+    # rollout "deploy flag-off -> enable read -> enable manage" step).
     admin_enabled: bool = True
     # Kill-switch for irreversible destructive actions (soft-delete + purge).
-    # When off, delete/restore endpoints and the PurgeJob are refused/skipped —
+    # When off, delete/restore endpoints and the PurgeJob are refused/skipped -
     # the safe default for the initial rollout can flip this off to disable
     # destruction entirely without a redeploy of code (value change, ADR-14).
     admin_destructive_actions: bool = True
@@ -540,7 +540,7 @@ class Settings(BaseSettings):
     # A soft-deleted user is restorable until ``deleted_at + this``; bounded to a
     # sane window so a typo can't create a zero (instant purge) or absurd delay.
     admin_delete_grace_days: int = 7
-    # Bounded batch size for ``POST /users/bulk-disable`` (R6.4) — caps the
+    # Bounded batch size for ``POST /users/bulk-disable`` (R6.4) - caps the
     # blast radius / request cost of a single bulk action.
     admin_bulk_disable_max: int = 100
 
@@ -586,7 +586,7 @@ class Settings(BaseSettings):
     # Tiered audit-log retention windows (Req 1.3/1.4/1.8). A Security_Critical
     # row is deleted once older than the hot window; a Downsamplable row is
     # aggregated-then-deleted once older than the downsample window. Positive
-    # integers — a blank/typo env falls back to the documented default so the
+    # integers - a blank/typo env falls back to the documented default so the
     # retention job can never resolve a zero/never window.
     admin_audit_hot_days: int = 365
     admin_audit_downsample_days: int = 90
@@ -597,7 +597,7 @@ class Settings(BaseSettings):
     # excluding the totals snapshot (Req 15.6). Positive integer.
     admin_metrics_retention_days: int = 400
     # Minimum interval (minutes) between DB-size samples taken by the rollup's
-    # DbSizeSampleStep — the hourly KV guard that keeps sampling off the request
+    # DbSizeSampleStep - the hourly KV guard that keeps sampling off the request
     # path (Req 7). Positive integer.
     admin_db_size_sample_minutes: int = 60
     # Stuck-job detection (Req 8.10): a running job is flagged potentially-stuck
@@ -626,7 +626,7 @@ class Settings(BaseSettings):
     )
     @classmethod
     def _validate_admin_positive_int(cls, v: Any, info: Any) -> int:
-        """Coerce a positive-int admin setting; blank/typo env → field default."""
+        """Coerce a positive-int admin setting; blank/typo env -> field default."""
         default = cls.model_fields[info.field_name].default
         if v is None or (isinstance(v, str) and not v.strip()):
             return default
@@ -655,7 +655,7 @@ class Settings(BaseSettings):
     )
     @classmethod
     def _validate_alert_percent(cls, v: Any, info: Any) -> int:
-        """Coerce + bounds-check an alert percentage to [0, 100]; blank → default."""
+        """Coerce + bounds-check an alert percentage to [0, 100]; blank -> default."""
         default = cls.model_fields[info.field_name].default
         if v is None or (isinstance(v, str) and not v.strip()):
             return default
@@ -666,14 +666,14 @@ class Settings(BaseSettings):
         return max(0, min(100, n))
 
     # =====================================================================
-    # P3 Productivity — Version history (design §A, Requirements 1–3)
+    # P3 Productivity - Version history (design §A, Requirements 1-3)
     # =====================================================================
-    # Master feature flag for the version-history surface. Off → the router
+    # Master feature flag for the version-history surface. Off -> the router
     # mounts but every endpoint returns 404 and snapshot capture is skipped, so
     # the feature can be dark-launched / killed without a redeploy (ADR-14).
     version_history_enabled: bool = True
     # Max snapshots retained per resume; the oldest non-``original`` rows are
-    # pruned beyond this (the ``original`` is always retained — R1.3). Bounded so
+    # pruned beyond this (the ``original`` is always retained - R1.3). Bounded so
     # a typo can't disable pruning or store thousands of blobs per resume.
     version_history_cap: int = 50
     # Debounce window (seconds) coalescing rapid consecutive ``manual`` saves
@@ -715,9 +715,9 @@ class Settings(BaseSettings):
     # =====================================================================
     # Professional Profile System (docs/architecture/PROFILE_SYSTEM_PLAN.md)
     # =====================================================================
-    # Master flag for the profile surface. Off → the router mounts but every
+    # Master flag for the profile surface. Off -> the router mounts but every
     # endpoint returns 404 and snapshot capture is skipped (dark-launch / kill
-    # switch without a redeploy — ADR-14).
+    # switch without a redeploy - ADR-14).
     profile_enabled: bool = True
     # Max profile snapshots retained per user; oldest non-first rows pruned.
     profile_history_cap: int = 50
@@ -726,7 +726,7 @@ class Settings(BaseSettings):
     profile_manual_debounce_seconds: int = 120
     # Merge similarity backend: deterministic (default) | hybrid | embedding.
     # hybrid/embedding are inert without an injected semantic/embed fn (no vector
-    # infra ships), falling back to deterministic — never fabricating a score.
+    # infra ships), falling back to deterministic - never fabricating a score.
     profile_similarity_provider: str = "deterministic"
 
     @field_validator("profile_enabled", mode="before")
@@ -762,7 +762,7 @@ class Settings(BaseSettings):
         return max(0, min(3600, n))
 
     # =====================================================================
-    # P3 Productivity — Notifications + shared platform (design §B/§Platform)
+    # P3 Productivity - Notifications + shared platform (design §B/§Platform)
     # =====================================================================
     # Master flag for the global-search surface (router 404s when off).
     search_enabled: bool = True
@@ -835,7 +835,7 @@ class Settings(BaseSettings):
     @field_validator("llm_rate_per_min_user", mode="before")
     @classmethod
     def _validate_llm_rate(cls, v: Any, info: Any) -> int:
-        # Allow 0 to disable; blank → default; negative → 0.
+        # Allow 0 to disable; blank -> default; negative -> 0.
         default = cls.model_fields[info.field_name].default
         if v is None or (isinstance(v, str) and not v.strip()):
             return default
@@ -847,7 +847,7 @@ class Settings(BaseSettings):
 
     # P3 JD-from-URL (SSRF-hardened import). Kill-switch + rate/concurrency caps.
     jd_from_url_enabled: bool = True
-    jd_v2_enabled: bool = True  # v2 extraction pipeline (cascade: API → JSON-LD → DOM)
+    jd_v2_enabled: bool = True  # v2 extraction pipeline (cascade: API -> JSON-LD -> DOM)
     jd_url_rate_per_min_user: int = 10
     jd_url_rate_per_min_global: int = 120
     jd_url_max_concurrency: int = 4
@@ -949,7 +949,7 @@ class Settings(BaseSettings):
         return max(1, min(100000, n))
     # Master flag for the notification surface (router 404s when off).
     notifications_enabled: bool = True
-    # Kill-switch for notification *email* delivery (NOTIFICATIONS_EMAIL). Off →
+    # Kill-switch for notification *email* delivery (NOTIFICATIONS_EMAIL). Off ->
     # in-app still works; the email worker sends nothing (marks rows skipped).
     notifications_email_enabled: bool = True
     # Transport selector for the frontend badge/center: polling (free) vs sse
@@ -990,7 +990,7 @@ class Settings(BaseSettings):
         return max(1, min(3650, n))
 
     # =====================================================================
-    # P4 Resilience — streaming AI, offline support, advanced autosave
+    # P4 Resilience - streaming AI, offline support, advanced autosave
     # =====================================================================
     # Independent ADR-14 free/premium toggles. Each area is dark-launchable and
     # has a documented off/rollback path (design §Deployment). Conservative
@@ -1156,7 +1156,7 @@ class Settings(BaseSettings):
                 object.__setattr__(self, field_name, secrets.token_urlsafe(32))
                 logger.warning(
                     "%s not set; using an ephemeral per-process value "
-                    "(local single-user mode only — sessions reset on restart).",
+                    "(local single-user mode only - sessions reset on restart).",
                     env_name,
                 )
             else:
@@ -1225,7 +1225,7 @@ class Settings(BaseSettings):
             if not url or url.startswith("sqlite"):
                 errors.append(
                     "DATABASE_URL must be a Postgres URL when SINGLE_USER_MODE is off "
-                    "(SQLite is local-dev only — ADR-13)"
+                    "(SQLite is local-dev only - ADR-13)"
                 )
 
         # -- background-jobs / scheduler wiring must actually be able to run ---
@@ -1237,7 +1237,7 @@ class Settings(BaseSettings):
             # external_cron drives ALL background work (reaper, search indexing,
             # notification emails, reminders, retention, purge) through
             # POST /api/v1/internal/run-jobs, which rejects every caller when no
-            # INTERNAL_JOB_TOKEN is set → those jobs could NEVER run. Fail fast.
+            # INTERNAL_JOB_TOKEN is set -> those jobs could NEVER run. Fail fast.
             if self.scheduler_mode == "external_cron" and not self.internal_job_token.strip():
                 errors.append(
                     "SCHEDULER_MODE=external_cron requires INTERNAL_JOB_TOKEN so your "
@@ -1259,7 +1259,7 @@ class Settings(BaseSettings):
                 )
 
             # Shared abuse-control + session-cache state is per-process with a
-            # local KVStore → weakened once you run >1 worker/instance. A single
+            # local KVStore -> weakened once you run >1 worker/instance. A single
             # container is valid, so warn (not fatal).
             if kv_is_local:
                 logger.warning(
@@ -1269,7 +1269,7 @@ class Settings(BaseSettings):
                     "instances. Set KVSTORE_URL=redis:// / rediss:// before scaling out."
                 )
 
-            # Email verification enabled but no real delivery provider → users
+            # Email verification enabled but no real delivery provider -> users
             # can never receive verification/reset links (only the dev log sees
             # them). Recoverable/product-dependent, so warn loudly (not fatal).
             if self.email_verification_enabled:

@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Analytics card — a compact, privacy-respecting usage summary.
+ * Analytics card - a compact, privacy-respecting usage summary.
  *
  * Reads the per-user analytics snapshot (event-derived counters + completeness
  * gauge). Non-PII; purely informational. Hidden while loading/empty to avoid a

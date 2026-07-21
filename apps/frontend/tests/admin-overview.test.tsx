@@ -11,14 +11,14 @@ import { render, screen } from '@testing-library/react';
  *   backend reports as `unavailable` shows an explicit "Unavailable" indicator
  *   instead of a number; `errorRate24h` renders as a percentage ("2.50%").
  * - **Stale indicator (Req 13.9).** When the snapshot's `computedAt` is older
- *   than 60s — or the backend `stale` flag is set — a "Stale" indicator renders.
+ *   than 60s - or the backend `stale` flag is set - a "Stale" indicator renders.
  * - **Selector re-render (Req 11.1/11.2).** The usage chart is keyed by the
  *   selected metric + window via `useUsageSeries`, so a metric/window change
  *   re-queries. The initial render calls `useUsageSeries` with the default
  *   metric + 30-day window, and both the metric and time-window selectors render
  *   labeled. The atelier `Select` is a Radix primitive that is not reliably
  *   operable under jsdom (it portals + relies on pointer-capture APIs jsdom
- *   lacks), so the full click-through interaction (selector change → chart
+ *   lacks), so the full click-through interaction (selector change -> chart
  *   re-query within 2s) is owned by the Playwright E2E in task 19.1; this test
  *   pins the render/wiring contract at the unit level.
  */
@@ -100,7 +100,7 @@ function usageQuery(over: Record<string, unknown> = {}) {
 
 afterEach(() => vi.clearAllMocks());
 
-describe('AdminOverviewPage — KPI cards', () => {
+describe('AdminOverviewPage - KPI cards', () => {
   it('renders every labeled KPI card with its value', () => {
     useKpisMock.mockReturnValue(kpisQuery());
     useUsageSeriesMock.mockReturnValue(usageQuery());
@@ -126,7 +126,7 @@ describe('AdminOverviewPage — KPI cards', () => {
     useUsageSeriesMock.mockReturnValue(usageQuery());
     render(<AdminOverviewPage />);
 
-    // purgeBacklog is unavailable → explicit indicator, never a bogus 0 (Req 13.10).
+    // purgeBacklog is unavailable -> explicit indicator, never a bogus 0 (Req 13.10).
     expect(screen.getByText('Unavailable')).toBeInTheDocument();
     expect(screen.getByLabelText('Purge backlog: unavailable')).toBeInTheDocument();
   });
@@ -136,12 +136,12 @@ describe('AdminOverviewPage — KPI cards', () => {
     useUsageSeriesMock.mockReturnValue(usageQuery());
     render(<AdminOverviewPage />);
 
-    // 2.5 → "2.50%" (two decimals, Req 13.8).
+    // 2.5 -> "2.50%" (two decimals, Req 13.8).
     expect(screen.getByText('2.50%')).toBeInTheDocument();
   });
 });
 
-describe('AdminOverviewPage — stale indicator (Req 13.9)', () => {
+describe('AdminOverviewPage - stale indicator (Req 13.9)', () => {
   it('renders a "Stale" indicator when computedAt is older than 60s', () => {
     const sixMinutesAgo = new Date(Date.now() - 6 * 60_000).toISOString();
     useKpisMock.mockReturnValue(kpisQuery({ data: kpiSnapshot({ computedAt: sixMinutesAgo }) }));
@@ -168,7 +168,7 @@ describe('AdminOverviewPage — stale indicator (Req 13.9)', () => {
   });
 });
 
-describe('AdminOverviewPage — usage chart selectors (Req 11.1)', () => {
+describe('AdminOverviewPage - usage chart selectors (Req 11.1)', () => {
   it('queries useUsageSeries with the default metric + 30-day window on mount', () => {
     useKpisMock.mockReturnValue(kpisQuery());
     useUsageSeriesMock.mockReturnValue(usageQuery());
@@ -185,7 +185,7 @@ describe('AdminOverviewPage — usage chart selectors (Req 11.1)', () => {
     render(<AdminOverviewPage />);
 
     // Both selects are present + labeled (keyboard/AT operable). Changing them
-    // re-invokes useUsageSeries with new args — the click-through is covered by
+    // re-invokes useUsageSeries with new args - the click-through is covered by
     // the E2E in task 19.1 (Radix Select is not reliably driveable in jsdom).
     expect(screen.getByLabelText('Metric')).toBeInTheDocument();
     expect(screen.getByLabelText('Time window')).toBeInTheDocument();

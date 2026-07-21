@@ -3,16 +3,16 @@
 Verifies the design's `§Reliability` guarantees hold when a dependency is
 degraded, deterministically (no real network / no real providers):
 
-- **KVStore outage — asymmetric failure modes (R13.5).** Auth rate limiting
+- **KVStore outage - asymmetric failure modes (R13.5).** Auth rate limiting
   fails **closed** (deny with ``Retry-After``) so an attacker cannot buy an
   unlimited window by knocking the store over; read-path session *resolution*
   fails **open**, falling back to the DB (the source of truth) so a cache
   outage never logs users out or blocks a scoped read.
-- **JWKS fetch failure — graceful OAuth degradation (R4.2).** A warm JWKS cache
+- **JWKS fetch failure - graceful OAuth degradation (R4.2).** A warm JWKS cache
   keeps serving (stale-cache) when a refresh would fail; a cold fetch failure is
   normalized to a clean ``OAuthError`` and the callback collapses to
   ``oauth_failed`` (no session, no crash).
-- **Email provider outage — uniform ack preserved (§Reliability).** A provider
+- **Email provider outage - uniform ack preserved (§Reliability).** A provider
   whose ``send`` raises must not 500 verify/reset requests: the failure is
   swallowed + logged and the same enumeration-safe acknowledgement is returned.
 
@@ -84,7 +84,7 @@ class _DeadCacheKV:
 
 
 # ---------------------------------------------------------------------------
-# KVStore outage — rate limit fails CLOSED, resolution fails OPEN
+# KVStore outage - rate limit fails CLOSED, resolution fails OPEN
 # ---------------------------------------------------------------------------
 
 
@@ -106,9 +106,9 @@ class TestKVStoreOutage:
         assert resp.headers.get("Retry-After") is not None
 
     async def test_session_resolution_falls_back_to_db(self, auth_env):
-        """A dead cache does not break resolution — it falls back to the DB (R17.1)."""
+        """A dead cache does not break resolution - it falls back to the DB (R17.1)."""
         record = await _seed(auth_env, "fallback@example.com")
-        # A live session is created against the real DB…
+        # A live session is created against the real DB...
         real_kv_service = SessionService(
             auth_env.session_factory,
             _DeadCacheKV(),
@@ -116,7 +116,7 @@ class TestKVStoreOutage:
         )
         raw_token, _info = await real_kv_service.create_session(record.id)
 
-        # …and resolves fine even though every cache read/write raises: the DB is
+        # ...and resolves fine even though every cache read/write raises: the DB is
         # the source of truth, so the read path fails OPEN (never logs out).
         resolved = await real_kv_service.resolve(raw_token)
         assert resolved is not None
@@ -132,20 +132,20 @@ class TestKVStoreOutage:
         from app.platform import get_container
 
         # Force the composition root to hand out the dead store, then rebuild the
-        # services so they pick it up (KVStore is owned by the container — Phase 3).
+        # services so they pick it up (KVStore is owned by the container - Phase 3).
         get_container().override("kvstore", _DeadCacheKV())
         reset_session_service()
         reset_rate_limiter()
 
         async with _client() as client:
-            # Local single-user mode → owner is resolved without touching the KV;
+            # Local single-user mode -> owner is resolved without touching the KV;
             # the scoped list read still succeeds despite the cache being down.
             resp = await client.get("/api/v1/applications")
         assert resp.status_code == 200
 
 
 # ---------------------------------------------------------------------------
-# JWKS fetch failure — stale cache serves; cold failure degrades cleanly
+# JWKS fetch failure - stale cache serves; cold failure degrades cleanly
 # ---------------------------------------------------------------------------
 
 
@@ -218,7 +218,7 @@ class TestJwksFailure:
         )
         info = await provider.verify_id_token(token, "the-nonce")
         assert info.email == "user@example.com"
-        # The known kid was found in cache — no (failing) network refresh needed.
+        # The known kid was found in cache - no (failing) network refresh needed.
         assert jwks_client.fetch_attempts == 0
 
     async def test_cold_fetch_failure_degrades_cleanly(self):
@@ -226,7 +226,7 @@ class TestJwksFailure:
         priv, pub = _make_key("k-new")
         token = _sign_id_token(priv, _claims(), kid="k-new")
         # Cache holds a DIFFERENT kid, so the unknown kid forces a refresh, which
-        # fails — the provider must normalize this to an OAuthError.
+        # fails - the provider must normalize this to an OAuthError.
         _stale_priv, stale_pub = _make_key("k-old")
         jwks_client = _StaleCacheJwksClient({"keys": [stale_pub]})
         provider = GoogleOAuthProvider(
@@ -241,7 +241,7 @@ class TestJwksFailure:
         assert jwks_client.fetch_attempts >= 1
 
     async def test_callback_collapses_jwks_failure_to_oauth_failed(self, auth_env):
-        """At the endpoint, a JWKS/verify failure → oauth_failed (no session, no 500)."""
+        """At the endpoint, a JWKS/verify failure -> oauth_failed (no session, no 500)."""
 
         class _JwksDownProvider(OAuthProvider):
             name = "jwksdown"
@@ -284,7 +284,7 @@ class TestJwksFailure:
 
 
 # ---------------------------------------------------------------------------
-# Email provider outage — uniform ack preserved, never 500 / leaks
+# Email provider outage - uniform ack preserved, never 500 / leaks
 # ---------------------------------------------------------------------------
 
 
@@ -312,7 +312,7 @@ class TestEmailProviderDown:
                     json={"email": record.email},
                     headers={"X-CSRF-Token": csrf},
                 )
-        # Uniform ack (200), NOT a 500 — the send failure is swallowed + logged.
+        # Uniform ack (200), NOT a 500 - the send failure is swallowed + logged.
         assert resp.status_code == 200
         assert any("email delivery failed" in r.message.lower() for r in caplog.records)
 

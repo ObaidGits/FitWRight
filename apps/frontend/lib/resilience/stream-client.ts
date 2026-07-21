@@ -2,16 +2,16 @@
  * Streaming AI client (P4 R1, Property 3).
  *
  * Two pieces, both transport-injected so they unit-test without a browser:
- * - {@link SseDecoder} — a pure incremental parser turning a byte/text SSE
+ * - {@link SseDecoder} - a pure incremental parser turning a byte/text SSE
  *   stream into `{ event, data }` records.
- * - {@link StreamController} — orchestrates a generation: accumulates `token`
+ * - {@link StreamController} - orchestrates a generation: accumulates `token`
  *   deltas into an `aria-live` preview, exposes cancel (aborts the request +
  *   signals the server), and on a terminal `error` (or unsupported/failed
  *   stream) transparently falls back to the non-stream path, surfacing any
  *   partial text as a discardable preview.
  *
  * Streamed output is a **preview**; it is persisted only via the existing
- * explicit accept path — never here.
+ * explicit accept path - never here.
  */
 
 export interface SseEvent {
@@ -70,7 +70,7 @@ export type StreamStatus = 'idle' | 'streaming' | 'done' | 'cancelled' | 'error'
 export interface StreamTransport {
   /** Open the SSE stream, yielding decoded events. Throw to trigger fallback. */
   open(signal: AbortSignal): AsyncIterable<SseEvent>;
-  /** Signal server-side cancellation (POST …/cancel). */
+  /** Signal server-side cancellation (POST .../cancel). */
   cancel(): Promise<void>;
   /** Non-stream fallback generation; resolves the full text. */
   fallback(): Promise<string>;

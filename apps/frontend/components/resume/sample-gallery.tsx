@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * <SampleGallery> — browse the Resume Sample Library.
+ * <SampleGallery> - browse the Resume Sample Library.
  *
  * Search + category filter over {@link RESUME_SAMPLES}; each card is a real
  * render of the sample (page 1) via the shared {@link ResumeDocument} in the
@@ -83,7 +83,7 @@ export function SampleGallery() {
         <Input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search samples — role, industry, keyword…"
+          placeholder="Search samples - role, industry, keyword..."
           aria-label="Search samples"
           className="pl-9"
         />

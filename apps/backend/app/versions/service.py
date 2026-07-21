@@ -1,8 +1,8 @@
-"""Version-history business logic (design §A, Requirements 1–3).
+"""Version-history business logic (design §A, Requirements 1-3).
 
 Pure helpers (canonical hashing, gzip compress/decompress, field diff, prune
 decision) plus orchestration that persists through the ``app.database`` facade
-(the only place owned-table queries may live — the scoping guard). Nothing here
+(the only place owned-table queries may live - the scoping guard). Nothing here
 touches the ORM directly; it composes facade methods that are all scoped by
 ``user_id``.
 
@@ -10,10 +10,10 @@ Design guarantees implemented here:
 - **Dedupe (R1.2):** a snapshot whose ``content_hash`` equals the latest
   snapshot's is skipped (no-op), so identical consecutive states never persist.
 - **Debounce (R1.2):** rapid ``manual`` saves within ``debounce_seconds`` of the
-  latest ``manual`` snapshot are coalesced (the newer content replaces nothing —
+  latest ``manual`` snapshot are coalesced (the newer content replaces nothing -
   the write is simply skipped; the periodic autosave will capture the settled
   state), preventing snapshot spam.
-- **Compression (R1.1):** payloads are gzip(json) — never raw JSON — bounded by
+- **Compression (R1.1):** payloads are gzip(json) - never raw JSON - bounded by
   a canonical serialization so the hash is stable across key ordering.
 - **Cap/prune (R1.3):** at most ``cap`` snapshots per resume; the oldest
   ``original`` is always retained; the oldest non-``original`` rows are pruned.
@@ -57,8 +57,8 @@ _GZIP_LEVEL = 6
 class VersionServiceError(Exception):
     """Raised for version-history precondition failures.
 
-    ``code`` maps to an HTTP status at the router boundary: ``not_found`` → 404,
-    ``conflict`` → 409, ``invalid`` → 422.
+    ``code`` maps to an HTTP status at the router boundary: ``not_found`` -> 404,
+    ``conflict`` -> 409, ``invalid`` -> 422.
     """
 
     def __init__(self, code: str, message: str) -> None:
@@ -199,7 +199,7 @@ async def capture_snapshot(
         # Dedupe: identical consecutive content is a no-op (R1.2).
         if latest.get("content_hash") == content_hash:
             return None
-        # Debounce: coalesce rapid manual saves (R1.2). Only manual→manual within
+        # Debounce: coalesce rapid manual saves (R1.2). Only manual->manual within
         # the window is skipped; original/ai are always significant.
         if (
             source == "manual"

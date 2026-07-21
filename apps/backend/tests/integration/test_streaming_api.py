@@ -1,4 +1,4 @@
-"""P4 Resilience — streaming AI SSE endpoint integration tests.
+"""P4 Resilience - streaming AI SSE endpoint integration tests.
 
 The LLM layer is stubbed (no network/provider) so we deterministically exercise
 the SSE framing, flag gate, capability probe, per-user concurrency cap, cancel
@@ -172,7 +172,7 @@ async def _owner_id() -> str:
 
 
 class TestImprovePreviewStream:
-    """POST /resumes/improve/preview/stream — stage-progress SSE for tailoring."""
+    """POST /resumes/improve/preview/stream - stage-progress SSE for tailoring."""
 
     @pytest.fixture
     def stub_db(self, monkeypatch):
@@ -290,7 +290,7 @@ class TestImprovePreviewStream:
 
 
 class TestStreamingUpload:
-    """POST /api/v1/resumes/upload/stream — honest per-stage parse SSE."""
+    """POST /api/v1/resumes/upload/stream - honest per-stage parse SSE."""
 
     async def test_streams_parse_stages_then_done(
         self, client, enable_streaming, isolated_db, monkeypatch
@@ -314,7 +314,7 @@ class TestStreamingUpload:
         assert resp.headers["content-type"].startswith("text/event-stream")
         events = _parse_sse(resp.text)
         stages = [(d["stage"], d["status"]) for e, d in events if e == "stage"]
-        # Honest boundaries: received → extracting → structuring, each completing.
+        # Honest boundaries: received -> extracting -> structuring, each completing.
         assert ("received", "done") in stages
         assert ("extracting", "active") in stages
         assert ("extracting", "done") in stages

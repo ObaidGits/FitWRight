@@ -2,7 +2,7 @@
  * A realistic sample resume used for template gallery thumbnails and previews.
  *
  * It exercises every major section (summary, experience, projects, education,
- * skills) so a template's real layout — not an empty shell — is what the user
+ * skills) so a template's real layout - not an empty shell - is what the user
  * evaluates in the gallery. Pure data; rendered through the shared renderer.
  */
 import type { ResumeData } from '@/components/dashboard/resume-component';

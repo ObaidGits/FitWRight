@@ -1,6 +1,6 @@
 # Server-Side Performance (HIGH)
 
-> Sibling docs: [waterfalls](01-waterfalls.md) · [bundle size](02-bundle-size.md) · [server actions security](03-server-actions-security.md) · [checklist](checklist.md)
+> Sibling docs: [waterfalls](01-waterfalls.md) - [bundle size](02-bundle-size.md) - [server actions security](03-server-actions-security.md) - [checklist](checklist.md)
 
 ---
 
@@ -8,16 +8,16 @@
 
 Once you've fixed waterfalls (file 01) and bundle bloat (file 02), the next tier of wins comes from three patterns: deduplicating server-side data fetches, trimming what you send to the client, and pushing non-critical work off the response path.
 
-These are HIGH severity, not CRITICAL — they matter, but the gains are smaller and require more refactoring than the earlier fixes.
+These are HIGH severity, not CRITICAL - they matter, but the gains are smaller and require more refactoring than the earlier fixes.
 
 ---
 
 ## 4.1 Use `React.cache()` for request deduplication
 
-In App Router, the same data-fetching function can be called from multiple places during a single request — `layout.tsx`, `page.tsx`, nested components, metadata generation. Without dedup, each call hits your database again.
+In App Router, the same data-fetching function can be called from multiple places during a single request - `layout.tsx`, `page.tsx`, nested components, metadata generation. Without dedup, each call hits your database again.
 
 ```tsx
-// ❌ BAD: Same user fetched 3+ times per request
+// BAD: Same user fetched 3+ times per request
 // layout.tsx
 const user = await getUser(userId);
 
@@ -29,7 +29,7 @@ const user = await getUser(userId);  // another duplicate
 ```
 
 ```tsx
-// ✅ GOOD: One fetch per request, shared everywhere
+// GOOD: One fetch per request, shared everywhere
 // lib/data.ts
 import { cache } from 'react';
 
@@ -48,18 +48,18 @@ export const getUser = cache(async (userId: string) => {
 
 ### What `cache()` is NOT
 
-- Not a cross-request cache — use `unstable_cache` or external caching for that
-- Not a client-side cache — only works in Server Components
-- Not magic — if your fetcher takes different arguments at each call site, it won't dedup
+- Not a cross-request cache - use `unstable_cache` or external caching for that
+- Not a client-side cache - only works in Server Components
+- Not magic - if your fetcher takes different arguments at each call site, it won't dedup
 
 ---
 
 ## 4.2 Minimize client component data
 
-When you pass props from a Server Component into a Client Component, those props get **serialized into the HTML** and shipped to the browser. Sending the entire user object means shipping the user's email, password hash (if present), internal IDs, etc. — every page load.
+When you pass props from a Server Component into a Client Component, those props get **serialized into the HTML** and shipped to the browser. Sending the entire user object means shipping the user's email, password hash (if present), internal IDs, etc. - every page load.
 
 ```tsx
-// ❌ BAD: Sends the whole user object to the browser
+// BAD: Sends the whole user object to the browser
 const user = await getUser(id);
 return <ClientProfile user={user} />;
 
@@ -67,7 +67,7 @@ return <ClientProfile user={user} />;
 ```
 
 ```tsx
-// ✅ GOOD: Pick only the fields the client genuinely needs
+// GOOD: Pick only the fields the client genuinely needs
 const user = await getUser(id);
 return (
   <ClientProfile
@@ -81,12 +81,12 @@ return (
 
 This has two benefits:
 
-1. **Smaller HTML payload** — faster time-to-first-byte
-2. **Less leakage** — sensitive fields never reach the browser, even if the client component never renders them
+1. **Smaller HTML payload** - faster time-to-first-byte
+2. **Less leakage** - sensitive fields never reach the browser, even if the client component never renders them
 
 ### Rule of thumb
 
-Treat the Server→Client boundary as a public API. Pick fields explicitly. Never pass full ORM objects.
+Treat the Server->Client boundary as a public API. Pick fields explicitly. Never pass full ORM objects.
 
 ---
 
@@ -97,7 +97,7 @@ Some work has to happen as a result of a request, but the user doesn't need to w
 In Next.js 15, the `after()` API lets you defer this work until **after the response has been sent**.
 
 ```tsx
-// ❌ BAD: User waits for analytics + webhook before getting their response
+// BAD: User waits for analytics + webhook before getting their response
 export async function POST(req: Request) {
   const data = await processRequest(req);
   await logToAnalytics(data);  // user waits
@@ -107,7 +107,7 @@ export async function POST(req: Request) {
 ```
 
 ```tsx
-// ✅ GOOD: Respond first, do background work after
+// GOOD: Respond first, do background work after
 import { after } from 'next/server';
 
 export async function POST(req: Request) {
@@ -126,17 +126,17 @@ The user sees the response in N ms instead of N + analytics_latency + webhook_la
 
 ### What's safe to put in `after()`
 
-- ✅ Analytics events
-- ✅ Audit logging
-- ✅ Cache warming / invalidation
-- ✅ Webhook dispatch (fire-and-forget)
-- ✅ Email queueing (queueing, not sending)
+- [x] Analytics events
+- [x] Audit logging
+- [x] Cache warming / invalidation
+- [x] Webhook dispatch (fire-and-forget)
+- [x] Email queueing (queueing, not sending)
 
 ### What's NOT safe to put in `after()`
 
-- ❌ Anything the response payload depends on
-- ❌ Anything the user expects to be durable before they see success (e.g., the actual database write)
-- ❌ Anything that needs to fail loudly to the user
+- [ ] Anything the response payload depends on
+- [ ] Anything the user expects to be durable before they see success (e.g., the actual database write)
+- [ ] Anything that needs to fail loudly to the user
 
 If a failure in `after()` should block the user, it doesn't belong there.
 
@@ -168,9 +168,9 @@ export async function createPost(formData: FormData) {
 | Pattern | When |
 |---------|------|
 | `cache()` | Any data fetcher called from multiple places per request |
-| Minimize client props | Always — make picking fields a habit |
+| Minimize client props | Always - make picking fields a habit |
 | `after()` | Any post-response work that doesn't gate user feedback |
 
 These are not as urgent as fixing waterfalls and barrels, but they compound. Apply them once and they keep paying off as the codebase grows.
 
-Next: [checklist.md](checklist.md) — a pre-merge checklist plus a `next.config.js` template.
+Next: [checklist.md](checklist.md) - a pre-merge checklist plus a `next.config.js` template.

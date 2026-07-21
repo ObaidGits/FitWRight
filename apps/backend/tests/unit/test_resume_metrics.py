@@ -9,7 +9,7 @@ injected :class:`~app.admin.metric_store.MetricStore`-shaped store:
 - **Split math (Req 14.1).** ``sourceSplit`` echoes the snapshot counts and adds
   percentages = ``count / total * 100`` rounded to 1 decimal (total =
   generated + imported + tailored + deleted).
-- **Empty state (Req 14.1).** No snapshot → all counts 0, all percentages 0.0,
+- **Empty state (Req 14.1).** No snapshot -> all counts 0, all percentages 0.0,
   empty ``topTemplates``, and a zero-filled growth series.
 - **top-N ordering (Req 14.2).** ``topTemplates`` is the snapshot's popular
   templates capped at 10, sorted descending by count with ties broken by name
@@ -17,8 +17,8 @@ injected :class:`~app.admin.metric_store.MetricStore`-shaped store:
 - **Window validation (Req 14.4).** ``analytics(45)`` raises ``ValueError``;
   7 / 30 / 90 are accepted.
 - **Scope-limited fields (Req 14.7).** The serialized ``ResumeAnalytics`` exposes
-  ONLY window / sourceSplit / topTemplates / growth / computedAt — no
-  funnel / cohort / retention keys — and passes the forbidden-field guard.
+  ONLY window / sourceSplit / topTemplates / growth / computedAt - no
+  funnel / cohort / retention keys - and passes the forbidden-field guard.
 - **O(1) read (Req 14.6).** ``analytics`` issues a fixed, bounded number of store
   reads (1 ``snapshot_get`` + 3 ``series``) regardless of data volume.
 - **Growth (Req 14.3).** The growth series sums generated + imported + tailored
@@ -56,7 +56,7 @@ def _day(offset: int = 0) -> str:
 
 
 def _trailing_days(days: int) -> list[str]:
-    """Trailing ``days`` UTC ``YYYY-MM-DD`` strings, oldest→newest (mirrors store)."""
+    """Trailing ``days`` UTC ``YYYY-MM-DD`` strings, oldest->newest (mirrors store)."""
     now = datetime.now(timezone.utc)
     n = max(0, int(days))
     return [(now - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(n - 1, -1, -1)]
@@ -105,7 +105,7 @@ def _snapshot(*, source_counts=None, templates=None) -> dict:
 
 
 # ===========================================================================
-# 1. Split math (Req 14.1) — counts echoed, percentages 1-decimal of total
+# 1. Split math (Req 14.1) - counts echoed, percentages 1-decimal of total
 # ===========================================================================
 
 
@@ -113,7 +113,7 @@ class TestSplitMath:
     """Validates: Requirements 14.1"""
 
     async def test_counts_and_percentages(self):
-        # total = 40 + 30 + 20 + 10 = 100 → percentages are exact tenths.
+        # total = 40 + 30 + 20 + 10 = 100 -> percentages are exact tenths.
         snap = _snapshot(
             source_counts={
                 "generated": 40,
@@ -145,7 +145,7 @@ class TestSplitMath:
         ) == 100.0
 
     async def test_percentages_rounded_to_one_decimal(self):
-        # total = 3 → 1/3 = 33.333.. rounds to 33.3 (one decimal place).
+        # total = 3 -> 1/3 = 33.333.. rounds to 33.3 (one decimal place).
         snap = _snapshot(
             source_counts={"generated": 1, "imported": 1, "tailored": 1, "deleted": 0}
         )
@@ -161,7 +161,7 @@ class TestSplitMath:
 
 
 # ===========================================================================
-# 2. Empty state (Req 14.1) — no snapshot → zeros, empty templates, zero growth
+# 2. Empty state (Req 14.1) - no snapshot -> zeros, empty templates, zero growth
 # ===========================================================================
 
 
@@ -190,7 +190,7 @@ class TestEmptyState:
 
 
 # ===========================================================================
-# 3. top-N ordering (Req 14.2) — cap 10, desc by count, ties → name asc
+# 3. top-N ordering (Req 14.2) - cap 10, desc by count, ties -> name asc
 # ===========================================================================
 
 
@@ -212,7 +212,7 @@ class TestTopTemplateOrdering:
             {"template": "t-50", "count": 50},
             {"template": "t-40", "count": 40},
             {"template": "t-30", "count": 30},
-            {"template": "t-4", "count": 4},     # 11th by count → excluded
+            {"template": "t-4", "count": 4},     # 11th by count -> excluded
             {"template": "t-3", "count": 3},     # excluded
             {"template": "t-2", "count": 2},     # excluded
         ]
@@ -246,7 +246,7 @@ class TestTopTemplateOrdering:
 
 
 # ===========================================================================
-# 4. Window validation (Req 14.4) — invalid → ValueError; 7/30/90 accepted
+# 4. Window validation (Req 14.4) - invalid -> ValueError; 7/30/90 accepted
 # ===========================================================================
 
 
@@ -266,7 +266,7 @@ class TestWindowValidation:
 
 
 # ===========================================================================
-# 5. Scope-limited fields (Req 14.7 / 15.8) — enumerated metrics only
+# 5. Scope-limited fields (Req 14.7 / 15.8) - enumerated metrics only
 # ===========================================================================
 
 
@@ -283,7 +283,7 @@ class TestScopeLimitedFields:
 
         body = result.model_dump(by_alias=True)
 
-        # Exactly the enumerated top-level metrics — nothing else.
+        # Exactly the enumerated top-level metrics - nothing else.
         assert set(body.keys()) == {
             "window",
             "sourceSplit",
@@ -302,7 +302,7 @@ class TestScopeLimitedFields:
 
 
 # ===========================================================================
-# 6. O(1) read (Req 14.6) — fixed store-read count regardless of data volume
+# 6. O(1) read (Req 14.6) - fixed store-read count regardless of data volume
 # ===========================================================================
 
 
@@ -332,13 +332,13 @@ class TestO1Read:
         # Fixed shape: 1 snapshot read + 3 series reads (generated/imported/tailored).
         assert small.snapshot_get_calls == 1
         assert small.series_calls == 3
-        # Identical regardless of how much data was seeded — O(1) w.r.t. volume.
+        # Identical regardless of how much data was seeded - O(1) w.r.t. volume.
         assert big.snapshot_get_calls == small.snapshot_get_calls
         assert big.series_calls == small.series_calls
 
 
 # ===========================================================================
-# 7. Growth (Req 14.3) — sum generated+imported+tailored, exclude deleted, zero-fill
+# 7. Growth (Req 14.3) - sum generated+imported+tailored, exclude deleted, zero-fill
 # ===========================================================================
 
 
@@ -350,14 +350,14 @@ class TestGrowth:
             RESUMES_GENERATED: {_day(0): 5, _day(2): 1},
             RESUMES_IMPORTED: {_day(0): 2, _day(2): 3},
             RESUMES_TAILORED: {_day(0): 1},
-            # Deletions must NOT count toward growth — seed a big value to prove it.
+            # Deletions must NOT count toward growth - seed a big value to prove it.
             RESUMES_DELETED: {_day(0): 999, _day(2): 999},
         }
         result = await _service(
             _FakeStore(snapshot=_snapshot(), series_data=series_data)
         ).analytics(7)
 
-        # One point per day, oldest→newest.
+        # One point per day, oldest->newest.
         assert len(result.growth) == 7
         dates = [p.date for p in result.growth]
         assert dates == sorted(dates)

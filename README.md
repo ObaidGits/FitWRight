@@ -6,7 +6,7 @@
 
 The AI harness to build tailored resumes for each job application with Claude, ChatGPT, DeepSeek, Kimi, GLM, Gemma, and other LLMs. Supports both local and remote LLMs.
 
-[𝙷𝚘𝚠 𝚝𝚘 𝙸𝚗𝚜𝚝𝚊𝚕𝚕](SETUP.md) ✦ [𝙺𝚎𝚢 𝙵𝚎𝚊𝚝𝚞𝚛𝚎𝚜](#key-features) ✦ [𝚃𝚎𝚌𝚑 𝚂𝚝𝚊𝚌𝚔](#tech-stack) ✦ [𝙲𝚛𝚎𝚊𝚝𝚘𝚛](#creators-note)
+[How to Install](SETUP.md) - [Key Features](#key-features) - [Tech Stack](#tech-stack) - [Creator](#creators-note)
 
 ![version](https://img.shields.io/badge/Version-1.2-FFF?labelColor=F0F0E8&style=for-the-badge&color=1d4ed8) ![license](https://img.shields.io/badge/License-Apache%202.0-FFF?labelColor=F0F0E8&style=for-the-badge&color=1d4ed8)
 
@@ -62,10 +62,10 @@ Export your tailored resume and cover letter as PDF.
 
 | Template Name | Preview | Description |
 |---------------|---------|-------------|
-| **Classic Single Column** | ![Classic Template](assets/pdf-templates/single-column.jpg) | A traditional and clean layout suitable for most industries. [𝐕𝐢𝐞𝐰 𝐏𝐃𝐅](assets/pdf-templates/single-column.pdf) |
-| **Modern Single Column** | ![Modern Template](assets/pdf-templates/modern-single-column.jpg) | A contemporary design with a focus on readability and aesthetics. [𝐕𝐢𝐞𝐰 𝐏𝐃𝐅](assets/pdf-templates/modern-single-column.pdf)|
-| **Classic Two Column** | ![Classic Two Column Template](assets/pdf-templates/two-column.jpg) | A structured layout that separates sections for clarity. [𝐕𝐢𝐞𝐰 𝐏𝐃𝐅](assets/pdf-templates/two-column.pdf)|
-| **Modern Two Column** | ![Modern Two Column Template](assets/pdf-templates/modern-two-column.jpg) | A sleek design that utilizes two columns for better organization. [𝐕𝐢𝐞𝐰 𝐏𝐃𝐅](assets/pdf-templates/modern-two-column.pdf)|
+| **Classic Single Column** | ![Classic Template](assets/pdf-templates/single-column.jpg) | A traditional and clean layout suitable for most industries. [View PDF](assets/pdf-templates/single-column.pdf) |
+| **Modern Single Column** | ![Modern Template](assets/pdf-templates/modern-single-column.jpg) | A contemporary design with a focus on readability and aesthetics. [View PDF](assets/pdf-templates/modern-single-column.pdf)|
+| **Classic Two Column** | ![Classic Two Column Template](assets/pdf-templates/two-column.jpg) | A structured layout that separates sections for clarity. [View PDF](assets/pdf-templates/two-column.pdf)|
+| **Modern Two Column** | ![Modern Two Column Template](assets/pdf-templates/modern-two-column.jpg) | A sleek design that utilizes two columns for better organization. [View PDF](assets/pdf-templates/modern-two-column.pdf)|
 
 ### Internationalization
 

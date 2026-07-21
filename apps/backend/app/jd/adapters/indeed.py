@@ -3,7 +3,7 @@
 Indeed job pages (``/viewjob?jk={id}``) embed a schema.org ``JobPosting`` in
 JSON-LD and also expose rich DOM markup (``#jobDescriptionText``). Indeed is
 aggressively bot-protected (Cloudflare), so extraction frequently falls through
-to classified WAF failures — which is correct behavior (honest failure > garbage).
+to classified WAF failures - which is correct behavior (honest failure > garbage).
 
 Like the LinkedIn adapter, this is a *detection + routing* adapter: it recognizes
 Indeed URLs and defers to the JSON-LD / DOM stages by returning ``None`` from
@@ -27,7 +27,7 @@ class IndeedAdapter:
     VERSION = "1.0.0"
     RATE_LIMIT = 20
     # JSON-LD/DOM present in static HTML when not WAF-blocked; browser is a
-    # last resort (and often futile behind Cloudflare — cascade handles it).
+    # last resort (and often futile behind Cloudflare - cascade handles it).
     REQUIRES_JS = False
 
     def can_handle(self, parsed: ParseResult) -> bool:
@@ -36,7 +36,7 @@ class IndeedAdapter:
         return host == "indeed.com" or host.endswith(".indeed.com")
 
     def extract_api_url(self, parsed: ParseResult) -> str | None:
-        # No public anonymous JSON API — defer to JSON-LD / DOM extractors.
+        # No public anonymous JSON API - defer to JSON-LD / DOM extractors.
         return None
 
     def job_key(self, parsed: ParseResult) -> str | None:

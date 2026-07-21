@@ -5,7 +5,7 @@ suite closes that gap end-to-end against a **real** Postgres:
 
 1. run the Alembic chain ``upgrade head`` on Postgres (the hosted schema owner);
 2. perform a scoped CRUD round-trip through the async ``Database`` facade wired
-   to the Postgres URL (asyncpg engine + psycopg sync engine) — proving the
+   to the Postgres URL (asyncpg engine + psycopg sync engine) - proving the
    runtime actually talks to Postgres, not the local SQLite file;
 3. run ``downgrade base`` to prove the chain reverses on Postgres too.
 
@@ -80,8 +80,8 @@ def _wait_until_ready(url: str) -> bool:
 def pg_url() -> str:
     """A reachable Postgres URL, or skip with a clear reason.
 
-    Precedence: an explicit ``TEST_DATABASE_URL`` (CI/dev supplies a server) →
-    a disposable Docker container → skip.
+    Precedence: an explicit ``TEST_DATABASE_URL`` (CI/dev supplies a server) ->
+    a disposable Docker container -> skip.
     """
     explicit = os.environ.get("TEST_DATABASE_URL")
     if explicit:
@@ -243,7 +243,7 @@ class TestPostgresRuntimeCrud:
         """The runtime Database facade performs real scoped CRUD on Postgres.
 
         This is the crux of audit C-1: with a Postgres URL, the app must read and
-        write Postgres — not the local SQLite file.
+        write Postgres - not the local SQLite file.
         """
         import asyncio
 
@@ -251,7 +251,7 @@ class TestPostgresRuntimeCrud:
         from app.models import User
 
         # Alembic's online migrations call ``asyncio.run`` internally, which
-        # cannot run inside this test's running event loop — run it in a thread.
+        # cannot run inside this test's running event loop - run it in a thread.
         await asyncio.to_thread(command.upgrade, alembic_cfg_pg, "head")
 
         database = Database(db_path=pg_url)

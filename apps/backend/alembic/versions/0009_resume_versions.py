@@ -1,16 +1,16 @@
-"""P3 Productivity: resume_versions (version history — R1–R3)
+"""P3 Productivity: resume_versions (version history - R1-R3)
 
 Adds the ``resume_versions`` table (design §A / "Data Models"): immutable,
 gzip-compressed, content-hash-deduped snapshots of a resume's ``processed_data``
 scoped to ``(user_id, resume_id)``. The gzipped JSON payload lives in the
-``data_gz`` BLOB (``LargeBinary`` — ``BYTEA`` on Postgres); the metadata-only
+``data_gz`` BLOB (``LargeBinary`` - ``BYTEA`` on Postgres); the metadata-only
 list never loads it.
 
 Index ``ix_resume_versions_scope_created (user_id, resume_id, created_at, id)``
 serves the newest-first keyset list, the "latest snapshot" dedupe/undo lookup,
 and the prune scan.
 
-On Postgres the index is created ``CONCURRENTLY`` (no long write lock — design
+On Postgres the index is created ``CONCURRENTLY`` (no long write lock - design
 "Deployment"); on SQLite (local/test) inline. Locally the same schema is
 produced by ``create_all`` from ``app.models.ResumeVersion``; hosted uses this
 migration. Reversible.

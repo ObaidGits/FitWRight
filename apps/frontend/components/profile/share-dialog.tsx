@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Share dialog (P7) — publish the profile to a public page and manage visibility.
+ * Share dialog (P7) - publish the profile to a public page and manage visibility.
  *
  * Publish as **public** (indexable) or **unlisted** (link-only, noindex), copy
  * the share link, open the live page, or unpublish (back to private). The slug

@@ -1,14 +1,14 @@
 'use client';
 
 /**
- * <ResumeDocument> — the WYSIWYG page surface for the in-app preview.
+ * <ResumeDocument> - the WYSIWYG page surface for the in-app preview.
  *
  * This is the single on-screen representation of the exported PDF. It renders
  * the SAME canonical `Resume` renderer the print/PDF path uses, at the EXACT
  * PDF content-box geometry (page size in CSS px at 96 DPI, margins applied as
  * the page padding), so line wrapping, margins, and horizontal layout match the
  * download pixel-for-pixel. Content is then laid across real A4/Letter page
- * surfaces with visible page boundaries — never an infinite scroll — and the
+ * surfaces with visible page boundaries - never an infinite scroll - and the
  * whole canvas is scaled to fit its container (we scale the canvas, never
  * reflow the document, so the layout is identical at any zoom).
  *
@@ -80,7 +80,7 @@ function measureFlowBlocks(root: HTMLElement): FlowBlock[] {
       blocks.push(rect(section));
     }
   }
-  // Fallback: nothing recognized (unknown template) → one block spanning all.
+  // Fallback: nothing recognized (unknown template) -> one block spanning all.
   if (blocks.length === 0) {
     const r = root.getBoundingClientRect();
     blocks.push({ top: 0, bottom: r.height });
@@ -110,7 +110,7 @@ export function ResumeDocument({
   const pageSize = settings.pageSize;
   const margins = settings.margins;
 
-  // Geometry (px at 96 DPI — the unit Chromium's PDF layout uses).
+  // Geometry (px at 96 DPI - the unit Chromium's PDF layout uses).
   const pageW = pageWidthPx(pageSize);
   const pageH = pageHeightPx(pageSize);
   const contentW = contentWidthPx(pageSize, margins);
@@ -182,7 +182,7 @@ export function ResumeDocument({
       </div>
 
       {/* Visible, scaled page canvas.
-          Fit-to-width uses CSS `zoom` — NOT `transform: scale()`. `zoom` performs
+          Fit-to-width uses CSS `zoom` - NOT `transform: scale()`. `zoom` performs
           a real layout scale, so glyphs are re-rasterised at the on-screen size
           and stay crisp at any factor. `transform: scale()` instead promotes the
           canvas to a GPU compositing layer that is rastered ONCE at the natural

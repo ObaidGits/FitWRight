@@ -24,7 +24,7 @@ const TARGET: AskAiTarget = {
 
 afterEach(() => vi.clearAllMocks());
 
-describe('AskAiDialog — loading', () => {
+describe('AskAiDialog - loading', () => {
   it('shows the stage timeline while generating instead of a blank dialog', async () => {
     regenerateItemsMock.mockReturnValue(new Promise(() => {})); // never resolves
     render(<AskAiDialog open onOpenChange={vi.fn()} target={TARGET} onApply={vi.fn()} />);

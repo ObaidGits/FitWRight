@@ -1,27 +1,27 @@
-"""Metric_Store — the single low-level access point over ``metrics_daily`` (+ KV).
+"""Metric_Store - the single low-level access point over ``metrics_daily`` (+ KV).
 
 This is the *only* place ``metrics_daily`` I/O and the named-snapshot KV access
 live. Every Domain_Metrics_Service and every Rollup_Step reuses it, so no service
 re-implements the daily-metric read/write path (design §"Why not extend
-MetricsService"; Req 19.3/19.4). It holds **no domain logic** — only generic,
+MetricsService"; Req 19.3/19.4). It holds **no domain logic** - only generic,
 key-agnostic primitives:
 
-- :meth:`upsert` — set the absolute ``value`` for one ``(day, key)`` row.
-- :meth:`add` — atomically increment one ``(day, key)`` row by ``delta``.
-- :meth:`sum` — sum the given keys over an inclusive UTC day range.
-- :meth:`series` — per-day values for the trailing ``N`` days of one key.
-- :meth:`prune_before` — delete rows older than a cutoff day (exclusions kept).
-- :meth:`snapshot_get` / :meth:`snapshot_put` — read/write a named KV snapshot.
+- :meth:`upsert` - set the absolute ``value`` for one ``(day, key)`` row.
+- :meth:`add` - atomically increment one ``(day, key)`` row by ``delta``.
+- :meth:`sum` - sum the given keys over an inclusive UTC day range.
+- :meth:`series` - per-day values for the trailing ``N`` days of one key.
+- :meth:`prune_before` - delete rows older than a cutoff day (exclusions kept).
+- :meth:`snapshot_get` / :meth:`snapshot_put` - read/write a named KV snapshot.
 
 Both writers are **idempotent-safe and race-free** via a dialect-aware
 ``INSERT ... ON CONFLICT (day_utc, metric) DO UPDATE`` (SQLite ``3.24+`` and
-Postgres share the same ON CONFLICT shape — see the DB-portability gate):
+Postgres share the same ON CONFLICT shape - see the DB-portability gate):
 
 - ``upsert`` sets an absolute value, so re-running a closed-day flush never
-  changes the already-written value (backs Property 1 — idempotent per closed
+  changes the already-written value (backs Property 1 - idempotent per closed
   day, Req 2.3/2.6).
 - ``add`` performs the increment inside the UPSERT (``value = value + :delta``),
-  so concurrent inline call-site increments across workers never lose a delta —
+  so concurrent inline call-site increments across workers never lose a delta -
   no read-modify-write race and no per-worker rows (feature-usage counts,
   Req 16.1).
 
@@ -29,7 +29,7 @@ The store is constructed with the app's async ``session_factory`` (and, lazily,
 the process ``KVStore``) exactly like :class:`app.admin.metrics_service.MetricsService`,
 so tests can inject an isolated factory. Named snapshots live in the KVStore as
 JSON blobs (the ``_TOTALS_DAY`` O(1) totals snapshot remains owned by
-``MetricsService`` — this class only handles arbitrary named snapshots).
+``MetricsService`` - this class only handles arbitrary named snapshots).
 """
 
 from __future__ import annotations
@@ -67,7 +67,7 @@ def _today() -> str:
 
 
 def _trailing_days(days: int) -> list[str]:
-    """Return the trailing ``days`` UTC ``YYYY-MM-DD`` strings, oldest→newest."""
+    """Return the trailing ``days`` UTC ``YYYY-MM-DD`` strings, oldest->newest."""
     now = datetime.now(timezone.utc)
     n = max(0, int(days))
     return [(now - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(n - 1, -1, -1)]
@@ -150,7 +150,7 @@ class MetricStore:
         A generic, key-agnostic retention primitive: rows whose ``day_utc``
         sorts lexicographically before ``cutoff_day`` (``YYYY-MM-DD``, so the
         string order is the chronological order) are deleted, except any
-        ``day_utc`` listed in ``exclude_days`` — used to spare the reserved
+        ``day_utc`` listed in ``exclude_days`` - used to spare the reserved
         ``_TOTALS_DAY`` totals-snapshot sentinel. Idempotent: a re-run after the
         old rows are gone deletes nothing. Returns the number of rows removed.
         """
@@ -190,7 +190,7 @@ class MetricStore:
     async def series(self, key: str, days: int) -> list[tuple[str, int]]:
         """Return ``(day, value)`` for the trailing ``days`` days of ``key``.
 
-        The result is ordered oldest→newest and every day in the window is
+        The result is ordered oldest->newest and every day in the window is
         present, with ``0`` filled for days that have no stored row. Domain
         services layer any live current-day compute on top of this raw read.
         """

@@ -1,7 +1,7 @@
 /**
  * Public review-submission API client (Connect page). Mirrors the contact
  * client: `apiPost` attaches CSRF for signed-in visitors and none for guests
- * (both valid — the backend only enforces CSRF with a session), and we opt out
+ * (both valid - the backend only enforces CSRF with a session), and we opt out
  * of the global 401 redirect.
  */
 import { apiPost, DEFAULT_TIMEOUT_MS } from './client';
@@ -12,7 +12,7 @@ export interface ReviewPayload {
   body: string;
   name?: string;
   email?: string;
-  /** Honeypot — must stay empty. */
+  /** Honeypot - must stay empty. */
   company_website?: string;
   elapsed_ms?: number;
 }
@@ -39,7 +39,7 @@ function statusMessage(status: number, parsed: string | null): string {
     return 'Thanks for the enthusiasm! Please wait a moment before submitting again.';
   if (status === 422) return 'Please check the highlighted fields and try again.';
   if (status >= 500)
-    return 'Something went wrong on our side — your review wasn’t saved. Please retry.';
+    return "Something went wrong on our side - your review wasn't saved. Please retry.";
   return 'Could not submit your review. Please try again.';
 }
 
@@ -48,7 +48,7 @@ export async function submitReview(payload: ReviewPayload): Promise<ReviewResult
   try {
     res = await apiPost('/reviews/', payload, DEFAULT_TIMEOUT_MS, { skipAuthHandling: true });
   } catch {
-    throw new ReviewError(0, 'Network error — please check your connection and try again.');
+    throw new ReviewError(0, 'Network error - please check your connection and try again.');
   }
   if (!res.ok) {
     let parsed: string | null = null;

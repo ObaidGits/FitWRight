@@ -57,7 +57,7 @@ class TestFetchUrl:
         body = resp.json()
         assert "Senior Platform Engineer" in body["content"]
         # v2 DOM extraction returns MEDIUM confidence (low_confidence=True means "verify")
-        # which is correct — only API/JSON-LD sources return HIGH (low_confidence=False)
+        # which is correct - only API/JSON-LD sources return HIGH (low_confidence=False)
         assert "content" in body
 
     async def test_low_confidence_flag(self, isolated_db, owner_id):
@@ -74,7 +74,7 @@ class TestFetchUrl:
              patch("app.jd.orchestrator.fetch_url_safely", new=AsyncMock(side_effect=SsrfError("blocked_ip:169.254.169.254"))):
             async with _client() as c:
                 resp = await c.post("/api/v1/jobs/fetch-url", json={"url": "https://metadata.example.com/"})
-        # v2 orchestrator returns 200 with LOW confidence (opaque — no reason leaked)
+        # v2 orchestrator returns 200 with LOW confidence (opaque - no reason leaked)
         # The SSRF reason is never in the response regardless of status code.
         assert "169.254" not in resp.text  # reason never leaked
         if resp.status_code == 200:
@@ -89,7 +89,7 @@ class TestFetchUrl:
             async with _client() as c:
                 await c.post("/api/v1/jobs/fetch-url", json={"url": "https://cache.example.com/j"})
                 await c.post("/api/v1/jobs/fetch-url", json={"url": "https://cache.example.com/j"})
-        # v2 doesn't use the v1 cache path — it has its own cascade.
+        # v2 doesn't use the v1 cache path - it has its own cascade.
         # The mock should be called at least once (first request).
         assert mock.await_count >= 1
 

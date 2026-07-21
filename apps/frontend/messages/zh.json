@@ -259,7 +259,7 @@
       "jobDescriptionTitle": "职位描述",
       "at": "在",
       "atSeparator": " 在 ",
-      "roleSeparator": "—",
+      "roleSeparator": "-",
       "aboutTitle": "关于 JD 匹配",
       "aboutDescription": "该视图用于展示简历与职位描述（JD）的匹配程度。职位描述中的关键词会在简历中以黄色高亮，帮助你快速查看已覆盖的技能与术语。",
       "highlightedKeywordsTitle": "高亮关键词",
@@ -468,7 +468,7 @@
       "outreachGenerateFailed": "生成联系邮件失败：{error}",
       "interviewPrepGenerateFailed": "生成面试准备失败：{error}",
       "aiRequiresConnection": "AI 生成需要网络连接。请重新连接后再试。",
-      "aiStreaming": "正在使用 AI 生成…",
+      "aiStreaming": "正在使用 AI 生成...",
       "draftQuarantined": "已保存的本地草稿无法读取，已被隔离以保护你的工作。当前内容是安全的。",
       "storageDegraded": "本地存储不可用，本次会话的更改仅保存在内存中。请保存到服务器以免丢失。",
       "openRecoveryCenter": "打开恢复中心"
@@ -675,7 +675,7 @@
       "ollamaServerUrlPlaceholder": "http://localhost:11434",
       "reasoningEffortLabel": "推理深度",
       "reasoningEffortAuto": "自动",
-      "reasoningEffortAutoDesc": "不发送 reasoning_effort —— 默认值，最大限度兼容",
+      "reasoningEffortAutoDesc": "不发送 reasoning_effort -- 默认值，最大限度兼容",
       "reasoningEffortMinimal": "极低",
       "reasoningEffortLow": "低",
       "reasoningEffortMedium": "中",
@@ -872,7 +872,7 @@
     "validationError": "部分字段需要注意。请检查标记的字段后重试。",
     "boundary": {
       "title": "出现错误",
-      "description": "发生了意外问题。请尝试重新加载页面 — 如果问题持续，请告知我们。",
+      "description": "发生了意外问题。请尝试重新加载页面 - 如果问题持续，请告知我们。",
       "tryAgain": "重试",
       "reloadPage": "重新加载页面"
     }
@@ -901,7 +901,7 @@
     "title": "简历向导",
     "answerLabel": "你的回答",
     "keepAddingPrompt": "你想添加或修改什么？",
-    "readyHint": "你已经有足够的内容来生成一份出色的简历——随时可以查看并完成。",
+    "readyHint": "你已经有足够的内容来生成一份出色的简历--随时可以查看并完成。",
     "sections": {
       "intro": "开始使用",
       "contact": "联系方式",
@@ -987,7 +987,7 @@
       "jobDescription": "职位描述",
       "noJobDescription": "没有职位描述。",
       "notes": "备注",
-      "notesPlaceholder": "为此申请添加备注……",
+      "notesPlaceholder": "为此申请添加备注......",
       "saveNotes": "保存备注",
       "resumeUnavailable": "所投递的简历已不可用。",
       "loadFailed": "无法加载此申请。",
@@ -995,7 +995,7 @@
     },
     "bulk": {
       "selected": "已选择 {count} 项",
-      "moveTo": "移动到……",
+      "moveTo": "移动到......",
       "clear": "清除",
       "deleteConfirmTitle": "删除申请？",
       "deleteConfirmDescription": "删除选中的 {count} 项申请？此操作无法撤销。"
@@ -1006,7 +1006,7 @@
       "resume": "简历",
       "untitledResume": "未命名简历",
       "jobDescription": "职位描述",
-      "jobDescriptionPlaceholder": "在此粘贴职位描述……",
+      "jobDescriptionPlaceholder": "在此粘贴职位描述......",
       "company": "公司",
       "role": "职位",
       "optional": "可选",

@@ -1,4 +1,4 @@
-"""Service tests for improver — async functions with mocked LLM."""
+"""Service tests for improver - async functions with mocked LLM."""
 
 import copy
 from unittest.mock import AsyncMock, patch
@@ -160,7 +160,7 @@ class TestGenerateResumeDiffs:
             job_keywords=sample_job_keywords,
             original_resume_data=sample_resume,
         )
-        # "delete" action fails Pydantic Literal validation → skipped
+        # "delete" action fails Pydantic Literal validation -> skipped
         assert len(result.changes) == 1
         assert result.changes[0].action == "replace"
 
@@ -168,7 +168,7 @@ class TestGenerateResumeDiffs:
     async def test_uses_json_resume_when_months_present(self, mock_llm, sample_resume, sample_job_keywords):
         """When structured data has month precision, use JSON not markdown."""
         mock_llm.return_value = {"changes": [], "strategy_notes": "test"}
-        # sample_resume has "Jan 2021 - Present" — has months
+        # sample_resume has "Jan 2021 - Present" - has months
         await generate_resume_diffs(
             original_resume="# Markdown resume",
             job_description="JD",
@@ -285,7 +285,7 @@ class TestGenerateResumeDiffsEdgeCases:
             prompt_id="nonexistent_strategy",
             original_resume_data=sample_resume,
         )
-        # Should not raise — falls back to default (keywords)
+        # Should not raise - falls back to default (keywords)
         prompt = mock_llm.call_args.kwargs.get("prompt") or mock_llm.call_args.args[0]
         # Default strategy is "keywords" which says "Weave in relevant keywords"
         assert "weave" in prompt.lower() or "keywords" in prompt.lower()

@@ -210,14 +210,14 @@ async def generate_enhancements(
     # resume's processed_data directly.
     answers_by_item: dict[str, list[AnswerInput]] = {}
     item_details: dict[str, dict] = {}
-    # question_id → question dict, populated only in the legacy path
+    # question_id -> question dict, populated only in the legacy path
     questions_by_id: dict[str, dict] = {}
 
     if all(a.item_id for a in request.answers) and all(
         _extract_item_from_resume(processed_data, a.item_id or "")
         for a in request.answers
     ):
-        # Fast path — no re-analysis needed
+        # Fast path - no re-analysis needed
         for answer in request.answers:
             item_id = answer.item_id or ""
             answers_by_item.setdefault(item_id, []).append(answer)
@@ -226,7 +226,7 @@ async def generate_enhancements(
                     processed_data, item_id
                 )
     else:
-        # Legacy path — re-analyze to get question-to-item mapping
+        # Legacy path - re-analyze to get question-to-item mapping
         resume_json = json.dumps(processed_data)
         language = get_content_language()
         output_language = get_language_name(language)

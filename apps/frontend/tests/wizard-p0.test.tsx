@@ -69,7 +69,7 @@ function questionState(overrides: Partial<ResumeWizardState>): ResumeWizardState
   };
 }
 
-describe('Wizard P0 — draft persistence (W-P0.2)', () => {
+describe('Wizard P0 - draft persistence (W-P0.2)', () => {
   it('persists the wizard state to localStorage after real progress', async () => {
     mockedTurn.mockResolvedValueOnce({
       state: questionState({
@@ -103,9 +103,9 @@ describe('Wizard P0 — draft persistence (W-P0.2)', () => {
   });
 });
 
-describe('Wizard P0 — non-destructive Back (W-P0.1)', () => {
+describe('Wizard P0 - non-destructive Back (W-P0.1)', () => {
   it('repopulates the conversational input with the restored answer on Back', async () => {
-    // First turn: submit the structured intro → advance to a CONVERSATIONAL
+    // First turn: submit the structured intro -> advance to a CONVERSATIONAL
     // question (education) that has history, so the Back control appears.
     mockedTurn.mockResolvedValueOnce({
       state: questionState({

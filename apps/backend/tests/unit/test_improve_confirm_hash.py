@@ -3,7 +3,7 @@
 The bug: ``improve/preview`` hashes the RAW ``improved_data`` dict, while
 ``improve/confirm`` hashes its ``ResumeData`` round-trip
 (``request.improved_data.model_dump()``). A resume that merely OMITS optional
-fields — which ``ResumeData`` defaults to ``None`` — therefore hashes
+fields - which ``ResumeData`` defaults to ``None`` - therefore hashes
 differently on the two sides, so a valid tailoring is rejected with 400
 ("preview hash mismatch") whenever the stored ``processed_data`` is not already
 schema-complete. ``_hash_improved_data`` must canonicalize through ``ResumeData``
@@ -22,7 +22,7 @@ def _canonical(data: dict) -> dict:
 
 def test_hash_is_stable_across_resumedata_roundtrip() -> None:
     # A resume whose personalProjects entry omits the optional github/website
-    # fields (which ResumeData defaults to None) — exactly the non-canonical
+    # fields (which ResumeData defaults to None) - exactly the non-canonical
     # stored-processed_data shape that triggers the confirm 400.
     raw = {
         "personalInfo": {"name": "Jane Doe", "email": "jane@x.dev"},

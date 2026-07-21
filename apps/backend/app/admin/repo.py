@@ -1,7 +1,7 @@
 """Isolated cross-user read path for the admin surface (Task 1.2).
 
 This is the **single** module permitted to query the database without a
-``user_id`` scope — the only place cross-user reads happen in the whole product.
+``user_id`` scope - the only place cross-user reads happen in the whole product.
 It is CI-allowlisted in ``app/scripts/check_scoping.py`` precisely so that every
 *other* repository stays user-scoped and a reviewer knows exactly where to look
 for cross-tenant access. It exposes typed, read-only aggregate + list methods and
@@ -9,7 +9,7 @@ holds **no write methods** (lifecycle writes go through their services; the purg
 delete goes through the user-scoped ``Database.purge_user_owned_data`` facade).
 
 Everything returned is an aggregate (a count/series) or allowlisted
-user-management metadata — never resume/JD content, secrets, tokens, or hashes
+user-management metadata - never resume/JD content, secrets, tokens, or hashes
 (Property 2). API-key presence is surfaced only as a boolean.
 """
 
@@ -53,7 +53,7 @@ __all__ = [
     "reset_admin_repo",
 ]
 
-# Valid list filter vocabularies (anything else is ignored → predictable results).
+# Valid list filter vocabularies (anything else is ignored -> predictable results).
 _VALID_STATUS = frozenset({"active", "disabled", "pending_verification"})
 _VALID_ROLE = frozenset({"user", "admin"})
 
@@ -95,7 +95,7 @@ def build_user_row_data(row: User) -> AdminUserRowData:
     """Map a ``users`` ORM row to the allowlisted admin list-row data.
 
     The single place a ``users`` row is projected for the admin surface, so a new
-    column never rides along (only these fields are copied — Property 2).
+    column never rides along (only these fields are copied - Property 2).
     """
     return AdminUserRowData(
         id=row.id,
@@ -134,7 +134,7 @@ class AdminRepo:
         """Return one keyset page of users + the next cursor (``None`` at end).
 
         Sort is ``created_at desc, id desc`` (stable tie-break by id). Search is
-        index-usable: case-insensitive **prefix** match on email OR name — never
+        index-usable: case-insensitive **prefix** match on email OR name - never
         a ``%q%`` substring scan (R4.2). ``deleted=False`` hides soft-deleted
         users; ``deleted=True`` surfaces only them (for restore, R4.4).
         """
@@ -160,7 +160,7 @@ class AdminRepo:
 
         if q:
             # Prefix only (index-usable), never %q%. Email is stored normalized
-            # lowercase, so match the **bare** column (no lower() wrapper) — that
+            # lowercase, so match the **bare** column (no lower() wrapper) - that
             # is what lets the `email text_pattern_ops` btree index serve the
             # prefix on Postgres. Name is mixed-case, so match `lower(name)`,
             # served by the `lower(name) text_pattern_ops` expression index.
@@ -350,27 +350,27 @@ class AdminRepo:
     # They are cross-user aggregate reads that are intentionally *not* O(1) (a
     # day-bounded event scan, whole-table counts, a JSON group-by), which is why
     # they live here (the allowlisted module) and are invoked off the request path
-    # only. Every return value is a count/aggregate — never resume/JD content,
+    # only. Every return value is a count/aggregate - never resume/JD content,
     # secrets, tokens, or hashes (Property 2).
 
     async def security_daily(self, day_start: str, day_end: str) -> dict[str, int]:
         """Count Security_Critical_Event ``audit_log`` rows for the UTC day
         ``[day_start, day_end)``, keyed by the ``SEC_*`` Metric_Keys (Req 9.1).
 
-        Mapping (audit event → SEC_* key):
-        - ``SEC_LOGIN_FAILED`` ← ``AuditEvent.LOGIN_FAILED`` (``auth.login_failed``).
-        - ``SEC_ADMIN_LOGIN``  ← ``AuditEvent.LOGIN`` (``login``) rows whose actor is
+        Mapping (audit event -> SEC_* key):
+        - ``SEC_LOGIN_FAILED`` <- ``AuditEvent.LOGIN_FAILED`` (``auth.login_failed``).
+        - ``SEC_ADMIN_LOGIN``  <- ``AuditEvent.LOGIN`` (``login``) rows whose actor is
           currently an ``admin``. There is no dedicated "admin login" event, so the
           cleanest correct signal is a ``login`` row joined to ``users`` on
           ``actor_user_id`` filtered to ``role == 'admin'``. Role is evaluated at
           rollup time (current role), which is acceptable for a daily aggregate.
-        - ``SEC_AUTHZ_DENIED`` ← ``AuditEvent.AUTHZ_DENIED`` (``authz.denied``).
-        - ``SEC_RATE_LIMITED`` ← **0 (documented gap).** Rate-limit denials are
+        - ``SEC_AUTHZ_DENIED`` <- ``AuditEvent.AUTHZ_DENIED`` (``authz.denied``).
+        - ``SEC_RATE_LIMITED`` <- **0 (documented gap).** Rate-limit denials are
           emitted only as an in-process metric (``AuthMetrics.record_rate_limited``),
           never as an ``audit_log`` row, so there is no event to count here. The key
           is still returned (as 0) so the rollup writes a stable, complete row; it
           can be sourced from the flushed auth metric in a later wave.
-        - ``SEC_SUSPICIOUS``   ← **0 (documented gap).** No suspicious/blocked audit
+        - ``SEC_SUSPICIOUS``   <- **0 (documented gap).** No suspicious/blocked audit
           event exists in the ``AuditEvent`` catalog today (WAF/SSRF/bot signals live
           in productivity metrics, not the audit trail), so this is returned as 0.
 
@@ -418,24 +418,24 @@ class AdminRepo:
             SEC_LOGIN_FAILED: by_event.get(AuditEvent.LOGIN_FAILED, 0),
             SEC_ADMIN_LOGIN: admin_login,
             SEC_AUTHZ_DENIED: by_event.get(AuditEvent.AUTHZ_DENIED, 0),
-            # Documented gaps — no audit-log signal exists for these today.
+            # Documented gaps - no audit-log signal exists for these today.
             SEC_RATE_LIMITED: 0,
             SEC_SUSPICIOUS: 0,
         }
 
     async def resume_source_counts(self) -> dict[str, int]:
-        """Point-in-time resume source split — generated / imported / tailored /
+        """Point-in-time resume source split - generated / imported / tailored /
         deleted (Req 14.1/14.2).
 
         ``resumes`` has no explicit ``source``/``origin`` column, so the split uses
         the best available structural proxies:
-        - ``tailored``  = ``COUNT(improvements)`` — a tailoring result row per
+        - ``tailored``  = ``COUNT(improvements)`` - a tailoring result row per
           tailored resume (matches the existing ``resumes_tailored`` overview stat).
         - ``imported``  = non-tailored resumes (``parent_id IS NULL``) that carry a
-          persisted ``original_markdown`` — that column is set only on the
+          persisted ``original_markdown`` - that column is set only on the
           upload/parse path, so its presence marks a file-imported resume.
         - ``generated`` = the remaining non-tailored resumes (``parent_id IS NULL``
-          AND ``original_markdown IS NULL``) — builder/profile-generated resumes.
+          AND ``original_markdown IS NULL``) - builder/profile-generated resumes.
         - ``deleted``   = **0 (documented gap).** Resumes are hard-deleted (purge
           cascade); there is no soft-delete column on ``resumes``, so a point-in-time
           snapshot cannot recover deleted rows. ``RESUMES_DELETED`` is instead an
@@ -489,7 +489,7 @@ class AdminRepo:
         (Req 7.2).
 
         - ``avatarCount``        = users with a non-null ``avatar_key`` (a stored
-          avatar object exists — matches the orphan-GC provenance key).
+          avatar object exists - matches the orphan-GC provenance key).
         - ``resumeCount``        = all ``resumes`` rows.
         - ``resumeVersionCount`` = all ``resume_versions`` snapshots.
         """

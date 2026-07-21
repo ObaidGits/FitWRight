@@ -15,10 +15,10 @@ product overview, start with the repository [`README.md`](../README.md) and
 
 ## Quick starts
 
-- **New contributor** → [`agent/scope-and-principles`](agent/scope-and-principles.md) → [`agent/quickstart`](agent/quickstart.md) → [`agent/workflow`](agent/workflow.md)
-- **Backend work** → [`agent/architecture/backend-architecture`](agent/architecture/backend-architecture.md) → [`agent/apis/front-end-apis`](agent/apis/front-end-apis.md) → [`agent/llm-integration`](agent/llm-integration.md)
-- **Frontend work** → [`agent/architecture/frontend-architecture`](agent/architecture/frontend-architecture.md) → [`portable/swiss-design-system`](portable/swiss-design-system/README.md) → [`portable/nextjs-performance`](portable/nextjs-performance/README.md)
-- **System design** → [`architecture/ARCHITECTURE.md`](architecture/ARCHITECTURE.md)
+- **New contributor** -> [`agent/scope-and-principles`](agent/scope-and-principles.md) -> [`agent/quickstart`](agent/quickstart.md) -> [`agent/workflow`](agent/workflow.md)
+- **Backend work** -> [`agent/architecture/backend-architecture`](agent/architecture/backend-architecture.md) -> [`agent/apis/front-end-apis`](agent/apis/front-end-apis.md) -> [`agent/llm-integration`](agent/llm-integration.md)
+- **Frontend work** -> [`agent/architecture/frontend-architecture`](agent/architecture/frontend-architecture.md) -> [`portable/swiss-design-system`](portable/swiss-design-system/README.md) -> [`portable/nextjs-performance`](portable/nextjs-performance/README.md)
+- **System design** -> [`architecture/ARCHITECTURE.md`](architecture/ARCHITECTURE.md)
 
 ## Contributing, security, license
 

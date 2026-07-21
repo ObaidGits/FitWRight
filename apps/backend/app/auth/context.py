@@ -1,6 +1,6 @@
 """Request-scoped effective user id (ADR-4, R10.6).
 
-The LLM call graph (``llm.py`` → services → ``get_llm_config`` →
+The LLM call graph (``llm.py`` -> services -> ``get_llm_config`` ->
 ``resolve_api_key``) is deep and synchronous, so threading ``user_id`` through
 every signature would touch dozens of unrelated functions. Instead the effective
 user id for the current request is published on a :class:`contextvars.ContextVar`

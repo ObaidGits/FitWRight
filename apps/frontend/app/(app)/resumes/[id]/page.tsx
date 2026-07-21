@@ -2,7 +2,7 @@
 
 /**
  * Resume Editor (Task 7.4-7.6 / Req 10,11). Content-first single surface with
- * an always-visible live preview (reuses the render engine → matches the PDF),
+ * an always-visible live preview (reuses the render engine -> matches the PDF),
  * an appearance inspector (template + options), inline field editing, export,
  * autosave/dirty guard. Deep rich-text/drag-drop editing links to the advanced
  * editor until fully ported (documented transitional decision).
@@ -198,7 +198,7 @@ export default function ResumeEditorPage() {
   // Unsaved-changes protection now lives in <UnsavedChangesGuard when={dirty} />
   // (reload/close + in-app link nav + Back/Forward). See below in the render.
 
-  // Keyboard save (⌘/Ctrl+S) — matches the expectation set by the editor's
+  // Keyboard save (⌘/Ctrl+S) - matches the expectation set by the editor's
   // dirty guard. Keep a ref so the handler always saves the latest state.
   const onSaveRef = React.useRef<() => void>(() => {});
   React.useEffect(() => {
@@ -213,7 +213,7 @@ export default function ResumeEditorPage() {
   }, [dirty, saving]);
 
   function persistSettings(next: TemplateSettings) {
-    // Once the user changes the appearance we own it — never let a late backend
+    // Once the user changes the appearance we own it - never let a late backend
     // adoption overwrite the choice.
     adoptedRef.current = true;
     setSettings(next);
@@ -260,7 +260,7 @@ export default function ResumeEditorPage() {
   }
 
   // Reorder an experience/project item by one position (identity-based: the
-  // whole item — including its preserved `source` — moves, so no field is lost).
+  // whole item - including its preserved `source` - moves, so no field is lost).
   function moveItem(kind: 'experience' | 'projects', index: number, dir: -1 | 1) {
     setEdit((prev) => {
       if (!prev) return prev;
@@ -341,7 +341,7 @@ export default function ResumeEditorPage() {
       setDirty(true);
       return;
     }
-    // experience / project → replace that item's bullets by parsed index.
+    // experience / project -> replace that item's bullets by parsed index.
     const kind = target.itemType === 'experience' ? 'experience' : 'projects';
     const prefix = target.itemType === 'experience' ? 'exp_' : 'proj_';
     const index = Number.parseInt(target.itemId.slice(prefix.length), 10);
@@ -403,7 +403,7 @@ export default function ResumeEditorPage() {
       setDirty(false);
       draft.clear();
       // Refresh the list surfaces (home / resumes list / tailor picker) so a
-      // renamed/edited resume shows immediately — without refetching THIS
+      // renamed/edited resume shows immediately - without refetching THIS
       // detail (that could clobber edits made right after saving).
       invalidateResumeLists(qc);
       toast({ title: 'Resume saved', variant: 'success' });
@@ -588,7 +588,7 @@ export default function ResumeEditorPage() {
             </div>
           </Card>
 
-          {/* Photo — same PhotoControls used by the resume builder + settings. */}
+          {/* Photo - same PhotoControls used by the resume builder + settings. */}
           <Card className="space-y-2 p-5">
             <h2 className="text-sm font-semibold text-[var(--muted-foreground)]">Photo</h2>
             <PhotoControls
@@ -818,7 +818,7 @@ function ItemEditor({
           value={item.bullets}
           onChange={(e) => onChange({ bullets: e.target.value })}
           className="min-h-24"
-          placeholder="• Led …&#10;• Built …"
+          placeholder="- Led ...&#10;- Built ..."
         />
       </div>
     </div>

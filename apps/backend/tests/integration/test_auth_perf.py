@@ -8,15 +8,15 @@ so they never flake on a slow/loaded CI box.
 
 Covered:
 
-- **Login + session-resolution under concurrency** — many parallel resolves of
+- **Login + session-resolution under concurrency** - many parallel resolves of
   the same session all succeed and agree (O(1) resolution, R17.1); a burst of
   concurrent logins all issue distinct, independently-resolvable sessions.
-- **Cache-hit fast path** — the first resolve populates the KVStore snapshot; a
+- **Cache-hit fast path** - the first resolve populates the KVStore snapshot; a
   subsequent resolve is served entirely from the cache and touches the DB
   **zero** times (R17.1), verified by counting real DB sessions opened.
-- **Lockout under a burst of failed logins** — a burst drives the account into a
+- **Lockout under a burst of failed logins** - a burst drives the account into a
   uniform ``429 rate_limited`` with a ``Retry-After`` (R13.1).
-- **Argon2 cost budget** — the *production-default* Argon2 parameters hash a
+- **Argon2 cost budget** - the *production-default* Argon2 parameters hash a
   password within a sane bounded time (R17.2), so a misconfiguration that made
   hashing explode would be caught, while the dialed-down test fixture stays fast.
 
@@ -170,12 +170,12 @@ class TestCacheHitAvoidsDb:
         raw_token, _info = await service.create_session(record.id)
         opened_after_create = counting.opened
 
-        # 1) Cold resolve → cache miss → exactly one DB session opened.
+        # 1) Cold resolve -> cache miss -> exactly one DB session opened.
         first = await service.resolve(raw_token)
         assert first is not None
         assert counting.opened == opened_after_create + 1
 
-        # 2) Warm resolve → cache hit → NO additional DB session opened (R17.1).
+        # 2) Warm resolve -> cache hit -> NO additional DB session opened (R17.1).
         second = await service.resolve(raw_token)
         assert second is not None
         assert second.user_id == record.id
@@ -253,10 +253,10 @@ class TestArgon2CostBudget:
         hashed = service.hash_password(STRONG_PW)
         elapsed = time.monotonic() - started
 
-        # Produces a real Argon2id hash that verifies…
+        # Produces a real Argon2id hash that verifies...
         assert hashed.startswith("$argon2id$")
         assert service.verify_password(hashed, STRONG_PW) is True
-        # …within a sane, bounded budget (params are not pathologically large).
+        # ...within a sane, bounded budget (params are not pathologically large).
         assert elapsed < 5.0
 
     def test_dialed_down_fixture_params_are_fast(self, auth_env):

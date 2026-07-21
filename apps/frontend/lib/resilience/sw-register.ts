@@ -3,7 +3,7 @@
  *
  * - Registers `/sw.js` only when OFFLINE_SUPPORT is enabled.
  * - Detects a waiting (updated) SW and surfaces `onUpdateReady` so the app can
- *   prompt "Update available — reload" at a *safe* point (no destructive
+ *   prompt "Update available - reload" at a *safe* point (no destructive
  *   skipWaiting mid-edit).
  * - `applyUpdate()` posts SKIP_WAITING then reloads once the new SW takes over.
  * - Kill-switch: `unregisterAndClear()` removes the SW + caches when
@@ -57,7 +57,7 @@ export async function registerServiceWorker(
     if (!installing) return;
     installing.addEventListener('statechange', () => {
       if (installing.state === 'installed' && navigator.serviceWorker.controller) {
-        // A new SW installed while an old one controls the page → update ready,
+        // A new SW installed while an old one controls the page -> update ready,
         // but WAIT (no auto-activate) until the app reaches a safe point (R9.8).
         waitingWorker = reg.waiting;
         opts.onUpdateReady?.();

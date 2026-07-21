@@ -10,7 +10,7 @@ public JSON endpoint. Rather than fabricate an endpoint that may not exist
 
   1. Recognizes its domain (improves platform metrics + drift attribution), and
   2. Returns ``None`` from ``extract_api_url`` so the orchestrator falls through
-     to the JSON-LD → hydration → DOM → Playwright cascade.
+     to the JSON-LD -> hydration -> DOM -> Playwright cascade.
 
 ``REQUIRES_JS`` is set truthfully so the browser-decision engine knows these are
 JS-heavy SPAs (see ``browser/decision.py``, which also lists their domains).
@@ -52,11 +52,11 @@ class _DetectionAdapter:
         return any(host == s or host.endswith("." + s) for s in self._HOST_SUFFIXES)
 
     def extract_api_url(self, parsed: ParseResult) -> str | None:
-        # No stable anonymous JSON API — defer to JSON-LD / DOM / Playwright.
+        # No stable anonymous JSON API - defer to JSON-LD / DOM / Playwright.
         return None
 
     def parse_response(self, data: dict, source_url: str) -> ExtractionResult:
-        # Contract completeness only; never invoked (extract_api_url → None).
+        # Contract completeness only; never invoked (extract_api_url -> None).
         title = data.get("title", "") if isinstance(data, dict) else ""
         return ExtractionResult(
             content=title,
@@ -79,7 +79,7 @@ class OracleAdapter(_DetectionAdapter):
     def can_handle(self, parsed: ParseResult) -> bool:
         host = (parsed.hostname or "").lower()
         # Oracle Cloud recruiting is hosted under *.oraclecloud.com paths like
-        # /hcmUI/CandidateExperience/... — match the cloud host generically.
+        # /hcmUI/CandidateExperience/... - match the cloud host generically.
         if host.endswith("oraclecloud.com"):
             return True
         # Some tenants use fa-*.oraclecloud.com or company-specific ORC hosts.

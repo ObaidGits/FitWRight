@@ -4,7 +4,7 @@ Every existing integration test mocks the database away (``patch("...db")``), so
 nothing proves that the core user journey actually persists through the routers.
 This module fills that gap: it drives the genuine FastAPI app against the
 disposable ``isolated_db`` fixture (a temp-file ``Database`` swapped into every
-router module) and asserts real persisted state via the yielded db — not just
+router module) and asserts real persisted state via the yielded db - not just
 status codes. Only the LLM boundaries are mocked; the routers, schemas,
 validation, and TinyDB persistence are all real.
 
@@ -123,7 +123,7 @@ class TestPipelineCore:
 
         Fixture safety: ``isolated_db`` is listed before ``client`` (pytest
         resolves same-scope fixtures left-to-right), and the routers look up the
-        module-global ``db`` at REQUEST time — so the monkeypatched isolated db
+        module-global ``db`` at REQUEST time - so the monkeypatched isolated db
         is always the one the ASGI app reads, independent of when ``client`` was
         constructed.
         """
@@ -155,7 +155,7 @@ class TestPipelineCore:
         self, isolated_db, owner_id, sample_resume
     ):
         """The cohesive core journey in one flow: upload a resume, upload a job,
-        then fetch the resume back by id — all through real routers + real db.
+        then fetch the resume back by id - all through real routers + real db.
 
         Asserts the fetched ``processed_resume`` (a fully validated ResumeData)
         carries the expected summary, proving the stored data survives the
@@ -317,7 +317,7 @@ class TestTailoringPipeline:
             patch(
                 "app.routers.resumes.generate_outreach_message",
                 new_callable=AsyncMock,
-                return_value="Hi — I'd love to connect about this role.",
+                return_value="Hi - I'd love to connect about this role.",
             ),
         ):
             # --- Preview (no persistence; resume_id stays null) ---
@@ -395,12 +395,12 @@ class TestTailoringPipeline:
         """A stored resume whose ``processed_data`` OMITS optional schema fields
         must still tailor + confirm successfully (regression for the confirm 400).
 
-        ``improve/preview`` hashes the raw ``improved_data`` — here a project that
+        ``improve/preview`` hashes the raw ``improved_data`` - here a project that
         omits the optional ``github``/``website`` keys ``ResumeData`` defaults to
-        ``None`` — while ``improve/confirm`` hashes the schema-defaulted
+        ``None`` - while ``improve/confirm`` hashes the schema-defaulted
         ``ResumeData`` round-trip. Before ``_hash_improved_data`` canonicalized
         both sides these diverged and confirm returned 400 ("preview hash
-        mismatch"). NO canonicalize workaround is applied to ``improved`` here —
+        mismatch"). NO canonicalize workaround is applied to ``improved`` here -
         that is exactly the point.
         """
         upload_resp = await _upload_resume(isolated_db, sample_resume)
@@ -476,7 +476,7 @@ class TestTailoringPipeline:
             patch(
                 "app.routers.resumes.generate_outreach_message",
                 new_callable=AsyncMock,
-                return_value="Hi — I'd love to connect about this role.",
+                return_value="Hi - I'd love to connect about this role.",
             ),
         ):
             async with _new_client() as client:
@@ -488,7 +488,7 @@ class TestTailoringPipeline:
             preview_data = preview_resp.json()["data"]
             preview_resume = preview_data["resume_preview"]
             # The preview RESPONSE is schema-complete even though the stored
-            # improved_data wasn't — this asymmetry is what used to break confirm.
+            # improved_data wasn't - this asymmetry is what used to break confirm.
             assert "github" in preview_resume["personalProjects"][0]
 
             async with _new_client() as client:

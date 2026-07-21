@@ -1,16 +1,16 @@
-"""Provider-abstracted OAuth (Google now; GitHub/Microsoft later) — Task 7.
+"""Provider-abstracted OAuth (Google now; GitHub/Microsoft later) - Task 7.
 
 Module layout (design `§OAuth provider interface`):
 
-- ``base`` — the provider-agnostic :class:`OAuthProvider` contract + shared types
+- ``base`` - the provider-agnostic :class:`OAuthProvider` contract + shared types
   (:class:`OAuthTokens`, :class:`OAuthUserInfo`, :class:`OAuthError`).
-- ``google`` — the Google OpenID Connect implementation (auth-code + PKCE, full
+- ``google`` - the Google OpenID Connect implementation (auth-code + PKCE, full
   id_token verification against a rotating JWKS with clock-skew tolerance).
-- ``registry`` — the ``name → factory`` allow-list so only known providers are
+- ``registry`` - the ``name -> factory`` allow-list so only known providers are
   routable; adding a provider is one :func:`register` call.
-- ``state`` — signed, httpOnly, 5-minute transient cookie carrying
+- ``state`` - signed, httpOnly, 5-minute transient cookie carrying
   ``state``/``nonce``/PKCE ``verifier`` (+ optional ``next``) plus PKCE helpers.
-- ``linking`` — the safe link/create decision (Property 5 / R4.4).
+- ``linking`` - the safe link/create decision (Property 5 / R4.4).
 """
 
 from app.auth.oauth.base import (

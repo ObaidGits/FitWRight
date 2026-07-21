@@ -139,7 +139,7 @@ class TestValidateDeployment:
         assert any("persistent_postgres" in e for e in errors)
 
     def test_explicit_profile_contradicting_mode_is_error(self):
-        # saas profile declared, but single-user mode → contradiction.
+        # saas profile declared, but single-user mode -> contradiction.
         s = fake(single_user_mode=True, deployment_profile="saas")
         errors = validate_deployment(s)
         assert any("contradicts" in e for e in errors)

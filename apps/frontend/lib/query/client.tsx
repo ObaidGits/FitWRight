@@ -41,7 +41,7 @@ export const queryKeys = {
   reminders: (applicationId: string) => ['reminders', applicationId] as const,
   interviews: (applicationId: string) => ['interviews', applicationId] as const,
   profile: ['profile'] as const,
-  // Professional Profile System (docs/architecture/PROFILE_SYSTEM_PLAN.md) —
+  // Professional Profile System (docs/architecture/PROFILE_SYSTEM_PLAN.md) -
   // distinct from the lightweight account ``profile`` key above.
   professionalProfile: ['professional-profile'] as const,
   professionalProfileCompleteness: ['professional-profile', 'completeness'] as const,
@@ -56,7 +56,7 @@ export const queryKeys = {
 //
 // Resume LIST surfaces (home ['resumes'], library ['resumes','library'], and
 // the tailor source picker ['resumes','tailor-sources']) are refreshed WITHOUT
-// touching the open editor detail (['resumes', id]) — a blanket ['resumes']
+// touching the open editor detail (['resumes', id]) - a blanket ['resumes']
 // invalidation would also refetch the detail and could clobber in-progress
 // edits. Callers that DO want the detail refreshed (e.g. version restore)
 // invalidate ``queryKeys.resume(id)`` explicitly.

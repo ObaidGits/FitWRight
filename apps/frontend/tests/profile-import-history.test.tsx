@@ -67,7 +67,7 @@ describe('ImportDialog', () => {
             id: 'workExperience:inc1',
             section: 'workExperience',
             op: 'add',
-            label: 'SWE · Globex',
+            label: 'SWE - Globex',
             confidence: 1,
             similarity: null,
             existing_uid: null,
@@ -96,7 +96,7 @@ describe('ImportDialog', () => {
     // Pick the resume to preview.
     fireEvent.click(await screen.findByText('My Resume'));
 
-    expect(await screen.findByText('SWE · Globex')).toBeInTheDocument();
+    expect(await screen.findByText('SWE - Globex')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /Apply import/i }));
     await waitFor(() => expect(applyImportMock).toHaveBeenCalledTimes(1));

@@ -2,7 +2,7 @@
 
 What NOT to do, and how to catch it before code ships. Read this before opening a PR that touches UI.
 
-> Sibling docs: [tokens](tokens.md) · [components](components.md) · [layouts](layouts.md) · [ai-prompt](ai-prompt.md)
+> Sibling docs: [tokens](tokens.md) - [components](components.md) - [layouts](layouts.md) - [ai-prompt](ai-prompt.md)
 
 ---
 
@@ -20,10 +20,10 @@ What NOT to do, and how to catch it before code ships. Read this before opening 
 | Centered layouts | Symmetric = generic | Left-aligned, asymmetric |
 | 2-column collections | Too symmetric | 3, 4, or 5 columns |
 | Card carousels | Hides content | Show the grid |
-| Soft grey dividers | Weakens structure | 1–2px solid black |
+| Soft grey dividers | Weakens structure | 1-2px solid black |
 | Circle status dots | Decorative | 12px squares |
 | Multiple primary buttons per region | No focal point | One primary, rest outline |
-| Decorative borders (dashed/dotted) | Ornamental | Solid only — exception: "hidden/draft" state |
+| Decorative borders (dashed/dotted) | Ornamental | Solid only - exception: "hidden/draft" state |
 | New colors invented for new states | Palette explosion | Reuse existing colors with intent |
 | Custom paddings off the 4px scale | Breaks rhythm | Stick to xs/sm/md/lg/xl/2xl |
 
@@ -39,11 +39,11 @@ Grey borders look "softer" and feel safer, which is exactly the wrong instinct. 
 
 ### Adding `shadow-sm` "for a little depth"
 
-A soft shadow is a depth illusion. The whole pack rejects depth illusions. If something needs to feel elevated, give it a hard offset shadow or a heavier border — never `shadow-sm`.
+A soft shadow is a depth illusion. The whole pack rejects depth illusions. If something needs to feel elevated, give it a hard offset shadow or a heavier border - never `shadow-sm`.
 
 ### Centering the page content with `mx-auto max-w-4xl`
 
-Centering is the default reflex from generic web design. In Swiss style, content should sit asymmetrically — typically pulled to the left third or two-thirds, with whitespace on the right. Use a grid, not `mx-auto`.
+Centering is the default reflex from generic web design. In Swiss style, content should sit asymmetrically - typically pulled to the left third or two-thirds, with whitespace on the right. Use a grid, not `mx-auto`.
 
 ### Using `text-gray-500` for everything secondary
 
@@ -83,11 +83,11 @@ Before merging UI changes, walk through this list:
 - [ ] Page background is Canvas, not white
 - [ ] Content is left-aligned by default
 - [ ] Padding is asymmetric (not equal on all sides for major blocks)
-- [ ] Dividers between panels are 1–2px solid black
+- [ ] Dividers between panels are 1-2px solid black
 - [ ] No animated transitions (or, if interactivity demands it, instant snap)
 
 ### Final pass
-- [ ] Squint at the design — does it look distinctly Swiss, or could it be any SaaS app?
+- [ ] Squint at the design - does it look distinctly Swiss, or could it be any SaaS app?
 - [ ] If you removed all colors except black and one accent, would the layout still read?
 
 If you can answer **yes** to the squint test, you're done. If it looks like a generic dashboard, go back to [tokens.md](tokens.md) and start over.

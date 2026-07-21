@@ -1,14 +1,14 @@
-"""Provider registry / allow-list — only known providers are routable (Task 7.1).
+"""Provider registry / allow-list - only known providers are routable (Task 7.1).
 
-The OAuth routes are provider-generic (``/auth/oauth/{provider}/…``), so an
+The OAuth routes are provider-generic (``/auth/oauth/{provider}/...``), so an
 allow-list is the boundary that stops an attacker from poking at arbitrary
 ``{provider}`` values: a name that is not registered is rejected before any work
 happens (R4.1). Adding GitHub/Microsoft later is a single :func:`register` call
-here — no router or UI change.
+here - no router or UI change.
 
 A registered provider is built lazily by its **factory** (which reads
 configuration), so a provider that is known but not configured (e.g. Google with
-no client id/secret) raises :class:`ProviderNotConfigured` on resolve — the
+no client id/secret) raises :class:`ProviderNotConfigured` on resolve - the
 router turns that into a clean "not configured" error while still 404-ing a truly
 unknown provider. Built instances are cached so the JWKS cache and HTTP client
 are reused across the ``start`` and ``callback`` requests; :meth:`reset` clears
@@ -49,7 +49,7 @@ class ProviderNotConfigured(OAuthError):
 
 
 class ProviderRegistry:
-    """A small allow-list of ``name → factory`` OAuth providers."""
+    """A small allow-list of ``name -> factory`` OAuth providers."""
 
     def __init__(self) -> None:
         self._factories: dict[str, Callable[[], OAuthProvider]] = {}

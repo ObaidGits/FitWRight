@@ -103,7 +103,7 @@ export async function parseError(
         if (typeof body.detail.message === 'string') message = body.detail.message;
       }
     } catch {
-      /* non-JSON body — keep the status/fallback message */
+      /* non-JSON body - keep the status/fallback message */
     }
   }
   // Defense in depth: never let an HTML/looks-like-markup message escape.

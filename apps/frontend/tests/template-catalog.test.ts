@@ -20,7 +20,7 @@ import type { ResumeData } from '@/components/dashboard/resume-component';
 const ENGINE_IDS = new Set(TEMPLATE_OPTIONS.map((o) => o.id));
 
 describe('template catalog integrity', () => {
-  it('ships a substantial library (20–30 templates)', () => {
+  it('ships a substantial library (20-30 templates)', () => {
     expect(RESUME_TEMPLATES.length).toBeGreaterThanOrEqual(20);
     expect(RESUME_TEMPLATES.length).toBeLessThanOrEqual(40);
   });
@@ -35,7 +35,7 @@ describe('template catalog integrity', () => {
     for (const t of RESUME_TEMPLATES) expect(ENGINE_IDS.has(t.engine)).toBe(true);
   });
 
-  it('ATS scores are within 1–5 with a stated reason', () => {
+  it('ATS scores are within 1-5 with a stated reason', () => {
     for (const t of RESUME_TEMPLATES) {
       expect(t.atsScore).toBeGreaterThanOrEqual(1);
       expect(t.atsScore).toBeLessThanOrEqual(5);
@@ -58,7 +58,7 @@ describe('template catalog integrity', () => {
   });
 });
 
-describe('templateToSettings — composes a preset into valid TemplateSettings', () => {
+describe('templateToSettings - composes a preset into valid TemplateSettings', () => {
   it('applies the engine + preset (accent, fonts, spacing)', () => {
     const t = getTemplateById('ats-executive')!;
     const s = templateToSettings(t);
@@ -72,7 +72,7 @@ describe('templateToSettings — composes a preset into valid TemplateSettings',
     const t = getTemplateById('finance-banking')!;
     const s = templateToSettings(t);
     expect(s.template).toBe('latex');
-    // applyTemplatePreset seeds latex → serif/serif.
+    // applyTemplatePreset seeds latex -> serif/serif.
     expect(s.fontSize.headerFont).toBe('serif');
   });
 });

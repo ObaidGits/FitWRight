@@ -3,11 +3,11 @@
 Exercises the full admin job cycle end-to-end over an ASGI transport against an
 isolated temp database + a fresh in-process KVStore:
 
-- one authorized call runs the whole admin pipeline (rollup → purge →
-  audit_retention → alerting), returns 200, and populates the durable per-job KV
+- one authorized call runs the whole admin pipeline (rollup -> purge ->
+  audit_retention -> alerting), returns 200, and populates the durable per-job KV
   run markers for ``rollup``/``purge``/``audit_retention`` (Req 1.2, 2.1, 3.4);
 - the nested ``admin`` result carries an ``alerting`` key whose ``status`` is a
-  real evaluation outcome (``ok``/``locked``) — the minimal threshold
+  real evaluation outcome (``ok``/``locked``) - the minimal threshold
   Alerting_Job actually ran on the tick (Req 12.2);
 - the cycle is single-flighted + idempotent: back-to-back and concurrent calls
   both return 200 with no error and leave the markers consistent (Req 15.8);
@@ -21,7 +21,7 @@ DB / metric-store / kvstore wiring
 ``auth_env`` (integration conftest) rebinds the process auth singletons +
 KVStore to the isolated temp DB and a fresh in-process store. The admin jobs
 also read/write through the process ``MetricStore`` singleton (run markers,
-snapshots) which lazily binds to ``app.database.db`` on first build — so the
+snapshots) which lazily binds to ``app.database.db`` on first build - so the
 ``job_cycle_env`` fixture calls :func:`reset_metric_store` after the DB swap to
 force a rebuild against the temp DB. ``run_admin_jobs()`` is called by the
 endpoint with no explicit kvstore, so it resolves the same container-bound
@@ -129,7 +129,7 @@ class TestFullCyclePopulatesMarkers:
         for job, marker in markers.items():
             assert marker["job"] == job
             # A completed run: last_run stamped, running_since cleared, and an
-            # outcome recorded (success/skipped/failure — never left unknown).
+            # outcome recorded (success/skipped/failure - never left unknown).
             assert marker["last_run"]
             assert marker["running_since"] is None
             assert marker["last_outcome"] in {"success", "skipped", "failure"}
@@ -191,7 +191,7 @@ class TestIdempotentSingleFlight:
             r1, r2 = await asyncio.gather(_run_jobs(c1), _run_jobs(c2))
 
         # Both requests succeed; the per-job KVStore locks make overlapping runs
-        # safe (a job whose lock is held simply reports "locked" / no-ops) — no
+        # safe (a job whose lock is held simply reports "locked" / no-ops) - no
         # error, no double-run crash.
         assert r1.status_code == r2.status_code == 200
         assert r1.json()["status"] == r2.json()["status"] == "ok"

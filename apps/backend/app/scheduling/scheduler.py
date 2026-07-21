@@ -1,14 +1,14 @@
-"""SchedulerService — claim-based due scans (design §Platform/§E/§F, R10.3/11.3/16.2).
+"""SchedulerService - claim-based due scans (design §Platform/§E/§F, R10.3/11.3/16.2).
 
 Single-flighted via the KVStore lock (safe under external-cron + in-process
 worker). Two scans per pass:
 
-1. **Reminders** — atomically claim due rows (``pending|snoozed → firing``),
-   emit ``reminder.due`` to the outbox (→ idempotent notification), then either
+1. **Reminders** - atomically claim due rows (``pending|snoozed -> firing``),
+   emit ``reminder.due`` to the outbox (-> idempotent notification), then either
    materialize the next occurrence (recurring) or mark ``fired``. The claim
    guarantees no double-fire across workers; the notification ``dedupe_key``
    (per occurrence bucket) makes delivery exactly-once (Property 3).
-2. **Interviews** — for scheduled interviews inside the lead horizon, emit
+2. **Interviews** - for scheduled interviews inside the lead horizon, emit
    ``interview.upcoming`` for each lead bucket now due (dedupe per
    ``(interview, lead)``) and record it in ``fired_leads``.
 

@@ -8,9 +8,9 @@ otherwise a scanned PDF returns a classified LOW-confidence failure with a clear
 "upload the PDF directly" suggestion (honest failure over garbage).
 
 Unsupported sources are detected and rejected with specific error codes:
-- Google Docs (docs.google.com/document/) → UNSUPPORTED_PLATFORM
-- Notion (notion.so / *.notion.site)       → UNSUPPORTED_PLATFORM
-- DOCX / office open XML                    → UNSUPPORTED_FORMAT
+- Google Docs (docs.google.com/document/) -> UNSUPPORTED_PLATFORM
+- Notion (notion.so / *.notion.site)       -> UNSUPPORTED_PLATFORM
+- DOCX / office open XML                    -> UNSUPPORTED_FORMAT
 
 Limits (§20): 10 MB, 20 pages, 30s timeout.
 """
@@ -209,7 +209,7 @@ def extract_pdf(data: bytes, url: str = "", *, ocr_enabled: bool = False) -> Ext
     cleaned = _clean_text(native_text)
     quality = _printable_ratio(cleaned)
 
-    # Native text is good enough → return with MEDIUM-HIGH confidence.
+    # Native text is good enough -> return with MEDIUM-HIGH confidence.
     if len(cleaned) >= _MIN_NATIVE_CHARS and quality >= _MIN_PRINTABLE_RATIO:
         score = 78 if len(cleaned) >= 800 else 65
         return ExtractionResult(
@@ -221,7 +221,7 @@ def extract_pdf(data: bytes, url: str = "", *, ocr_enabled: bool = False) -> Ext
             ),
             explanation=ExtractionExplanation(
                 summary="Extracted text directly from the PDF.",
-                suggestions=["Verify the extracted text — PDF layout can affect ordering."]
+                suggestions=["Verify the extracted text - PDF layout can affect ordering."]
                 if score < 70 else [],
             ),
             source="pdf_ocr",
@@ -232,7 +232,7 @@ def extract_pdf(data: bytes, url: str = "", *, ocr_enabled: bool = False) -> Ext
             submitted_url=url,
         )
 
-    # Image-only / low-quality → OCR fallback (optional).
+    # Image-only / low-quality -> OCR fallback (optional).
     if ocr_enabled and _ocr_available():
         try:
             ocr_text = _clean_text(_extract_ocr(data))
@@ -254,7 +254,7 @@ def extract_pdf(data: bytes, url: str = "", *, ocr_enabled: bool = False) -> Ext
                 source="pdf_ocr", submitted_url=url,
             )
 
-    # Nothing usable — honest failure.
+    # Nothing usable - honest failure.
     reason = "scanned_pdf_no_ocr" if not ocr_enabled else "pdf_no_extractable_text"
     return ExtractionResult(
         content="",

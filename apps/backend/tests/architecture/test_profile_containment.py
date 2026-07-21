@@ -3,13 +3,13 @@
 
 The deployment axis (``single_user_mode`` / ``deployment_profile`` /
 ``resolved_profile``) must only be *read* in the composition/config/validation
-seam — never scattered as a behavioral branch across the codebase.
+seam - never scattered as a behavioral branch across the codebase.
 
 This test encodes the **baseline allow-list**: the exact set of modules that
 reference the deployment axis today. It blocks *new* references (the ratchet):
 adding a mode read to any other module fails CI. As later phases move identity
 behind a port (Phase 5) and centralize wiring (Phase 3), entries are *removed*
-from this allow-list — it only ever shrinks.
+from this allow-list - it only ever shrinks.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ APP_DIR = Path(app_pkg.__file__).parent
 MODE_TOKENS = ("single_user_mode", "deployment_profile", "resolved_profile")
 
 # Baseline allow-list (paths relative to app/). Each entry is legitimate today;
-# the migration shrinks this set. Do NOT add entries to "make CI pass" — that is
+# the migration shrinks this set. Do NOT add entries to "make CI pass" - that is
 # the anti-pattern this guard exists to prevent (IMPLEMENTATION_PLAN §4.1).
 ALLOW_LIST = {
     # config + validation (owns the setting)
@@ -40,11 +40,11 @@ ALLOW_LIST = {
     "diagnostics.py",
     # TLS default depends on hosted vs local (db_engine)
     "db_engine.py",
-    # auth middleware — still reads the mode for the per-session CSRF gate
+    # auth middleware - still reads the mode for the per-session CSRF gate
     # (the identity owner-fallback fork was moved to the IdentityProvider in
     # Phase 5; the CSRF-gate read is the remaining legitimate use here).
     "auth/principal.py",
-    # NOTE (Phase 5): routers/health.py was removed from this list — its
+    # NOTE (Phase 5): routers/health.py was removed from this list - its
     # owner-resolve now goes through the composition root's IdentityProvider.
 }
 

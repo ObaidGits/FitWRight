@@ -23,7 +23,7 @@ describe('ConflictDialog', () => {
     );
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(screen.getByText(/changed elsewhere/i)).toBeInTheDocument();
-    // Overlapping change (summary) → merge NOT offered.
+    // Overlapping change (summary) -> merge NOT offered.
     expect(screen.queryByRole('button', { name: /merge/i })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /keep my changes/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /take the latest/i })).toBeInTheDocument();

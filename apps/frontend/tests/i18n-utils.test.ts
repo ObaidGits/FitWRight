@@ -5,7 +5,7 @@ import { getMessages } from '@/lib/i18n/messages';
 /**
  * The translation engine (useTranslations / translate) is a thin wrapper over
  * these two pure functions. They decide what a missing key does and how
- * {placeholder} substitution works — the behavior every `t('a.b.c')` relies on.
+ * {placeholder} substitution works - the behavior every `t('a.b.c')` relies on.
  */
 
 function firstStringLeaf(

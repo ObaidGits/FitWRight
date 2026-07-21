@@ -3,7 +3,7 @@
 At signup and password change the new password can be checked against a breach
 corpus (HIBP k-anonymity range API). This goes through the
 :class:`BreachedPasswordCheck` interface so the concrete provider is a per-deploy
-choice, and — critically — the check **fails open**: if the provider is
+choice, and - critically - the check **fails open**: if the provider is
 unavailable, the password is accepted (and the failure is logged), never
 blocking a legitimate user because a third party is down (R13.3).
 
@@ -91,7 +91,7 @@ class HibpRangeClient(Protocol):
 
 
 class HttpxHibpRangeClient:
-    """Default httpx-backed range client (fixed endpoint — SSRF-safe).
+    """Default httpx-backed range client (fixed endpoint - SSRF-safe).
 
     Bounded by ``timeout`` so a slow/hung provider can never stall auth; the
     caller (:class:`HibpBreachedPasswordCheck`) turns any raised error into a
@@ -121,7 +121,7 @@ class HibpBreachedPasswordCheck(BreachedPasswordCheck):
 
     Flow: SHA-1 the password, split into a 5-char ``prefix`` + 35-char
     ``suffix``, ask the range API for all suffixes sharing that prefix, and look
-    for our suffix in the response. **Only the prefix is ever transmitted** —
+    for our suffix in the response. **Only the prefix is ever transmitted** -
     the password and its full hash stay in this process.
 
     Fails **open** on any transport/parse error (returns ``breached=False,
@@ -142,7 +142,7 @@ class HibpBreachedPasswordCheck(BreachedPasswordCheck):
 
         try:
             body = await self._client.get_range(prefix)
-        except Exception:  # noqa: BLE001 - any transport error → fail open
+        except Exception:  # noqa: BLE001 - any transport error -> fail open
             logger.warning(
                 "Breached-password check failed (HIBP unavailable); allowing (fail-open)",
                 exc_info=True,

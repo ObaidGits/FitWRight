@@ -2,13 +2,13 @@
 
 Two complementary primitives, zero external dependencies:
 
-1. ``content_fingerprint`` — a stable SHA-256 over the identifying fields plus a
+1. ``content_fingerprint`` - a stable SHA-256 over the identifying fields plus a
    *slice* of the description (chars 200-700). The first ~200 chars of most JDs
    are identical company boilerplate ("About Company X, we are a leading..."), so
    using chars 200-700 captures the unique role content while avoiding
    intro-collision for different roles at the same company.
 
-2. ``simhash`` + ``hamming_similarity`` — a 64-bit SimHash for near-duplicate
+2. ``simhash`` + ``hamming_similarity`` - a 64-bit SimHash for near-duplicate
    detection. Two documents with SimHash Hamming similarity > 0.85 are "likely
    the same job" (e.g. the same posting mirrored on two boards).
 """
@@ -55,7 +55,7 @@ def content_fingerprint(
     elif len(desc) > 200:
         desc_slice = desc[200:]
     else:
-        desc_slice = desc  # too short to skip the intro — use it all
+        desc_slice = desc  # too short to skip the intro - use it all
 
     payload = "\x1f".join((
         _normalize(title),

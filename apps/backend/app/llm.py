@@ -74,7 +74,7 @@ def _normalize_api_base(provider: str, api_base: str | None) -> str | None:
     `/v1/v1/...` and cause 404s.
 
     For the `openai` provider, LiteLLM uses the upstream OpenAI client which
-    handles `/v1` correctly — we MUST preserve whatever the user pasted so
+    handles `/v1` correctly - we MUST preserve whatever the user pasted so
     that OpenAI-compatible endpoints like llama.cpp (http://localhost:8080/v1)
     round-trip intact. See issue #751.
     """
@@ -328,7 +328,7 @@ def resolve_api_key(stored: dict, provider: str) -> str:
     """Resolve the effective API key from stored config.
 
     Priority: top-level ``api_key`` > ``api_keys[provider]`` > env/settings
-    default — EXCEPT for providers in ``_PROVIDERS_WITHOUT_ENV_KEY_FALLBACK``
+    default - EXCEPT for providers in ``_PROVIDERS_WITHOUT_ENV_KEY_FALLBACK``
     (``openai_compatible`` / ``ollama``), where the env-level default is
     skipped so a paid OpenAI key in ``LLM_API_KEY`` cannot leak to a local
     self-hosted server when the user leaves the provider key blank.
@@ -391,13 +391,13 @@ def get_llm_config(user_id: str | None = None) -> LLMConfig:
                 "(set REASONING_EFFORT= or clear in Settings to disable)"
             )
         except Exception as e:
-            # Non-fatal — retry on next call.
+            # Non-fatal - retry on next call.
             logging.warning("Failed to persist gpt-5 migration: %s", e)
 
     api_key = resolve_api_key(stored, provider)
 
     raw_re = stored.get("reasoning_effort", settings.reasoning_effort)
-    # Normalize empty string to None — user explicitly cleared.
+    # Normalize empty string to None - user explicitly cleared.
     reasoning_effort = raw_re if raw_re else None
 
     return LLMConfig(
@@ -458,7 +458,7 @@ def get_model_name(config: LLMConfig) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Router — centralises transport retries, cooldowns, and error-type policies
+# Router - centralises transport retries, cooldowns, and error-type policies
 # ---------------------------------------------------------------------------
 
 _router: Router | None = None
@@ -469,7 +469,7 @@ _router_lock = threading.Lock()
 def _config_fingerprint(config: LLMConfig) -> str:
     """Generate a fingerprint to detect config changes.
 
-    Uses Python's built-in ``hash()`` on the API key — stable within a
+    Uses Python's built-in ``hash()`` on the API key - stable within a
     single process (which is the cache lifetime), collision-resistant,
     and not a cryptographic function so it won't trigger CodeQL alerts.
     The raw key is never stored in the fingerprint string.
@@ -547,7 +547,7 @@ async def check_llm_health(
 
     # Check if API key is configured. Ollama and openai_compatible local
     # servers often run without auth, so a blank key is acceptable for those
-    # providers — a sentinel is passed downstream (see _effective_api_key)
+    # providers - a sentinel is passed downstream (see _effective_api_key)
     # to satisfy the OpenAI client's non-empty-string validation.
     if config.provider not in ("ollama", "openai_compatible") and not config.api_key:
         return {
@@ -609,7 +609,7 @@ async def check_llm_health(
             # Surface reasoning/thinking text separately ONLY when the model
             # also returned distinct primary content. If message.content was
             # empty, _extract_choice_text already folded the reasoning text
-            # into `content` above — surfacing it here too would duplicate
+            # into `content` above - surfacing it here too would duplicate
             # identical text in "Model output" and "Model thinking".
             msg = response.choices[0].message
             primary_content = _join_text_parts(
@@ -663,7 +663,7 @@ async def check_llm_health(
 #
 # Every provider round-trip (the Router-backed completion functions below) is
 # counted once via the in-process AiMetricsService. Only the allowlisted
-# aggregate signals are recorded — total calls / success / failure / timeouts /
+# aggregate signals are recorded - total calls / success / failure / timeouts /
 # retries / per-provider counts / total tokens / latency. Rejected fields
 # (temperature, prompt/completion length, model version, system prompt, tool
 # calls, reasoning tokens, ids) are never passed. See app/admin/ai_metrics.py.
@@ -686,7 +686,7 @@ def _is_timeout_error(exc: BaseException) -> bool:
 def _usage_total_tokens(response: Any) -> int:
     """Extract the allowlisted aggregate ``usage.total_tokens`` (0 if absent).
 
-    Only the aggregate is read — never the prompt/completion breakdown, which is
+    Only the aggregate is read - never the prompt/completion breakdown, which is
     a rejected field for the admin AI metrics allowlist.
     """
     try:
@@ -709,7 +709,7 @@ def _record_ai_call(
     """Best-effort record of one AI provider call to the AiMetricsService.
 
     The import is lazy so ``llm.py`` stays import-light and no import cycle can
-    form. This never raises — metrics must never break an LLM call (mirrors the
+    form. This never raises - metrics must never break an LLM call (mirrors the
     defensive AdminMetricsMiddleware).
     """
     try:
@@ -798,7 +798,7 @@ async def complete(
 
 
 # ---------------------------------------------------------------------------
-# Streaming completion (P4 Resilience — Streaming AI, R1)
+# Streaming completion (P4 Resilience - Streaming AI, R1)
 # ---------------------------------------------------------------------------
 
 
@@ -841,7 +841,7 @@ def provider_supports_streaming(config: LLMConfig | None = None) -> bool:
     try:
         return bool(litellm.supports_response_schema) or litellm.supports_function_calling(model_name) or True
     except Exception:
-        # Unknown/local model — assume streaming works; a mid-stream error still
+        # Unknown/local model - assume streaming works; a mid-stream error still
         # triggers the transparent fallback, so this is safe.
         return True
 
@@ -872,7 +872,7 @@ async def stream_complete(
     ``result.usage`` is filled from the provider's final chunk (or estimated),
     and ``result.cancelled`` is set if ``cancel_check`` returned truthy mid-flight.
     Cancellation aborts the provider iterator and leaves no persisted state
-    (Property 3) — persistence only ever happens on explicit accept, never here.
+    (Property 3) - persistence only ever happens on explicit accept, never here.
 
     Raises the underlying provider error so the caller can emit a terminal
     ``error`` SSE event and fall back to the non-stream path (R1.3).
@@ -988,7 +988,7 @@ def _supports_json_mode(model_name: str) -> bool:
         supported_params = info.get("supported_openai_params", [])
         return "response_format" in supported_params
     except Exception:
-        # Model not in LiteLLM's registry — fall back to prompt-only JSON
+        # Model not in LiteLLM's registry - fall back to prompt-only JSON
         # mode (the system prompt already instructs "respond with valid JSON
         # only"). This avoids sending response_format to models that may
         # reject it.
@@ -1050,7 +1050,7 @@ def get_safe_max_tokens(model_name: str, requested: int = DEFAULT_JSON_MAX_TOKEN
             safe = min(safe_requested, model_limit)
             if safe < safe_requested:
                 logging.debug(
-                    "max_tokens clamped %d → %d for model %s (model limit)",
+                    "max_tokens clamped %d -> %d for model %s (model limit)",
                     safe_requested,
                     safe,
                     model_name,
@@ -1061,7 +1061,7 @@ def get_safe_max_tokens(model_name: str, requested: int = DEFAULT_JSON_MAX_TOKEN
 
     safe = min(safe_requested, FALLBACK_MAX_TOKENS)
     logging.debug(
-        "Model %s not in LiteLLM registry, clamping requested max_tokens %d → %d constraint",
+        "Model %s not in LiteLLM registry, clamping requested max_tokens %d -> %d constraint",
         model_name,
         safe_requested,
         safe,
@@ -1078,7 +1078,7 @@ def _appears_truncated(data: dict, schema_type: str = "resume") -> bool:
 
     Args:
         data: Parsed JSON dict.
-        schema_type: Expected schema — "resume" (full resume), "enrichment"
+        schema_type: Expected schema - "resume" (full resume), "enrichment"
             (analyze output), "diff" (diff changes), "keywords", or
             "interview_prep".
             Determines which fields are checked for truncation.
@@ -1166,7 +1166,7 @@ def _supports_temperature(model_name: str, temperature: float | None = None) -> 
         if "temperature" not in supported_params:
             return False
     except Exception:
-        # Model not in LiteLLM's registry — be conservative and skip
+        # Model not in LiteLLM's registry - be conservative and skip
         # temperature to avoid BadRequestError from unsupported params.
         logging.debug(
             "Model %s not in LiteLLM registry, skipping temperature", model_name
@@ -1347,7 +1347,7 @@ async def complete_json(
     are handled by the Router and are NOT retried again here.
 
     Args:
-        schema_type: Expected schema — "resume", "enrichment", "diff",
+        schema_type: Expected schema - "resume", "enrichment", "diff",
             "keywords", or "interview_prep". Passed to _appears_truncated for
             context-aware truncation detection and used to tailor retry hints.
     """
@@ -1391,7 +1391,7 @@ async def complete_json(
             # AI metrics (Req 4.1): record this single provider round-trip.
             # complete_json's app-level retries each perform one round-trip, so
             # each is counted once here (retried=True for attempt > 0). This is
-            # the narrowest, non-nested call site — complete_json does not call
+            # the narrowest, non-nested call site - complete_json does not call
             # complete()/stream_complete(), so there is no double-counting.
             _attempt_start = time.perf_counter()
             try:
@@ -1459,7 +1459,7 @@ async def complete_json(
             return result
 
         except json.JSONDecodeError as e:
-            # Content quality — malformed JSON, retry with prompt hint
+            # Content quality - malformed JSON, retry with prompt hint
             logging.warning(f"JSON parse failed (attempt {attempt + 1}): {e}")
             if use_json_mode and not json_mode_failed:
                 # JSON-012: Registry claimed JSON mode support but the upstream
@@ -1479,7 +1479,7 @@ async def complete_json(
                 f"Failed to parse JSON after {retries + 1} attempts: {e}")
 
         except ValueError as e:
-            # Content quality — empty response, JSON extraction failure
+            # Content quality - empty response, JSON extraction failure
             logging.warning(f"Content extraction failed (attempt {attempt + 1}): {e}")
             if attempt < retries:
                 continue
@@ -1509,7 +1509,7 @@ async def complete_json(
             raise
 
         except Exception:
-            # Transport errors — Router already retried with backoff.
+            # Transport errors - Router already retried with backoff.
             # Cooldowns are disabled (see _build_router); no additional
             # retry is attempted here.
             raise

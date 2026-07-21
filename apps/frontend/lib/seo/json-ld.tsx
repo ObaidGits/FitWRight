@@ -1,5 +1,5 @@
 /**
- * <JsonLd> — renders one or more schema.org objects as a single, safely
+ * <JsonLd> - renders one or more schema.org objects as a single, safely
  * serialized `application/ld+json` script. Server-rendered so crawlers and AI
  * retrieval systems see structured data in the initial HTML.
  *

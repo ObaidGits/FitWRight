@@ -1,6 +1,6 @@
 """Public product review schemas (Connect page).
 
-An unauthenticated review submission: a 1–5 star rating with a short title and
+An unauthenticated review submission: a 1-5 star rating with a short title and
 body, plus an optional name (anonymous when omitted) and optional contact email.
 Server-authoritative validation mirrors the contact schema (length bounds,
 control-char rejection, dependency-free email shape) and carries the shared

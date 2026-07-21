@@ -2,7 +2,7 @@
 
 Covers, end-to-end over the real ASGI app against an isolated temp DB:
 
-- **9.1** CAPTCHA + breach wiring: breach/CAPTCHA fail-open (provider raises →
+- **9.1** CAPTCHA + breach wiring: breach/CAPTCHA fail-open (provider raises ->
   auth proceeds, warning logged); breach reject on a known-breached password;
   lockout/backoff returns a uniform ``rate_limited`` (429 + ``Retry-After``) with
   **no enumeration**; KVStore-outage fail-closed for auth rate limits.
@@ -83,7 +83,7 @@ async def _events(db) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
-# 9.1 — breach / captcha fail-open
+# 9.1 - breach / captcha fail-open
 # ---------------------------------------------------------------------------
 
 
@@ -95,7 +95,7 @@ class TestBreachFailOpen:
             async def check(self, password: str) -> BreachResult:
                 raise RuntimeError("HIBP unreachable")
 
-        # Verification off (local) → signup signs in immediately on success.
+        # Verification off (local) -> signup signs in immediately on success.
         get_password_service()._breach_check = _BoomBreach()
         with caplog.at_level(logging.WARNING):
             async with _client() as client:
@@ -125,7 +125,7 @@ class TestCaptchaGate:
             # A few wrong attempts push failures past the soft threshold (3).
             for _ in range(4):
                 await _login(client, "cap@example.com", password="wrong-password-xyz")
-            # The next *correct* login still succeeds — the default verifier
+            # The next *correct* login still succeeds - the default verifier
             # allows (fail-open), it does not demand a token.
             ok = await _login(client, "cap@example.com")
         assert ok.status_code == 200
@@ -151,13 +151,13 @@ class TestCaptchaGate:
             blocked = await _login(client, "capreq@example.com")
             assert blocked.status_code == 403
             assert blocked.json()["error"]["code"] == "captcha_required"
-            # Supplying a token clears the challenge → the correct login succeeds.
+            # Supplying a token clears the challenge -> the correct login succeeds.
             ok = await _login(client, "capreq@example.com", captcha_token="solved")
         assert ok.status_code == 200
 
 
 # ---------------------------------------------------------------------------
-# 9.1 — lockout UX: uniform rate_limited, no enumeration
+# 9.1 - lockout UX: uniform rate_limited, no enumeration
 # ---------------------------------------------------------------------------
 
 
@@ -185,14 +185,14 @@ class TestLockoutNoEnumeration:
         async with _client() as c2:
             unknown_status, unknown_retry = await self._hammer(c2, "ghost@example.com")
 
-        # Both accounts lock out identically (429 + Retry-After) — an attacker
+        # Both accounts lock out identically (429 + Retry-After) - an attacker
         # cannot tell a real account from an unknown one (R13.4).
         assert existing_status == unknown_status == 429
         assert existing_retry is not None and unknown_retry is not None
 
 
 # ---------------------------------------------------------------------------
-# 9.1 — KVStore outage fails CLOSED for auth rate limits (R13.5)
+# 9.1 - KVStore outage fails CLOSED for auth rate limits (R13.5)
 # ---------------------------------------------------------------------------
 
 
@@ -225,7 +225,7 @@ class TestKVStoreOutageFailClosed:
 
 
 # ---------------------------------------------------------------------------
-# 9.2 — security headers / CSP on all responses
+# 9.2 - security headers / CSP on all responses
 # ---------------------------------------------------------------------------
 
 
@@ -259,7 +259,7 @@ class TestSecurityHeaders:
 
 
 # ---------------------------------------------------------------------------
-# 9.2 — metrics emitted
+# 9.2 - metrics emitted
 # ---------------------------------------------------------------------------
 
 
@@ -291,7 +291,7 @@ class TestMetricsEmitted:
 
 
 # ---------------------------------------------------------------------------
-# 9.2 — audit events for key actions
+# 9.2 - audit events for key actions
 # ---------------------------------------------------------------------------
 
 

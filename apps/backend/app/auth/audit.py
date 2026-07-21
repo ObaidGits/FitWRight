@@ -44,7 +44,7 @@ __all__ = [
 ]
 
 # Maximum stored length for any single sanitized string value and for the whole
-# meta blob's key count — bounds a single audit row's size.
+# meta blob's key count - bounds a single audit row's size.
 _MAX_VALUE_LENGTH = 500
 _MAX_META_KEYS = 50
 
@@ -107,8 +107,8 @@ def sanitize_log_value(value: Any, *, max_length: int = _MAX_VALUE_LENGTH) -> An
     """Make ``value`` safe to store/log.
 
     Strings are stripped of control characters (CR/LF/tab and the rest of the
-    C0/C1 range plus DEL) — collapsing them to spaces so a value cannot inject a
-    newline into a log line — then length-bounded. Non-string scalars pass
+    C0/C1 range plus DEL) - collapsing them to spaces so a value cannot inject a
+    newline into a log line - then length-bounded. Non-string scalars pass
     through; nested containers are sanitized recursively.
     """
     if isinstance(value, str):
@@ -117,7 +117,7 @@ def sanitize_log_value(value: Any, *, max_length: int = _MAX_VALUE_LENGTH) -> An
         )
         cleaned = cleaned.strip()
         if len(cleaned) > max_length:
-            cleaned = cleaned[:max_length] + "…"
+            cleaned = cleaned[: max_length - 3] + "..."
         return cleaned
     if isinstance(value, bool) or value is None or isinstance(value, (int, float)):
         return value
@@ -148,7 +148,7 @@ def sanitize_meta(meta: dict[str, Any] | None, *, _depth: int = 0) -> dict[str, 
         lowered = key_str.casefold()
         if any(marker in lowered for marker in _SECRET_KEY_MARKERS):
             # Drop secret-bearing keys outright (do not even store a redaction
-            # of the value — the key's presence is enough of a hint).
+            # of the value - the key's presence is enough of a hint).
             continue
         safe_key = sanitize_log_value(key_str, max_length=100)
         cleaned[str(safe_key)] = sanitize_log_value(value)
@@ -183,7 +183,7 @@ class AuditService:
         Fails soft by default (``raise_on_error=False``): an audit write must
         never break the user-facing flow it observes, so a persistence error is
         logged and swallowed. A Sensitive_Endpoint that MUST treat a failed
-        audit as a hard error (admin-panel-upgrade Req 15.9 — the access is only
+        audit as a hard error (admin-panel-upgrade Req 15.9 - the access is only
         legitimate if it is traceable) passes ``raise_on_error=True`` so the
         exception propagates and the caller can refuse to report success.
         """

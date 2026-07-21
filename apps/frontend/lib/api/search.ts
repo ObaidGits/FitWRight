@@ -1,5 +1,5 @@
 /**
- * Search API (P3 §C, Requirements 7–8) — server FTS with client-side fallback.
+ * Search API (P3 §C, Requirements 7-8) - server FTS with client-side fallback.
  *
  * {@link searchServer} hits the backend FTS index (ranked, scoped, paginated);
  * {@link searchLocal} is the OFFLINE fallback over already-loaded object-graph
@@ -21,7 +21,7 @@ export interface SearchIndexItem extends SearchResult {
   haystack: string; // lowercased searchable text
 }
 
-/** Pure client-side matcher over provided items (no network) — offline fallback. */
+/** Pure client-side matcher over provided items (no network) - offline fallback. */
 export function searchLocal(items: SearchIndexItem[], query: string, limit = 20): SearchResult[] {
   const q = query.trim().toLowerCase();
   if (!q) return [];

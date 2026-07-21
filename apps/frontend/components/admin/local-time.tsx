@@ -25,7 +25,7 @@ function formatLocal(iso: string): string {
 export function LocalTime({ iso, className }: { iso?: string | null; className?: string }) {
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => setMounted(true), []);
-  if (!iso) return <span className={className}>—</span>;
+  if (!iso) return <span className={className}>-</span>;
   return (
     <time dateTime={iso} title={`${iso} (UTC)`} className={className} suppressHydrationWarning>
       {mounted ? formatLocal(iso) : iso}
@@ -46,7 +46,7 @@ function relativeLabel(iso: string): string {
 /** Relative "x ago" with a UTC tooltip, for compact audit/lastActive display.
  *
  * The relative label is computed in an effect (not during render) so the render
- * stays pure — the wall clock (`Date.now()`) is read only inside the effect,
+ * stays pure - the wall clock (`Date.now()`) is read only inside the effect,
  * which also refreshes the label every minute. Server render shows the raw ISO
  * (hydration-safe), then the client swaps to the relative label after mount.
  */
@@ -59,7 +59,7 @@ export function RelativeTime({ iso, className }: { iso?: string | null; classNam
     const t = setInterval(update, 60_000);
     return () => clearInterval(t);
   }, [iso]);
-  if (!iso) return <span className={className}>—</span>;
+  if (!iso) return <span className={className}>-</span>;
   return (
     <time dateTime={iso} title={`${iso} (UTC)`} className={className} suppressHydrationWarning>
       {label || iso}

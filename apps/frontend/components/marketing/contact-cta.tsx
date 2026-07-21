@@ -1,6 +1,6 @@
 /**
  * Home "let's work together" CTA (marketing). A personal, conversion-focused
- * section that introduces the developer and guides visitors to /contact —
+ * section that introduces the developer and guides visitors to /contact -
  * distinct from the product "Get started" CTA above it. Placed right where the
  * reader has just finished the product story, so the natural next question
  * ("who built this, and can I work with them?") is answered with a clear path
@@ -42,7 +42,7 @@ export function ContactCta() {
     >
       <Reveal>
         <div className="relative overflow-hidden rounded-[var(--radius-at-xl)] border border-[var(--border)] bg-[var(--card)] shadow-[var(--shadow-at-e2)]">
-          {/* Decorative lighting — aria-hidden; motion collapses under reduced-motion. */}
+          {/* Decorative lighting - aria-hidden; motion collapses under reduced-motion. */}
           <div aria-hidden className="pointer-events-none absolute inset-0">
             <div className="absolute inset-0 at-grid-bg opacity-40" />
             <div
@@ -56,10 +56,10 @@ export function ContactCta() {
           </div>
 
           <div className="relative grid gap-10 p-8 md:p-12 lg:grid-cols-[1.1fr_1fr] lg:items-center lg:gap-14">
-            {/* Left — invitation + trust */}
+            {/* Left - invitation + trust */}
             <div>
               <span className="text-xs font-semibold uppercase tracking-wider text-[var(--at-ai)]">
-                Let’s work together
+                Let's work together
               </span>
               <h2
                 id="contact-cta-heading"
@@ -68,14 +68,14 @@ export function ContactCta() {
                 Have an idea worth building?
                 <br />
                 <span className="bg-gradient-to-r from-[var(--primary)] to-[var(--at-ai)] bg-clip-text text-transparent">
-                  I’d love to hear it.
+                  I'd love to hear it.
                 </span>
               </h2>
               <p className="mt-4 max-w-md text-[var(--muted-foreground)]">
                 FitWright is built by{' '}
                 <span className="font-medium text-[var(--foreground)]">Obaidullah Zeeshan</span>, a
                 full-stack &amp; backend-focused software engineer. Hiring, exploring a
-                collaboration, or just want to talk shop about AI and software? My inbox is open —
+                collaboration, or just want to talk shop about AI and software? My inbox is open -
                 and I actually reply.
               </p>
 
@@ -91,7 +91,7 @@ export function ContactCta() {
               </ul>
             </div>
 
-            {/* Right — the CTA card */}
+            {/* Right - the CTA card */}
             <div className="rounded-[var(--radius-at-xl)] border border-[var(--border)] bg-[var(--at-surface-2)]/70 p-6 shadow-[var(--shadow-at-e1)] backdrop-blur-sm md:p-7">
               <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--at-success)]/40 bg-[var(--at-success)]/10 px-3 py-1 text-xs font-medium text-[var(--at-success)]">
                 <span className="relative flex h-2 w-2">
@@ -105,7 +105,7 @@ export function ContactCta() {
                 <MessageSquare className="h-5 w-5 text-[var(--at-ai)]" /> Start a conversation
               </h3>
               <p className="mt-1.5 text-sm text-[var(--muted-foreground)]">
-                Tell me what you’re working on. Thoughtful messages get thoughtful replies —
+                Tell me what you're working on. Thoughtful messages get thoughtful replies -
                 typically within a day.
               </p>
 

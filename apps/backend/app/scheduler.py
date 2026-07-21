@@ -82,7 +82,7 @@ async def admin_jobs_loop(
 ) -> None:
     """Run the P2 admin jobs (rollup + purge) once per ``interval_seconds``.
 
-    ``internal`` (premium) mode only — the free tier drives the same jobs from
+    ``internal`` (premium) mode only - the free tier drives the same jobs from
     the external-cron ``run-jobs`` endpoint. Each job is single-flighted +
     idempotent, so running on this interval never double-counts (rollup writes
     only closed days) and only purges grace-elapsed users. A failed batch is

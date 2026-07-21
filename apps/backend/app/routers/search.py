@@ -1,4 +1,4 @@
-"""Global search endpoints (P3 §C, Requirements 7–8).
+"""Global search endpoints (P3 §C, Requirements 7-8).
 
 User-scoped (scope enforced **in SQL**), FTS-ranked, cursor-paginated, and gated
 by the ``SEARCH`` feature flag. Results are content-safe and deep-link to the

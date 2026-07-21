@@ -4,11 +4,11 @@
  * Pure, dependency-injected primitives so a single flaky-backend brownout does
  * not turn thousands of clients into a retry storm:
  *
- * - {@link fullJitterBackoff} — exponential backoff with *full jitter*
+ * - {@link fullJitterBackoff} - exponential backoff with *full jitter*
  *   (AWS-style): `random(0, min(cap, base * 2^attempt))`. Full jitter (not
  *   equal jitter) maximises decorrelation between clients so they don't retry
  *   in lock-step.
- * - {@link CircuitBreaker} — a closed→open→half-open state machine that stops
+ * - {@link CircuitBreaker} - a closed->open->half-open state machine that stops
  *   hammering an endpoint that keeps failing and probes for recovery. While
  *   open, the caller must not attempt the network (the durable local draft
  *   still protects the work).
@@ -36,7 +36,7 @@ export function fullJitterBackoff(attempt: number, opts: BackoffOptions): number
 export type BreakerState = 'closed' | 'open' | 'half-open';
 
 export interface CircuitBreakerOptions {
-  /** Consecutive failures that trip the breaker from closed → open. */
+  /** Consecutive failures that trip the breaker from closed -> open. */
   failureThreshold: number;
   /** Cooldown (ms) before an open breaker moves to half-open to probe. */
   cooldownMs: number;
@@ -48,9 +48,9 @@ export interface CircuitBreakerOptions {
  * Client-side circuit breaker.
  *
  * Transitions:
- * - `closed` → `open` after `failureThreshold` consecutive failures.
- * - `open` → `half-open` once `cooldownMs` has elapsed (probed on `canAttempt`).
- * - `half-open` → `closed` on a success; `half-open` → `open` on a failure.
+ * - `closed` -> `open` after `failureThreshold` consecutive failures.
+ * - `open` -> `half-open` once `cooldownMs` has elapsed (probed on `canAttempt`).
+ * - `half-open` -> `closed` on a success; `half-open` -> `open` on a failure.
  *
  * `canAttempt()` is the single gate the SaveController/SyncController consults
  * before a network attempt.
@@ -69,7 +69,7 @@ export class CircuitBreaker {
     this.now = opts.now ?? Date.now;
   }
 
-  /** Current state, promoting open→half-open when the cooldown has elapsed. */
+  /** Current state, promoting open->half-open when the cooldown has elapsed. */
   getState(): BreakerState {
     if (this.state === 'open' && this.now() - this.openedAt >= this.cooldownMs) {
       this.state = 'half-open';
@@ -93,7 +93,7 @@ export class CircuitBreaker {
    * reaching the threshold while closed trips the breaker back open.
    */
   recordFailure(): void {
-    // Ensure any pending open→half-open promotion is applied first.
+    // Ensure any pending open->half-open promotion is applied first.
     const state = this.getState();
     this.consecutiveFailures += 1;
     if (state === 'half-open' || this.consecutiveFailures >= this.failureThreshold) {

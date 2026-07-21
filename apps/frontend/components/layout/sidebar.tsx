@@ -76,7 +76,7 @@ export function Sidebar() {
           );
         })}
 
-        {/* Profile — the canonical career document. A distinct destination
+        {/* Profile - the canonical career document. A distinct destination
             below the core workflow nav (kept out of PRIMARY_NAV so the mobile
             bottom nav, which reads that list by index, is unaffected). */}
         <Link
@@ -93,7 +93,7 @@ export function Sidebar() {
           Profile
         </Link>
 
-        {/* Connect with the developer — a distinct destination below the core
+        {/* Connect with the developer - a distinct destination below the core
             workflow nav (kept out of PRIMARY_NAV so the mobile bottom nav, which
             reads that list by index, is unaffected). */}
         <Link

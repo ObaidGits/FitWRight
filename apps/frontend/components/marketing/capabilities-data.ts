@@ -1,12 +1,12 @@
 /**
- * Capability landing-page content — the single source of truth for FitWright's
+ * Capability landing-page content - the single source of truth for FitWright's
  * feature landing pages (/resume-tailoring, /ats-resume-checker, etc.).
  *
  * Every field is truthful and grounded in a real, shipped capability (see the
  * home page feature list). Each capability owns a distinct keyword cluster
  * (lib/seo/page-keywords) so the pages never cannibalize one another or the
  * broad home page. Content is intentionally substantive (definition + steps +
- * outcomes + FAQ + cross-links) — never thin, never duplicated.
+ * outcomes + FAQ + cross-links) - never thin, never duplicated.
  *
  * Data is pure (no React) so it can be imported by server components, the
  * sitemap, and tests. Icons are referenced by key and mapped in the renderer.
@@ -52,7 +52,7 @@ export interface Capability {
   socialTitle: string;
   /** Keyword cluster key in lib/seo/page-keywords KEYWORDS. */
   keywordGroup: 'tailoring' | 'atsChecker' | 'coverLetter' | 'interviewPrep';
-  /** "What is …?" definition block (entity-first, AI/LLM friendly). */
+  /** "What is ...?" definition block (entity-first, AI/LLM friendly). */
   definitionHeading: string;
   definition: string[];
   /** HowTo. */
@@ -79,18 +79,18 @@ export const CAPABILITIES: Record<string, Capability> = {
   'resume-tailoring': {
     slug: 'resume-tailoring',
     eyebrow: 'Resume tailoring',
-    h1: 'Tailor your resume to every job — in seconds, not hours',
+    h1: 'Tailor your resume to every job - in seconds, not hours',
     heroSub:
-      'A single master resume rarely fits every role. FitWright reshapes yours to match a specific job description with AI — surfacing the right experience and keywords, scoring the fit, and showing every change so you stay in control.',
-    metaTitle: 'Resume Tailoring — Tailor Your Resume to Any Job with AI',
+      'A single master resume rarely fits every role. FitWright reshapes yours to match a specific job description with AI - surfacing the right experience and keywords, scoring the fit, and showing every change so you stay in control.',
+    metaTitle: 'Resume Tailoring - Tailor Your Resume to Any Job with AI',
     metaDescription:
-      'Tailor your resume to any job with AI. FitWright analyzes the role, scores the fit, and reshapes your resume — every change reviewable. Free & open source.',
-    socialTitle: 'Resume Tailoring with AI · FitWright',
+      'Tailor your resume to any job with AI. FitWright analyzes the role, scores the fit, and reshapes your resume - every change reviewable. Free & open source.',
+    socialTitle: 'Resume Tailoring with AI - FitWright',
     keywordGroup: 'tailoring',
     definitionHeading: 'What is resume tailoring?',
     definition: [
       'Resume tailoring is the practice of adapting one resume to a specific job description. Instead of sending the same generic document everywhere, you emphasize the experience most relevant to the role, mirror the wording of the required skills, and structure the resume so the fit is clear to both applicant tracking systems (ATS) and the people who read it.',
-      'Done by hand, this takes real time for every application. FitWright automates the mechanical parts — analysis, keyword matching, and a first-draft rewrite — while keeping you as the editor of record. It reshapes your real experience; it does not invent new experience.',
+      'Done by hand, this takes real time for every application. FitWright automates the mechanical parts - analysis, keyword matching, and a first-draft rewrite - while keeping you as the editor of record. It reshapes your real experience; it does not invent new experience.',
     ],
     howToName: 'How to tailor your resume to a job',
     howToDescription:
@@ -99,7 +99,7 @@ export const CAPABILITIES: Record<string, Capability> = {
       {
         icon: 'upload',
         title: 'Add your resume',
-        body: 'Upload a PDF or DOCX, or build one with the guided wizard. This is your source of truth — FitWright only reshapes what is already there.',
+        body: 'Upload a PDF or DOCX, or build one with the guided wizard. This is your source of truth - FitWright only reshapes what is already there.',
       },
       {
         icon: 'search',
@@ -124,7 +124,7 @@ export const CAPABILITIES: Record<string, Capability> = {
       {
         icon: 'gauge',
         title: 'An honest match score',
-        body: 'A transparent fit score for each job, broken down into keyword, skills, and section sub-scores — not a vanity number.',
+        body: 'A transparent fit score for each job, broken down into keyword, skills, and section sub-scores - not a vanity number.',
       },
       {
         icon: 'list',
@@ -145,7 +145,7 @@ export const CAPABILITIES: Record<string, Capability> = {
     faqs: [
       {
         q: 'What is resume tailoring?',
-        a: 'Resume tailoring is the practice of adapting a single resume to a specific job description — emphasizing the most relevant experience, matching the wording of required skills, and reordering sections so the fit is obvious to both applicant tracking systems (ATS) and human reviewers.',
+        a: 'Resume tailoring is the practice of adapting a single resume to a specific job description - emphasizing the most relevant experience, matching the wording of required skills, and reordering sections so the fit is obvious to both applicant tracking systems (ATS) and human reviewers.',
       },
       {
         q: 'How is tailoring different from writing a new resume?',
@@ -161,7 +161,7 @@ export const CAPABILITIES: Record<string, Capability> = {
       },
       {
         q: 'Do I need my own AI key to tailor resumes?',
-        a: 'Yes — FitWright is bring-your-own-key. You connect the provider you prefer (OpenAI, Anthropic, Google Gemini, OpenRouter, DeepSeek, Groq, or a local model via Ollama), so you control the model, the cost, and where your data goes.',
+        a: 'Yes - FitWright is bring-your-own-key. You connect the provider you prefer (OpenAI, Anthropic, Google Gemini, OpenRouter, DeepSeek, Groq, or a local model via Ollama), so you control the model, the cost, and where your data goes.',
       },
     ],
     ctaHeading: 'Ready to tailor your resume?',
@@ -172,18 +172,18 @@ export const CAPABILITIES: Record<string, Capability> = {
   'ats-resume-checker': {
     slug: 'ats-resume-checker',
     eyebrow: 'ATS resume checker',
-    h1: 'Check your resume against any job — with an honest ATS score',
+    h1: 'Check your resume against any job - with an honest ATS score',
     heroSub:
-      'Applicant tracking systems screen resumes on keywords and structure before a human reads them. FitWright scores your resume against a specific job and shows exactly what is matched and what is missing — so you fix the real gaps.',
-    metaTitle: 'ATS Resume Checker — Score Your Resume Against Any Job',
+      'Applicant tracking systems screen resumes on keywords and structure before a human reads them. FitWright scores your resume against a specific job and shows exactly what is matched and what is missing - so you fix the real gaps.',
+    metaTitle: 'ATS Resume Checker - Score Your Resume Against Any Job',
     metaDescription:
       "Score your resume against any job with FitWright's ATS checker: an honest match score plus the keywords and skills you're missing. Free & open source.",
-    socialTitle: 'ATS Resume Checker · FitWright',
+    socialTitle: 'ATS Resume Checker - FitWright',
     keywordGroup: 'atsChecker',
     definitionHeading: 'What is an ATS resume checker?',
     definition: [
-      'An applicant tracking system (ATS) is the software most employers use to receive and filter job applications. It parses your resume and screens it for the keywords, skills, and structure a role requires — often before a recruiter sees it. An ATS resume checker estimates how well your resume matches a specific job so you can improve the fit before applying.',
-      'FitWright checks your resume against the exact job description you paste in. It returns a transparent match score and a breakdown of matched versus missing keywords and skills — no black box, and no fake "ATS pass" guarantees.',
+      'An applicant tracking system (ATS) is the software most employers use to receive and filter job applications. It parses your resume and screens it for the keywords, skills, and structure a role requires - often before a recruiter sees it. An ATS resume checker estimates how well your resume matches a specific job so you can improve the fit before applying.',
+      'FitWright checks your resume against the exact job description you paste in. It returns a transparent match score and a breakdown of matched versus missing keywords and skills - no black box, and no fake "ATS pass" guarantees.',
     ],
     howToName: 'How to check your resume against a job',
     howToDescription:
@@ -202,15 +202,15 @@ export const CAPABILITIES: Record<string, Capability> = {
       {
         icon: 'gauge',
         title: 'Get your match score',
-        body: 'See an overall fit score with keyword, skills, and section sub-scores — a clear, honest read on alignment.',
+        body: 'See an overall fit score with keyword, skills, and section sub-scores - a clear, honest read on alignment.',
       },
       {
         icon: 'list',
         title: 'Fix the real gaps',
-        body: 'Review matched versus missing terms, then tailor your resume to close the genuine gaps — truthfully.',
+        body: 'Review matched versus missing terms, then tailor your resume to close the genuine gaps - truthfully.',
       },
     ],
-    outcomesHeading: 'A clear read on fit — before you apply',
+    outcomesHeading: 'A clear read on fit - before you apply',
     outcomesSub:
       'No vanity metrics and no false guarantees. Just the signals an ATS actually measures.',
     outcomes: [
@@ -242,7 +242,7 @@ export const CAPABILITIES: Record<string, Capability> = {
       },
       {
         q: 'Does a high score guarantee an interview?',
-        a: 'No. No tool can guarantee an interview — hiring depends on many human factors. A strong match score means your resume is well-aligned and parseable for the systems that screen it, which is the part software actually measures.',
+        a: 'No. No tool can guarantee an interview - hiring depends on many human factors. A strong match score means your resume is well-aligned and parseable for the systems that screen it, which is the part software actually measures.',
       },
       {
         q: 'How does FitWright decide what is "missing"?',
@@ -263,16 +263,16 @@ export const CAPABILITIES: Record<string, Capability> = {
     eyebrow: 'Cover letter generator',
     h1: 'Generate a tailored cover letter grounded in your resume',
     heroSub:
-      'Write a cover letter that actually fits the job — drawn from your real resume and the specific role, not a generic template. Edit it freely, then export a clean PDF.',
-    metaTitle: 'Cover Letter Generator — AI Cover Letters from Your Resume',
+      'Write a cover letter that actually fits the job - drawn from your real resume and the specific role, not a generic template. Edit it freely, then export a clean PDF.',
+    metaTitle: 'Cover Letter Generator - AI Cover Letters from Your Resume',
     metaDescription:
       'Generate a tailored cover letter grounded in your resume and the job. Edit every line and export to PDF. Truthful by design. Free & open source.',
-    socialTitle: 'AI Cover Letter Generator · FitWright',
+    socialTitle: 'AI Cover Letter Generator - FitWright',
     keywordGroup: 'coverLetter',
     definitionHeading: 'What is a tailored cover letter?',
     definition: [
       'A cover letter is a short, role-specific message that introduces you to an employer and explains why your experience fits the job. A tailored cover letter references the actual role and draws on your real background, rather than reusing a generic paragraph for every application.',
-      'FitWright generates a first draft grounded in two things you already have: your resume and the job description. It connects your genuine experience to what the role asks for — and every word is yours to edit before you send or export it.',
+      'FitWright generates a first draft grounded in two things you already have: your resume and the job description. It connects your genuine experience to what the role asks for - and every word is yours to edit before you send or export it.',
     ],
     howToName: 'How to generate a cover letter',
     howToDescription:
@@ -299,13 +299,13 @@ export const CAPABILITIES: Record<string, Capability> = {
         body: 'Refine the tone and details, then export a clean PDF ready to attach to your application.',
       },
     ],
-    outcomesHeading: 'A letter that fits — and stays yours',
+    outcomesHeading: 'A letter that fits - and stays yours',
     outcomesSub: 'Grounded in your real experience, fully editable, and export-ready.',
     outcomes: [
       {
         icon: 'file',
         title: 'Grounded in your resume',
-        body: 'The draft is built from your actual experience and the job — not a generic, one-size-fits-all template.',
+        body: 'The draft is built from your actual experience and the job - not a generic, one-size-fits-all template.',
       },
       {
         icon: 'pen',
@@ -330,7 +330,7 @@ export const CAPABILITIES: Record<string, Capability> = {
       },
       {
         q: 'Can I edit the generated cover letter?',
-        a: 'Yes — always. The AI produces a first draft; you can rewrite, trim, or restructure any part before exporting.',
+        a: 'Yes - always. The AI produces a first draft; you can rewrite, trim, or restructure any part before exporting.',
       },
       {
         q: 'Can I export the cover letter to PDF?',
@@ -338,7 +338,7 @@ export const CAPABILITIES: Record<string, Capability> = {
       },
       {
         q: 'Do I need my own AI key?',
-        a: 'Yes. FitWright is bring-your-own-key, so you control the AI provider, the model, and the cost — including free local models via Ollama.',
+        a: 'Yes. FitWright is bring-your-own-key, so you control the AI provider, the model, and the cost - including free local models via Ollama.',
       },
     ],
     ctaHeading: 'Write your next cover letter in minutes',
@@ -351,15 +351,15 @@ export const CAPABILITIES: Record<string, Capability> = {
     eyebrow: 'Interview preparation',
     h1: 'Prepare for interviews with questions grounded in your resume',
     heroSub:
-      'Walk into interviews ready. FitWright generates likely questions, talking points, and a role-fit analysis based on your actual resume and the specific job — so you practice what genuinely matters.',
-    metaTitle: 'Interview Preparation — Resume-Grounded Practice Questions',
+      'Walk into interviews ready. FitWright generates likely questions, talking points, and a role-fit analysis based on your actual resume and the specific job - so you practice what genuinely matters.',
+    metaTitle: 'Interview Preparation - Resume-Grounded Practice Questions',
     metaDescription:
       'Get likely interview questions, talking points, and a role-fit analysis grounded in your resume and the job. Practice what matters. Free & open source.',
-    socialTitle: 'AI Interview Preparation · FitWright',
+    socialTitle: 'AI Interview Preparation - FitWright',
     keywordGroup: 'interviewPrep',
     definitionHeading: 'What is resume-grounded interview preparation?',
     definition: [
-      'Interview preparation is the work you do before an interview to anticipate questions and rehearse strong, specific answers. Generic question lists only go so far — the most useful practice is tied to your actual background and the specific role you are interviewing for.',
+      'Interview preparation is the work you do before an interview to anticipate questions and rehearse strong, specific answers. Generic question lists only go so far - the most useful practice is tied to your actual background and the specific role you are interviewing for.',
       'FitWright generates likely questions, talking points, and a role-fit analysis from your resume and the job description. Because it is grounded in your real experience, you rehearse answers that are genuinely yours to give.',
     ],
     howToName: 'How to prepare for an interview',
@@ -388,7 +388,7 @@ export const CAPABILITIES: Record<string, Capability> = {
       },
     ],
     outcomesHeading: 'Practice what actually matters',
-    outcomesSub: 'Preparation tied to your resume and the role — not a generic checklist.',
+    outcomesSub: 'Preparation tied to your resume and the role - not a generic checklist.',
     outcomes: [
       {
         icon: 'message',
@@ -422,7 +422,7 @@ export const CAPABILITIES: Record<string, Capability> = {
       },
       {
         q: 'Does it write my answers for me?',
-        a: 'It suggests talking points and angles based on your experience. The answers are yours to shape — the goal is focused, honest practice, not a script of invented achievements.',
+        a: 'It suggests talking points and angles based on your experience. The answers are yours to shape - the goal is focused, honest practice, not a script of invented achievements.',
       },
       {
         q: 'Is interview preparation free?',

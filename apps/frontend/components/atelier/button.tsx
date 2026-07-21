@@ -3,7 +3,7 @@
 /**
  * Atelier Button (Task 2.2)
  * Warm, rounded, soft-elevation button on Atelier tokens. One accent per region.
- * State matrix: default · hover · active · focus-visible · disabled · loading.
+ * State matrix: default - hover - active - focus-visible - disabled - loading.
  */
 
 import * as React from 'react';
@@ -60,7 +60,7 @@ const buttonVariants = cva(
         md: 'h-10 px-4',
         lg: 'h-11 px-6 text-base',
         icon: 'h-10 w-10',
-        // Compact icon control for dense rows — still a comfortable touch target
+        // Compact icon control for dense rows - still a comfortable touch target
         // on mobile (32px meets WCAG 2.5.8 AA with margin), with a focus ring.
         iconSm: 'h-8 w-8',
       },
@@ -82,7 +82,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ) => {
     const classes = cn(buttonVariants({ variant, size }), className);
 
-    // When asChild, Radix Slot requires exactly ONE child element — do not
+    // When asChild, Radix Slot requires exactly ONE child element - do not
     // inject a loading spinner (the consumer's element is passed through).
     if (asChild) {
       return (

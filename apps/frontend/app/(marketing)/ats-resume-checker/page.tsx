@@ -1,5 +1,5 @@
 /**
- * /ats-resume-checker — feature landing page for FitWright's ATS match scoring.
+ * /ats-resume-checker - feature landing page for FitWright's ATS match scoring.
  * Thin route shell over the shared data-driven <CapabilityLanding> renderer.
  */
 import type { Metadata } from 'next';

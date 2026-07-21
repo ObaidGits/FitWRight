@@ -1,15 +1,15 @@
-"""P3 Productivity: outbox + notifications platform (R4–R6, R16)
+"""P3 Productivity: outbox + notifications platform (R4-R6, R16)
 
 Adds the shared event platform + notification tables (design §Platform/§B):
 
-- ``outbox`` — transactional domain-event log consumed at-least-once + idempotent
+- ``outbox`` - transactional domain-event log consumed at-least-once + idempotent
   by id (notifier + search indexer). Index ``(processed_at, created_at, id)``
   is the consumer cursor; ``dead_at`` parks poison rows (DLQ).
-- ``notifications`` — user-scoped, content-safe items with category/priority/
+- ``notifications`` - user-scoped, content-safe items with category/priority/
   group_key + a unique ``(user_id, dedupe_key)`` for scheduled-notification
   idempotency.
-- ``notification_prefs`` — per-user, per-category in_app/email toggles.
-- ``user_unread_counts`` — denormalized O(1) unread badge + digest setting.
+- ``notification_prefs`` - per-user, per-category in_app/email toggles.
+- ``user_unread_counts`` - denormalized O(1) unread badge + digest setting.
 
 Postgres indexes are created ``CONCURRENTLY``; SQLite inline. Locally the same
 schema is produced by ``create_all``; hosted uses this migration. Reversible.

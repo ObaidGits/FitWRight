@@ -29,11 +29,11 @@ export interface ConflictDialogProps {
 }
 
 function preview(value: unknown): string {
-  if (value == null) return '—';
-  if (typeof value === 'string') return value.length > 120 ? `${value.slice(0, 117)}…` : value;
+  if (value == null) return '-';
+  if (typeof value === 'string') return value.length > 120 ? `${value.slice(0, 117)}...` : value;
   try {
     const s = JSON.stringify(value);
-    return s.length > 120 ? `${s.slice(0, 117)}…` : s;
+    return s.length > 120 ? `${s.slice(0, 117)}...` : s;
   } catch {
     return String(value);
   }
@@ -55,7 +55,7 @@ export function ConflictDialog({
   );
   const dialogRef = React.useRef<HTMLDivElement>(null);
 
-  // Focus the dialog on open + trap Escape → dismiss (keyboard accessible).
+  // Focus the dialog on open + trap Escape -> dismiss (keyboard accessible).
   React.useEffect(() => {
     dialogRef.current?.focus();
     const onKey = (e: KeyboardEvent) => {
@@ -95,7 +95,7 @@ export function ConflictDialog({
           This resume changed elsewhere
         </h2>
         <p id="conflict-desc" className="mt-1 text-sm text-[var(--muted-foreground)]">
-          Another tab or device saved a newer version (v{currentVersion}). Choose how to resolve —
+          Another tab or device saved a newer version (v{currentVersion}). Choose how to resolve -
           your work is never discarded without your say-so.
         </p>
 

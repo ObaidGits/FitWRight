@@ -1,6 +1,6 @@
-"""Photo System — cross-flow provenance/preservation tests.
+"""Photo System - cross-flow provenance/preservation tests.
 
-Covers the flows the audit flagged as photo-sensitive: profile→resume sync must
+Covers the flows the audit flagged as photo-sensitive: profile->resume sync must
 preserve the resume's photo config; JD tailoring must preserve the header photo;
 the public projection must expose avatar metadata for CLS-free rendering.
 """
@@ -58,7 +58,7 @@ class TestSyncPreservesPhoto:
 
 
 class TestTailorPreservesPersonalInfo:
-    """JD tailoring must never rewrite/drop identity — incl. the photo config."""
+    """JD tailoring must never rewrite/drop identity - incl. the photo config."""
 
     async def test_improve_restores_personal_info_with_photo(self, monkeypatch):
         from app.services import improver
@@ -166,7 +166,7 @@ class TestPublicAvatarEnrichment:
             }
         }
         await ProfileService._enrich_public_avatar(payload, "u1")
-        # Cleared → the public view renders initials, not a dead image.
+        # Cleared -> the public view renders initials, not a dead image.
         assert payload["identity"]["avatarUrl"] is None
         assert payload["identity"]["avatarSrcset"] == []
 

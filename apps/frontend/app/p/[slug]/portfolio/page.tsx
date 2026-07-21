@@ -3,7 +3,7 @@
  *
  * A projects-first public view derived from the same profile projection as the
  * public profile (no duplicated data or rendering logic). Server-rendered with
- * SEO metadata; visibility-gated by the backend (private → notFound). Reuses the
+ * SEO metadata; visibility-gated by the backend (private -> notFound). Reuses the
  * public profile view's presentational sections for consistency.
  */
 import { cache } from 'react';
@@ -26,7 +26,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const page = await loadPage(slug);
   if (!page) return { title: 'Portfolio not found', robots: { index: false, follow: false } };
   const name = page.profile.identity.name ?? 'Portfolio';
-  const title = `${name} — Portfolio`;
+  const title = `${name} - Portfolio`;
   const description = page.profile.summary || `${name}'s portfolio and selected work.`;
   const images = page.profile.identity.avatarUrl
     ? [{ url: page.profile.identity.avatarUrl }]
@@ -65,7 +65,7 @@ export default async function PublicPortfolioPage({ params }: Params) {
         <JsonLd
           data={[
             collectionPageSchema({
-              name: `${name} — Portfolio`,
+              name: `${name} - Portfolio`,
               path: `/p/${slug}/portfolio`,
               about: page.json_ld,
             }),

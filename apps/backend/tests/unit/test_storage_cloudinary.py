@@ -1,7 +1,7 @@
 """Cloudinary provider hardening tests (retry / backoff / recovery / failure).
 
 Uses an injected fake transport and a no-op sleep, so these run offline with no
-Cloudinary account and no real network — the retry/backoff logic is exercised
+Cloudinary account and no real network - the retry/backoff logic is exercised
 deterministically. Live-service behavior (real signatures/CDN) is NOT verified
 here; that requires credentials (documented as such in the report).
 """
@@ -96,7 +96,7 @@ async def test_put_missing_secure_url_is_error():
 
 
 async def test_delete_is_best_effort_and_swallows_failure():
-    # 3 transient failures with 3 attempts → delete must NOT raise (orphan → GC).
+    # 3 transient failures with 3 attempts -> delete must NOT raise (orphan -> GC).
     p, t, sleeps = _provider(
         [("status", 500, {}), ("status", 500, {}), ("status", 500, {})],
         max_attempts=3,

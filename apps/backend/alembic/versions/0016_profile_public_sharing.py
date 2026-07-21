@@ -3,10 +3,10 @@
 Adds the two columns that back the Public Profile Platform
 (docs/architecture/PROFILE_SYSTEM_PLAN.md §P7):
 
-- ``profiles.public_slug`` — the globally-unique URL segment for a shared
+- ``profiles.public_slug`` - the globally-unique URL segment for a shared
   profile (nullable until first publish); a partial-safe UNIQUE index enforces
   uniqueness and powers the fast, JSON-free anonymous lookup by slug.
-- ``profiles.visibility`` — ``private`` (default) | ``unlisted`` | ``public``;
+- ``profiles.visibility`` - ``private`` (default) | ``unlisted`` | ``public``;
   the authoritative publish gate for the anonymous ``/public/profiles/{slug}``
   endpoint.
 

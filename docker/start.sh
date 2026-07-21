@@ -46,7 +46,7 @@ EOF
 
 # Print status message
 status() {
-    echo -e "${GREEN}[✓]${NC} $1" >&2
+    echo -e "${GREEN}[OK]${NC} $1" >&2
 }
 
 # Print info message
@@ -61,7 +61,7 @@ warn() {
 
 # Print error message
 error() {
-    echo -e "${RED}[✗]${NC} $1" >&2
+    echo -e "${RED}[FAIL]${NC} $1" >&2
 }
 
 # Docker-style secret loader: supports VAR or VAR_FILE
@@ -198,7 +198,7 @@ if [ -d "/root/.cache/ms-playwright" ] || [ -d "/home/appuser/.cache/ms-playwrig
 else
     warn "Installing Playwright Chromium (this may take a moment)..."
     python -m playwright install chromium || {
-        warn "Playwright install failed — PDF export may not work"
+        warn "Playwright install failed - PDF export may not work"
     }
     status "Playwright setup complete"
 fi

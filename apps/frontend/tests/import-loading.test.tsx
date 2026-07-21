@@ -2,9 +2,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
 /**
- * Import/parse loading experience (Loading audit — P0): while a resume uploads
+ * Import/parse loading experience (Loading audit - P0): while a resume uploads
  * and is structured, the user sees the honest stage timeline + skeleton, not the
- * old bare "Uploading & parsing…" spinner.
+ * old bare "Uploading & parsing..." spinner.
  */
 
 vi.mock('next/navigation', () => ({
@@ -35,12 +35,12 @@ import ImportPage from '@/app/(app)/import/page';
 
 afterEach(() => vi.clearAllMocks());
 
-describe('Import page — parse loading experience', () => {
+describe('Import page - parse loading experience', () => {
   it('shows the deterministic stage timeline when streaming is unavailable', async () => {
     validateResumeFile.mockReturnValue(null); // valid file
-    // Streaming off → falls back to the non-stream path (deterministic timeline).
+    // Streaming off -> falls back to the non-stream path (deterministic timeline).
     streamUploadResumeFile.mockRejectedValue(new Error('stream_unavailable'));
-    // Never resolves → stays in the uploading/parsing state.
+    // Never resolves -> stays in the uploading/parsing state.
     uploadResumeFile.mockReturnValue(new Promise(() => {}));
 
     const { container } = render(<ImportPage />);
@@ -48,13 +48,13 @@ describe('Import page — parse loading experience', () => {
     const file = new File(['x'], 'resume.pdf', { type: 'application/pdf' });
     fireEvent.change(input, { target: { files: [file] } });
 
-    // Stage timeline copy appears…
+    // Stage timeline copy appears...
     await waitFor(() =>
       expect(screen.getByText(/turning your resume into an editable draft/i)).toBeInTheDocument()
     );
     expect(screen.getByText('Reading your document')).toBeInTheDocument();
     expect(screen.getByText('Detecting your skills')).toBeInTheDocument();
-    // …and there's an accessible live status.
+    // ...and there's an accessible live status.
     expect(screen.getAllByRole('status').length).toBeGreaterThan(0);
     // The old bare copy is gone.
     expect(screen.queryByText(/this can take a few seconds/i)).not.toBeInTheDocument();

@@ -6,10 +6,10 @@ dependency overrides), in **hosted** mode so authN/CSRF/rate-limit/capability
 all apply. Parametrized over every new read endpoint and every maintenance
 action:
 
-- **Read authz (Req 15.1).** For each new read endpoint: anon → 401,
-  authenticated non-admin → 403, admin → 200.
+- **Read authz (Req 15.1).** For each new read endpoint: anon -> 401,
+  authenticated non-admin -> 403, admin -> 200.
 - **Maintenance authz (Req 15.1).** For each maintenance action (POST + CSRF):
-  anon → 401, non-admin → 403, admin (``admin.manage``) → 200 with a
+  anon -> 401, non-admin -> 403, admin (``admin.manage``) -> 200 with a
   ``started``/``already_running``/``disabled`` outcome.
 - **Sensitive_Endpoint audit (Req 15.3).** ``GET /config`` records an
   ``admin.config_viewed`` audit entry naming the acting admin; every maintenance
@@ -120,7 +120,7 @@ async def _seed(db, email, *, role="user", status="active", verified=True, name=
 
 @asynccontextmanager
 async def _admin_client(db, email="admin@example.com"):
-    """Yield ``(client, admin)`` — a logged-in admin with the csrf header set."""
+    """Yield ``(client, admin)`` - a logged-in admin with the csrf header set."""
     admin = await _seed(db, email, role="admin")
     async with _client() as client:
         await _login(client, email)
@@ -177,7 +177,7 @@ class TestMaintenanceAuthzMatrix:
     @pytest.mark.parametrize("path,action", MAINTENANCE_ACTIONS)
     async def test_anonymous_401(self, admin_env, hosted, path, action):
         async with _client() as client:
-            # No session → CSRF is not enforced; the guard is the first stop → 401.
+            # No session -> CSRF is not enforced; the guard is the first stop -> 401.
             assert (await client.post(path)).status_code == 401
 
     @pytest.mark.parametrize("path,action", MAINTENANCE_ACTIONS)
@@ -208,7 +208,7 @@ async def _audit_items(client, *, event, actor):
 
 
 class TestSensitiveEndpointAudit:
-    """Validates: Requirement 15.3 (Sensitive_Endpoint access → audit_log entry
+    """Validates: Requirement 15.3 (Sensitive_Endpoint access -> audit_log entry
     with acting admin + action)."""
 
     async def test_config_view_is_audited(self, admin_env, hosted):
@@ -243,9 +243,9 @@ class TestSensitiveEndpointAudit:
 
 
 class TestPerAdminRateLimit:
-    """Validates: Requirement 15.2 (per-admin rate limit → 429 + retry hint).
+    """Validates: Requirement 15.2 (per-admin rate limit -> 429 + retry hint).
 
-    The production read bucket is 240/60s — impractical to exhaust deterministically
+    The production read bucket is 240/60s - impractical to exhaust deterministically
     in a test. We dial the read rule down to 2/60s (the limiter reads the module
     global at call time) so the 3rd read on one endpoint trips the limit, proving
     the per-admin limiter is wired on the new read surface and returns a 429 with a

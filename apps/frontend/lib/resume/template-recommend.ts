@@ -2,7 +2,7 @@
  * Smart template recommendations (pure, deterministic).
  *
  * Ranks the catalog against a light signal derived from the user's resume /
- * profile — role, industry keywords, experience level, skills, country — so the
+ * profile - role, industry keywords, experience level, skills, country - so the
  * gallery can surface "Recommended for you" without any LLM call. Scoring is
  * transparent and every recommendation carries a human reason.
  */
@@ -75,7 +75,7 @@ export function scoreTemplate(t: ResumeTemplate, signal: RecommendSignal): Score
     const roleHit = roleTokens.some((tok) => inHay(tok));
     if (roleHit) {
       score += 3;
-      reasons.push(`Matches your role “${signal.role}”`);
+      reasons.push(`Matches your role "${signal.role}"`);
     }
   }
 

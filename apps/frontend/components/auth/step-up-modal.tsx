@@ -88,7 +88,7 @@ export function StepUpProvider({ children }: { children: React.ReactNode }) {
       setError(describeAuthError(err));
       return;
     }
-    // Step-up succeeded — retry the original action and resolve the caller.
+    // Step-up succeeded - retry the original action and resolve the caller.
     const job = pendingRef.current;
     pendingRef.current = null;
     try {

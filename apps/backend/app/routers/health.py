@@ -24,7 +24,7 @@ router = APIRouter(tags=["Health"])
 # GET /status is PUBLIC (optional principal; anonymous callers reach it in
 # hosted mode) and is polled by the client status cache. A naive implementation
 # fires a live LLM provider round-trip (litellm.acompletion, up to a 30s
-# timeout) on EVERY call — which (a) collapses /status throughput under
+# timeout) on EVERY call - which (a) collapses /status throughput under
 # concurrency and (b) lets any unauthenticated caller trigger outbound, billable
 # provider requests on the server's key (cost/abuse vector at scale). We cache
 # the probe result briefly and single-flight concurrent probes so repeated
@@ -123,7 +123,7 @@ async def readiness_check() -> JSONResponse:
 
     Checks the database (``SELECT 1`` on the async engine) and the KVStore
     (a round-trip probe). Returns 200 only when every dependency is healthy,
-    else 503 with a per-dependency breakdown — the correct signal for a load
+    else 503 with a per-dependency breakdown - the correct signal for a load
     balancer / orchestrator readiness gate (Render, Kubernetes) so traffic is
     not routed to an instance that cannot serve requests. Each check is isolated
     and time-bounded so the probe itself can never hang.
@@ -165,14 +165,14 @@ async def _resolve_status_user_id(request: Request) -> str | None:
     """Best-effort effective user id for the (public) status endpoint.
 
     Uses the authenticated principal when present, the bootstrap owner in
-    single-user/local mode, and otherwise ``None`` (anonymous hosted request —
+    single-user/local mode, and otherwise ``None`` (anonymous hosted request -
     the DB stats are simply reported empty rather than 401-ing the status page).
     """
     principal = get_optional_principal(request)
     if principal is not None:
         return principal.user_id
     # Owner fallback (local) vs None (hosted) is decided by the composition
-    # root's IdentityProvider — no direct deployment-mode read here (Phase 5).
+    # root's IdentityProvider - no direct deployment-mode read here (Phase 5).
     from app.platform import get_container
 
     return await get_container().identity_provider().resolve_owner_fallback()

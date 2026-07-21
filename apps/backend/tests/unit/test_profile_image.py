@@ -57,7 +57,7 @@ class TestSniff:
 
 class TestProcessMaster:
     def test_preserves_aspect_ratio(self):
-        # Master must NOT be square-cropped — aspect ratio is preserved.
+        # Master must NOT be square-cropped - aspect ratio is preserved.
         out = process_profile_image(_img_bytes("JPEG", size=(1000, 400)))
         assert out.width / out.height == pytest.approx(1000 / 400, rel=0.02)
         assert out.aspect_ratio == pytest.approx(2.5, rel=0.02)

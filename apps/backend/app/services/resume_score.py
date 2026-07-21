@@ -1,7 +1,7 @@
 """Deterministic resume scoring for the wizard (W-P2.3).
 
-Pure, explainable functions that score a ``ResumeData`` draft — completeness,
-ATS readiness, and per-section confidence — mirroring the weight philosophy of
+Pure, explainable functions that score a ``ResumeData`` draft - completeness,
+ATS readiness, and per-section confidence - mirroring the weight philosophy of
 ``app/profile/completion.py`` but operating directly on the resume schema the
 wizard produces (no ``ProfileData`` dependency, no LLM). Surfaced live so the
 wizard can show a quality score instead of an opaque step count.
@@ -12,7 +12,7 @@ from __future__ import annotations
 from app.schemas.models import ResumeData
 from app.schemas.resume_wizard import ResumeScores, ResumeSectionConfidence
 
-# (key, weight) — weights sum to 100, ordered by importance.
+# (key, weight) - weights sum to 100, ordered by importance.
 _COMPLETENESS_WEIGHTS: tuple[tuple[str, int], ...] = (
     ("name", 8),
     ("title", 8),

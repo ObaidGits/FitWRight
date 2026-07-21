@@ -1,10 +1,10 @@
-"""Profile version snapshots — mirrors ``app/versions/service.py`` for profiles.
+"""Profile version snapshots - mirrors ``app/versions/service.py`` for profiles.
 
 Reuses the generic, well-tested gzip/hash helpers from the resume version
 service (``compress_processed_data`` / ``decompress_version``) so there is a
 single serialization + dedupe implementation. Snapshots are content-hash
-deduped, manual-save debounced, and capped with prune (the oldest snapshot —
-typically the ``migration`` baseline — is always retained). All persistence
+deduped, manual-save debounced, and capped with prune (the oldest snapshot -
+typically the ``migration`` baseline - is always retained). All persistence
 goes through the ``app.database`` facade, scoped by ``user_id``.
 """
 

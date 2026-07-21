@@ -73,7 +73,7 @@ function skillsState(): ResumeWizardState {
   };
 }
 
-describe('Wizard P1 — structured Identity (W-P1.1)', () => {
+describe('Wizard P1 - structured Identity (W-P1.1)', () => {
   it('gates Start until a name is entered and posts a structured turn to contact', async () => {
     mockedTurn.mockResolvedValue({ state: skillsState() });
     render(<WizardPage />);
@@ -98,7 +98,7 @@ describe('Wizard P1 — structured Identity (W-P1.1)', () => {
   });
 });
 
-describe('Wizard P1 — skills chips + confirmable suggestions (W-P1.2)', () => {
+describe('Wizard P1 - skills chips + confirmable suggestions (W-P1.2)', () => {
   it('adds a suggested skill on tap and submits the confirmed list', async () => {
     // Seed the wizard directly on the skills section via a recovered draft
     // (also exercises W-P0.2 rehydration) to avoid navigating the whole flow.
@@ -110,7 +110,7 @@ describe('Wizard P1 — skills chips + confirmable suggestions (W-P1.2)', () => 
 
     // On the skills section: the inferred skill shows as a suggestion.
     const suggestion = await screen.findByRole('button', { name: /docker/i });
-    fireEvent.click(suggestion); // confirm the suggestion → becomes a chip
+    fireEvent.click(suggestion); // confirm the suggestion -> becomes a chip
 
     // Also add a typed skill.
     fireEvent.change(screen.getByLabelText(/add a skill/i), { target: { value: 'Python' } });

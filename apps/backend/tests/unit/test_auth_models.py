@@ -70,7 +70,7 @@ class TestMetadata:
     def test_owned_tables_have_user_id_fk(self):
         # Document tables keep ``user_id`` nullable during the P1 transition;
         # ``api_keys`` is reconciled to the enforced per-user shape (composite
-        # PK ``(user_id, provider)`` — R10.6), so its ``user_id`` is NOT NULL.
+        # PK ``(user_id, provider)`` - R10.6), so its ``user_id`` is NOT NULL.
         for table in _OWNED_TABLES:
             col = Base.metadata.tables[table].columns["user_id"]
             assert col.foreign_keys, f"{table}.user_id should reference users.id"

@@ -1,4 +1,4 @@
-"""DB-backed ``KVStore`` adapter — the "no Redis at all" fallback (ADR-6).
+"""DB-backed ``KVStore`` adapter - the "no Redis at all" fallback (ADR-6).
 
 On the strictest free tier there may be no Redis (not even Upstash). This
 adapter keeps the app fully functional by persisting KV entries in a single
@@ -274,7 +274,7 @@ class DBKVStore(KVStore):
                         held_until = row[0]
                         if held_until is not None and now < held_until:
                             return False
-                        # Stale/expired lock — reclaim it.
+                        # Stale/expired lock - reclaim it.
                         await session.execute(
                             kv_table.update()
                             .where(kv_table.c.key == lock_key)

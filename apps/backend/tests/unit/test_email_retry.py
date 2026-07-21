@@ -1,7 +1,7 @@
 """Email delivery resilience tests: bounded retry, backoff, and permanent
 vs transient classification.
 
-Offline — no SMTP/Resend account or network. Uses fake senders/transports and a
+Offline - no SMTP/Resend account or network. Uses fake senders/transports and a
 no-op sleep so retry/backoff is exercised deterministically. Live provider
 delivery is NOT verified here (needs credentials; documented as such).
 """
@@ -105,7 +105,7 @@ async def test_smtp_generic_error_is_transient():
         transport=_RaisingSmtpTransport(smtplib.SMTPServerDisconnected("bye")),
     )
     with pytest.raises(smtplib.SMTPServerDisconnected):
-        await sender.send(MSG)  # NOT PermanentEmailError → will be retried
+        await sender.send(MSG)  # NOT PermanentEmailError -> will be retried
 
 
 class _Resp:
@@ -136,7 +136,7 @@ async def test_resend_4xx_is_permanent():
 async def test_resend_429_is_transient():
     sender = ResendEmailSender(api_key="k", sender="from@x.com", client=_ResendClient(_HttpErr(429)))
     with pytest.raises(_HttpErr):
-        await sender.send(MSG)  # rate limit → transient, retried by send_email_safe
+        await sender.send(MSG)  # rate limit -> transient, retried by send_email_safe
 
 
 async def test_resend_5xx_is_transient():

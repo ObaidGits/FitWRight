@@ -1,4 +1,4 @@
-"""Persistent AI analysis cache — facade, service, and endpoint-reuse tests.
+"""Persistent AI analysis cache - facade, service, and endpoint-reuse tests.
 
 Exercises the "compute once, reuse everywhere" substrate end to end against a
 REAL isolated database (``isolated_db``): the ``analysis_artifacts`` facade
@@ -57,7 +57,7 @@ class TestArtifactFacade:
             version="1|gpt-4",
             analysis_data={"x": 1},
         )
-        # Different version (model/prompt changed) ⇒ miss (lazy regeneration).
+        # Different version (model/prompt changed) => miss (lazy regeneration).
         assert (
             await isolated_db.get_analysis_artifact(
                 owner_id,
@@ -67,7 +67,7 @@ class TestArtifactFacade:
                 version="2|gpt-4",
             )
         ) is None
-        # Different checksum (content changed) ⇒ miss.
+        # Different checksum (content changed) => miss.
         assert (
             await isolated_db.get_analysis_artifact(
                 owner_id,
@@ -199,7 +199,7 @@ class TestGetOrCompute:
 
         assert first == {"result": 1}
         assert cached1 is False
-        # Second call is a pure cache hit — compute() never ran again.
+        # Second call is a pure cache hit - compute() never ran again.
         assert second == {"result": 1}
         assert cached2 is True
         assert calls["n"] == 1
@@ -290,7 +290,7 @@ class TestJobAnalyzeReuse:
             assert r1.status_code == 200
             assert r2.status_code == 200
             assert r1.json()["keywords"]["required_skills"] == ["Python"]
-            # The expensive LLM extraction ran exactly once — the second identical
+            # The expensive LLM extraction ran exactly once - the second identical
             # analysis was served from the persistent cache.
             assert mock_extract.await_count == 1
 
@@ -321,7 +321,7 @@ class TestAuxGenerationReuse:
                 )
             assert resp.status_code == 200
             assert resp.json()["content"] == "Dear Hiring Manager, ..."
-            # Stored copy returned — the LLM generator was never invoked.
+            # Stored copy returned - the LLM generator was never invoked.
             mock_gen.assert_not_awaited()
 
     async def test_interview_prep_reused_without_llm(self, isolated_db, owner_id, client):

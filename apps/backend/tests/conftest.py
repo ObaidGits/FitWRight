@@ -8,9 +8,9 @@
 # (e.g. SINGLE_USER_MODE=false + a Postgres DATABASE_URL + provider secrets)
 # would otherwise see that config bleed into the unit/integration suite, causing
 # spurious failures that do NOT reproduce in CI (which has no ``.env``). We pin
-# the settings-relevant variables to their zero-config defaults here — os.environ
+# the settings-relevant variables to their zero-config defaults here - os.environ
 # takes precedence over ``.env`` in pydantic-settings, and explicit
-# ``Settings(...)`` kwargs in hosted-mode tests still override these — so the
+# ``Settings(...)`` kwargs in hosted-mode tests still override these - so the
 # suite is hermetic and ``pytest`` behaves identically locally and in CI.
 # ---------------------------------------------------------------------------
 import os as _os
@@ -53,7 +53,7 @@ def _hermetic_jd_robots(monkeypatch):
     That check performs its OWN network fetch (separate from the mocked
     ``orchestrator.fetch_url_safely``), which would make otherwise-hermetic tests
     hit the network. We force the robots fetch to fail here, which the checker
-    treats as fail-OPEN (allow) — exactly the production behavior when robots.txt
+    treats as fail-OPEN (allow) - exactly the production behavior when robots.txt
     is unreachable. Phase-3 robots tests override this by patching the same
     symbol or by exercising the pure parser/decision functions directly.
     """
@@ -89,7 +89,7 @@ def _reset_status_llm_health_cache():
 
 
 # ---------------------------------------------------------------------------
-# Sample resume data — full ResumeData-compatible dict
+# Sample resume data - full ResumeData-compatible dict
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
@@ -211,12 +211,12 @@ def sample_job_description() -> str:
 
 
 # ---------------------------------------------------------------------------
-# Master resume — used for alignment validation
+# Master resume - used for alignment validation
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
 def master_resume(sample_resume) -> dict:
-    """Master resume (source of truth) — same as sample_resume by default."""
+    """Master resume (source of truth) - same as sample_resume by default."""
     return copy.deepcopy(sample_resume)
 
 
@@ -262,7 +262,7 @@ def sample_changes():
 
 
 # ---------------------------------------------------------------------------
-# Isolated database — swap the global TinyDB singleton for a temp-file DB
+# Isolated database - swap the global TinyDB singleton for a temp-file DB
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
@@ -272,7 +272,7 @@ async def isolated_db(tmp_path, monkeypatch):
 
     Lets endpoint / e2e tests run against a REAL (but isolated) database instead
     of a MagicMock, so persistence, the master-resume invariant, and CRUD are
-    actually exercised — without touching the developer's real database. A
+    actually exercised - without touching the developer's real database. A
     temp **file** (not ``:memory:``) is required: SQLite's connection pool gives
     each connection its own in-memory DB, so the async + sync engines would not
     share state.

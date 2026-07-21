@@ -2,16 +2,16 @@
 
 Covers the real adapters wired by ``app.auth.runtime``:
 
-- ``HibpBreachedPasswordCheck`` — HIBP k-anonymity range API (R13.3). The HTTP
+- ``HibpBreachedPasswordCheck`` - HIBP k-anonymity range API (R13.3). The HTTP
   transport is injected, so these assert exactly what leaves the process (only
-  the 5-char SHA-1 prefix — never the password or full hash), correct parsing
+  the 5-char SHA-1 prefix - never the password or full hash), correct parsing
   of breached vs clean responses, and fail-open on transport error.
-- ``SmtpEmailSender`` — stdlib SMTP transport is monkeypatched (no real socket):
+- ``SmtpEmailSender`` - stdlib SMTP transport is monkeypatched (no real socket):
   asserts MIME construction/recipients.
-- ``ResendEmailSender`` — injected httpx-style client: asserts the send payload
+- ``ResendEmailSender`` - injected httpx-style client: asserts the send payload
   and that a hard failure surfaces as an exception the enumeration-safe flow
   swallows via ``send_email_safe`` (logged, uniform ack preserved).
-- ``TurnstileCaptchaVerifier`` — injected siteverify client: success/failure and
+- ``TurnstileCaptchaVerifier`` - injected siteverify client: success/failure and
   fail-open on provider error (R13.2).
 
 Requirements: 13.2, 13.3.
@@ -127,7 +127,7 @@ class TestHibpBreachedPasswordCheck:
 
 
 class _FakeSmtpTransport:
-    """In-memory SMTP transport — captures the MIME message, opens no socket."""
+    """In-memory SMTP transport - captures the MIME message, opens no socket."""
 
     def __init__(self) -> None:
         self.sent = []
@@ -298,7 +298,7 @@ class TestTurnstileCaptchaVerifier:
 
         assert result.allowed is False
         assert result.reason == "missing_token"
-        assert client.calls == []  # nothing to verify → no provider call
+        assert client.calls == []  # nothing to verify -> no provider call
 
     async def test_provider_error_fails_open(self, caplog):
         client = _FakeSiteverifyClient(error=RuntimeError("turnstile down"))

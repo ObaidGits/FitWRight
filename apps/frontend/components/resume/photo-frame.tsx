@@ -48,7 +48,7 @@ export function resolveResumePhoto(
 }
 
 /**
- * PhotoFrame — the single, template-agnostic photo renderer (Photo System).
+ * PhotoFrame - the single, template-agnostic photo renderer (Photo System).
  *
  * Every surface renders the header/sidebar photo through this one component:
  * the resume templates (so preview === PDF, since both mount the same template

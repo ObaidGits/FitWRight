@@ -5,16 +5,16 @@
  * operates on:
  *
  *   Master Resume
- *   ├── versions[]
- *   └── Tailored Resume
- *       ├── Job Description
- *       ├── versions[]
- *       └── Application
- *           ├── status (lifecycle)
- *           ├── Cover Letter
- *           ├── Interview Prep
- *           ├── Outreach
- *           └── ATS Score
+ *   +-- versions[]
+ *   +-- Tailored Resume
+ *       +-- Job Description
+ *       +-- versions[]
+ *       +-- Application
+ *           +-- status (lifecycle)
+ *           +-- Cover Letter
+ *           +-- Interview Prep
+ *           +-- Outreach
+ *           +-- ATS Score
  *
  * These are frontend-facing types. They map onto the existing backend shapes
  * (Resume/Job/Application) without changing any backend contract; new
@@ -23,7 +23,7 @@
 
 export type ResumeProcessingStatus = 'pending' | 'processing' | 'ready' | 'failed';
 
-/** A resume document — master or tailored variant. */
+/** A resume document - master or tailored variant. */
 export interface ResumeNode {
   id: string;
   title: string | null;
@@ -63,7 +63,7 @@ export const TERMINAL_STAGES: ApplicationStage[] = [
   'archived',
 ];
 
-/** A single job pursuit — the workflow hub object. */
+/** A single job pursuit - the workflow hub object. */
 export interface ApplicationNode {
   id: string;
   jobId: string;

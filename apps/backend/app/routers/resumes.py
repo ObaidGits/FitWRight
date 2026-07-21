@@ -223,7 +223,7 @@ def _flatten_stored_template(stored: Any) -> dict[str, Any]:
 def _resolve_pdf_settings(
     stored: Any, overrides: dict[str, Any]
 ) -> dict[str, Any]:
-    """Resolve final PDF appearance: query override → stored → default.
+    """Resolve final PDF appearance: query override -> stored -> default.
 
     Every value is validated/clamped so a malformed stored blob or override can
     never produce an invalid render request.
@@ -251,12 +251,12 @@ def _resolve_pdf_settings(
 
 
 async def _parse_resume_cached(user_id: str, markdown: str) -> dict[str, Any]:
-    """Parse resume markdown → structured JSON, reusing a cached result.
+    """Parse resume markdown -> structured JSON, reusing a cached result.
 
     Content-addressed via the persistent analysis cache: re-parsing identical
     resume text (a duplicate upload or a ``retry-processing`` on unchanged
     content) under an unchanged prompt+model returns the stored structured data
-    instead of spending another LLM call — while a genuinely new resume, or a
+    instead of spending another LLM call - while a genuinely new resume, or a
     prompt/model change, still parses fresh. Scoped per user.
     """
     try:
@@ -440,7 +440,7 @@ def _restore_original_dates(
                 and not _has_month(result_years)
             ):
                 logger.info(
-                    "Restoring date in %s[%d]: %r → %r",
+                    "Restoring date in %s[%d]: %r -> %r",
                     section_key,
                     idx,
                     result_years,
@@ -562,7 +562,7 @@ def _protect_custom_sections(
             continue
         result_section = result_custom.get(section_key)
         if not isinstance(result_section, dict):
-            # Section was removed by LLM — restore original
+            # Section was removed by LLM - restore original
             result_custom[section_key] = copy.deepcopy(orig_section)
             logger.info("Restored missing custom section: %s", section_key)
             continue
@@ -748,7 +748,7 @@ async def _generate_auxiliary_messages(
     task_labels: list[str] = []
 
     # Title generation is always on (no feature flag). Pass the candidate's
-    # name so the title reads "<Name> — <Role @ Company>" rather than a bare
+    # name so the title reads "<Name> - <Role @ Company>" rather than a bare
     # (and sometimes sentence-long) job descriptor.
     personal_info = improved_data.get("personalInfo")
     candidate_name = (
@@ -894,7 +894,7 @@ async def upload_resume(
         )
 
     # Fail fast on a declared body larger than the cap (+ multipart overhead
-    # margin) BEFORE reading anything — cheap DoS guard for the honest-large case.
+    # margin) BEFORE reading anything - cheap DoS guard for the honest-large case.
     declared = request.headers.get("content-length")
     if declared and declared.isdigit() and int(declared) > MAX_FILE_SIZE + _MULTIPART_OVERHEAD:
         raise HTTPException(
@@ -1012,7 +1012,7 @@ async def upload_resume(
 
 
 def _validate_upload_bytes(request: Request, file: UploadFile, content: bytes) -> None:
-    """Shared upload validation (type/size/empty) → JSON 4xx before any streaming."""
+    """Shared upload validation (type/size/empty) -> JSON 4xx before any streaming."""
     if not _is_allowed_upload(file.content_type, file.filename):
         raise HTTPException(status_code=400, detail="Invalid file type. Allowed: PDF, DOC, DOCX")
     if len(content) > MAX_FILE_SIZE:
@@ -1032,9 +1032,9 @@ async def upload_resume_stream(
 ) -> StreamingResponse:
     """Upload + parse a resume, emitting HONEST per-stage SSE progress.
 
-    Progress events map 1:1 to the REAL pipeline boundaries — never a fabricated
-    bar: ``received`` → ``extracting`` (``parse_document``) → ``structuring``
-    (``parse_resume_to_json``) → ``done`` (carrying the same payload the
+    Progress events map 1:1 to the REAL pipeline boundaries - never a fabricated
+    bar: ``received`` -> ``extracting`` (``parse_document``) -> ``structuring``
+    (``parse_resume_to_json``) -> ``done`` (carrying the same payload the
     non-stream ``/upload`` returns). All validation (type/size/empty) happens as
     a normal JSON 4xx BEFORE the stream opens. Gated by ``streaming_ai_enabled``
     so the client transparently falls back to ``/upload`` when disabled.
@@ -1059,12 +1059,12 @@ async def upload_resume_stream(
     _validate_upload_bytes(request, file, content)
     filename = file.filename or "resume.pdf"
 
-    # Heartbeat cadence — must stay well under the Heroku router's 55s idle
+    # Heartbeat cadence - must stay well under the Heroku router's 55s idle
     # timeout (H15/H28). The upload pipeline has two long awaits (document parse
     # and the LLM structuring call) during which no stage event is emitted; a
     # slow PDF or a 30-90s LLM call would otherwise stall the SSE connection
     # long enough for the platform to sever it mid-parse (surfacing to the user
-    # as a truncated stream → non-stream fallback → Heroku "Application Error").
+    # as a truncated stream -> non-stream fallback -> Heroku "Application Error").
     heartbeat_seconds = settings.stream_heartbeat_seconds
 
     async def event_gen():
@@ -1103,7 +1103,7 @@ async def upload_resume_stream(
                     "error",
                     {
                         "code": "empty_text",
-                        "message": "Could not extract text — the file may be scanned/image-based.",
+                        "message": "Could not extract text - the file may be scanned/image-based.",
                     },
                 )
                 return
@@ -1186,7 +1186,7 @@ async def upload_resume_stream(
             yield _sse("error", {"code": "stream_error", "message": "Upload failed; please retry."})
         finally:
             # If the client disconnected mid-stream, don't leak the parse/LLM
-            # tasks — cancel any that are still running.
+            # tasks - cancel any that are still running.
             for t in bg_tasks:
                 if not t.done():
                     t.cancel()
@@ -1429,9 +1429,9 @@ async def stream_improve_preview_endpoint(
 ) -> StreamingResponse:
     """Stream the tailor pipeline as *stage-progress* SSE (not token streaming).
 
-    The tailor flow is a sequence of discrete stages (extract keywords → plan
-    skills → rewrite → refine → score), so honest progress means emitting a
-    ``stage`` event at each real boundary — never a fabricated progress bar. The
+    The tailor flow is a sequence of discrete stages (extract keywords -> plan
+    skills -> rewrite -> refine -> score), so honest progress means emitting a
+    ``stage`` event at each real boundary - never a fabricated progress bar. The
     final ``done`` event carries the complete ``ImproveResumeResponse`` (same
     shape the non-stream endpoint returns), so the client renders identical
     results. On cancellation nothing is persisted beyond the preview-hash the
@@ -1439,7 +1439,7 @@ async def stream_improve_preview_endpoint(
     ``POST /resumes/improve/preview`` transparently.
 
     Events: ``stage`` ({stage, status}), ``heartbeat`` (liveness), ``done``
-    ({result} | {cancelled: true}), ``error`` ({code, message} → fallback).
+    ({result} | {cancelled: true}), ``error`` ({code, message} -> fallback).
 
     NOTE: this route is defined *before* ``/{resume_id}/{kind}/stream`` so its
     static path wins over the parameterized token-stream route (Starlette
@@ -1448,7 +1448,7 @@ async def stream_improve_preview_endpoint(
     if len(request_id) < 8:
         raise HTTPException(status_code=422, detail="request_id must be at least 8 chars")
 
-    # Flag gate (ADR-14): off → client transparently uses the non-stream path.
+    # Flag gate (ADR-14): off -> client transparently uses the non-stream path.
     if not settings.streaming_ai_enabled:
         raise ApiError(
             status_code=409, code="streaming_disabled",
@@ -1635,7 +1635,7 @@ async def _improve_preview_flow(
             "job_keywords": job_keywords,
             "job_keywords_hash": content_hash,
         }
-        # LLM output isn't guaranteed to be a string — guard before .strip().
+        # LLM output isn't guaranteed to be a string - guard before .strip().
         raw_company = job_keywords.get("company")
         raw_role = job_keywords.get("role")
         company = raw_company.strip() if isinstance(raw_company, str) else ""
@@ -1753,7 +1753,7 @@ async def _improve_preview_flow(
         )
         await _emit("rewrite", "done")
 
-    # Safety nets (defense in depth — should rarely activate with diff-based flow)
+    # Safety nets (defense in depth - should rarely activate with diff-based flow)
     improved_data, preserve_warnings = _preserve_personal_info(
         original_resume_data,
         improved_data,
@@ -2026,7 +2026,7 @@ async def improve_resume_confirm_endpoint(
         )
 
         # Capture the accepted AI generation as an ``ai`` snapshot (R1.1) and
-        # emit the done event (→ notification, decoupled from this request).
+        # emit the done event (-> notification, decoupled from this request).
         await _capture_version(
             user_id, tailored_resume["resume_id"], improved_data, "ai"
         )
@@ -2308,7 +2308,7 @@ async def improve_resume_endpoint(
         )
 
         # Capture the accepted AI generation as an ``ai`` snapshot (R1.1) and
-        # emit the done event (→ notification, decoupled from this request).
+        # emit the done event (-> notification, decoupled from this request).
         await _capture_version(
             user_id, tailored_resume["resume_id"], improved_data, "ai"
         )
@@ -2450,7 +2450,7 @@ async def update_resume_endpoint(
     if_match: str | None = Header(default=None, alias="If-Match"),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> ResumeFetchResponse:
-    """Update a resume with new structured data (P4 version CAS — R3.1/3.4).
+    """Update a resume with new structured data (P4 version CAS - R3.1/3.4).
 
     Optimistic concurrency: when an ``If-Match: <version>`` header is present the
     write is applied atomically **only if** the stored ``version`` still equals
@@ -2460,10 +2460,10 @@ async def update_resume_endpoint(
     the server never silently overwrites a newer version (R3.3).
 
     Idempotent retries: an ``Idempotency-Key`` header lets a retried autosave (the
-    client couldn't tell whether the first attempt landed) dedupe server-side —
+    client couldn't tell whether the first attempt landed) dedupe server-side -
     an identical replayed request returns the cached result rather than applying
     the write twice (R4.2, Property 4). When neither header is present the write
-    is a normal (non-CAS) update — preserving the pre-P4 client contract — but it
+    is a normal (non-CAS) update - preserving the pre-P4 client contract - but it
     still bumps ``version`` so other tabs observe a fresh token.
     """
     updated_data = resume_data.model_dump()
@@ -2479,7 +2479,7 @@ async def update_resume_endpoint(
     if idempotency_key:
         cached = await idem.get(user_id, idempotency_key)
         if cached is not None and cached.fingerprint == fingerprint:
-            # Replay of an already-applied save — return the stored result
+            # Replay of an already-applied save - return the stored result
             # without touching the database (dedupe).
             return ResumeFetchResponse.model_validate(cached.result)
 
@@ -2562,8 +2562,8 @@ async def download_resume_pdf(
     Appearance resolution (WYSIWYG guarantee): each setting is taken from the
     query param when supplied, else from the resume's PERSISTED
     ``template_settings``, else the documented default. So a bare
-    ``GET /resumes/{id}/pdf`` renders in the resume's own stored template — the
-    export matches the editor preview even for non-editor callers — while the
+    ``GET /resumes/{id}/pdf`` renders in the resume's own stored template - the
+    export matches the editor preview even for non-editor callers - while the
     editor can still override any setting via query params.
 
     Settings: template (swiss-single|swiss-two-column|modern|modern-two-column|
@@ -2779,7 +2779,7 @@ async def update_template_settings(
     """Persist a resume's appearance (chosen template + customization).
 
     This is a rendering artifact, not resume content, so it does NOT bump the
-    optimistic-concurrency ``version`` (see ``db.update_resume``) — persisting a
+    optimistic-concurrency ``version`` (see ``db.update_resume``) - persisting a
     template change never conflicts with an in-flight content edit.
     """
     resume = await db.get_resume(user_id, resume_id)
@@ -2826,7 +2826,7 @@ async def create_resume_from_data(
         )
 
     # Capture the initial state as the retained ``original`` snapshot (R1.1) and
-    # emit the parsed event (decoupled → search index / notifications).
+    # emit the parsed event (decoupled -> search index / notifications).
     await _capture_version(user_id, created["resume_id"], normalized, "original")
     from app.events import EventType
 
@@ -3135,15 +3135,15 @@ async def generate_interview_prep_endpoint(
 
 
 # ---------------------------------------------------------------------------
-# Streaming AI (P4 Resilience — R1). SSE relay of LiteLLM chunks with a
+# Streaming AI (P4 Resilience - R1). SSE relay of LiteLLM chunks with a
 # cross-worker task registry (cap + cancel + reap) and transparent fallback.
 # ---------------------------------------------------------------------------
 
-# Rate rule for stream *starts* (ADR-8) — blunts cancel-abuse / task exhaustion
+# Rate rule for stream *starts* (ADR-8) - blunts cancel-abuse / task exhaustion
 # on top of the per-user concurrent-stream cap.
 _STREAM_START_RULE = RateLimitRule(limit=20, window_seconds=60)
 
-# Supported streaming generation kinds → (prompt builder, system prompt).
+# Supported streaming generation kinds -> (prompt builder, system prompt).
 _STREAM_KINDS = {
     "cover-letter": (build_cover_letter_prompt, COVER_LETTER_SYSTEM_PROMPT, 2048),
     "outreach": (build_outreach_prompt, OUTREACH_SYSTEM_PROMPT, 1024),
@@ -3201,20 +3201,20 @@ async def stream_generation_endpoint(
     request_id: str = Query(default="", max_length=100),
     user_id: str = Depends(require_verified_user_id),
 ) -> StreamingResponse:
-    """Stream an AI generation (cover letter / outreach) as SSE (R1.1–R1.6).
+    """Stream an AI generation (cover letter / outreach) as SSE (R1.1-R1.6).
 
     Events: ``token`` (delta), ``heartbeat`` (liveness/keep-warm), ``done`` (final
-    text + token usage for cost accounting), ``error`` (terminal → client falls
+    text + token usage for cost accounting), ``error`` (terminal -> client falls
     back to the non-stream path). Cancellation (client close, explicit
     ``/cancel``, or lifetime/heartbeat reaping) aborts the provider call and
-    persists nothing — streamed text is a preview until explicit accept (R1.4).
+    persists nothing - streamed text is a preview until explicit accept (R1.4).
     """
     if kind not in _STREAM_KINDS:
         raise HTTPException(status_code=404, detail="Unknown streaming kind")
     if len(request_id) < 8:
         raise HTTPException(status_code=422, detail="request_id must be at least 8 chars")
 
-    # Flag gate (R6.4 / ADR-14): off → the client transparently uses the
+    # Flag gate (R6.4 / ADR-14): off -> the client transparently uses the
     # non-stream path. Signalled as a typed 409 so `useStream` falls back.
     if not settings.streaming_ai_enabled:
         raise ApiError(
@@ -3222,7 +3222,7 @@ async def stream_generation_endpoint(
             message="Streaming is disabled; use the standard generation.",
         )
 
-    # Capability probe (R1.3): a provider that can't stream → fall back.
+    # Capability probe (R1.3): a provider that can't stream -> fall back.
     if not provider_supports_streaming():
         raise ApiError(
             status_code=409, code="streaming_unsupported",
@@ -3331,7 +3331,7 @@ async def stream_generation_endpoint(
         except Exception:
             logger.exception("Streaming generation failed for %s", resume_id)
             metrics.stream_error()
-            # Terminal error → client transparently falls back (R1.3). Any
+            # Terminal error -> client transparently falls back (R1.3). Any
             # partial text is surfaced as a discardable preview.
             yield _sse("error", {
                 "code": "stream_error",
@@ -3361,7 +3361,7 @@ async def cancel_stream_endpoint(
     """Signal cancellation of an in-flight stream (R1.2), cross-worker.
 
     Sets a cancel flag the streaming loop polls between chunks; the loop aborts
-    the provider call and closes. Idempotent — cancelling an already-finished or
+    the provider call and closes. Idempotent - cancelling an already-finished or
     unknown stream is a harmless no-op.
     """
     await get_stream_registry().request_cancel(user_id, request_id)
@@ -3441,7 +3441,7 @@ async def download_cover_letter_pdf(
     url = f"{settings.frontend_base_url}/print/cover-letter/{resume_id}?pageSize={pageSize}"
     if lang:
         url = f"{url}&lang={lang}"
-    # Short-lived signed print token → lets the headless render authenticate in
+    # Short-lived signed print token -> lets the headless render authenticate in
     # hosted mode (browser has no user session cookie).
     from app.pdf_token import make_print_token
     print_token = make_print_token(user_id, resume_id)

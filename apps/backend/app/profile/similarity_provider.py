@@ -1,4 +1,4 @@
-"""Similarity provider abstraction — a swappable scoring backend (P-final).
+"""Similarity provider abstraction - a swappable scoring backend (P-final).
 
 The Merge Engine no longer hard-codes the deterministic scorer; it asks the
 configured :class:`SimilarityProvider` for an entity-similarity score. This is
@@ -6,12 +6,12 @@ the seam that lets a future **semantic/embedding** provider (or a hybrid) drop i
 with zero merge-engine changes (Open/Closed + dependency inversion).
 
 - :class:`DeterministicSimilarityProvider` (default) wraps the pure, explainable
-  functions in ``app/profile/similarity.py`` — identical behavior to before, so
+  functions in ``app/profile/similarity.py`` - identical behavior to before, so
   the refactor is behavior-preserving.
 - :class:`HybridSimilarityProvider` blends deterministic + an injected semantic
   scorer with configurable weights, and **explains** each decision.
 - :class:`EmbeddingSimilarityProvider` documents the vector-DB seam; it is inert
-  unless an embedding function is injected (none ships — needs external infra),
+  unless an embedding function is injected (none ships - needs external infra),
   so it always falls back to deterministic rather than fabricating a score.
 
 Selection is config-driven (``settings.profile_similarity_provider``) and cached.
@@ -83,7 +83,7 @@ class DeterministicSimilarityProvider:
 class HybridSimilarityProvider:
     """Blends deterministic + an injected semantic scorer (weighted, explained).
 
-    ``semantic_fn(kind, a, b) -> float`` is optional; absent ⇒ pure deterministic
+    ``semantic_fn(kind, a, b) -> float`` is optional; absent => pure deterministic
     (so this is safe to configure even before a semantic backend exists).
     """
 

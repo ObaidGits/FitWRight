@@ -1,4 +1,4 @@
-"""In-process AI-call accumulators — the ``AiMetricsService`` (Req 4.1).
+"""In-process AI-call accumulators - the ``AiMetricsService`` (Req 4.1).
 
 Mirrors :class:`app.admin.metrics.AdminMetrics`: a tiny, process-wide,
 lock-guarded counter sink that the LLM call site updates via
@@ -6,25 +6,25 @@ lock-guarded counter sink that the LLM call site updates via
 ``AiFlushStep`` (Task 9.2) reads :meth:`snapshot` and, on a successful durable
 persist, calls :meth:`reset`.
 
-**Allowlist (Req 4, design philosophy §4) — EXACTLY these signals, nothing more:**
+**Allowlist (Req 4, design philosophy §4) - EXACTLY these signals, nothing more:**
 total calls, success, failure, timeouts, retries, per-provider call counts,
 summed tokens, and summed latency (ms). Cost is derived separately by the
 ``CostMonitor`` at flush time (Task 9.3) and is **not** accumulated here.
 
-**Explicitly rejected — never accepted, accumulated, or stored here:**
+**Explicitly rejected - never accepted, accumulated, or stored here:**
 temperature, prompt/completion length, model version, system prompt, tool
 calls, reasoning tokens, and conversation/request ids. There are deliberately
 no parameters or fields for any of these.
 
 **Bounded cardinality (Req 20, Property 8).** Per-provider counts are keyed by
 the closed :class:`~app.admin.metric_registry.AiProvider` enum. The per-provider
-dict is fixed at construction — exactly one counter per enum member — so no key
+dict is fixed at construction - exactly one counter per enum member - so no key
 is ever composed from a runtime value. A provider *string* handed to
 :meth:`record_call` is mapped to an ``AiProvider`` via a static alias table; an
 **unknown** provider is handled safely by still counting the global accumulators
 while **skipping** the per-provider counter (never creating a runtime key).
 
-This module depends only on :mod:`app.admin.metric_registry` and the stdlib —
+This module depends only on :mod:`app.admin.metric_registry` and the stdlib -
 never on another Domain_Metrics_Service (Req 19.2/19.3/19.5).
 """
 
@@ -84,7 +84,7 @@ def provider_to_enum(provider: "str | AiProvider | None") -> AiProvider | None:
 
     Returns the matching enum member, or ``None`` for an unknown/blank provider.
     A ``None`` result is the documented signal to count the global accumulators
-    but **skip** the per-provider counter — never to invent a runtime key.
+    but **skip** the per-provider counter - never to invent a runtime key.
     """
     if isinstance(provider, AiProvider):
         return provider
@@ -115,7 +115,7 @@ class AiMetricsService:
         # Optional injected read collaborators for :meth:`analytics` (tests);
         # otherwise the process-wide singletons are resolved lazily. The service
         # depends ONLY on the shared MetricStore + Metric_Registry + schemas and
-        # the CostMonitor (in ``app.jd.monitoring`` — not a Domain_Metrics_Service),
+        # the CostMonitor (in ``app.jd.monitoring`` - not a Domain_Metrics_Service),
         # never on another domain service (import-graph guard, Req 19.2/19.3/19.5).
         self._metric_store = metric_store
         self._cost_monitor = cost_monitor
@@ -154,7 +154,7 @@ class AiMetricsService:
 
         Args:
             provider: The configured provider (str or :class:`AiProvider`).
-                Unknown/blank → global counters still update, per-provider
+                Unknown/blank -> global counters still update, per-provider
                 counter is skipped (no runtime key created).
             ok: Whether the call ultimately succeeded.
             timed_out: Whether the failure was a timeout.
@@ -163,7 +163,7 @@ class AiMetricsService:
                 the LiteLLM Router's own transport retries are not observable
                 here, so this reflects only app-level retries.
             tokens: Aggregate ``usage.total_tokens`` for the call (never the
-                prompt/completion breakdown — that is a rejected field).
+                prompt/completion breakdown - that is a rejected field).
             latency_ms: Wall-clock duration of the call in milliseconds.
         """
         mapped = provider_to_enum(provider)
@@ -253,7 +253,7 @@ class AiMetricsService:
 
         - **concurrent increments** that arrived between the flush snapshot and
           this call (only the snapshotted amount is removed; newer calls remain);
-        - the **sub-integer latency remainder** — the step persists the truncated
+        - the **sub-integer latency remainder** - the step persists the truncated
           integer millisecond sum, so consuming that same integer leaves the
           fractional millisecond carry in the accumulator for the next flush.
 
@@ -302,9 +302,9 @@ class AiMetricsService:
         Assembles the allowlisted AI aggregates (Req 4.3/4.5/4.6/4.7) from the
         durable ``AI_*`` ``metrics_daily`` keys via the shared ``MetricStore``,
         plus the current in-process accumulator so today's not-yet-flushed
-        activity is included ("today is live" — matches the usage-series partial
+        activity is included ("today is live" - matches the usage-series partial
         current-day convention and keeps the dashboard fresh). ``window`` is
-        assumed to be a sane int (the endpoint validates 1–365; default 30).
+        assumed to be a sane int (the endpoint validates 1-365; default 30).
 
         **O(1) read (Req 4.9).** Only a bounded, fixed number of indexed
         ``(metric, day)`` reads run: one ``MetricStore.sum`` per durable ``AI_*``
@@ -343,7 +343,7 @@ class AiMetricsService:
             + float(live["latency_ms_sum"])
         )
 
-        # Rates — complement approach guarantees success + failure == 1.0 at 4dp
+        # Rates - complement approach guarantees success + failure == 1.0 at 4dp
         # when total > 0 (rounding both independently could drift to 0.9999/1.0001).
         if total_calls > 0:
             success_rate = round(successes / total_calls, 4)
@@ -367,7 +367,7 @@ class AiMetricsService:
 
         # Estimated cost (Req 4.5). LIMITATION: the only durable KVStore
         # microdollar counter today is CostMonitor's rolling one-hour global
-        # counter, scoped to the JD extraction pipeline — there is NO durable
+        # counter, scoped to the JD extraction pipeline - there is NO durable
         # arbitrary-window AI-cost total (adding one would be scope creep beyond
         # the metric registry). We therefore truncate the best-available signal;
         # the value is an operational estimate / "ready for future billing", not
@@ -426,24 +426,24 @@ def reset_ai_metrics_service() -> None:
 
 
 # ---------------------------------------------------------------------------
-# AiFlushStep — durable flush of the in-process AI accumulators (Req 4.2 / 4.8)
+# AiFlushStep - durable flush of the in-process AI accumulators (Req 4.2 / 4.8)
 # ---------------------------------------------------------------------------
 #
 # Unlike ``AdminMetrics`` (cumulative-since-process-start, flushed via a running
 # per-worker delta baseline), the :class:`AiMetricsService` accumulates only
 # *since the last successful flush* and supports :meth:`AiMetricsService.subtract`
 # / :meth:`AiMetricsService.reset`. So the flush is a straight
-# **snapshot → add → consume** cycle rather than a delta computation:
+# **snapshot -> add -> consume** cycle rather than a delta computation:
 #
 # 1. Take ONE snapshot of the current accumulators.
 # 2. UPSERT-add each non-zero amount to the *current* accumulating UTC day
 #    (``today``) via ``MetricStore.add`` (an atomic in-UPSERT increment, so
-#    multiple workers sum into the single ``(day, key)`` row — no per-worker rows).
+#    multiple workers sum into the single ``(day, key)`` row - no per-worker rows).
 # 3. On a fully successful persist, ``subtract`` exactly the persisted amounts
-#    from the accumulators (Req 4.2 "reset ... upon successful persistence" —
+#    from the accumulators (Req 4.2 "reset ... upon successful persistence" -
 #    refined to a consume so concurrent increments during the flush are kept).
 #
-# Failure semantics (Req 4.8 — "retain the accumulators without resetting ...
+# Failure semantics (Req 4.8 - "retain the accumulators without resetting ...
 # surface an error"): each key's ``add`` is isolated. A key whose ``add`` raises
 # is NOT consumed (its count is retained for the next run) and is collected; the
 # remaining keys are still attempted. The step then ``subtract``s ONLY the keys
@@ -451,7 +451,7 @@ def reset_ai_metrics_service() -> None:
 # keys. This is a strict, no-double-count refinement of "retain": no count is ever
 # lost, and a count is never both persisted and left in the accumulator (which
 # would double-count on the next run). If EVERY key fails, nothing is consumed and
-# the accumulators are fully retained — matching the literal requirement.
+# the accumulators are fully retained - matching the literal requirement.
 #
 # Day/idempotency: like ``MetricsFlushStep`` the amounts are added to ``today``
 # (the accumulating day), never the just-closed ``day`` the pipeline passes, so a
@@ -485,7 +485,7 @@ class AiFlushStep:
 
     Independent, idempotent per closed UTC day (only ``today`` is ever written),
     resumable (an un-persisted key retries next run), and failure-isolated per
-    key. See the module-level notes above for the snapshot→add→consume reasoning
+    key. See the module-level notes above for the snapshot->add->consume reasoning
     and the AI-key single-ownership decision.
     """
 
@@ -574,7 +574,7 @@ class AiFlushStep:
         # Consume exactly the persisted amounts. On a fully clean flush with no
         # concurrent activity this zeroes the accumulators (Req 4.2); on a partial
         # failure only the persisted keys are removed and the rest are retained
-        # (Req 4.8) — a strict, no-double-count refinement of "retain".
+        # (Req 4.8) - a strict, no-double-count refinement of "retain".
         service.subtract(consumed)
 
         if failed_keys:

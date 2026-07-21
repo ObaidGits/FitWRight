@@ -1,5 +1,5 @@
 /**
- * P4 Requirement 9 — failure-scenario matrix, one executable check per scenario
+ * P4 Requirement 9 - failure-scenario matrix, one executable check per scenario
  * (Task 8.2). Each asserts the stated outcome: work recoverable, user informed,
  * no state corrupted. Scenarios that are inherently browser/deploy-level are
  * verified at the logic layer that governs them (noted inline).
@@ -90,7 +90,7 @@ describe('R9 failure matrix', () => {
     c.update({ summary: 'edited while asleep' });
     await c.flush();
     expect(c.getState().status).toBe('offline');
-    // On resume, connectivity returns → flush saves.
+    // On resume, connectivity returns -> flush saves.
     online = true;
     await c.flush();
     expect(save).toHaveBeenCalled();
@@ -157,7 +157,7 @@ describe('R9 failure matrix', () => {
 
   it('R9.9 storage eviction: a missing draft is NOT fabricated as restored', async () => {
     const store = new ResilienceStore(new MemoryEngine(), 'u1');
-    // Nothing saved (evicted) → load reports none, never a false "restored".
+    // Nothing saved (evicted) -> load reports none, never a false "restored".
     expect((await store.loadDraft('r1')).status).toBe('none');
   });
 

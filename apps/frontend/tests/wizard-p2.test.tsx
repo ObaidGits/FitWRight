@@ -83,7 +83,7 @@ function seedDraft(state: ResumeWizardState) {
   localStorage.setItem(DRAFT_KEY, JSON.stringify({ value: state, savedAt: Date.now() }));
 }
 
-describe('Wizard P2 — structured Education card (W-P2.1/W-P2.2/N3)', () => {
+describe('Wizard P2 - structured Education card (W-P2.1/W-P2.2/N3)', () => {
   it('progressively discloses advanced fields and submits a structured education entry', async () => {
     seedDraft(educationState());
     render(<WizardPage />);
@@ -113,7 +113,7 @@ describe('Wizard P2 — structured Education card (W-P2.1/W-P2.2/N3)', () => {
   });
 });
 
-describe('Wizard P2 — live scoreboard + accessibility (W-P2.3/W-P2.5)', () => {
+describe('Wizard P2 - live scoreboard + accessibility (W-P2.3/W-P2.5)', () => {
   it('shows Quality/ATS scores and an accessible progressbar', async () => {
     seedDraft(educationState());
     render(<WizardPage />);

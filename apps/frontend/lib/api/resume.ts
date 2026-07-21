@@ -92,7 +92,7 @@ interface ResumeResponse {
     interview_prep?: InterviewPrepData | null;
     parent_id?: string | null; // For determining if resume is tailored
     title?: string | null;
-    /** Persisted appearance (template + customization); null ⇒ app default. */
+    /** Persisted appearance (template + customization); null => app default. */
     template_settings?: TemplateSettings | null;
     /** Optimistic-concurrency token (P4 R3.1). */
     version?: number | null;
@@ -205,7 +205,7 @@ async function postImprove(
       'Raw response:',
       text.slice(0, 500)
     );
-    // A 2xx with a non-JSON body (e.g. an edge/proxy returned HTML) — surface a
+    // A 2xx with a non-JSON body (e.g. an edge/proxy returned HTML) - surface a
     // safe, typed error rather than leaking the body or a bare SyntaxError.
     throw new ApiError(
       'malformed_response',
@@ -253,8 +253,8 @@ export interface JobAnalyzeResult {
  * This makes a single LLM keyword-extraction call on the backend and returns
  * the keyword breakdown plus, when `resumeId` points to a resume with
  * processed data, the matched/missing keywords and an overall fit score. It is
- * only ever invoked when the user explicitly clicks "Analyze fit" — never
- * automatically — to honor the cost-consent principle.
+ * only ever invoked when the user explicitly clicks "Analyze fit" - never
+ * automatically - to honor the cost-consent principle.
  */
 export async function analyzeJob(
   jobDescription: string,
@@ -358,7 +358,7 @@ export async function streamImproveResume(
     throw e instanceof Error ? e : new Error('stream_open_failed');
   }
   if (!res.ok || !res.body) {
-    // 409 (disabled) / 429 / any non-2xx → caller falls back to non-stream.
+    // 409 (disabled) / 429 / any non-2xx -> caller falls back to non-stream.
     throw new Error(`stream_open_failed:${res.status}`);
   }
 
@@ -452,7 +452,7 @@ export async function updateResume(
     headers,
   });
   if (res.status === 409) {
-    // Version conflict — parse the ADR-7 envelope details so the caller can
+    // Version conflict - parse the ADR-7 envelope details so the caller can
     // drive the explicit resolution flow (keep-mine / take-latest / merge).
     const body = await res.json().catch(() => null);
     const details = body?.error?.details ?? {};
@@ -559,7 +559,7 @@ export async function updateOutreachMessage(resumeId: string, content: string): 
  * Persist a resume's appearance (chosen template + customization).
  *
  * Appearance is a rendering artifact, not resume content, so the backend does
- * not bump the optimistic-concurrency version — saving a template change never
+ * not bump the optimistic-concurrency version - saving a template change never
  * conflicts with an in-flight content edit.
  */
 export async function updateResumeTemplateSettings(
@@ -590,7 +590,7 @@ export function normalizeTemplateSettings(raw: unknown): TemplateSettings {
 
 /**
  * Create a new resume from structured data (Sample Library "Use", duplication).
- * Never mutates an existing resume — always returns a fresh `resume_id`.
+ * Never mutates an existing resume - always returns a fresh `resume_id`.
  */
 export async function createResumeFromData(opts: {
   processed_data: ResumeData;
@@ -709,7 +709,7 @@ export type StreamKind = 'cover-letter' | 'outreach';
  * Build a {@link StreamTransport} for an AI generation (P4 R1).
  *
  * `open` streams SSE from the backend using `fetch` (so the caller's abort
- * signal really cancels the request — unlike the timeout-bounded `apiFetch`).
+ * signal really cancels the request - unlike the timeout-bounded `apiFetch`).
  * A 409 (streaming disabled/unsupported) or any transport error propagates so
  * the StreamController transparently falls back to the non-stream path.
  */
@@ -734,7 +734,7 @@ export function buildResumeStreamTransport(
         signal,
       });
       if (!res.ok || !res.body) {
-        // 409 (disabled/unsupported) or any error → trigger fallback.
+        // 409 (disabled/unsupported) or any error -> trigger fallback.
         throw new Error(`stream_open_failed:${res.status}`);
       }
       const reader = res.body.getReader();

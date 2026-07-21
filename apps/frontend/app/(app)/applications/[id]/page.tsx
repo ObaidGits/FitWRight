@@ -2,7 +2,7 @@
 
 /**
  * Application Workspace (Task 9.2-9.6 / Req 12,13,14,17). Overview + resource
- * sections (Cover Letter · Interview Prep · Outreach). Per-job deliverables
+ * sections (Cover Letter - Interview Prep - Outreach). Per-job deliverables
  * live here (not in the Resume Editor). Generation reuses existing APIs and is
  * cost-aware (only on explicit action).
  */
@@ -135,7 +135,7 @@ export default function ApplicationWorkspacePage() {
         const prep = await generateInterviewPrep(app.resume_id);
         setDeliverable((d) => ({ ...d, interviewPrep: prep }));
       }
-      // These persist onto the resume record — refresh its cache so the Resume
+      // These persist onto the resume record - refresh its cache so the Resume
       // Editor (if open elsewhere) reflects the new deliverable on next view.
       qc.invalidateQueries({ queryKey: queryKeys.resume(app.resume_id) });
       toast({ title: 'Generated', variant: 'success' });
@@ -165,7 +165,7 @@ export default function ApplicationWorkspacePage() {
     }
   }
 
-  // Task 9.6 — duplicate this application (same resume + JD) into a fresh card.
+  // Task 9.6 - duplicate this application (same resume + JD) into a fresh card.
   async function duplicateApplication() {
     if (!app?.resume_id) return;
     setDuplicating(true);
@@ -188,7 +188,7 @@ export default function ApplicationWorkspacePage() {
     }
   }
 
-  // Task 9.6 — reuse the underlying resume to tailor for another job.
+  // Task 9.6 - reuse the underlying resume to tailor for another job.
   function reuseResume() {
     if (!app) return;
     const source = app.master_resume_id || app.resume_id;
@@ -280,7 +280,7 @@ export default function ApplicationWorkspacePage() {
               <Textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="Add notes…"
+                placeholder="Add notes..."
               />
               <div className="mt-2 flex justify-end">
                 <Button

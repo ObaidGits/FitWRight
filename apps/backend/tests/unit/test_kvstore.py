@@ -1,9 +1,9 @@
 """Unit tests for the pluggable KVStore adapters (ADR-6).
 
 Covers the in-process (:class:`LocalKVStore`) and DB-backed (:class:`DBKVStore`)
-adapters against the shared :class:`KVStore` contract — get/set/delete + TTL,
+adapters against the shared :class:`KVStore` contract - get/set/delete + TTL,
 atomic ``incr`` (including concurrency and window semantics), and the
-single-flight ``lock`` primitive — plus the ``kvstore_from_url`` adapter
+single-flight ``lock`` primitive - plus the ``kvstore_from_url`` adapter
 selector. The Redis adapter needs a live server and is exercised in integration
 env; here we only assert the factory routes to it without connecting.
 """
@@ -104,13 +104,13 @@ class TestTTL:
 
     async def test_reset_clears_ttl(self, store):
         await store.set("k", "v", ttl_seconds=0.1)
-        await store.set("k", "v2")  # no TTL — should persist
+        await store.set("k", "v2")  # no TTL - should persist
         await asyncio.sleep(0.15)
         assert await store.get("k") == "v2"
 
 
 # ---------------------------------------------------------------------------
-# incr — atomic counter with window (rate-limit) semantics
+# incr - atomic counter with window (rate-limit) semantics
 # ---------------------------------------------------------------------------
 
 
@@ -133,7 +133,7 @@ class TestIncr:
         await asyncio.sleep(0.1)
         assert await store.incr("win", ttl_seconds=0.2) == 2  # window still open
         await asyncio.sleep(0.15)  # now past the original 0.2s window
-        # Window expired → counter resets to 1 (fresh window).
+        # Window expired -> counter resets to 1 (fresh window).
         assert await store.incr("win", ttl_seconds=0.2) == 1
 
     async def test_concurrent_incr_is_atomic(self, store):
@@ -143,7 +143,7 @@ class TestIncr:
 
 
 # ---------------------------------------------------------------------------
-# lock — TTL-bound single-flight
+# lock - TTL-bound single-flight
 # ---------------------------------------------------------------------------
 
 
@@ -151,7 +151,7 @@ class TestLock:
     async def test_acquire_and_release(self, store):
         async with store.lock("job", ttl_seconds=5) as acquired:
             assert acquired is True
-        # Released — can be re-acquired immediately.
+        # Released - can be re-acquired immediately.
         async with store.lock("job", ttl_seconds=5) as again:
             assert again is True
 
@@ -211,7 +211,7 @@ class TestLock:
         await asyncio.sleep(0.15)  # first expires
         second = store.lock("job", ttl_seconds=5)
         assert await second.acquire() is True
-        await first.release()  # stale release — must be a no-op for `second`
+        await first.release()  # stale release - must be a no-op for `second`
         # `second` still holds it: a non-blocking third acquire fails.
         third = store.lock("job", ttl_seconds=5, blocking=False)
         assert await third.acquire() is False
@@ -230,7 +230,7 @@ class TestFactory:
 
     @pytest.mark.parametrize("url", ["redis://localhost:6379/0", "rediss://x.upstash.io"])
     def test_redis_selection_lazy(self, url):
-        # from_url is lazy — this must not require a running Redis.
+        # from_url is lazy - this must not require a running Redis.
         assert isinstance(kvstore_from_url(url), RedisKVStore)
 
     def test_db_selection_requires_engine(self, tmp_path):

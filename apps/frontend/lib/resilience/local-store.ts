@@ -1,8 +1,8 @@
 /**
- * Durable local store — draft + outbox + quarantine (P4 R5, R8, Property 2 & 7).
+ * Durable local store - draft + outbox + quarantine (P4 R5, R8, Property 2 & 7).
  *
  * Three logical stores on top of an injected {@link StoreEngine}:
- * - **draft**: the crash safety net — the current editor content, integrity-
+ * - **draft**: the crash safety net - the current editor content, integrity-
  *   hashed and encrypted at rest, one record per resume.
  * - **outbox**: an ordered (FIFO) op-log of edits made offline / while a save
  *   was failing, bounded by entries/bytes so it can never grow unbounded.
@@ -37,7 +37,7 @@ interface StoredEnvelope {
 }
 
 export interface OutboxEntry {
-  id: string; // zero-padded monotonic sequence → FIFO string sort
+  id: string; // zero-padded monotonic sequence -> FIFO string sort
   userId: string;
   resumeId: string;
   baseVersion: number | null;
@@ -130,7 +130,7 @@ export class ResilienceStore {
       this.key = fresh;
       return fresh;
     } catch {
-      // Key store unusable → disable encryption, degrade with a warning.
+      // Key store unusable -> disable encryption, degrade with a warning.
       this.encryptionEnabled = false;
       this.degraded = true;
       return null;
@@ -200,7 +200,7 @@ export class ResilienceStore {
     if (!env) return { status: 'none' };
     const opened = await this.openEnvelope<T>(env);
     if (!opened.ok) {
-      // Quarantine — never load poison into the editor (R5.3, Property 7).
+      // Quarantine - never load poison into the editor (R5.3, Property 7).
       await this.quarantine('draft', resumeId, env, opened.reason);
       await this.engine.delete('draft', key);
       return { status: 'quarantined', reason: opened.reason };
@@ -250,7 +250,7 @@ export class ResilienceStore {
     const envelope = await this.makeEnvelope(payload, baseVersion);
     const entryBytes = JSON.stringify(envelope).length;
 
-    // Bounds (R2.5): block new offline edits before overflow — never silently
+    // Bounds (R2.5): block new offline edits before overflow - never silently
     // drop queued work.
     if (entries.length + 1 > this.bounds.maxEntries) {
       return { ok: false, blocked: true, reason: 'entries', pressure: 'full' };

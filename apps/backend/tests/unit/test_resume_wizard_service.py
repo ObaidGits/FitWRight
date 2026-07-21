@@ -417,7 +417,7 @@ async def test_ai_turn_auto_advances_to_review_when_model_says_review() -> None:
 
 
 def test_apply_skip_advances_deterministically_without_llm() -> None:
-    # W-P0.4: apply_skip is pure — it never calls the model. (No patch needed;
+    # W-P0.4: apply_skip is pure - it never calls the model. (No patch needed;
     # if it tried to call complete_json the import wouldn't be awaited here.)
     state = _state_on_section("education")
     state.resume_data.personalInfo.name = "James"
@@ -582,14 +582,14 @@ async def test_parse_entries_extracts_multiple_roles_from_blob() -> None:
                 "title": "Full Stack Engineer Intern",
                 "company": "TechStax",
                 "location": "Remote",
-                "years": "Jul 2025 – Jan 2026",
+                "years": "Jul 2025 - Jan 2026",
                 "description": ["Engineered backend APIs", "Optimized workflows"],
             },
             {
                 "title": "Full-Stack Developer",
                 "company": "Outbro",
                 "location": "Remote",
-                "years": "Nov 2023 – Jun 2025",
+                "years": "Nov 2023 - Jun 2025",
                 "description": ["Architected a MERN platform"],
             },
         ]
@@ -889,7 +889,7 @@ _ACME_ROLE = {
 
 
 async def test_ai_turn_full_echo_keeps_all_experience_in_order() -> None:
-    # Model echoes the FULL list (existing + new) — both must survive, in order.
+    # Model echoes the FULL list (existing + new) - both must survive, in order.
     state = _state_on_section("workExperience")
     state.resume_data = ResumeData.model_validate({"workExperience": [_GLOBEX_ROLE]})
 
@@ -910,7 +910,7 @@ async def test_ai_turn_full_echo_keeps_all_experience_in_order() -> None:
 
 
 async def test_ai_turn_partial_echo_does_not_drop_prior_experience() -> None:
-    # Model returns ONLY the new role (a common mis-read) — prior role must NOT be lost.
+    # Model returns ONLY the new role (a common mis-read) - prior role must NOT be lost.
     state = _state_on_section("workExperience")
     state.resume_data = ResumeData.model_validate({"workExperience": [_GLOBEX_ROLE]})
 

@@ -3,7 +3,7 @@
 Every registered adapter must honor one contract: given its native payload it
 returns a valid ``ProfileData`` (or raises ``ImportError_`` with a code for bad
 input / unsupported sources). These tests fail loudly if a new adapter is added
-that violates the contract — the guardrail that keeps the pipeline extensible
+that violates the contract - the guardrail that keeps the pipeline extensible
 without pipeline changes.
 """
 

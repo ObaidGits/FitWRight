@@ -43,7 +43,7 @@ def needs_browser(html: str, domain: str, extracted_chars: int) -> bool:
     if any(d in domain_lower for d in _JS_ONLY_DOMAINS):
         return True
 
-    # Rule 2: Already have enough content — don't waste browser resources
+    # Rule 2: Already have enough content - don't waste browser resources
     if extracted_chars >= 400:
         return False
 

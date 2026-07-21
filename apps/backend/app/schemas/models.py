@@ -451,7 +451,7 @@ class ResumeFetchData(BaseModel):
     interview_prep: InterviewPrepData | None = None
     parent_id: str | None = None  # For determining if resume is tailored
     title: str | None = None
-    # Persisted appearance (frontend TemplateSettings shape); None ⇒ app default.
+    # Persisted appearance (frontend TemplateSettings shape); None => app default.
     template_settings: dict[str, Any] | None = None
     # Optimistic-concurrency token (P4 R3.1). Clients read it here and echo it as
     # the ``If-Match`` base_version on the next write so the server can CAS.
@@ -589,16 +589,16 @@ class ATSSubScores(BaseModel):
     """Individual component scores that make up the ATS overall score."""
 
     keyword_match: float = Field(
-        default=0.0, ge=0.0, le=100.0, description="Keyword match % (0–100)"
+        default=0.0, ge=0.0, le=100.0, description="Keyword match % (0-100)"
     )
     skills_coverage: float = Field(
-        default=0.0, ge=0.0, le=100.0, description="JD skills matched in resume (0–100)"
+        default=0.0, ge=0.0, le=100.0, description="JD skills matched in resume (0-100)"
     )
     section_completeness: float = Field(
         default=0.0,
         ge=0.0,
         le=100.0,
-        description="Key resume sections present (0–100)",
+        description="Key resume sections present (0-100)",
     )
 
 
@@ -609,7 +609,7 @@ class ATSScore(BaseModel):
         default=0.0,
         ge=0.0,
         le=100.0,
-        description="Weighted composite ATS score (0–100)",
+        description="Weighted composite ATS score (0-100)",
     )
     sub_scores: ATSSubScores = Field(default_factory=ATSSubScores)
     missing_keywords: list[str] = Field(
@@ -712,7 +712,7 @@ class LLMConfigRequest(BaseModel):
     api_base: str | None = None
     # Optional reasoning-effort override.
     #   - A valid value ("minimal"/"low"/"medium"/"high") updates the setting.
-    #   - Empty string clears the field — the server persists "" rather than
+    #   - Empty string clears the field - the server persists "" rather than
     #     removing the key, so the gpt-5 auto-migration does not re-fire.
     #   - None means "don't change this field".
     # Strictly typed so invalid values are rejected at the boundary (422)
@@ -802,7 +802,7 @@ class FeaturePromptsRequest(BaseModel):
     """Request to update custom feature prompts.
 
     ``None`` means "don't change this field". An empty string clears the
-    override — the server persists ``""`` so runtime resolution falls back
+    override - the server persists ``""`` so runtime resolution falls back
     to the built-in default without the key disappearing from config.json.
     """
 
@@ -884,7 +884,7 @@ class CreateResumeFromDataRequest(BaseModel):
 
     Powers "Use this sample" (from the Sample Library) and resume duplication:
     the caller supplies ready `ResumeData` plus optional title and persisted
-    appearance. Never touches an existing resume — always creates a new one.
+    appearance. Never touches an existing resume - always creates a new one.
     """
 
     processed_data: ResumeData
@@ -988,7 +988,7 @@ class ResumeChange(BaseModel):
     action: Literal["replace", "append", "reorder", "add_skill"]
     original: str | list[str] | None = Field(
         default=None,
-        description="Current text at path — for verification. May be a list (the "
+        description="Current text at path - for verification. May be a list (the "
         "current items) for the reorder action; only used for text verification of "
         "replace/append, ignored otherwise.",
     )
@@ -998,7 +998,7 @@ class ResumeChange(BaseModel):
     @model_validator(mode="after")
     def _list_original_only_for_reorder(self) -> "ResumeChange":
         """A list ``original`` is only meaningful for ``reorder`` (the LLM sends
-        the current items). For the text actions it must stay a string/None — a
+        the current items). For the text actions it must stay a string/None - a
         list there would silently bypass the replace verification gate and crash
         the invented-metrics check, so reject it at parse time."""
         if isinstance(self.original, list) and self.action != "reorder":

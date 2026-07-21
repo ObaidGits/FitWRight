@@ -1,9 +1,9 @@
-"""AI Intelligence Layer — assists that improve *existing* profile content (P5).
+"""AI Intelligence Layer - assists that improve *existing* profile content (P5).
 
 Firm rule (design §P5): **AI never fabricates experience.** Every assist takes
 content the user already has and improves its wording/structure; it cannot add
 jobs, employers, dates, or achievements that aren't present. Suggestions are
-returned for review — never auto-applied — so the user stays in control.
+returned for review - never auto-applied - so the user stays in control.
 
 - ``normalize_skills`` is **pure** (Canonical Skill Engine, no LLM): dedupes and
   canonicalizes the user's skills; always available and deterministic.
@@ -32,9 +32,9 @@ __all__ = [
     "suggest_keywords",
 ]
 
-# Deterministic role → commonly-expected skills map (grounding for gap analysis).
+# Deterministic role -> commonly-expected skills map (grounding for gap analysis).
 # Small on purpose; a future taxonomy service can widen it. Never used to invent
-# *experience* — only to suggest skills the user may want to add/learn.
+# *experience* - only to suggest skills the user may want to add/learn.
 _ROLE_SKILLS: dict[str, list[str]] = {
     "frontend": ["JavaScript", "TypeScript", "React", "CSS", "HTML", "Testing"],
     "backend": ["Python", "SQL", "PostgreSQL", "REST", "Docker", "Testing"],
@@ -67,7 +67,7 @@ def is_llm_available(user_id: str | None = None) -> bool:
 def normalize_skills(profile: ProfileData) -> dict[str, Any]:
     """Deduplicate + canonicalize the profile's skills (pure, no LLM).
 
-    Returns ``{"skills": <ProfileSkills dict>, "changed": bool}`` — the caller
+    Returns ``{"skills": <ProfileSkills dict>, "changed": bool}`` - the caller
     decides whether to apply it. Order-preserving within each category; canonical
     duplicates are collapsed (keeping the first, merging aliases).
     """
@@ -116,9 +116,9 @@ def _held_skill_names(profile: ProfileData) -> set[str]:
 def skills_gap(profile: ProfileData) -> dict[str, Any]:
     """Deterministic skills-gap analysis vs. the profile's target roles.
 
-    Matches ``identity.targetRoles`` (and current role) against a small role→
+    Matches ``identity.targetRoles`` (and current role) against a small role->
     skills map and reports which expected skills are already held vs. missing.
-    **Never fabricates experience** — it only recommends skills to add/learn, with
+    **Never fabricates experience** - it only recommends skills to add/learn, with
     an explicit, explainable basis. Returns ``{target_roles, have, missing, basis}``.
     """
     ident = profile.identity
@@ -155,7 +155,7 @@ def suggest_keywords(profile: ProfileData) -> dict[str, Any]:
     """Deterministic ATS keyword extraction from existing content (no fabrication).
 
     Surfaces the most frequent meaningful tokens across experience bullets, tech,
-    and skills — the terms an ATS is likely to key on — so the user can ensure
+    and skills - the terms an ATS is likely to key on - so the user can ensure
     they appear. Purely derived from what's already in the profile.
     """
     from collections import Counter
@@ -187,14 +187,14 @@ async def suggest_summary(profile: ProfileData, *, user_id: str | None = None) -
     """Suggest an improved professional summary from existing profile content."""
     existing = (profile.summary or profile.identity.careerObjective or "").strip()
     context_bits = [profile.identity.headline, profile.identity.currentRole]
-    context = " · ".join(b for b in context_bits if b)
+    context = " - ".join(b for b in context_bits if b)
     experience_titles = [e.title for e in profile.workExperience if e.title][:5]
 
     if not existing and not experience_titles:
         return {
             "kind": "summary",
             "suggestion": None,
-            "note": "Add your experience or a draft summary first — AI improves what you have, it won't invent it.",
+            "note": "Add your experience or a draft summary first - AI improves what you have, it won't invent it.",
         }
     if not is_llm_available(user_id):
         return {
@@ -210,7 +210,7 @@ async def suggest_summary(profile: ProfileData, *, user_id: str | None = None) -
         "impactful (2-4 sentences). Base it strictly on the provided details.\n\n"
         f"Headline/role: {context or 'n/a'}\n"
         f"Recent roles: {', '.join(experience_titles) or 'n/a'}\n"
-        f"Current summary: {existing or '(none — draft one from the roles above)'}\n\n"
+        f"Current summary: {existing or '(none - draft one from the roles above)'}\n\n"
         'Return JSON: {"summary": "<improved summary>"}'
     )
     try:
@@ -233,7 +233,7 @@ async def suggest_experience_bullets(
         return {
             "kind": "experience_bullets",
             "suggestion": None,
-            "note": "Add at least one bullet first — AI polishes what you have, it won't invent it.",
+            "note": "Add at least one bullet first - AI polishes what you have, it won't invent it.",
         }
     if not is_llm_available(user_id):
         return {

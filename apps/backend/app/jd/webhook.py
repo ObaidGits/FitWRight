@@ -1,4 +1,4 @@
-"""Employer webhook ingestion — zero-scrape authoritative job data (Phase 4).
+"""Employer webhook ingestion - zero-scrape authoritative job data (Phase 4).
 
 Employers / ATS vendors can PUSH job descriptions directly instead of us pulling
 them. A pushed posting is the MOST authoritative source possible (the employer is
@@ -9,7 +9,7 @@ URL then serves the pushed data with zero network I/O and zero scraping.
 Security:
 - Feature-flagged (``jd_webhook_enabled``); the endpoint 404s when off.
 - Authenticated by an HMAC-SHA256 signature over the raw body using a shared
-  secret (``jd_webhook_secret``), compared in constant time. No secret → refuse.
+  secret (``jd_webhook_secret``), compared in constant time. No secret -> refuse.
 - Payload is validated + length-capped; the content is treated as data, never
   instructions (same prompt-injection posture as scraped content).
 """
@@ -43,7 +43,7 @@ def verify_signature(secret: str, body: bytes, provided_sig: str | None) -> bool
     """Constant-time HMAC-SHA256 verification of the raw request body.
 
     Accepts an optional ``sha256=`` prefix (GitHub-style). Returns False on any
-    missing/misformatted input — never raises.
+    missing/misformatted input - never raises.
     """
     if not secret or not provided_sig:
         return False

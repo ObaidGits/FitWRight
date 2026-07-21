@@ -67,7 +67,7 @@ class AccountRecord:
     headline: str | None = None
     location: str | None = None
     links: list | None = None
-    # Canonical profile-image metadata (Photo System). Metadata only — never
+    # Canonical profile-image metadata (Photo System). Metadata only - never
     # binary. ``avatar_checksum`` powers content-addressed dedup.
     avatar_width: int | None = None
     avatar_height: int | None = None
@@ -118,7 +118,7 @@ async def set_avatar(
 
     Returns ``(record, old_key)``. The old key is returned so the caller can
     garbage-collect the replaced object (R13.2). The url is only ever set *after*
-    a successful upload (no dangling url on storage failure — the caller stores
+    a successful upload (no dangling url on storage failure - the caller stores
     first, then calls this). ``metadata`` carries the Photo-System master fields
     (width/height/checksum/format/bytes/dominant_color); when omitted the columns
     are left untouched.
@@ -180,7 +180,7 @@ async def update_profile(
     links: list | None,
     db=None,
 ) -> AccountRecord | None:
-    """Update the extended profile fields (already validated) — R14.1."""
+    """Update the extended profile fields (already validated) - R14.1."""
     db = _resolve_db(db)
     async with db.session_factory() as session:
         row = await session.get(User, user_id)
@@ -195,7 +195,7 @@ async def update_profile(
 
 
 async def all_avatar_keys(db=None) -> set[str]:
-    """Return every referenced avatar key (orphan-GC reference set — R13.2)."""
+    """Return every referenced avatar key (orphan-GC reference set - R13.2)."""
     db = _resolve_db(db)
     async with db.session_factory() as session:
         rows = (
@@ -296,7 +296,7 @@ async def update_name(
     """Update a user's display name with optional optimistic concurrency.
 
     Returns ``(outcome, record)`` where ``outcome`` is one of ``"ok"``,
-    ``"conflict"`` (``expected_updated_at`` no longer matches — R Reliability),
+    ``"conflict"`` (``expected_updated_at`` no longer matches - R Reliability),
     or ``"not_found"``. ``role``/``status`` are never touched here (R7.2).
     """
     db = _resolve_db(db)
@@ -315,8 +315,8 @@ async def update_name(
 async def mark_email_verified(user_id: str, *, db=None) -> AccountRecord | None:
     """Mark a user's email verified and activate a pending account (R5.2).
 
-    Sets ``email_verified_at`` (idempotent — an already-verified timestamp is
-    left untouched) and transitions ``pending_verification`` → ``active``. A
+    Sets ``email_verified_at`` (idempotent - an already-verified timestamp is
+    left untouched) and transitions ``pending_verification`` -> ``active``. A
     ``disabled`` account is *not* re-activated here (only the pending state is a
     verification gate). Returns the updated snapshot, or ``None`` if the user is
     gone.
@@ -340,7 +340,7 @@ async def set_password_hash(user_id: str, password_hash: str, *, db=None) -> Acc
     """Set a user's Argon2 password hash (R6.2/6.3).
 
     Used by password reset: it overwrites the stored hash for a password account
-    and, for an OAuth-only account (``password_hash IS NULL``), *sets* one —
+    and, for an OAuth-only account (``password_hash IS NULL``), *sets* one -
     linking password auth (R6.3). Returns the updated snapshot, or ``None`` if
     the user is gone.
     """

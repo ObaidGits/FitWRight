@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Agenda + scheduling data hooks (P3 §E/§F/§G) — TanStack Query.
+ * Agenda + scheduling data hooks (P3 §E/§F/§G) - TanStack Query.
  *
  * The agenda is a merged, time-ordered feed of upcoming reminders + interviews.
  * Quick actions (snooze, cancel) mutate through the reminder/interview API and

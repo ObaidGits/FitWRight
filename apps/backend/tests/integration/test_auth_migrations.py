@@ -1,7 +1,7 @@
-"""Migration-chain tests for the P1 auth foundation (Task 1.2–1.4, 10.3).
+"""Migration-chain tests for the P1 auth foundation (Task 1.2-1.4, 10.3).
 
-These run the real Alembic chain (0001 → **0006**) against a **seeded throwaway
-copy** of the schema — never the developer's real database. They assert the
+These run the real Alembic chain (0001 -> **0006**) against a **seeded throwaway
+copy** of the schema - never the developer's real database. They assert the
 core guarantees from the design's "Migration plan" and Property 7:
 
 - data preservation: every pre-existing owned row survives upgrade *and*
@@ -250,7 +250,7 @@ class TestMigrationChain:
 
 
 class TestEmailChangeTokens0006:
-    """Migration 0006 (email_change_tokens) sign-off — presence + reversibility."""
+    """Migration 0006 (email_change_tokens) sign-off - presence + reversibility."""
 
     def test_email_change_tokens_present_after_head(self, alembic_cfg):
         _seed_baseline(alembic_cfg)
@@ -290,7 +290,7 @@ class TestEmailChangeTokens0006:
         before = _seed_baseline(alembic_cfg)
         command.upgrade(alembic_cfg, "head")
 
-        # Reverse just 0006 → the table is gone, owned rows untouched.
+        # Reverse just 0006 -> the table is gone, owned rows untouched.
         command.downgrade(alembic_cfg, "0005")
         conn = _connect(alembic_cfg)
         try:
@@ -304,7 +304,7 @@ class TestEmailChangeTokens0006:
         finally:
             conn.close()
 
-        # Re-apply 0006 → table returns (forward/back is a clean round-trip).
+        # Re-apply 0006 -> table returns (forward/back is a clean round-trip).
         command.upgrade(alembic_cfg, "head")
         conn = _connect(alembic_cfg)
         try:
@@ -321,15 +321,15 @@ class TestEmailChangeTokens0006:
 
 class TestReversibility:
     def test_full_chain_up_head_then_down_base_on_seeded_copy(self, alembic_cfg):
-        """Property 7 end-to-end: up→head preserves 100% of owned rows across the
-        WHOLE chain (incl. 0006), then down→base tears everything down cleanly.
+        """Property 7 end-to-end: up->head preserves 100% of owned rows across the
+        WHOLE chain (incl. 0006), then down->base tears everything down cleanly.
 
-        Owned rows are preserved on the way down until 0001→base finally drops
+        Owned rows are preserved on the way down until 0001->base finally drops
         the owned tables themselves (the baseline schema is removed at base).
         """
         before = _seed_baseline(alembic_cfg)
 
-        # Up to the very head of the chain (0006) — nothing lost.
+        # Up to the very head of the chain (0006) - nothing lost.
         command.upgrade(alembic_cfg, "head")
         conn = _connect(alembic_cfg)
         try:
@@ -337,7 +337,7 @@ class TestReversibility:
         finally:
             conn.close()
 
-        # Down to the 0001 baseline — every owned row still survives (only the
+        # Down to the 0001 baseline - every owned row still survives (only the
         # auth/kv/token tables + the user_id scoping are reversed above 0001).
         command.downgrade(alembic_cfg, "0001")
         conn = _connect(alembic_cfg)
@@ -355,7 +355,7 @@ class TestReversibility:
         finally:
             conn.close()
 
-        # All the way down to base — the entire schema is torn down cleanly.
+        # All the way down to base - the entire schema is torn down cleanly.
         command.downgrade(alembic_cfg, "base")
         conn = _connect(alembic_cfg)
         try:

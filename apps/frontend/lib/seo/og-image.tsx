@@ -10,7 +10,7 @@ import { ImageResponse } from 'next/og';
 import { SITE_NAME, SITE_TAGLINE } from './config';
 
 export const OG_SIZE = { width: 1200, height: 630 } as const;
-export const OG_ALT = `${SITE_NAME} — ${SITE_TAGLINE}`;
+export const OG_ALT = `${SITE_NAME} - ${SITE_TAGLINE}`;
 export const OG_CONTENT_TYPE = 'image/png';
 
 export function renderOgImage() {
@@ -66,9 +66,9 @@ export function renderOgImage() {
 
       <div style={{ marginTop: 44, display: 'flex', gap: 16, fontSize: 24, color: '#cbd5e1' }}>
         <span>Open source</span>
-        <span style={{ color: '#475569' }}>•</span>
+        <span style={{ color: '#475569' }}>-</span>
         <span>Privacy-first</span>
-        <span style={{ color: '#475569' }}>•</span>
+        <span style={{ color: '#475569' }}>-</span>
         <span>Bring your own API key</span>
       </div>
     </div>,

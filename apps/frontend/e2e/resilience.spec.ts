@@ -8,7 +8,7 @@ import { test, expect } from '@playwright/test';
  * network, so the resilience UI paths are exercised in a REAL browser:
  * - Degradation banner + reachability probe (offline detection is probe-based).
  * - Autosave status chip lifecycle.
- * - Version-conflict (409) → conflict dialog with keep/latest/merge.
+ * - Version-conflict (409) -> conflict dialog with keep/latest/merge.
  *
  * The two-tab leader-election and SW-deploy specs require multi-context /
  * service-worker orchestration and are authored as scaffolding; they run when
@@ -17,9 +17,9 @@ import { test, expect } from '@playwright/test';
 
 const RESUME_EDITOR = '/builder?id=';
 
-test.describe('P4 Resilience — degradation & reachability', () => {
+test.describe('P4 Resilience - degradation & reachability', () => {
   test('offline health probe surfaces the offline degradation banner', async ({ page }) => {
-    // Force the reachability probe to fail → the app must show offline, driven
+    // Force the reachability probe to fail -> the app must show offline, driven
     // by the probe (not navigator.onLine).
     await page.route('**/api/v1/health', (route) => route.abort());
     await page.goto('/home');
@@ -30,7 +30,7 @@ test.describe('P4 Resilience — degradation & reachability', () => {
   });
 });
 
-test.describe('P4 Resilience — offline edit → reconnect replay', () => {
+test.describe('P4 Resilience - offline edit -> reconnect replay', () => {
   test.skip(({ browserName }) => browserName !== 'chromium', 'stack-dependent');
 
   test('editing offline queues durably and syncs on reconnect', async ({ page, context }) => {
@@ -51,7 +51,7 @@ test.describe('P4 Resilience — offline edit → reconnect replay', () => {
         timeout: 15_000,
       });
     }
-    // Reconnect → the outbox drains and the status returns to saved.
+    // Reconnect -> the outbox drains and the status returns to saved.
     await context.setOffline(false);
     await expect(page.getByRole('status').filter({ hasText: /saved/i })).toBeVisible({
       timeout: 20_000,
@@ -59,7 +59,7 @@ test.describe('P4 Resilience — offline edit → reconnect replay', () => {
   });
 });
 
-test.describe('P4 Resilience — two-tab coordination', () => {
+test.describe('P4 Resilience - two-tab coordination', () => {
   test.skip(({ browserName }) => browserName !== 'chromium', 'stack-dependent');
 
   test('a second tab shares the session and elects a single leader', async ({ context }) => {
@@ -77,7 +77,7 @@ test.describe('P4 Resilience — two-tab coordination', () => {
   });
 });
 
-test.describe('P4 Resilience — autosave & conflict', () => {
+test.describe('P4 Resilience - autosave & conflict', () => {
   test.skip(({ browserName }) => browserName !== 'chromium', 'stack-dependent');
 
   test('a version conflict (409) opens the explicit conflict dialog', async ({ page }) => {
@@ -112,7 +112,7 @@ test.describe('P4 Resilience — autosave & conflict', () => {
     await firstResume.click();
     await page.waitForURL(new RegExp(RESUME_EDITOR));
 
-    // Make an edit to trigger autosave → 409 → conflict dialog.
+    // Make an edit to trigger autosave -> 409 -> conflict dialog.
     const anyEditable = page.getByRole('textbox').first();
     if ((await anyEditable.count()) > 0) {
       await anyEditable.click();

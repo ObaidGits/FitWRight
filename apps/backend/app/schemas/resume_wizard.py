@@ -92,7 +92,7 @@ class ResumeWizardStructuredUpdate(BaseModel):
     technical_skills: list[str] | None = None
     # A single structured Education entry to append/replace (W-P2.1/W-P2.2).
     education: Education | None = None
-    # Structured Experience/Project entries to append/replace (W-P2.2 — hybrid
+    # Structured Experience/Project entries to append/replace (W-P2.2 - hybrid
     # cards: structured facts + AI-drafted bullets). Lists so a parsed multi-role
     # paste can be confirmed in one submit. ``internships`` reuse ``experiences``
     # (they map onto workExperience).
@@ -169,7 +169,7 @@ class ResumeWizardState(BaseModel):
 
         Output-only: recomputed on every serialization so the client always sees
         scores consistent with the current draft, and any client-sent value is
-        ignored. Imported locally to avoid a schema→service import at module load.
+        ignored. Imported locally to avoid a schema->service import at module load.
         """
         from app.services.resume_score import compute_resume_scores
 
@@ -201,7 +201,7 @@ class ResumeWizardTurnResponse(BaseModel):
 
 # ---------------------------------------------------------------------------
 # Hybrid Experience/Project assist (W-P2.2): focused AI helpers that never
-# mutate wizard state — they return content the client shows for confirmation.
+# mutate wizard state - they return content the client shows for confirmation.
 # ---------------------------------------------------------------------------
 
 ResumeWizardAssistKind = Literal["draft_bullets", "parse_entries"]
@@ -258,9 +258,9 @@ class ResumeWizardFinalizeRequest(BaseModel):
     """Request to save the wizard draft as a resume.
 
     ``is_master`` is the user's intent:
-      - ``True``  → set this as the master resume (only honoured when none exists);
-      - ``False`` → save as a regular (non-master) resume;
-      - ``None``  → default: become the master only if the user has none yet.
+      - ``True``  -> set this as the master resume (only honoured when none exists);
+      - ``False`` -> save as a regular (non-master) resume;
+      - ``None``  -> default: become the master only if the user has none yet.
     The server never silently replaces an existing master.
     """
 

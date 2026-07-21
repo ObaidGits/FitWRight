@@ -2,13 +2,13 @@
 
 **Producer side.** :func:`emit` appends an ``outbox`` row. Passed a live
 ``AsyncSession`` it enlists in the caller's transaction (true transactional
-outbox — the event and the change commit or roll back together); with no session
+outbox - the event and the change commit or roll back together); with no session
 it opens and commits its own (best-effort at-least-once, for producers that have
 already committed their change, e.g. a background scheduler claim).
 
 **Consumer side.** Handlers register per :class:`~app.events.types.EventType`.
 :func:`process_outbox_batch` is single-flighted via the KVStore lock (safe to run
-under external-cron *and* the in-process scheduler simultaneously — ADR-15),
+under external-cron *and* the in-process scheduler simultaneously - ADR-15),
 scans unprocessed rows oldest-first in a bounded batch, and runs every handler
 for each event. Handlers MUST be idempotent (the batch is at-least-once): a
 partial failure re-runs all handlers for that event on the next pass. On repeated
@@ -118,7 +118,7 @@ async def process_outbox_batch(
     """Process one bounded, single-flighted batch of unprocessed events.
 
     Returns ``{processed, failed, dead, locked}`` counts. Never raises on a
-    single event's handler failure — that event is retried (attempts++) or
+    single event's handler failure - that event is retried (attempts++) or
     dead-lettered, and the batch continues.
     """
     from app.models import Outbox
@@ -176,7 +176,7 @@ async def process_outbox_batch(
                 logger.warning(
                     "Outbox event %s (%s) failed (attempt %d/%d)%s: %s",
                     row.id, row.event_type, attempts, max_attempts,
-                    " → DLQ" if is_dead else "", exc,
+                    " -> DLQ" if is_dead else "", exc,
                 )
                 async with db.session_factory() as s:
                     await s.execute(

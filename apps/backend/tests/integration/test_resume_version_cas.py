@@ -1,4 +1,4 @@
-"""P4 Resilience — version-CAS conflict resolution on PATCH /resumes/{id}.
+"""P4 Resilience - version-CAS conflict resolution on PATCH /resumes/{id}.
 
 Exercises the atomic optimistic-concurrency path against a REAL (isolated)
 database so the single-row conditional update and the 409 envelope are actually

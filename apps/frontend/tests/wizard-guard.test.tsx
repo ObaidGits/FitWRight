@@ -48,7 +48,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe('Wizard — unsaved changes guard', () => {
+describe('Wizard - unsaved changes guard', () => {
   it('does not guard navigation before any answer is entered', () => {
     render(<WizardPage />);
     const back = screen.getByRole('link', { name: /back to import/i });

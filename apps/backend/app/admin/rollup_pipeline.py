@@ -2,14 +2,14 @@
 
 The Rollup_Job does **not** accumulate inline rollup logic. It builds an ordered
 :data:`PIPELINE` of :class:`RollupStep`s and executes them; this module only
-*coordinates* — it owns no business logic. Each step lives next to its owning
+*coordinates* - it owns no business logic. Each step lives next to its owning
 service, and every step is:
 
-- **independent** — one step never depends on another's in-run side effects;
-- **idempotent** per closed UTC day — re-running a day is a no-op where the work
+- **independent** - one step never depends on another's in-run side effects;
+- **idempotent** per closed UTC day - re-running a day is a no-op where the work
   is already done, so a re-run never double-counts;
-- **resumable** — a crashed/partial run is recovered on the next run by re-scan;
-- **failure-isolated** — one step failing never aborts the others (R2.5).
+- **resumable** - a crashed/partial run is recovered on the next run by re-scan;
+- **failure-isolated** - one step failing never aborts the others (R2.5).
 
 Each step reports a :class:`StepResult` (name + ok/failed + optional error) and
 the orchestrator additionally wraps any exception that escapes a step, so
@@ -95,21 +95,21 @@ class RollupStep(Protocol):
 
 
 class ExistingRollupStep:
-    """First pipeline step — the pre-existing generic rollup + reconciliation.
+    """First pipeline step - the pre-existing generic rollup + reconciliation.
 
     A transitional wrapper that routes the pre-pipeline rollup work through the
     pipeline **unchanged**. It delegates to the existing
-    :class:`~app.admin.metrics_service.MetricsService` entrypoints — ``run_rollup``
+    :class:`~app.admin.metrics_service.MetricsService` entrypoints - ``run_rollup``
     (the generic ``metrics_daily`` registry UPSERTs for the closed day(s) + the
     ``_TOTALS_DAY`` totals-snapshot refresh that also backs usage-series) and
-    ``reconcile_counters`` (denormalized usage-counter drift correction) — so the
+    ``reconcile_counters`` (denormalized usage-counter drift correction) - so the
     rows it produces are byte-for-byte the same as the old inline implementation.
     The step adds nothing but the pipeline's ordering and per-step failure
     isolation around that existing work.
 
     The existing rollup recovers ``lookback_days`` closed days internally (for
     missed-run recovery), so the pipeline's per-day ``day`` argument is not used to
-    bound the work here — it is preserved for the day-scoped steps added later.
+    bound the work here - it is preserved for the day-scoped steps added later.
     The last run's result dicts are captured on :attr:`rollup` / :attr:`reconcile`
     so the Rollup_Job can preserve its historical return shape.
     """
@@ -144,7 +144,7 @@ EXISTING_ROLLUP_STEP = ExistingRollupStep()
 
 
 class MetricsPruneStep:
-    """Last pipeline step — bound the only new durable grower (Req 15.6).
+    """Last pipeline step - bound the only new durable grower (Req 15.6).
 
     Deletes ``metrics_daily`` rows older than ``admin_metrics_retention_days``
     (a closed-day retention window), **excluding** the reserved ``_TOTALS_DAY``
@@ -152,7 +152,7 @@ class MetricsPruneStep:
     ``today (UTC) - retention_days`` as a ``YYYY-MM-DD`` day string; rows whose
     ``day_utc`` sorts before it are removed via the generic
     :meth:`~app.admin.metric_store.MetricStore.prune_before` primitive (the store
-    stays logic-free — this step owns the retention policy).
+    stays logic-free - this step owns the retention policy).
 
     Runs **last** so retention never races the flush/aggregate/snapshot steps
     that (re)write closed days earlier in the run. Idempotent: once the aged rows
@@ -194,14 +194,14 @@ from app.admin.metrics_service import MetricsFlushStep, METRICS_FLUSH_STEP  # no
 # specific), so we import its process-wide singleton here to slot it into the
 # ordered PIPELINE. Safe top-level import: ``ai_metrics`` imports ``StepResult``
 # from this module *lazily* (inside the step's ``run``), so there is no cycle at
-# load time — the same pattern used for MetricsFlushStep.
+# load time - the same pattern used for MetricsFlushStep.
 from app.admin.ai_metrics import AiFlushStep, AI_FLUSH_STEP  # noqa: E402
 
 # The DbSizeSampleStep + StorageSnapshotStep live next to their owning
 # StorageMetricsService (their logic is storage-specific), so we import their
 # process-wide singletons here to slot them into the ordered PIPELINE. Safe
 # top-level import: ``storage_metrics`` imports ``StepResult`` from this module
-# *lazily* (inside each step's ``run``), so there is no cycle at load time — the
+# *lazily* (inside each step's ``run``), so there is no cycle at load time - the
 # same pattern used for MetricsFlushStep / AiFlushStep.
 from app.admin.storage_metrics import (  # noqa: E402
     DbSizeSampleStep,
@@ -214,7 +214,7 @@ from app.admin.storage_metrics import (  # noqa: E402
 # logic is security-specific), so we import its process-wide singleton here to
 # slot it into the ordered PIPELINE. Safe top-level import: ``security_metrics``
 # imports ``StepResult`` from this module *lazily* (inside the step's ``run``), so
-# there is no cycle at load time — the same pattern used for the flush/snapshot
+# there is no cycle at load time - the same pattern used for the flush/snapshot
 # steps above.
 from app.admin.security_metrics import (  # noqa: E402
     SecurityAggregateStep,
@@ -224,7 +224,7 @@ from app.admin.security_metrics import (  # noqa: E402
 # The ResumeSnapshotStep is the resume-analytics rollup *writer*. It performs
 # cross-user aggregate reads (via AdminRepo) and therefore lives in the admin/
 # observability rollup infrastructure (``app.admin.resume_rollup``) alongside the
-# only sanctioned cross-user reader — NOT in the Product-Analytics context, which
+# only sanctioned cross-user reader - NOT in the Product-Analytics context, which
 # consumes the resulting snapshot purely through Metric_Store (Req 19.4). Safe
 # top-level import: ``resume_rollup`` imports ``StepResult`` from this module
 # *lazily* (inside the step's ``run``), so there is no cycle at load time.
@@ -240,8 +240,8 @@ from app.admin.resume_rollup import (  # noqa: E402
 # and the storage snapshot; further independent steps (security aggregate, resume
 # snapshot, ...) are appended by their owning services in later tasks *before* the
 # prune step (their relative order among the flush/aggregate/snapshot steps is not
-# behavior-critical — only "existing rollup first, prune last"). Keeping this list
-# — and this file — tiny is intentional; the pipeline only coordinates.
+# behavior-critical - only "existing rollup first, prune last"). Keeping this list
+# - and this file - tiny is intentional; the pipeline only coordinates.
 PIPELINE: list[RollupStep] = [
     EXISTING_ROLLUP_STEP,
     METRICS_FLUSH_STEP,

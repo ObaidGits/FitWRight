@@ -5,7 +5,7 @@ Extracts job data from framework hydration state embedded in static HTML:
 - Nuxt: window.__NUXT__
 - Remix: window.__remixContext
 
-Zero additional network cost — parses from already-fetched HTML.
+Zero additional network cost - parses from already-fetched HTML.
 """
 
 from __future__ import annotations

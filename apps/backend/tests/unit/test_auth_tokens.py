@@ -100,7 +100,7 @@ class TestConsume:
         svc = _service(isolated_db, clock=lambda: past)
         raw = await svc.issue_reset(uid)
 
-        # Consume with the real clock → expired.
+        # Consume with the real clock -> expired.
         live = _service(isolated_db)
         result = await live.consume_reset(raw)
         assert not result.ok and result.reason == "expired"
@@ -115,7 +115,7 @@ class TestPeek:
         peek = await svc.peek_reset(raw)
         assert peek.ok and peek.user_id == uid
 
-        # Peeking left the token usable — a subsequent consume still succeeds.
+        # Peeking left the token usable - a subsequent consume still succeeds.
         async with isolated_db.session_factory() as session:
             row = await session.get(PasswordResetToken, hash_token_value(raw))
         assert row.used_at is None

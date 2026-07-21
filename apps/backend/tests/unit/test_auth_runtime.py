@@ -47,7 +47,7 @@ def _local(**overrides) -> Settings:
 
 @pytest.fixture(autouse=True)
 def _reset_singletons():
-    """Reset the composition-root cache (adapters are owned there — Phase 3)."""
+    """Reset the composition-root cache (adapters are owned there - Phase 3)."""
     from app.platform import reset_container
 
     reset_container()
@@ -181,7 +181,7 @@ class TestSingletons:
         assert runtime.get_breached_password_check() is runtime.get_breached_password_check()
 
     def test_kvstore_singleton_is_cached(self):
-        # Default settings → local store, no engine needed.
+        # Default settings -> local store, no engine needed.
         assert runtime.get_kvstore() is runtime.get_kvstore()
 
     async def test_close_kvstore_releases_local_singleton(self):

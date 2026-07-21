@@ -37,7 +37,7 @@ _PRESERVE_ALWAYS = frozenset({
 
 # Sensitive tokens (§27 Privacy): stripped from the canonical form so they never
 # land in cache keys, logs, or metrics. The ORIGINAL url (with token) is still
-# used for the actual fetch — canonicalization only affects the cache/log key,
+# used for the actual fetch - canonicalization only affects the cache/log key,
 # which means two users pasting the same job with different signed tokens share
 # one cache entry (privacy + efficiency).
 _PRIVACY_STRIP = frozenset({
@@ -134,7 +134,7 @@ def redact_url(url: str) -> str:
 
     Logs must never contain full URLs (they can carry tokens). We emit the
     scheme+host+path plus a short hash of the canonical form. Query strings are
-    dropped entirely — even non-sensitive params — to guarantee no token leak.
+    dropped entirely - even non-sensitive params - to guarantee no token leak.
     """
     import hashlib
 

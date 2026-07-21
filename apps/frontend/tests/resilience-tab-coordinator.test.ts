@@ -80,7 +80,7 @@ describe('TabCoordinator', () => {
     const follower = a.isLeader() ? b : a;
     expect(follower.isLeader()).toBe(false);
 
-    // Leader closes → follower is re-elected.
+    // Leader closes -> follower is re-elected.
     firstLeader.dispose();
     await Promise.resolve();
     await Promise.resolve();
@@ -96,7 +96,7 @@ describe('TabCoordinator', () => {
       locks: undefined,
       createChannel: () => bus.create(),
     });
-    // No injected lock + no navigator.locks in jsdom → immediate leader.
+    // No injected lock + no navigator.locks in jsdom -> immediate leader.
     solo.start();
     expect(solo.isLeader()).toBe(true);
     solo.dispose();

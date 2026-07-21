@@ -6,7 +6,7 @@
  * A reusable, cost-aware AI affordance that rewrites a resume item
  * (skills / experience / project) from a natural-language instruction and
  * shows a PREVIEW-BEFORE-APPLY diff. No AI call fires until the user picks an
- * intent or submits an instruction — nothing is unsolicited.
+ * intent or submits an instruction - nothing is unsolicited.
  */
 import * as React from 'react';
 import Sparkles from 'lucide-react/dist/esm/icons/sparkles';
@@ -47,7 +47,7 @@ interface AskAiDialogProps {
   onApply: (target: AskAiTarget, newContent: string[]) => void;
 }
 
-/** Quick-intent presets → each maps to a concrete instruction (Req 27.1). */
+/** Quick-intent presets -> each maps to a concrete instruction (Req 27.1). */
 const INTENTS: { id: string; label: string; instruction: string }[] = [
   {
     id: 'quantify',
@@ -142,7 +142,7 @@ export function AskAiDialog({ open, onOpenChange, target, onApply }: AskAiDialog
           </DialogTitle>
           <DialogDescription>
             {target
-              ? `Rewrite “${target.title}”. Preview the result before applying — nothing changes until you accept.`
+              ? `Rewrite "${target.title}". Preview the result before applying - nothing changes until you accept.`
               : ''}
           </DialogDescription>
         </DialogHeader>
@@ -170,13 +170,13 @@ export function AskAiDialog({ open, onOpenChange, target, onApply }: AskAiDialog
           <Textarea
             value={instruction}
             onChange={(e) => setInstruction(e.target.value)}
-            placeholder="Or describe exactly what to change…"
+            placeholder="Or describe exactly what to change..."
             className="min-h-20"
             disabled={loading}
           />
           <div className="flex items-center justify-between">
             <span className="text-xs text-[var(--muted-foreground)]">
-              Uses your AI provider — one request per run.
+              Uses your AI provider - one request per run.
             </span>
             <Button
               size="sm"
@@ -189,7 +189,7 @@ export function AskAiDialog({ open, onOpenChange, target, onApply }: AskAiDialog
           </div>
         </div>
 
-        {/* Generating — compact honest timeline instead of a blank dialog. */}
+        {/* Generating - compact honest timeline instead of a blank dialog. */}
         {loading && !result && (
           <div className="rounded-[var(--radius-at-lg)] border border-[var(--border)] p-4">
             <AiProgress
@@ -240,7 +240,7 @@ export function AskAiDialog({ open, onOpenChange, target, onApply }: AskAiDialog
               </div>
             </div>
             <p className="flex items-center gap-1.5 text-xs text-[var(--muted-foreground)]">
-              <ArrowRight className="h-3.5 w-3.5" /> Review for accuracy — keep only claims that are
+              <ArrowRight className="h-3.5 w-3.5" /> Review for accuracy - keep only claims that are
               true.
             </p>
           </div>

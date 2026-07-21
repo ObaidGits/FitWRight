@@ -1,5 +1,5 @@
 /**
- * /cover-letter-generator — feature landing page for FitWright's tailored cover
+ * /cover-letter-generator - feature landing page for FitWright's tailored cover
  * letters. Thin route shell over the shared <CapabilityLanding> renderer.
  */
 import type { Metadata } from 'next';

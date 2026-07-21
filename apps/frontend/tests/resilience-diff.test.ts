@@ -28,7 +28,7 @@ describe('computeConflictDiff', () => {
     const diff = computeConflictDiff(base, mine, latest);
     expect(diff.mineChanged).toEqual([]);
     expect(diff.latestChanged).toEqual([]);
-    expect(diff.mergeable).toBe(false); // no local changes → nothing to merge
+    expect(diff.mergeable).toBe(false); // no local changes -> nothing to merge
   });
 
   it('treats nested object changes as a field change', () => {

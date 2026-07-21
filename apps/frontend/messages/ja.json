@@ -225,7 +225,7 @@
         "subtitle": "AIを導くために具体的なフィードバックを入力してください",
         "defaultInstruction": "より強いアクション動詞で内容を改善し、可能な範囲で定量的な成果を示してください。",
         "selectedItems": "選択した項目",
-        "placeholder": "例：より定量的な指標を追加する、リーダーシップを強調する、行動動詞を増やす…",
+        "placeholder": "例：より定量的な指標を追加する、リーダーシップを強調する、行動動詞を増やす...",
         "hint": "満足していない点を具体的に書いてください",
         "backButton": "戻る",
         "generateButton": "生成"
@@ -259,7 +259,7 @@
       "jobDescriptionTitle": "求人内容",
       "at": "＠",
       "atSeparator": " @ ",
-      "roleSeparator": "—",
+      "roleSeparator": "-",
       "aboutTitle": "JD一致について",
       "aboutDescription": "このビューでは、履歴書が求人内容（JD）にどれだけ一致しているかを確認できます。JDのキーワードが履歴書内で黄色にハイライトされ、すでに含まれているスキルや用語が分かります。",
       "highlightedKeywordsTitle": "ハイライトされたキーワード",
@@ -468,7 +468,7 @@
       "outreachGenerateFailed": "連絡メールの生成に失敗しました: {error}",
       "interviewPrepGenerateFailed": "面接準備の生成に失敗しました: {error}",
       "aiRequiresConnection": "AI生成にはインターネット接続が必要です。再接続してからもう一度お試しください。",
-      "aiStreaming": "AIで生成しています…",
+      "aiStreaming": "AIで生成しています...",
       "draftQuarantined": "保存されたローカル下書きが読み取れなかったため、作業を保護するために隔離しました。現在の内容は安全です。",
       "storageDegraded": "ローカルストレージが利用できないため、このセッションでは変更をメモリ内にのみ保持します。失わないようにサーバーへ保存してください。",
       "openRecoveryCenter": "リカバリーセンターを開く"
@@ -987,7 +987,7 @@
       "jobDescription": "求人内容",
       "noJobDescription": "求人内容はありません。",
       "notes": "メモ",
-      "notesPlaceholder": "この応募についてのメモを追加…",
+      "notesPlaceholder": "この応募についてのメモを追加...",
       "saveNotes": "メモを保存",
       "resumeUnavailable": "応募した履歴書は利用できなくなりました。",
       "loadFailed": "この応募を読み込めませんでした。",
@@ -995,7 +995,7 @@
     },
     "bulk": {
       "selected": "{count} 件選択中",
-      "moveTo": "移動先…",
+      "moveTo": "移動先...",
       "clear": "クリア",
       "deleteConfirmTitle": "応募を削除しますか？",
       "deleteConfirmDescription": "選択した {count} 件の応募を削除しますか？この操作は取り消せません。"
@@ -1006,7 +1006,7 @@
       "resume": "履歴書",
       "untitledResume": "無題の履歴書",
       "jobDescription": "求人内容",
-      "jobDescriptionPlaceholder": "ここに求人内容を貼り付け…",
+      "jobDescriptionPlaceholder": "ここに求人内容を貼り付け...",
       "company": "会社",
       "role": "役職",
       "optional": "任意",

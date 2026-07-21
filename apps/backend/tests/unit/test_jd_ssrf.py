@@ -24,7 +24,7 @@ class TestIpBlocking:
             "fe80::1",            # v6 link-local
             "::ffff:127.0.0.1",   # v4-mapped loopback
             "::ffff:10.0.0.1",    # v4-mapped private
-            "not-an-ip",          # garbage → blocked
+            "not-an-ip",          # garbage -> blocked
         ],
     )
     def test_blocked(self, ip):
@@ -66,7 +66,7 @@ class TestUrlValidation:
 
 
 class TestRealFetchGuard:
-    """Exercise the real fetch() path (no mock) — it must block before connecting."""
+    """Exercise the real fetch() path (no mock) - it must block before connecting."""
 
     @pytest.mark.parametrize(
         "url,reason_prefix",

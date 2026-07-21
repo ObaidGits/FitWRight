@@ -28,7 +28,7 @@ def diff_against_baseline(
             regressions.append({"jd_key": jd_key, "kind": "keyword_floor", "value": cov})
         if judge is None and base.get("judge_score") is not None:
             # The judge produced a score for this variation at baseline but nothing
-            # now (e.g. it errored) — worse than any low score, so flag it.
+            # now (e.g. it errored) - worse than any low score, so flag it.
             regressions.append({
                 "jd_key": jd_key,
                 "kind": "judge_missing",
@@ -62,7 +62,7 @@ def summary_to_baseline(variations: list[dict[str, Any]]) -> dict[str, Any]:
         # Floors are the absolute "this is broken" bar; per-variation drift
         # (judge_tolerance) catches regressions above the floor. The fixture set
         # deliberately includes JDs far from the master (frontend/ML/PM) whose
-        # truthful tailoring legitimately scores ~2 — so the judge floor sits at
+        # truthful tailoring legitimately scores ~2 - so the judge floor sits at
         # 2, not 3, to avoid false-positives on those honest-but-weak variations.
         "floor": {"min_judge_score": 2, "min_keyword_coverage": 0.5},
         "judge_tolerance": 1,

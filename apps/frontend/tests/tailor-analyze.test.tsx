@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 /**
- * Tailor "Analyze fit" flow (Req 15 — explicit, cost-aware AI):
+ * Tailor "Analyze fit" flow (Req 15 - explicit, cost-aware AI):
  * - The analysis only runs on an explicit click (never automatically).
  * - Matched/missing keywords and the fit score render after the call resolves.
  * - Editing the JD clears a stale analysis so results never mismatch inputs.
@@ -86,7 +86,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe('Tailor — Analyze fit', () => {
+describe('Tailor - Analyze fit', () => {
   it('does not analyze until the user clicks (explicit AI action)', () => {
     renderPage();
     fireEvent.change(screen.getByLabelText('Job description'), { target: { value: LONG_JD } });
@@ -167,7 +167,7 @@ describe('Tailor — Analyze fit', () => {
     fireEvent.click(screen.getByRole('button', { name: /^generate$/i }));
 
     await waitFor(() => expect(streamImproveResumeMock).toHaveBeenCalled());
-    expect(screen.getByText('Tailoring your resume…')).toBeInTheDocument();
+    expect(screen.getByText('Tailoring your resume...')).toBeInTheDocument();
     // A real backend stage boundary lights up the checklist.
     emitStage?.({ stage: 'keywords', status: 'active' });
 

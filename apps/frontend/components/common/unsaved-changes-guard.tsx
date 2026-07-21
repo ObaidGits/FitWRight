@@ -1,15 +1,15 @@
 'use client';
 
 /**
- * Unsaved-changes guard — protects in-progress edits from every route
+ * Unsaved-changes guard - protects in-progress edits from every route
  * transition, with a clear Stay / Discard choice (never silent data loss).
  *
  * Coverage:
- * - **Reload / close tab / external navigation** → native `beforeunload` prompt.
+ * - **Reload / close tab / external navigation** -> native `beforeunload` prompt.
  * - **In-app navigation** (Next `<Link>`, `<a>`, sidebar, bottom nav, in-page
- *   links) → capture-phase click interception shows the confirm dialog and, on
+ *   links) -> capture-phase click interception shows the confirm dialog and, on
  *   Discard, performs the originally-intended navigation.
- * - **Browser Back/Forward** → `popstate` interception re-pins the current
+ * - **Browser Back/Forward** -> `popstate` interception re-pins the current
  *   entry and confirms; Discard then performs the intended history move.
  *
  * Programmatic `router.push` cannot be globally intercepted in the App Router,
@@ -58,7 +58,7 @@ function isModifiedEvent(e: MouseEvent): boolean {
 export function UnsavedChangesGuard({
   when,
   title = 'Discard unsaved changes?',
-  description = 'You have edits that haven’t been saved. If you leave now, they’ll be lost.',
+  description = "You have edits that haven't been saved. If you leave now, they'll be lost.",
   confirmLabel = 'Discard changes',
   cancelLabel = 'Stay',
   children,
@@ -118,7 +118,7 @@ export function UnsavedChangesGuard({
         return;
       }
       if (url.origin !== window.location.origin) return;
-      // Same URL → nothing to guard.
+      // Same URL -> nothing to guard.
       if (url.pathname + url.search === window.location.pathname + window.location.search) return;
 
       e.preventDefault();

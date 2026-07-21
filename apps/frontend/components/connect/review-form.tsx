@@ -144,7 +144,7 @@ export function ReviewForm() {
                 type="button"
                 role="radio"
                 aria-checked={rating === n}
-                aria-label={`${n} star${n > 1 ? 's' : ''} — ${RATING_LABELS[n]}`}
+                aria-label={`${n} star${n > 1 ? 's' : ''} - ${RATING_LABELS[n]}`}
                 onClick={() => {
                   setRating(n);
                   persist({ rating: n });

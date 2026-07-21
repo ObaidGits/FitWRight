@@ -1,4 +1,4 @@
-"""Unit tests for refiner pure functions — no LLM calls needed."""
+"""Unit tests for refiner pure functions - no LLM calls needed."""
 
 import copy
 import pytest
@@ -15,7 +15,7 @@ from app.schemas.refinement import AlignmentViolation, RefinementConfig
 
 
 class TestRemoveAiPhrases:
-    """Tests for remove_ai_phrases() — local regex replacement."""
+    """Tests for remove_ai_phrases() - local regex replacement."""
 
     def test_removes_blacklisted_verbs(self, sample_resume):
         data = copy.deepcopy(sample_resume)
@@ -43,7 +43,7 @@ class TestRemoveAiPhrases:
         data = copy.deepcopy(sample_resume)
         data["workExperience"][0]["description"][0] = "Utilized Python for API development"
         cleaned, removed = remove_ai_phrases(data)
-        # "utilized" → "used"
+        # "utilized" -> "used"
         assert "used" in cleaned["workExperience"][0]["description"][0].lower()
 
     def test_removes_em_dashes(self, sample_resume):
@@ -71,7 +71,7 @@ class TestRemoveAiPhrases:
 
 
 class TestValidateMasterAlignment:
-    """Tests for validate_master_alignment() — fabrication detection."""
+    """Tests for validate_master_alignment() - fabrication detection."""
 
     def test_aligned_when_identical(self, sample_resume, master_resume):
         report = validate_master_alignment(sample_resume, master_resume)
@@ -205,7 +205,7 @@ class TestValidateMasterAlignment:
     def test_allows_skill_variants_as_non_critical(self, sample_resume, master_resume):
         """A variant of an existing skill (e.g. 'Python 3') should be info, not critical."""
         tailored = copy.deepcopy(sample_resume)
-        # Master has "Python", tailored adds "Python 3" — substring match should be non-critical
+        # Master has "Python", tailored adds "Python 3" - substring match should be non-critical
         tailored["additional"]["technicalSkills"].append("Python 3")
         report = validate_master_alignment(tailored, master_resume)
         python3_violations = [
@@ -224,7 +224,7 @@ class TestValidateMasterAlignment:
 
 
 class TestFixAlignmentViolations:
-    """Tests for fix_alignment_violations() — removing fabricated content."""
+    """Tests for fix_alignment_violations() - removing fabricated content."""
 
     def test_removes_fabricated_skill(self, sample_resume):
         tailored = copy.deepcopy(sample_resume)
@@ -270,7 +270,7 @@ class TestFixAlignmentViolations:
 
 
 class TestAnalyzeKeywordGaps:
-    """Tests for analyze_keyword_gaps() — keyword matching analysis."""
+    """Tests for analyze_keyword_gaps() - keyword matching analysis."""
 
     def test_finds_missing_keywords(self, sample_resume, master_resume, sample_job_keywords):
         analysis = analyze_keyword_gaps(sample_job_keywords, sample_resume, master_resume)
@@ -303,7 +303,7 @@ class TestAnalyzeKeywordGaps:
 
 
 class TestCalculateKeywordMatch:
-    """Tests for calculate_keyword_match() — percentage calculation."""
+    """Tests for calculate_keyword_match() - percentage calculation."""
 
     def test_returns_percentage(self, sample_resume, sample_job_keywords):
         pct = calculate_keyword_match(sample_resume, sample_job_keywords)

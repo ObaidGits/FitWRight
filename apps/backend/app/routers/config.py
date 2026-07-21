@@ -146,7 +146,7 @@ async def update_llm_config(
     # api_base: distinguish "omitted" (leave unchanged) from "present but
     # blank/null" (explicit clear). The frontend sends api_base: null/"" when
     # the Base URL field is cleared; treating that as "don't change" left a
-    # stale override in config.json (issue #760). Normalize blank → None so an
+    # stale override in config.json (issue #760). Normalize blank -> None so an
     # empty string also never reaches LiteLLM as a bogus endpoint.
     if "api_base" in request.model_fields_set:
         cleaned = (request.api_base or "").strip()
@@ -249,8 +249,8 @@ async def get_resilience_flags() -> ResilienceFlagsResponse:
     activate: streaming AI vs the non-stream fallback, whether to register the
     service worker / offline outbox, and whether to run server autosave. Flags
     are ADR-14 config values (no separate code path); flipping a flag off makes
-    the client degrade gracefully (streaming→non-stream, offline→local-draft
-    only, autosave→manual save + local draft).
+    the client degrade gracefully (streaming->non-stream, offline->local-draft
+    only, autosave->manual save + local draft).
     """
     return ResilienceFlagsResponse(
         streaming_ai=settings.streaming_ai_enabled,
@@ -417,7 +417,7 @@ async def update_feature_prompts(
     (``{job_description}``, ``{resume_data}``, ``{output_language}``).
     Missing placeholders return a 422 with a structured detail so the UI
     can list exactly which ones are absent. Empty strings clear the
-    override — persisted as ``""`` so runtime resolution falls back to the
+    override - persisted as ``""`` so runtime resolution falls back to the
     built-in default.
     """
     stored = _load_config()

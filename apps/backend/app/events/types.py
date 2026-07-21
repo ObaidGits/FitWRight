@@ -3,7 +3,7 @@
 Event types are stable string constants (stored in ``outbox.event_type``).
 Keeping them in one enum prevents typos between producers and consumers and
 documents the full event surface in a single place. New consumers subscribe to
-these without the producer knowing (decoupling — R16.1).
+these without the producer knowing (decoupling - R16.1).
 """
 
 from __future__ import annotations

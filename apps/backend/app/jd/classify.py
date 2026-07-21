@@ -98,5 +98,5 @@ def classify_page(html: str, http_status: int = 200) -> str:
         return PageClass.EXPIRED_JOB
 
     # If page has apply button or job-like structure, it's likely a job
-    # (we don't classify as SINGLE_JOB positively — we just don't reject it)
+    # (we don't classify as SINGLE_JOB positively - we just don't reject it)
     return PageClass.UNKNOWN

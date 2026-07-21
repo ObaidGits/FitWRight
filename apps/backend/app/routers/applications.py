@@ -96,7 +96,7 @@ async def create_application(
             logger.warning("Failed to clean up orphan job %s: %s", job["job_id"], cleanup_error)
         raise HTTPException(status_code=500, detail="Failed to create application. Please try again.")
 
-    # Best-effort: cache company/role on the job for later reuse — never 500.
+    # Best-effort: cache company/role on the job for later reuse - never 500.
     if company or role:
         try:
             await db.update_job(user_id, job["job_id"], {"company": company, "role": role})

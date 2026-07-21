@@ -90,7 +90,7 @@ async def analyze_job(
     covers (matched), which it does not (missing), and an overall fit score.
 
     This endpoint performs a single LLM keyword extraction. It is never fired
-    automatically — the frontend only calls it when the user explicitly asks
+    automatically - the frontend only calls it when the user explicitly asks
     for a fit analysis (cost-consent principle).
     """
     jd = request.job_description.strip()

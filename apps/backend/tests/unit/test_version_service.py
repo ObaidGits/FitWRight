@@ -1,4 +1,4 @@
-"""Unit tests for version-history pure logic (P3 §A, R1–R3).
+"""Unit tests for version-history pure logic (P3 §A, R1-R3).
 
 Covers the deterministic helpers with no DB: canonical hashing, gzip
 compress/decompress round-trip + corruption handling, and the field-level diff.
@@ -29,7 +29,7 @@ class TestContentHash:
         assert vs.compute_content_hash({"s": [1, 2]}) != vs.compute_content_hash({"s": [2, 1]})
 
     def test_unicode_preserved_in_hash(self):
-        # ensure_ascii=False → é hashed as its UTF-8 bytes, stable.
+        # ensure_ascii=False -> é hashed as its UTF-8 bytes, stable.
         h1 = vs.compute_content_hash({"name": "José"})
         h2 = vs.compute_content_hash({"name": "José"})
         assert h1 == h2

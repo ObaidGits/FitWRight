@@ -1,4 +1,4 @@
-"""Canonical Skill Engine — pure, deterministic skill normalization (ADR-12).
+"""Canonical Skill Engine - pure, deterministic skill normalization (ADR-12).
 
 ``canonicalize`` maps a free-text skill to a stable canonical id and a clean
 display name using a small built-in alias table. It is intentionally pure (no
@@ -13,7 +13,7 @@ import re
 
 __all__ = ["canonicalize", "make_skill_dict", "suggest_skills"]
 
-# Common alias → canonical display name. Small on purpose; the shared taxonomy
+# Common alias -> canonical display name. Small on purpose; the shared taxonomy
 # (later phase) is the scalable source. Keys are compared case-insensitively
 # against the normalized token.
 _ALIASES: dict[str, str] = {

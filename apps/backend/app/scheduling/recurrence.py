@@ -1,6 +1,6 @@
 """Bounded rrule-lite recurrence + timezone/DST-correct math (design §E, R10.2).
 
-A deliberately small, safe recurrence grammar (full RFC-5545 is out of scope —
+A deliberately small, safe recurrence grammar (full RFC-5545 is out of scope -
 design Round 5 residual (b)):
 
     daily | weekly | every:N:days | every:N:weeks   [ ";until=<UTC ISO>" ]
@@ -37,7 +37,7 @@ def is_valid_timezone(tz_name: str) -> bool:
 def parse_recurrence(recurrence: str | None) -> dict | None:
     """Parse an rrule-lite string into ``{interval, unit, until}`` or ``None``.
 
-    Returns ``None`` for a one-shot (no/invalid recurrence) — callers treat a
+    Returns ``None`` for a one-shot (no/invalid recurrence) - callers treat a
     ``None`` result as "does not repeat", never as an error, so a malformed
     stored value degrades safely to a single fire.
     """

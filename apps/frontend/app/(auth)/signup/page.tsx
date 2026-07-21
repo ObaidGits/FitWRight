@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { AuthCard } from '@/components/auth/auth-card';
 
-export const metadata: Metadata = { title: 'Sign up — FitWright' };
+export const metadata: Metadata = { title: 'Sign up - FitWright' };
 
 type SignupPageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;

@@ -8,7 +8,7 @@
  *   clears caches when it's off (the ADR-14 kill-switch).
  * - Runs the reachability monitor and renders the DegradationBanner with the
  *   current named level (offline / degraded / safe-mode).
- * - Surfaces a safe "Update available — reload" prompt when a new SW is waiting;
+ * - Surfaces a safe "Update available - reload" prompt when a new SW is waiting;
  *   the user chooses the safe point (never a destructive mid-edit activation).
  * - Clears local data + SW caches on logout / different-user detection (R8.2/8.5).
  */

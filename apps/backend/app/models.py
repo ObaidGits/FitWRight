@@ -3,7 +3,7 @@
 A single declarative ``Base`` backs all tables (doc tables migrated from
 TinyDB plus the new ``applications`` and ``api_keys`` tables). The facade in
 ``app/database.py`` converts ORM rows to plain dicts so the rest of the app
-never sees ORM objects — preserving the TinyDB-era contracts.
+never sees ORM objects - preserving the TinyDB-era contracts.
 """
 
 from datetime import datetime, timezone
@@ -73,7 +73,7 @@ class Resume(Base):
     # the key when this column is non-null.
     original_markdown: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Persisted appearance for this resume (the chosen template + customization:
-    # engine, page size, margins, spacing, fonts, accent, photo, etc. — the
+    # engine, page size, margins, spacing, fonts, accent, photo, etc. - the
     # frontend ``TemplateSettings`` shape). Nullable for backward compatibility:
     # a resume created before the template system falls back to the app default.
     # This is a rendering artifact, NOT resume content, so writing it never bumps
@@ -209,14 +209,14 @@ class ApiKey(Base):
 
 
 # ===========================================================================
-# Auth foundation (P1 Multi-User Foundation) — new tables
+# Auth foundation (P1 Multi-User Foundation) - new tables
 # ===========================================================================
 #
 # These back authentication, sessions, RBAC, verification/reset, and the
 # append-only audit log. All ids are UUID4 strings and all timestamps are
 # zero-padded UTC ISO strings (lexically comparable), matching the TinyDB-era
 # convention used by the document tables above. Created via ``create_all``
-# locally (zero-config boot) and via Alembic ``0002`` on hosted Postgres — both
+# locally (zero-config boot) and via Alembic ``0002`` on hosted Postgres - both
 # paths produce the same schema.
 
 
@@ -240,10 +240,10 @@ class User(Base):
     status: Mapped[str] = mapped_column(String, nullable=False, default="active")
     avatar_url: Mapped[str | None] = mapped_column(String, nullable=True)
     # Server-generated storage key for the current avatar object (orphan GC keys
-    # off this + avatar_url — P3 §H, R13). NULL ⇒ no stored object.
+    # off this + avatar_url - P3 §H, R13). NULL => no stored object.
     avatar_key: Mapped[str | None] = mapped_column(String, nullable=True)
     # Canonical profile-image metadata (Photo System, migration 0018). Only
-    # metadata lives in the DB — never binary. ``avatar_checksum`` is the SHA-256
+    # metadata lives in the DB - never binary. ``avatar_checksum`` is the SHA-256
     # of the original upload (content-addressed dedup: a re-upload of the same
     # file is a no-op). Dimensions/aspect/colour drive responsive rendering,
     # skeletons, and CLS-free layout. All nullable; a pre-Photo-System avatar
@@ -265,7 +265,7 @@ class User(Base):
     # Reserved for MFA/WebAuthn readiness (R9.2); no enforcement in P1.
     mfa_enrolled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # ---- P2 Admin (soft-delete grace period + denormalized usage counters) ----
-    # Soft-delete marker (ADR admin §Deletion). NULL ⇒ live; a non-null iso ts
+    # Soft-delete marker (ADR admin §Deletion). NULL => live; a non-null iso ts
     # starts the grace period after which the PurgeJob irreversibly erases the
     # user. Indexed for the purge scan + the ``deleted`` admin filter (R8.1).
     deleted_at: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -283,7 +283,7 @@ class User(Base):
     __table_args__ = (
         Index("ux_users_email", "email", unique=True),
         Index("ix_users_status", "status"),
-        # Active-admin count (role=admin, status=active) — the lockout guard.
+        # Active-admin count (role=admin, status=active) - the lockout guard.
         Index("ix_users_role_status", "role", "status"),
         # List sort + keyset cursor (created_at desc, id desc).
         Index("ix_users_created_at_id", "created_at", "id"),
@@ -303,7 +303,7 @@ class User(Base):
 class OAuthIdentity(Base):
     """A verified external identity linked to a :class:`User`.
 
-    Composite primary key ``(provider, subject)`` — a provider's stable ``sub``
+    Composite primary key ``(provider, subject)`` - a provider's stable ``sub``
     is unique within that provider. ``email_at_link`` records the provider email
     seen at link time for auditing.
     """
@@ -324,7 +324,7 @@ class OAuthIdentity(Base):
 class Session(Base):
     """A server-side session; the DB is the source of truth (KVStore caches it).
 
-    Only ``sha256(raw token)`` is stored in ``token_hash`` — the raw token lives
+    Only ``sha256(raw token)`` is stored in ``token_hash`` - the raw token lives
     only in the ``__Host-`` cookie. ``csrf_secret`` derives the per-session CSRF
     cookie. ``aal``/``step_up_at`` back step-up ("sudo") and MFA readiness;
     ``remember_me`` selects the longer absolute cap; sliding expiry is driven by
@@ -471,7 +471,7 @@ class EmailChangeToken(Base):
 
 
 # ===========================================================================
-# P2 Admin — daily metrics rollup
+# P2 Admin - daily metrics rollup
 # ===========================================================================
 
 
@@ -481,7 +481,7 @@ class MetricsDaily(Base):
     The ``RollupJob`` computes each registry metric's value for a just-closed
     UTC calendar day via an indexed aggregate query and UPSERTs it here, so the
     admin dashboards + usage-series read O(1) from this table for historical
-    days and compute only the current partial day live (never double-counting —
+    days and compute only the current partial day live (never double-counting -
     the rollup only ever writes closed days). ``value`` is a non-negative count;
     ``computed_at`` records when the row was (re)computed.
     """
@@ -497,14 +497,14 @@ class MetricsDaily(Base):
 
 
 # ===========================================================================
-# P3 Productivity — Version history (design §A, Requirements 1–3)
+# P3 Productivity - Version history (design §A, Requirements 1-3)
 # ===========================================================================
 
 
 class ResumeVersion(Base):
     """An immutable, compressed snapshot of a resume's ``processed_data``.
 
-    Snapshots are captured on meaningful changes — the initial parse
+    Snapshots are captured on meaningful changes - the initial parse
     (``source=original``), each accepted AI generation (``source=ai``), and
     manual saves (``source=manual``). The processed_data JSON is **gzip-
     compressed** into ``data_gz`` (so 50 snapshots × millions of resumes stay
@@ -533,7 +533,7 @@ class ResumeVersion(Base):
     label: Mapped[str | None] = mapped_column(String, nullable=True)
     # sha256 hex of the canonical-JSON of processed_data; drives dedupe.
     content_hash: Mapped[str] = mapped_column(String, nullable=False)
-    # gzip(json.dumps(processed_data, sort_keys, separators)) — the payload.
+    # gzip(json.dumps(processed_data, sort_keys, separators)) - the payload.
     data_gz: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
     # Resume appearance at capture time (frontend ``TemplateSettings`` shape) so
     # restore reapplies the historical template, not just the content. Nullable:
@@ -544,7 +544,7 @@ class ResumeVersion(Base):
     created_at: Mapped[str] = mapped_column(String, default=_utcnow_iso)
 
     __table_args__ = (
-        # Primary list + "latest snapshot" lookup (dedupe/undo/prune) — newest
+        # Primary list + "latest snapshot" lookup (dedupe/undo/prune) - newest
         # first within a resume, tie-broken by id for a stable keyset cursor.
         Index(
             "ix_resume_versions_scope_created",
@@ -557,7 +557,7 @@ class ResumeVersion(Base):
 
 
 # ===========================================================================
-# P3 Productivity — Shared event platform + Notifications (design §Platform/§B)
+# P3 Productivity - Shared event platform + Notifications (design §Platform/§B)
 # ===========================================================================
 
 
@@ -572,7 +572,7 @@ class Outbox(Base):
     Not an *owned* table in the request sense (consumers scan it cross-user, like
     ``sessions``/``audit_log``); ``user_id`` is carried on the row so consumers
     can attribute the derived notification/search-doc to the right user.
-    ``processed_at`` NULL ⇒ unprocessed; ``attempts`` bounds retries before an
+    ``processed_at`` NULL => unprocessed; ``attempts`` bounds retries before an
     event is parked (dead-lettered) via ``dead_at``.
     """
 
@@ -599,7 +599,7 @@ class Outbox(Base):
 class Notification(Base):
     """A user-scoped, content-safe notification (design §B, R4.1).
 
-    ``body`` never contains resume/JD content or secrets — only a title + a
+    ``body`` never contains resume/JD content or secrets - only a title + a
     deep-link (``node_type``/``node_id``). ``dedupe_key`` makes scheduled/derived
     notifications idempotent (unique per user); ``group_key`` collapses related
     items in the UI. ``read``/``dismissed`` drive the list + unread counter.
@@ -622,7 +622,7 @@ class Notification(Base):
     dedupe_key: Mapped[str | None] = mapped_column(String, nullable=True)
     read: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     dismissed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    # Email-delivery bookkeeping (None ⇒ not applicable / not yet sent).
+    # Email-delivery bookkeeping (None => not applicable / not yet sent).
     emailed_at: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[str] = mapped_column(String, default=_utcnow_iso)
 
@@ -646,7 +646,7 @@ class NotificationPref(Base):
     """Per-user, per-category delivery preferences (design §B, R6.1).
 
     PK ``(user_id, category)``. ``in_app``/``email`` toggle each channel; absence
-    of a row means the built-in defaults apply (in-app on, email off — resolved
+    of a row means the built-in defaults apply (in-app on, email off - resolved
     in the service, so a new category needs no backfill).
     """
 
@@ -665,7 +665,7 @@ class UserUnreadCount(Base):
     """Denormalized O(1) unread badge counter (design §B, R4.2).
 
     Incremented on notification create, decremented on read/dismiss, clamped at
-    zero. Avoids a COUNT scan per 30–60s poll. Reconcilable from the
+    zero. Avoids a COUNT scan per 30-60s poll. Reconcilable from the
     ``notifications`` table if it ever drifts (retention/reconcile job).
     """
 
@@ -680,7 +680,7 @@ class UserUnreadCount(Base):
 
 
 # ===========================================================================
-# P3 Productivity — Global search (design §C, Requirements 7–8)
+# P3 Productivity - Global search (design §C, Requirements 7-8)
 # ===========================================================================
 
 
@@ -689,7 +689,7 @@ class SearchDocument(Base):
 
     Populated **asynchronously from the outbox** by the SearchIndexer (never in
     the write path). ``title`` + ``body`` are content-safe projections of a
-    source node (resume/job/application) — never secrets. PK is the node ref
+    source node (resume/job/application) - never secrets. PK is the node ref
     ``(node_type, node_id)`` so re-indexing is an idempotent upsert; ``user_id``
     scopes every query **in SQL** (R7.2). On SQLite an FTS5 mirror
     (``search_fts``) accelerates ranked matching; on Postgres a GIN
@@ -722,7 +722,7 @@ class SearchDocument(Base):
 # SQLite FTS5 acceleration for search (design §C). On SQLite the search read
 # path matches against an ``search_fts`` external-content FTS5 mirror kept in
 # lock-step with ``search_documents`` by triggers (so the indexer only writes the
-# base table — the triggers maintain the index). Postgres uses a GIN
+# base table - the triggers maintain the index). Postgres uses a GIN
 # ``to_tsvector`` expression index instead (migration 0011). Created here via a
 # dialect-guarded ``after_create`` DDL hook so local zero-config boot (create_all)
 # gets FTS with no migration; hosted gets it from the migration's SQLite branch
@@ -752,7 +752,7 @@ def _create_sqlite_search_fts(target, connection, **kw):  # pragma: no cover - D
 
 
 # ===========================================================================
-# P3 Productivity — Reminders + Interviews (design §E/§F, Requirements 10–11)
+# P3 Productivity - Reminders + Interviews (design §E/§F, Requirements 10-11)
 # ===========================================================================
 
 
@@ -763,7 +763,7 @@ class Reminder(Base):
     ``recurrence`` is a bounded rrule-lite string (``daily`` / ``weekly`` /
     ``every:N:days`` etc. with an optional ``until``); recurring reminders
     **materialize the next occurrence on fire** (no infinite rows). ``status``
-    drives the claim-based scheduler: ``pending`` → ``firing`` (claimed) →
+    drives the claim-based scheduler: ``pending`` -> ``firing`` (claimed) ->
     ``fired``; ``snoozed`` reschedules ``due_at``; ``cancelled`` is terminal.
     Owned + parent-ownership checked (the application must belong to the user).
     """
@@ -780,7 +780,7 @@ class Reminder(Base):
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     recurrence: Mapped[str | None] = mapped_column(String, nullable=True)
     status: Mapped[str] = mapped_column(String, nullable=False, default="pending")
-    # Claim bookkeeping: the instant a scanner claimed this row (pending→firing),
+    # Claim bookkeeping: the instant a scanner claimed this row (pending->firing),
     # so a crashed claim can be reclaimed after a lease timeout.
     claimed_at: Mapped[str | None] = mapped_column(String, nullable=True)
     fired_at: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -841,13 +841,13 @@ class Profile(Base):
     """The canonical, document-oriented professional profile (one per user).
 
     The entire structured profile lives in one native-JSON column ``data`` (a
-    ``ProfileData`` document — see ``app/profile/schemas.py``): professional
+    ``ProfileData`` document - see ``app/profile/schemas.py``): professional
     identity, experience/education/projects, canonical skills, certifications,
     achievements, links, custom sections, section ordering, AI memory, plus a
     compact ``meta.provenance`` map. This mirrors ``resumes.processed_data`` so
     the profile shares validators, the render/projection engine, and the gzip
     version-snapshot infrastructure with zero new serialization formats
-    (ADR — document-oriented profile).
+    (ADR - document-oriented profile).
 
     ``completeness`` caches the weighted completion score for O(1) list reads;
     ``version`` is the optimistic-concurrency (CAS) token bumped atomically by
@@ -868,7 +868,7 @@ class Profile(Base):
         nullable=False,
         index=True,
     )
-    # Canonical ProfileData document (JSONB on Postgres → future GIN-indexable
+    # Canonical ProfileData document (JSONB on Postgres -> future GIN-indexable
     # for skill/keyword search with no schema change).
     data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     # Cached 0..100 completion score (cheap list reads); recomputed on every write.
@@ -926,7 +926,7 @@ class ProfileVersion(Base):
     label: Mapped[str | None] = mapped_column(String, nullable=True)
     # sha256 hex of the canonical-JSON of data; drives dedupe.
     content_hash: Mapped[str] = mapped_column(String, nullable=False)
-    # gzip(json.dumps(data, sort_keys, separators)) — the payload.
+    # gzip(json.dumps(data, sort_keys, separators)) - the payload.
     data_gz: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
     size_bytes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[str] = mapped_column(String, default=_utcnow_iso)
@@ -944,7 +944,7 @@ class ProfileVersion(Base):
 
 
 # ===========================================================================
-# Persistent AI Analysis Cache — the "Universal Analysis Object"
+# Persistent AI Analysis Cache - the "Universal Analysis Object"
 # ===========================================================================
 
 
@@ -953,16 +953,16 @@ class AnalysisArtifact(Base):
 
     This is the generic "compute once, reuse everywhere" substrate that lets the
     app avoid recomputing identical LLM/analysis work (resume parsing, job
-    analysis, …). It is *complementary* to :class:`ResumeVersion` /
-    :class:`ProfileVersion` (which are user-facing edit history) — this table is
+    analysis, ...). It is *complementary* to :class:`ResumeVersion` /
+    :class:`ProfileVersion` (which are user-facing edit history) - this table is
     an internal cache keyed by the **content** and **algorithm version** of an
     operation, so an identical input under an unchanged prompt+model resolves to
     a stored result instead of another API call.
 
     Reuse key: ``(user_id, artifact_type, source_id, checksum, version)`` is
-    unique — a lookup on that tuple is an exact cache hit. ``checksum`` is the
+    unique - a lookup on that tuple is an exact cache hit. ``checksum`` is the
     SHA-256 of the canonical input; ``version`` encodes the prompt+model+algo so
-    a prompt/model change simply misses (lazy regeneration — version awareness).
+    a prompt/model change simply misses (lazy regeneration - version awareness).
 
     Invalidation: ``source_id`` is the primary owning resource (e.g. a content
     hash or a ``job_id``) and ``related_id`` an optional secondary dependency
@@ -983,7 +983,7 @@ class AnalysisArtifact(Base):
         nullable=False,
         index=True,
     )
-    # What kind of result this is: resume_parse | job_analysis | tailor_preview | …
+    # What kind of result this is: resume_parse | job_analysis | tailor_preview | ...
     artifact_type: Mapped[str] = mapped_column(String, nullable=False)
     # Primary owning resource key (content hash for content-addressed dedup, or a
     # resource id like job_id for invalidation).
@@ -992,7 +992,7 @@ class AnalysisArtifact(Base):
     related_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     # SHA-256 of the canonical input that produced ``analysis_data``.
     checksum: Mapped[str] = mapped_column(String, nullable=False)
-    # Composite algorithm version (prompt|model|algo); a change ⇒ cache miss.
+    # Composite algorithm version (prompt|model|algo); a change => cache miss.
     version: Mapped[str] = mapped_column(String, nullable=False)
     # ready | failed (a failed artifact is not reused but records the attempt).
     status: Mapped[str] = mapped_column(String, nullable=False, default="ready")

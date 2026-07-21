@@ -16,13 +16,13 @@ config = context.config
 # ``disable_existing_loggers=False`` is important: env.py can be invoked
 # in-process (e.g. the migration test suite runs the chain via Alembic's command
 # API), and the default fileConfig behavior would otherwise disable every logger
-# not named in alembic.ini — silently muting the rest of the app's loggers.
+# not named in alembic.ini - silently muting the rest of the app's loggers.
 if config.config_file_name is not None:
     fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 # Model metadata for 'autogenerate' support. ``Base`` aggregates every ORM
 # table (the document tables plus the auth tables); the DB-backed KVStore ``kv``
-# table is intentionally *not* on ``Base`` — it is owned by the KVStore adapter
+# table is intentionally *not* on ``Base`` - it is owned by the KVStore adapter
 # and declared in migration 0002 for hosted Postgres (see design "Data Models").
 from app.models import Base  # noqa: E402
 
@@ -33,13 +33,13 @@ def _resolve_database_url() -> str:
     """Resolve the database URL Alembic should run against.
 
     Precedence (single source of truth so migrations never hit the ini
-    placeholder): an explicit ``-x db_url=…`` passed on the command line, then
+    placeholder): an explicit ``-x db_url=...`` passed on the command line, then
     the ``ALEMBIC_DATABASE_URL`` environment variable (used by the migration
     test harness to point at a throwaway copy), then the dedicated
-    ``MIGRATION_DATABASE_URL`` (the DIRECT / session-mode endpoint — DDL and the
+    ``MIGRATION_DATABASE_URL`` (the DIRECT / session-mode endpoint - DDL and the
     session-scoped advisory lock are unsafe through a transaction pooler), and
     finally the application's resolved ``effective_database_url`` (SQLite
-    locally, Postgres hosted — ADR-13). The async driver is required because
+    locally, Postgres hosted - ADR-13). The async driver is required because
     ``env.py`` runs migrations through an async engine.
     """
     x_args = context.get_x_argument(as_dictionary=True)
@@ -50,7 +50,7 @@ def _resolve_database_url() -> str:
         url = (settings.migration_database_url or "").strip() or settings.effective_database_url
     # Normalize to an async driver so ``async_engine_from_config`` can connect.
     # Reuse the runtime engine's normalizer so every Postgres prefix
-    # (postgres://, postgresql+psycopg2://, …) is handled identically.
+    # (postgres://, postgresql+psycopg2://, ...) is handled identically.
     if url.startswith("sqlite:///"):
         return url.replace("sqlite:///", "sqlite+aiosqlite:///", 1)
     from app.db_engine import _normalize_url
@@ -61,7 +61,7 @@ def _resolve_database_url() -> str:
 # Inject the resolved URL so both offline and online paths use it instead of the
 # ini placeholder. Libpq TLS params (``sslmode``/``ssl``) are stripped here and
 # translated into an asyncpg ``ssl`` connect arg, because asyncpg rejects the
-# raw ``sslmode`` kwarg — without this, migrating against a TLS-only Postgres
+# raw ``sslmode`` kwarg - without this, migrating against a TLS-only Postgres
 # (e.g. Supabase's ``?sslmode=require``) fails with a connect TypeError.
 _resolved_url = _resolve_database_url()
 _SSL_CONNECT_ARGS: dict = {}
@@ -73,10 +73,10 @@ if _resolved_url.startswith("postgresql"):
     if _ssl_arg is not None:
         _SSL_CONNECT_ARGS = {"ssl": _ssl_arg}
 # ConfigParser (Alembic's config store) uses ``%`` for interpolation, so a URL
-# that legitimately contains ``%`` — e.g. a URL-encoded password like ``%40``
-# for ``@`` — otherwise raises "invalid interpolation syntax". Escape ``%`` as
+# that legitimately contains ``%`` - e.g. a URL-encoded password like ``%40``
+# for ``@`` - otherwise raises "invalid interpolation syntax". Escape ``%`` as
 # ``%%``; interpolation restores the single ``%`` when the value is read back by
-# ``async_engine_from_config`` (and SQLAlchemy then decodes ``%40`` → ``@``).
+# ``async_engine_from_config`` (and SQLAlchemy then decodes ``%40`` -> ``@``).
 config.set_main_option("sqlalchemy.url", _resolved_url.replace("%", "%%"))
 
 # other values from the config, defined by the needs of env.py,

@@ -1,5 +1,5 @@
 /**
- * Cloudinary derivation helpers (Photo System) — mirrors backend
+ * Cloudinary derivation helpers (Photo System) - mirrors backend
  * `app/storage/image.py`. Every responsive/optimized variant is a **URL
  * transform** of the one canonical master (no re-upload, original never
  * mutated). For a non-Cloudinary master (local dev provider, external avatar)

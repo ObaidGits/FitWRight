@@ -1,7 +1,7 @@
 """Live-Redis validation for the production ``RedisKVStore`` adapter (ADR-6).
 
-The audit flagged that the Redis adapter — the hosted free-tier (Upstash) and
-premium (managed Redis) shared-state path — was never integration-tested: the
+The audit flagged that the Redis adapter - the hosted free-tier (Upstash) and
+premium (managed Redis) shared-state path - was never integration-tested: the
 unit suite only proves the factory *routes* to it lazily, and the contract
 tests run against the local/DB adapters. This suite closes that gap by driving
 ``RedisKVStore`` against a **real** Redis server for exactly the primitives auth
@@ -11,7 +11,7 @@ depends on at runtime:
   ``state``/``nonce``/``code_verifier`` blobs);
 - atomic ``incr`` with rate-limit *window* semantics + concurrent increments
   (rate-limit / lockout counters);
-- the ``lock`` single-flight primitive — holder token, a second acquire fails
+- the ``lock`` single-flight primitive - holder token, a second acquire fails
   while held, correct release, and TTL auto-expiry (session reaper, per-user
   master-resume promotion).
 
@@ -79,8 +79,8 @@ async def _wait_until_ready(url: str) -> bool:
 def redis_url() -> str:
     """A reachable Redis URL, or skip with a clear reason.
 
-    Precedence: an explicit ``TEST_REDIS_URL`` (CI/dev supplies a server) → a
-    disposable Docker container → skip.
+    Precedence: an explicit ``TEST_REDIS_URL`` (CI/dev supplies a server) -> a
+    disposable Docker container -> skip.
     """
     explicit = os.environ.get("TEST_REDIS_URL")
     if explicit:
@@ -148,7 +148,7 @@ def _k(name: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# get / set / delete + TTL — session cache & transient OAuth blobs
+# get / set / delete + TTL - session cache & transient OAuth blobs
 # ---------------------------------------------------------------------------
 
 
@@ -189,13 +189,13 @@ class TestGetSetDeleteTTL:
     async def test_reset_clears_ttl(self, store):
         key = _k("reset-ttl")
         await store.set(key, "v", ttl_seconds=1)
-        await store.set(key, "v2")  # no TTL → should persist past the window
+        await store.set(key, "v2")  # no TTL -> should persist past the window
         await asyncio.sleep(1.4)
         assert await store.get(key) == "v2"
 
 
 # ---------------------------------------------------------------------------
-# incr — atomic counter with rate-limit window semantics
+# incr - atomic counter with rate-limit window semantics
 # ---------------------------------------------------------------------------
 
 
@@ -217,13 +217,13 @@ class TestIncr:
 
     async def test_ttl_applied_on_creation_only(self, store):
         # First incr sets the window; later incrs must NOT extend it (Redis
-        # INCR+EXPIRE-once semantics — the rate-limit window counts down).
+        # INCR+EXPIRE-once semantics - the rate-limit window counts down).
         key = _k("win")
         assert await store.incr(key, ttl_seconds=1) == 1
         await asyncio.sleep(0.4)
         assert await store.incr(key, ttl_seconds=1) == 2  # window still open
         await asyncio.sleep(0.9)  # now past the original 1s window
-        # Window expired → counter resets to 1 (fresh window).
+        # Window expired -> counter resets to 1 (fresh window).
         assert await store.incr(key, ttl_seconds=1) == 1
 
     async def test_concurrent_incr_is_atomic(self, store):
@@ -234,7 +234,7 @@ class TestIncr:
 
 
 # ---------------------------------------------------------------------------
-# lock — TTL-bound single-flight primitive
+# lock - TTL-bound single-flight primitive
 # ---------------------------------------------------------------------------
 
 
@@ -243,7 +243,7 @@ class TestLock:
         key = _k("job")
         async with store.lock(key, ttl_seconds=5) as acquired:
             assert acquired is True
-        # Released — can be re-acquired immediately.
+        # Released - can be re-acquired immediately.
         async with store.lock(key, ttl_seconds=5) as again:
             assert again is True
 
@@ -289,7 +289,7 @@ class TestLock:
         await asyncio.sleep(1.4)  # first expires
         second = store.lock(key, ttl_seconds=5)
         assert await second.acquire() is True
-        await first.release()  # stale release — must be a no-op for `second`
+        await first.release()  # stale release - must be a no-op for `second`
         third = store.lock(key, ttl_seconds=5, blocking=False)
         assert await third.acquire() is False  # `second` still holds it
         await second.release()

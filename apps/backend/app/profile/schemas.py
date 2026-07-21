@@ -1,14 +1,14 @@
-"""``ProfileData`` — the canonical professional-profile document + DTOs.
+"""``ProfileData`` - the canonical professional-profile document + DTOs.
 
 ``ProfileData`` is a backward-compatible **superset** of ``ResumeData`` so a
 resume can be *derived* by projection (``app/profile/projection.py``) and a
 parsed resume can be *merged in* (``app/profile/merge.py``). Design:
-docs/architecture/PROFILE_SYSTEM_PLAN.md §13–§16.
+docs/architecture/PROFILE_SYSTEM_PLAN.md §13-§16.
 
 Key properties:
 - **Professional Identity** first-class block (``identity``).
 - **Canonical skills** (``Skill`` with canonical/aliases/proficiency/confidence).
-- **AI Memory** as a separate namespace (``aiMemory``) — never projected into a
+- **AI Memory** as a separate namespace (``aiMemory``) - never projected into a
   resume (ADR-11).
 - **Stable uids** on every list item (ADR-8) minted on creation.
 - **Compact provenance** in ``meta.provenance`` (ADR-9), not inline per field.
@@ -141,7 +141,7 @@ class ProfileIdentity(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Core sections (each item carries a stable uid — ADR-8)
+# Core sections (each item carries a stable uid - ADR-8)
 # ---------------------------------------------------------------------------
 
 
@@ -199,12 +199,12 @@ class ProfileProject(BaseModel):
 
 
 class Skill(BaseModel):
-    """A canonical skill (Canonical Skill Engine — ADR-12).
+    """A canonical skill (Canonical Skill Engine - ADR-12).
 
     ``canonical`` is the normalized identity (e.g. ``javascript``);
     ``displayName`` is what the UI shows (e.g. ``JavaScript``); ``aliases``
     captures variants seen in source material. ``evidenceUids`` links to the
-    experiences/projects that demonstrate the skill (KG relation — ADR-7).
+    experiences/projects that demonstrate the skill (KG relation - ADR-7).
     """
 
     uid: str = Field(default_factory=new_uid)
@@ -278,7 +278,7 @@ class ProfileLink(BaseModel):
 
 
 class AiMemory(BaseModel):
-    """AI Memory — a separate namespace that steers generation (ADR-11).
+    """AI Memory - a separate namespace that steers generation (ADR-11).
 
     **Never projected into a resume.** Captures learned preferences so AI
     assists produce consistent, on-voice output.
@@ -316,7 +316,7 @@ class ProfileMeta(BaseModel):
     schemaVersion: int = 1
     source: str = "manual"
     lastImportedResumeId: str | None = None
-    # entity-uid / field-path -> provenance. Absent ⇒ manual (safe default).
+    # entity-uid / field-path -> provenance. Absent => manual (safe default).
     provenance: dict[str, ProvenanceEntry] = Field(default_factory=dict)
 
 
@@ -368,7 +368,7 @@ class ProfileUpdateRequest(BaseModel):
     """Partial profile update (If-Match CAS via ``base_version``).
 
     The client sends the full ``data`` document it edited (mass-assignment is
-    prevented by validating into ``ProfileData`` — unknown top-level keys are
+    prevented by validating into ``ProfileData`` - unknown top-level keys are
     dropped by Pydantic). ``base_version`` is the version the client last read;
     the server applies the write only if it still matches (409 otherwise).
     """
@@ -396,7 +396,7 @@ class ProfileCompletenessResponse(BaseModel):
 
 
 class GenerateResumeRequest(BaseModel):
-    """Generate a resume from the profile (Projection Engine — ADR-6).
+    """Generate a resume from the profile (Projection Engine - ADR-6).
 
     ``persist`` = save the projected data as a new resume (optionally master);
     otherwise the projection is returned for preview only. ``template`` and
@@ -415,7 +415,7 @@ class GenerateResumeRequest(BaseModel):
     template: str | None = None
     sections: dict[str, bool] | None = None
     # Persisted appearance (frontend ``TemplateSettings`` shape). Stored verbatim
-    # on the generated resume so it opens — and exports — in the chosen template.
+    # on the generated resume so it opens - and exports - in the chosen template.
     template_settings: dict[str, Any] | None = None
 
 
@@ -498,7 +498,7 @@ class ImportStatistics(BaseModel):
     """Quality + shape signals for an import, surfaced before the user commits.
 
     ``quality_score`` is the weighted completeness of the *incoming* candidate
-    (0..100) — a quick read on how much usable content the source carried.
+    (0..100) - a quick read on how much usable content the source carried.
     ``sections`` counts parsed items per section; the op tallies mirror the plan.
     """
 
@@ -622,7 +622,7 @@ class AiSuggestRequest(BaseModel):
 
 
 class AiSuggestResponse(BaseModel):
-    """AI suggestion output — a proposed value the user can accept/reject."""
+    """AI suggestion output - a proposed value the user can accept/reject."""
 
     kind: str
     suggestion: Any = None

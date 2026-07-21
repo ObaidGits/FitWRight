@@ -1,4 +1,4 @@
-"""ProfileService — orchestrates the canonical professional profile.
+"""ProfileService - orchestrates the canonical professional profile.
 
 The service is the single entry point the router calls. It coordinates the pure
 domain engines (backfill, completion, projection) with the ``app.database``
@@ -6,7 +6,7 @@ facade (the owned-table scoping boundary) and the version-snapshot subsystem.
 Invariants it upholds:
 
 - **One profile per user**, created lazily on first read by deriving it from the
-  user's master resume (``source=migration``) — the resume is never mutated
+  user's master resume (``source=migration``) - the resume is never mutated
   (ADR-14).
 - **Optimistic concurrency** on every write via ``version`` CAS (mirrors the
   resume editor). A stale ``base_version`` yields a conflict the router maps to
@@ -116,7 +116,7 @@ async def _load_user_fallback(user_id: str) -> dict[str, Any]:
 def _compose_profile_resume_title(profile: "ProfileData") -> str:
     """Build a concise, relatable title for a profile-generated resume.
 
-    Formats as ``"<Name> — <Role> [@ <Company>]"`` from the profile identity,
+    Formats as ``"<Name> - <Role> [@ <Company>]"`` from the profile identity,
     degrading gracefully as fields are missing (never a sentence/paragraph).
     """
     ident = profile.identity
@@ -129,11 +129,11 @@ def _compose_profile_resume_title(profile: "ProfileData") -> str:
         descriptor = f"{role} @ {company}"
 
     if name and descriptor:
-        return f"{name} — {descriptor}"[:80]
+        return f"{name} - {descriptor}"[:80]
     if descriptor:
         return descriptor[:80]
     if name:
-        return f"{name} — Resume"[:80]
+        return f"{name} - Resume"[:80]
     return "Generated resume"
 
 
@@ -382,7 +382,7 @@ class ProfileService:
         if not plan.operations:
             warnings.append("This source adds nothing new to your profile.")
         if statistics["quality_score"] < 30:
-            warnings.append("The imported document looks sparse — parsing may have missed content.")
+            warnings.append("The imported document looks sparse - parsing may have missed content.")
         return {
             "source": source,
             "incoming": incoming,
@@ -445,7 +445,7 @@ class ProfileService:
         base_version: int,
         include_photo: bool = False,
     ) -> tuple[str, dict[str, Any] | None]:
-        """Apply the profile projection to a draft resume (submitted → refused)."""
+        """Apply the profile projection to a draft resume (submitted -> refused)."""
         from app.profile.sync import apply_sync
 
         row = await self.get_or_create(user_id)
@@ -622,7 +622,7 @@ class ProfileService:
                 user_id, public_slug=unique, visibility=visibility, public_theme=theme
             )
         except Exception:
-            # Lost the uniqueness race — retry once with a fresh suffix.
+            # Lost the uniqueness race - retry once with a fresh suffix.
             from uuid import uuid4
 
             updated = await _db().set_profile_publication(
@@ -662,7 +662,7 @@ class ProfileService:
 
         Returns ``None`` when the slug is unclaimed OR the profile is ``private``
         (indistinguishable to avoid slug-enumeration disclosure). ``unlisted`` and
-        ``public`` both resolve (unlisted is link-only / noindex — enforced by the
+        ``public`` both resolve (unlisted is link-only / noindex - enforced by the
         page's robots metadata, not here).
         """
         from app.profile.public import project_public_profile, public_json_ld
@@ -718,7 +718,7 @@ class ProfileService:
         live_url = rec.avatar_url if rec else None
         identity["avatarUrl"] = live_url
         if not live_url:
-            # Photo removed → clear derived fields so the view falls back to initials.
+            # Photo removed -> clear derived fields so the view falls back to initials.
             identity["avatarSrcset"] = []
             identity["avatarWidth"] = None
             identity["avatarHeight"] = None

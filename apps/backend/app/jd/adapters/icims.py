@@ -1,4 +1,4 @@
-"""ICIMS platform adapter (Phase 1 — browser-required).
+"""ICIMS platform adapter (Phase 1 - browser-required).
 
 ICIMS renders job postings via JavaScript. No public API. Detection by domain
 pattern; extraction uses Playwright + known DOM selectors.
@@ -54,11 +54,11 @@ class IcimsAdapter:
         return host.endswith(".icims.com") or "icims" in host
 
     def extract_api_url(self, parsed: ParseResult) -> str | None:
-        # ICIMS has no public API — always returns None
+        # ICIMS has no public API - always returns None
         return None
 
     def parse_response(self, data: dict, source_url: str) -> ExtractionResult:
-        # Not used for ICIMS (no API) — interface compliance
+        # Not used for ICIMS (no API) - interface compliance
         return ExtractionResult(content="", source="platform_api")
 
     def parse_rendered_html(self, html: str, source_url: str) -> ExtractionResult | None:

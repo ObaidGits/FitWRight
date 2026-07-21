@@ -2,9 +2,9 @@
 
 The PDF export flow renders the frontend ``/print/...`` route with headless
 Chromium. That print page is a **server component** that fetches the resume from
-the backend — but the headless browser carries no user session cookie, so in
+the backend - but the headless browser carries no user session cookie, so in
 hosted mode (``SINGLE_USER_MODE=false``) the backend rejects the fetch with 401
-and the page 500s (→ "PDF rendering failed").
+and the page 500s (-> "PDF rendering failed").
 
 To authenticate that internal render without weakening the real auth surface,
 the (already-authenticated) export endpoint mints a **short-lived, signed print

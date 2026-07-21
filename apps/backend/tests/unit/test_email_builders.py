@@ -3,7 +3,7 @@
 Covers the professional verification / reset / email-change emails: each must
 carry BOTH a plain-text and an HTML body, with branding, a call-to-action
 button (HTML), a plain-URL fallback, an expiration notice, a security note, and
-a support contact — and the raw token must appear only inside the link (in the
+a support contact - and the raw token must appear only inside the link (in the
 text body so link extraction and HTML-stripping clients both work).
 """
 

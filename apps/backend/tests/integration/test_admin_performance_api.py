@@ -6,7 +6,7 @@ rate-limit/capability all apply. Reuses the ``_client`` / ``_admin_client`` /
 ``_seed`` / ``hosted`` harness from :mod:`tests.integration.test_admin_api`.
 
 Covers the ``require_admin_read`` authz matrix (anon 401, non-admin 403, admin
-200 — Req 15.1) with a secret-free ``PerformanceSignals`` body (Property 3), and
+200 - Req 15.1) with a secret-free ``PerformanceSignals`` body (Property 3), and
 the ``response_model_exclude_none=True`` behaviour (Req 6.5): the None-valued
 host metrics (``memoryBytes`` / ``cpuPercent`` / ``diskBytes``) and
 ``dbQueryTimeMs`` are dropped from the payload, while the present aggregates and
@@ -66,10 +66,10 @@ class TestPerformanceExcludeNone:
             resp = await client.get(_PERF_URL)
         assert resp.status_code == 200
         body = resp.json()
-        # Host metrics are a Non-Goal → None → dropped by exclude_none (Req 6.5).
+        # Host metrics are a Non-Goal -> None -> dropped by exclude_none (Req 6.5).
         for field in ("memoryBytes", "cpuPercent", "diskBytes"):
             assert field not in body
-        # dbQueryTimeMs is None → excluded from the body, but its name is surfaced
+        # dbQueryTimeMs is None -> excluded from the body, but its name is surfaced
         # in the unavailable list so the client knows it is a wired-but-empty
         # signal (Req 6.7).
         assert "dbQueryTimeMs" not in body

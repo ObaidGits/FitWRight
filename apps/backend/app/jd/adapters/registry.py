@@ -27,7 +27,7 @@ from app.jd.adapters.workday import WorkdayAdapter
 
 __all__ = ["detect_platform", "get_adapter"]
 
-# Registered adapters (order doesn't matter — detection is domain-based)
+# Registered adapters (order doesn't matter - detection is domain-based)
 _ADAPTERS: list[PlatformAdapter] = [
     AshbyAdapter(),
     GreenhouseAdapter(),

@@ -1,8 +1,8 @@
 """The tailor flow auto-creates a tracker card (best-effort, non-blocking).
 
-Drives a real ``/improve/preview`` → ``/improve/confirm`` round trip (every LLM
+Drives a real ``/improve/preview`` -> ``/improve/confirm`` round trip (every LLM
 boundary mocked, exactly like ``test_pipeline_e2e``) and asserts an ``applied``
-card lands on the board carrying the LLM-extracted company/role — with zero
+card lands on the board carrying the LLM-extracted company/role - with zero
 extra LLM call on the confirm path (company/role come from the cached job).
 """
 
@@ -22,7 +22,7 @@ def _new_client():
 
 
 async def _preview_then_confirm(isolated_db, sample_resume):
-    """Run the mocked preview→confirm handshake; return the tailored resume id."""
+    """Run the mocked preview->confirm handshake; return the tailored resume id."""
     upload_resp = await _upload_resume(isolated_db, sample_resume)
     resume_id = upload_resp.json()["resume_id"]
 
@@ -123,7 +123,7 @@ class TestTrackerAutoCreate:
         # Two tailorings of the same master+job dedupe to a single card.
         await _preview_then_confirm(isolated_db, sample_resume)
         # A second confirm creates a *new* tailored resume id, so it's a distinct
-        # card — verify at least the first path produced exactly one so far.
+        # card - verify at least the first path produced exactly one so far.
         async with _new_client() as client:
             board = (await client.get("/api/v1/applications")).json()["columns"]
         assert len(board["applied"]) == 1

@@ -332,14 +332,14 @@ export const ResumeVivid: React.FC<ResumeVividProps> = ({
           {isSectionVisible('additional') && technicalSkills.length > 0 && (
             <div className={baseStyles['resume-section']}>
               <h3 className={styles.sectionTitleSm}>{headingFallbacks.skills}</h3>
-              <p className={baseStyles['resume-text-xs']}>{technicalSkills.join(' • ')}</p>
+              <p className={baseStyles['resume-text-xs']}>{technicalSkills.join(' - ')}</p>
             </div>
           )}
 
           {isSectionVisible('additional') && languages.length > 0 && (
             <div className={baseStyles['resume-section']}>
               <h3 className={styles.sectionTitleSm}>{headingFallbacks.languages}</h3>
-              <p className={baseStyles['resume-text-xs']}>{languages.join(' • ')}</p>
+              <p className={baseStyles['resume-text-xs']}>{languages.join(' - ')}</p>
             </div>
           )}
 
@@ -473,7 +473,7 @@ const DynamicResumeSectionVivid: React.FC<{
         </div>
       ) : null}
       {sectionMeta.sectionType === 'stringList' && customSection.strings?.length ? (
-        <p className={baseStyles['resume-text-xs']}>{customSection.strings.join(' • ')}</p>
+        <p className={baseStyles['resume-text-xs']}>{customSection.strings.join(' - ')}</p>
       ) : null}
     </div>
   );

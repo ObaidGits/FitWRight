@@ -1,7 +1,7 @@
 """Internationalization for JD extraction (§21 of enhancement plan).
 
 Provides:
-- Language detection (html lang → Content-Language → script/keyword heuristic)
+- Language detection (html lang -> Content-Language -> script/keyword heuristic)
 - Multi-language section keywords (en/de/fr/es/ja/pt)
 - Locale-aware salary parsing (currency + number-format normalization)
 
@@ -9,7 +9,7 @@ Zero new dependencies: language detection uses the html lang attribute first,
 then a lightweight Unicode-script + keyword heuristic. This keeps latency at
 < 1ms and avoids pulling a heavy CLD model into the hot path. When the detected
 language is not in the keyword set, section classification is skipped entirely
-(no false positives) — confidence is unaffected because sections are a bonus,
+(no false positives) - confidence is unaffected because sections are a bonus,
 not a requirement.
 """
 
@@ -55,7 +55,7 @@ SECTION_KEYWORDS: dict[str, dict[str, list[str]]] = {
     },
 }
 
-# Currency symbols/codes → normalized currency code.
+# Currency symbols/codes -> normalized currency code.
 _CURRENCY_MAP = {
     "$": "USD", "US$": "USD", "usd": "USD",
     "€": "EUR", "eur": "EUR",
@@ -69,7 +69,7 @@ _CURRENCY_MAP = {
     "a$": "AUD", "aud": "AUD",
 }
 
-# Period keywords → normalized period.
+# Period keywords -> normalized period.
 _PERIOD_MAP = {
     "year": "YEAR", "yr": "YEAR", "annum": "YEAR", "annual": "YEAR", "pa": "YEAR",
     "p.a.": "YEAR", "jahr": "YEAR", "an": "YEAR", "año": "YEAR", "ano": "YEAR",
@@ -83,7 +83,7 @@ _PERIOD_MAP = {
 _JA_RE = re.compile(r"[\u3040-\u30ff\u4e00-\u9faf]")  # hiragana/katakana/kanji
 
 # Language keyword hints for Latin-script disambiguation (stopwords).
-# Only DISTINCTIVE multi-character tokens — single-letter articles (a/e/o/y)
+# Only DISTINCTIVE multi-character tokens - single-letter articles (a/e/o/y)
 # collide across languages and with ordinary English text, so they are excluded.
 _LANG_HINTS = {
     "de": (" und ", " der ", " die ", " für ", " mit ", " wir ", " sie ", " nicht ", " werden ", " eine "),
@@ -103,7 +103,7 @@ def detect_language(
 ) -> str:
     """Detect the primary language, returning a 2-letter code or "" if unknown.
 
-    Priority: <html lang> → Content-Language header → text heuristic.
+    Priority: <html lang> -> Content-Language header -> text heuristic.
     """
     # 1. html lang attribute (most authoritative, ~0 cost).
     if html:

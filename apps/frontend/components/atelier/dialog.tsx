@@ -35,7 +35,7 @@ export const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        // Portaled to document.body — `atelier` makes it resolve Atelier tokens
+        // Portaled to document.body - `atelier` makes it resolve Atelier tokens
         // instead of the legacy Swiss :root fallbacks (`.dark .atelier` still
         // matches via the <html> dark class).
         'atelier',

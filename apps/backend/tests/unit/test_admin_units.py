@@ -168,7 +168,7 @@ class TestMetricsService:
         closed1, total1 = await _counts()
         # 2 closed days * 3 registry metrics = 6 daily rows.
         assert closed1 == 6
-        # Re-run must UPSERT, not duplicate (idempotent) — counts unchanged.
+        # Re-run must UPSERT, not duplicate (idempotent) - counts unchanged.
         await svc.run_rollup(lookback_days=2)
         closed2, total2 = await _counts()
         assert closed2 == 6

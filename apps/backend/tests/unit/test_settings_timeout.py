@@ -33,7 +33,7 @@ class TestRequestTimeoutSetting:
         assert Settings(request_timeout_seconds="300.0").request_timeout_seconds == 300
 
     def test_infinity_falls_back_to_default(self):
-        # int(float("inf")) raises OverflowError — must not crash startup (PR #833 review).
+        # int(float("inf")) raises OverflowError - must not crash startup (PR #833 review).
         assert Settings(request_timeout_seconds="inf").request_timeout_seconds == 240
 
     def test_nan_falls_back_to_default(self):

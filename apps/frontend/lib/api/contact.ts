@@ -2,7 +2,7 @@
  * Public contact-form API client.
  *
  * Talks to `POST /contact` (unauthenticated). `apiPost` attaches the CSRF token
- * automatically for a signed-in visitor and none for a guest — both are valid,
+ * automatically for a signed-in visitor and none for a guest - both are valid,
  * since the backend only enforces CSRF when a session is present. We opt out of
  * the global 401 redirect so an expired session never bounces a guest mid-send.
  */
@@ -18,7 +18,7 @@ export interface ContactPayload {
   purpose: string;
   project_type?: string;
   budget?: string;
-  /** Honeypot — must stay empty. */
+  /** Honeypot - must stay empty. */
   company_website?: string;
   /** Milliseconds spent on the form (bot-timing heuristic). */
   elapsed_ms?: number;
@@ -45,10 +45,10 @@ export class ContactError extends Error {
 function statusMessage(status: number, parsed: string | null): string {
   if (parsed) return parsed;
   if (status === 429)
-    return 'You’ve sent a few messages already. Please wait a moment and try again.';
+    return "You've sent a few messages already. Please wait a moment and try again.";
   if (status === 422) return 'Please check the highlighted fields and try again.';
   if (status >= 500)
-    return 'Something went wrong on our side. Your message wasn’t sent — please retry.';
+    return "Something went wrong on our side. Your message wasn't sent - please retry.";
   return 'Could not send your message. Please try again.';
 }
 
@@ -57,7 +57,7 @@ export async function submitContact(payload: ContactPayload): Promise<ContactRes
   try {
     res = await apiPost('/contact/', payload, DEFAULT_TIMEOUT_MS, { skipAuthHandling: true });
   } catch {
-    throw new ContactError(0, 'Network error — please check your connection and try again.');
+    throw new ContactError(0, 'Network error - please check your connection and try again.');
   }
 
   if (!res.ok) {

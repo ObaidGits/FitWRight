@@ -6,8 +6,8 @@ capability all apply. Reuses the ``_client`` / ``_admin_client`` / ``_seed`` /
 ``hosted`` harness from :mod:`tests.integration.test_admin_api`.
 
 Covers the ``require_admin_read`` authz matrix (anon 401, non-admin 403, admin
-200 — Req 15.1) with a secret-free ``AiAnalytics`` body (Property 3), and the
-``window`` request-validation bounds (1–365, default 30 — Req 4.3): 0 and 366
+200 - Req 15.1) with a secret-free ``AiAnalytics`` body (Property 3), and the
+``window`` request-validation bounds (1-365, default 30 - Req 4.3): 0 and 366
 are rejected with 422, valid/omitted windows return 200.
 
 Requirements: 4.3, 15.1, 15.8.

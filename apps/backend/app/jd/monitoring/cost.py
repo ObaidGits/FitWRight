@@ -3,11 +3,11 @@
 Attributes a per-operation cost to each extraction and enforces two budgets via
 KVStore counters (atomic ``incr`` with TTL windows):
 
-- Per-user daily cap (default $0.50) — protects against a single abusive account.
-- Global hourly cap (default alert $50, circuit-break $100) — protects the fleet.
+- Per-user daily cap (default $0.50) - protects against a single abusive account.
+- Global hourly cap (default alert $50, circuit-break $100) - protects the fleet.
 
-Costs are estimates in USD-cents-scaled integers (we store *microdollars* — i.e.
-millionths of a dollar — as integers to keep KV counters integer-only and avoid
+Costs are estimates in USD-cents-scaled integers (we store *microdollars* - i.e.
+millionths of a dollar - as integers to keep KV counters integer-only and avoid
 float drift). 1 dollar = 1_000_000 microdollars.
 """
 
@@ -130,7 +130,7 @@ class CostMonitor:
         """Return the current global-hour microdollar counter (observability read).
 
         A cheap, non-incrementing read of the existing ``jd:cost:global:<hour>``
-        KV counter — the only durable KVStore microdollar signal the system
+        KV counter - the only durable KVStore microdollar signal the system
         records today. Note it is a **rolling one-hour** window (the counter has
         a 1h TTL) scoped to the JD extraction pipeline; there is no durable
         arbitrary-window AI microdollar total. Callers that surface a windowed

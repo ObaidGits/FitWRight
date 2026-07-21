@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 
-/** Atelier Card — warm surface, soft border + elevation, rounded-lg. */
+/** Atelier Card - warm surface, soft border + elevation, rounded-lg. */
 export const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
     <div

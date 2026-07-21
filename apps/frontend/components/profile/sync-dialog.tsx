@@ -1,10 +1,10 @@
 'use client';
 
 /**
- * Sync dialog (P4) — refresh an existing draft resume from the profile.
+ * Sync dialog (P4) - refresh an existing draft resume from the profile.
  *
- * Pick a resume → preview the field-level diff between its current data and a
- * fresh projection of the profile → apply (resume version CAS). Submitted
+ * Pick a resume -> preview the field-level diff between its current data and a
+ * fresh projection of the profile -> apply (resume version CAS). Submitted
  * resumes are surfaced as locked/immutable and cannot be changed (the record of
  * what was sent stays truthful); the user generates a new resume instead.
  */
@@ -37,8 +37,8 @@ const ACTION_VARIANT: Record<string, 'success' | 'danger' | 'primary'> = {
 };
 
 function summarize(value: unknown): string {
-  if (value == null) return '—';
-  if (typeof value === 'string') return value || '—';
+  if (value == null) return '-';
+  if (typeof value === 'string') return value || '-';
   return JSON.stringify(value).slice(0, 60);
 }
 

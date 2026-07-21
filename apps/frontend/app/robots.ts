@@ -2,7 +2,7 @@
  * robots.txt (App Router metadata route).
  *
  * Public marketing + public-profile surfaces are crawlable. Authenticated app
- * surfaces, admin, auth flows, print views, and the API proxy are disallowed —
+ * surfaces, admin, auth flows, print views, and the API proxy are disallowed -
  * they contain private/per-user content that must never enter a search index.
  * The sitemap is advertised so crawlers discover canonical public URLs.
  */

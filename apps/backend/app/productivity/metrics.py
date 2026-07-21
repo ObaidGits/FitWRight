@@ -5,10 +5,10 @@ the signals the design's alerts key off:
 - ``jd_fetch_total{result}`` + ``jd_blocked_ssrf_total`` (SSRF probe signal);
 - ``avatar_upload_total{result}``;
 - ``notification_created_total`` / ``notification_emailed_total`` /
-  ``notification_deduped_total`` (duplicate-delivery *prevented* — the
+  ``notification_deduped_total`` (duplicate-delivery *prevented* - the
   exactly-once signal, stays the counterpart of double_fire=0);
 - ``scheduler_reminders_fired_total`` / ``scheduler_interview_leads_fired_total``;
-- ``ai_cleanup_total`` (JD LLM cleanup — cost-aware usage tracking, R15).
+- ``ai_cleanup_total`` (JD LLM cleanup - cost-aware usage tracking, R15).
 
 Live gauges (outbox backlog + DLQ depth) are computed from the DB at scrape time
 in the internal ``/metrics`` endpoint, not held here.

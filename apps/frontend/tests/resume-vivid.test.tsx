@@ -31,7 +31,7 @@ describe('ResumeVivid', () => {
 
   it('renders skills joined with bullet separators in the sidebar', () => {
     render(<ResumeVivid data={data} />);
-    expect(screen.getByText('Python • TypeScript')).toBeInTheDocument();
+    expect(screen.getByText('Python - TypeScript')).toBeInTheDocument();
   });
 
   it('does not render an orphaned leading pipe when years is missing but location exists', () => {

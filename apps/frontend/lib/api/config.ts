@@ -13,7 +13,7 @@ export type LLMProvider =
   | 'ollama';
 
 // Reasoning-effort levels supported by LiteLLM. `null` (or absent) means
-// "do not send the parameter" — the default for max compatibility.
+// "do not send the parameter" - the default for max compatibility.
 export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high';
 
 export interface LLMConfig {
@@ -294,7 +294,7 @@ export async function updateFeaturePrompts(update: FeaturePromptsUpdate): Promis
 
   if (!res.ok) {
     // Error path: body may be absent or malformed, so we tolerate parse
-    // failure. A fetch body is a one-shot stream — read it once and reuse
+    // failure. A fetch body is a one-shot stream - read it once and reuse
     // for both the 422-special-case and the generic fallback.
     const errBody = (await res.json().catch(() => ({}))) as {
       detail?: FeaturePromptsValidationError | string;
@@ -322,7 +322,7 @@ export async function updateFeaturePrompts(update: FeaturePromptsUpdate): Promis
 
   // Success path: require a valid JSON body. Swallowing parse errors here
   // would let an invalid success response be returned as FeaturePrompts
-  // with undefined fields — caller code would then read .cover_letter_prompt
+  // with undefined fields - caller code would then read .cover_letter_prompt
   // and get surprising behavior. Let the parse error propagate.
   return (await res.json()) as FeaturePrompts;
 }
@@ -339,7 +339,7 @@ export type ApiKeyProvider =
   | 'ollama';
 
 // Map an LLM provider (the active-provider axis) to its key-store provider
-// name. Mirrors the backend `_PROVIDER_KEY_MAP` (gemini → google; the local
+// name. Mirrors the backend `_PROVIDER_KEY_MAP` (gemini -> google; the local
 // providers pass through). Keys are persisted under the key-store name.
 export function llmProviderToKeyProvider(provider: LLMProvider): ApiKeyProvider {
   if (provider === 'gemini') return 'google';
@@ -453,7 +453,7 @@ const DEFAULT_RESILIENCE_FLAGS: ResilienceFlags = {
 /**
  * Fetch the P4 resilience flags. Falls back to conservative defaults (autosave
  * on, streaming/offline off) if the endpoint is unreachable, so a flag-service
- * blip never breaks the editor — it just degrades to the safe path.
+ * blip never breaks the editor - it just degrades to the safe path.
  */
 export async function fetchResilienceFlags(): Promise<ResilienceFlags> {
   try {

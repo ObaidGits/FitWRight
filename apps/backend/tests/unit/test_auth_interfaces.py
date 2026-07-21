@@ -54,7 +54,7 @@ class TestLoggingEmailSender:
         msg = EmailMessage(to="u@e.com", subject="s", text_body="x" * 5000)
         with caplog.at_level(logging.INFO, logger="app.auth.email"):
             await sender.send(msg)
-        assert "…" in caplog.text  # preview truncation marker
+        assert "..." in caplog.text  # preview truncation marker
 
 
 class TestAllowAllCaptchaVerifier:

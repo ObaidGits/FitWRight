@@ -360,7 +360,7 @@ const ResumeBuilderContent = () => {
           setInterviewPrep(data.interview_prep ?? null);
           setInterviewPrepError(null);
           // Seed the optimistic-concurrency base version + the synced content
-          // (the common ancestor used for correct conflict diff/merge — P4 R3.1/3.2).
+          // (the common ancestor used for correct conflict diff/merge - P4 R3.1/3.2).
           autosave.setBaseVersion(
             data.version ?? null,
             (data.processed_resume ?? undefined) as
@@ -861,7 +861,7 @@ const ResumeBuilderContent = () => {
             onDiscard={autosave.dismissRecovery}
           />
         )}
-        {/* P4 R5.3/R5.5: corrupt draft or queued edits → open the recovery center. */}
+        {/* P4 R5.3/R5.5: corrupt draft or queued edits -> open the recovery center. */}
         {(autosave.quarantined || recovery.hasAnything) && (
           <div
             role="alert"
@@ -892,7 +892,7 @@ const ResumeBuilderContent = () => {
             onClose={() => setShowRecoveryCenter(false)}
           />
         )}
-        {/* P4 R8.4: durable local storage is unavailable — warn (memory-only). */}
+        {/* P4 R8.4: durable local storage is unavailable - warn (memory-only). */}
         {autosave.storageDegraded && (
           <div
             role="status"

@@ -2,7 +2,7 @@
  * Cross-flow "preferred template" bridge.
  *
  * The template gallery persists the user's chosen template id here so the very
- * next resume flow (wizard, create) opens already rendered in that template —
+ * next resume flow (wizard, create) opens already rendered in that template -
  * without threading query params through every route. Reads are fully guarded
  * so this is a no-op (returns defaults) on the server or in tests.
  */

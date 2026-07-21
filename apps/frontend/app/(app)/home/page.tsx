@@ -1,9 +1,9 @@
 'use client';
 
 /**
- * Home — lightweight launchpad (Task 6 / Req 6, 7).
- * Priority order: primary action → continue where you left off → needs
- * attention → recent. No dense dashboard; links out to destinations.
+ * Home - lightweight launchpad (Task 6 / Req 6, 7).
+ * Priority order: primary action -> continue where you left off -> needs
+ * attention -> recent. No dense dashboard; links out to destinations.
  */
 import * as React from 'react';
 import Link from 'next/link';
@@ -33,8 +33,8 @@ import CircleCheck from 'lucide-react/dist/esm/icons/circle-check';
 import Circle from 'lucide-react/dist/esm/icons/circle';
 
 /**
- * Onboarding checklist that reflects live setup state: add an AI key → add a
- * resume → tailor to a job. Completed steps show a filled check; the current
+ * Onboarding checklist that reflects live setup state: add an AI key -> add a
+ * resume -> tailor to a job. Completed steps show a filled check; the current
  * step is emphasized. Replaces the previous first-run dead-end.
  */
 function FirstRunChecklist({
@@ -151,11 +151,11 @@ export default function HomePage() {
           <p className="text-[var(--muted-foreground)]">
             {setup.has_master_resume
               ? 'Your resume is ready. Finish connecting an AI provider to start tailoring.'
-              : 'Start with your master resume — upload one or build it with the wizard.'}
+              : 'Start with your master resume - upload one or build it with the wizard.'}
           </p>
         </div>
 
-        {/* Getting-started checklist — turns the dead-end into a guided path.
+        {/* Getting-started checklist - turns the dead-end into a guided path.
             Step 1 (AI key) is what a brand-new user is otherwise never told. */}
         <FirstRunChecklist aiUnconfigured={aiUnconfigured} hasResume={setup.has_master_resume} />
 

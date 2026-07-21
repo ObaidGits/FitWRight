@@ -88,7 +88,7 @@ class InterviewResponse(BaseModel):
     status: Literal["scheduled", "cancelled"]
     created_at: str
     updated_at: str
-    # Soft warning on create/reschedule (never blocks) — empty when none.
+    # Soft warning on create/reschedule (never blocks) - empty when none.
     overlaps: list[OverlapWarning] = Field(default_factory=list)
 
 

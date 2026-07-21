@@ -5,7 +5,7 @@ BeautifulSoup heuristic (drops script/style/nav/header/footer/aside; prefers the
 densest ``<article>``/``<main>``/content container; falls back to whole-body
 text). Flags **low confidence** when the result is short or looks like a
 boilerplate/blocked page, so the UI asks the user to verify before tailoring.
-No network here — pure transform, fully testable.
+No network here - pure transform, fully testable.
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ def extract_job_description(html: str, *, max_chars: int = 20000) -> tuple[str, 
     """Return ``(content, low_confidence)`` extracted from ``html``.
 
     ``low_confidence`` is True when extraction is short/uncertain (the caller
-    surfaces a "please verify" prompt before tailoring — R9.1).
+    surfaces a "please verify" prompt before tailoring - R9.1).
     """
     if not html or not html.strip():
         return "", True

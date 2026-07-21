@@ -2,7 +2,7 @@
 
 Aggregates the per-adapter circuit-breaker state (from :class:`DriftMonitor`)
 into a single health snapshot for observability + alerting. The self-healing
-itself lives in the DriftMonitor (half-open probe → close on success, re-open on
+itself lives in the DriftMonitor (half-open probe -> close on success, re-open on
 failure); this module surfaces the state and computes a fleet-level rollup.
 
 Exposed via the internal metrics endpoint so on-call can see, at a glance, which

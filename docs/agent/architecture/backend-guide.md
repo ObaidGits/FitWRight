@@ -17,18 +17,18 @@
 
 ```
 apps/backend/app/
-├── main.py         # Entry point (lifespan: TinyDB→SQLite import, legacy-key fold-in)
-├── config.py       # Settings from env/file; encrypted API-key read/write
-├── crypto.py       # Fernet encrypt/decrypt for API keys at rest
-├── database.py     # Async SQLAlchemy/SQLite facade (returns plain dicts)
-├── models.py       # SQLAlchemy declarative Base + ORM models
-├── db_engine.py    # SQLite engine/session factories (async + sync) + PRAGMAs
-├── llm.py          # Multi-provider LLM
-├── routers/        # health, config, resumes, jobs, applications, enrichment
-├── services/       # parser, improver, cover_letter
-├── schemas/        # Pydantic models (models.py, applications.py)
-├── scripts/        # migrate_tinydb_to_sqlite.py (one-time importer)
-└── prompts/        # templates.py
++-- main.py         # Entry point (lifespan: TinyDB->SQLite import, legacy-key fold-in)
++-- config.py       # Settings from env/file; encrypted API-key read/write
++-- crypto.py       # Fernet encrypt/decrypt for API keys at rest
++-- database.py     # Async SQLAlchemy/SQLite facade (returns plain dicts)
++-- models.py       # SQLAlchemy declarative Base + ORM models
++-- db_engine.py    # SQLite engine/session factories (async + sync) + PRAGMAs
++-- llm.py          # Multi-provider LLM
++-- routers/        # health, config, resumes, jobs, applications, enrichment
++-- services/       # parser, improver, cover_letter
++-- schemas/        # Pydantic models (models.py, applications.py)
++-- scripts/        # migrate_tinydb_to_sqlite.py (one-time importer)
++-- prompts/        # templates.py
 ```
 
 ## Database Operations
@@ -39,10 +39,10 @@ rows). ORM models are in `models.py`; engine plumbing is in `db_engine.py`.
 
 ```python
 await db.create_resume(content, content_type, filename, is_master, processed_data)
-await db.get_resume(resume_id) → dict | None
-await db.list_resumes() → list[dict]
+await db.get_resume(resume_id) -> dict | None
+await db.list_resumes() -> list[dict]
 await db.update_resume(resume_id, updates)
-await db.delete_resume(resume_id) → bool
+await db.delete_resume(resume_id) -> bool
 await db.set_master_resume(resume_id)            # Exactly one master allowed
 await db.create_job(content, resume_id)
 await db.create_application(...) / list_applications / bulk_update_applications
@@ -77,7 +77,7 @@ unique index. Jobs' dynamic pipeline fields (`preview_hash(es)`, `job_keywords`,
 |---------|-------------|
 | API Key Passing | Direct to litellm (avoids race conditions) |
 | JSON Mode | Auto-enabled for supported providers |
-| Retry Logic | 2 retries, temperature 0.1→0.0 |
+| Retry Logic | 2 retries, temperature 0.1->0.0 |
 | Timeouts | 30s (health), 120s (completion), 180s (JSON) |
 
 ## Prompt Guidelines
@@ -102,9 +102,9 @@ GET  /api/v1/applications        # Kanban tracker: grouped list (+ POST/PATCH/DE
 
 ## Data Flow
 
-**Upload:** File → markitdown → Markdown → LLM parse → JSON → SQLite (via `db`)
+**Upload:** File -> markitdown -> Markdown -> LLM parse -> JSON -> SQLite (via `db`)
 
-**Improve:** Resume + Job → Extract keywords (LLM) → Tailor (LLM) → Store. Routers call
+**Improve:** Resume + Job -> Extract keywords (LLM) -> Tailor (LLM) -> Store. Routers call
 services; services call `app/llm.py`; persistence goes through the async `db` facade.
 `/improve/confirm` also best-effort auto-creates an `applied` card in the tracker.
 

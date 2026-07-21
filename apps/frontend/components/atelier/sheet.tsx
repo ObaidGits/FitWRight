@@ -1,6 +1,6 @@
 'use client';
 
-/** Sheet / Drawer — mobile-first side/bottom panels (Atelier). Built on Radix Dialog. */
+/** Sheet / Drawer - mobile-first side/bottom panels (Atelier). Built on Radix Dialog. */
 import * as React from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import X from 'lucide-react/dist/esm/icons/x';
@@ -39,7 +39,7 @@ export const SheetContent = React.forwardRef<
     <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/40 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0" />
     <DialogPrimitive.Content
       ref={ref}
-      // Portaled to document.body — `atelier` makes the sheet resolve Atelier
+      // Portaled to document.body - `atelier` makes the sheet resolve Atelier
       // tokens instead of the legacy Swiss :root fallbacks.
       className={cn('atelier', sheetVariants({ side }), className)}
       {...props}

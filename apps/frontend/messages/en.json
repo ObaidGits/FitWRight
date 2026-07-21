@@ -468,7 +468,7 @@
       "outreachGenerateFailed": "Failed to generate outreach message: {error}",
       "interviewPrepGenerateFailed": "Failed to generate interview preparation: {error}",
       "aiRequiresConnection": "AI generation needs an internet connection. Reconnect and try again.",
-      "aiStreaming": "Generating with AI…",
+      "aiStreaming": "Generating with AI...",
       "draftQuarantined": "A saved local draft was unreadable and has been set aside to protect your work. Your current content is safe.",
       "storageDegraded": "Local storage is unavailable, so changes are kept in memory only for this session. Save to the server to avoid losing them.",
       "openRecoveryCenter": "Open recovery center"
@@ -675,7 +675,7 @@
       "ollamaServerUrlPlaceholder": "http://localhost:11434",
       "reasoningEffortLabel": "Reasoning effort",
       "reasoningEffortAuto": "Auto",
-      "reasoningEffortAutoDesc": "Don't send reasoning_effort — default for max compatibility",
+      "reasoningEffortAutoDesc": "Don't send reasoning_effort - default for max compatibility",
       "reasoningEffortMinimal": "Minimal",
       "reasoningEffortLow": "Low",
       "reasoningEffortMedium": "Medium",
@@ -872,7 +872,7 @@
     "validationError": "Some fields need attention. Check the highlighted fields and try again.",
     "boundary": {
       "title": "Something Went Wrong",
-      "description": "Something unexpected broke. Try reloading the page — if it keeps happening, let us know.",
+      "description": "Something unexpected broke. Try reloading the page - if it keeps happening, let us know.",
       "tryAgain": "Try Again",
       "reloadPage": "Reload Page"
     }
@@ -901,7 +901,7 @@
     "title": "Resume Wizard",
     "answerLabel": "Your answer",
     "keepAddingPrompt": "What would you like to add or change?",
-    "readyHint": "You have enough for a solid resume — review and finish whenever you are ready.",
+    "readyHint": "You have enough for a solid resume - review and finish whenever you are ready.",
     "sections": {
       "intro": "Getting started",
       "contact": "Contact details",
@@ -987,7 +987,7 @@
       "jobDescription": "Job Description",
       "noJobDescription": "No job description on file.",
       "notes": "Notes",
-      "notesPlaceholder": "Add notes about this application…",
+      "notesPlaceholder": "Add notes about this application...",
       "saveNotes": "Save notes",
       "resumeUnavailable": "The applied resume is no longer available.",
       "loadFailed": "Could not load this application.",
@@ -995,7 +995,7 @@
     },
     "bulk": {
       "selected": "{count} selected",
-      "moveTo": "Move to…",
+      "moveTo": "Move to...",
       "clear": "Clear",
       "deleteConfirmTitle": "Delete applications?",
       "deleteConfirmDescription": "Delete {count} selected application(s)? This cannot be undone."
@@ -1006,7 +1006,7 @@
       "resume": "Resume",
       "untitledResume": "Untitled resume",
       "jobDescription": "Job Description",
-      "jobDescriptionPlaceholder": "Paste the job description here…",
+      "jobDescriptionPlaceholder": "Paste the job description here...",
       "company": "Company",
       "role": "Role",
       "optional": "Optional",

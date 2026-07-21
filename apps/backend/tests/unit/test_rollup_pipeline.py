@@ -1,13 +1,13 @@
 """Unit tests for the Rollup_Pipeline orchestrator + MetricsPruneStep (Task 2.4).
 
 Covers the pipeline coordination and metrics-retention step landed in tasks
-2.1–2.3:
+2.1-2.3:
 
-- ``app.admin.rollup_pipeline.run_rollup_pipeline`` — the coordinator that runs
+- ``app.admin.rollup_pipeline.run_rollup_pipeline`` - the coordinator that runs
   every :class:`RollupStep` in :data:`PIPELINE` in order, isolates a failing step
   (whether it raises or returns a failed :class:`StepResult`) so later steps still
   run, and returns one :class:`StepResult` per step (R2.5 failure isolation).
-- ``app.admin.rollup_pipeline.MetricsPruneStep`` + ``MetricStore.prune_before`` —
+- ``app.admin.rollup_pipeline.MetricsPruneStep`` + ``MetricStore.prune_before`` -
   the retention primitive that deletes ``metrics_daily`` rows older than the
   configured window, keeps the boundary day, never touches the reserved
   ``_TOTALS_DAY`` sentinel, and is idempotent on re-run (R15.6).
@@ -61,7 +61,7 @@ class _RecordingStep:
 
 
 class _RaisingStep:
-    """A fake RollupStep that raises — the orchestrator must isolate it."""
+    """A fake RollupStep that raises - the orchestrator must isolate it."""
 
     def __init__(self, name: str, order: list[str], exc: Exception) -> None:
         self.name = name
@@ -106,7 +106,7 @@ async def _all_days(session_factory) -> set[str]:
 
 
 # ===========================================================================
-# Pipeline orchestration — run_rollup_pipeline
+# Pipeline orchestration - run_rollup_pipeline
 # ===========================================================================
 
 
@@ -152,7 +152,7 @@ class TestPipelineIsolatesFailingStep:
 
         results = await run_rollup_pipeline(_day(1))
 
-        # The raise did NOT abort the run — the later step still executed.
+        # The raise did NOT abort the run - the later step still executed.
         assert order == ["before", "raiser", "after"]
         by_name = {r.name: r for r in results}
         assert by_name["before"].ok is True
@@ -195,17 +195,17 @@ class TestPipelineIsolatesFailingStep:
 
 
 # ===========================================================================
-# MetricStore.prune_before — retention bounds (Req 15.6)
+# MetricStore.prune_before - retention bounds (Req 15.6)
 # ===========================================================================
 
 
 class TestPruneBefore:
     async def test_deletes_rows_older_than_cutoff_keeps_newer(self, isolated_db):
         store = _store(isolated_db)
-        await store.upsert("2020-01-01", "k", 1)  # older → deleted
-        await store.upsert("2020-05-31", "k", 2)  # older → deleted
-        await store.upsert("2020-06-02", "k", 3)  # newer → kept
-        await store.upsert("2020-12-31", "k", 4)  # newer → kept
+        await store.upsert("2020-01-01", "k", 1)  # older -> deleted
+        await store.upsert("2020-05-31", "k", 2)  # older -> deleted
+        await store.upsert("2020-06-02", "k", 3)  # newer -> kept
+        await store.upsert("2020-12-31", "k", 4)  # newer -> kept
 
         removed = await store.prune_before("2020-06-01")
 
@@ -213,10 +213,10 @@ class TestPruneBefore:
         assert await _all_days(isolated_db.session_factory) == {"2020-06-02", "2020-12-31"}
 
     async def test_cutoff_boundary_day_is_kept(self, isolated_db):
-        """Delete is ``day_utc < cutoff`` — a row on the cutoff day survives."""
+        """Delete is ``day_utc < cutoff`` - a row on the cutoff day survives."""
         store = _store(isolated_db)
-        await store.upsert("2020-06-01", "k", 1)  # == cutoff → kept
-        await store.upsert("2020-05-31", "k", 2)  # < cutoff → deleted
+        await store.upsert("2020-06-01", "k", 1)  # == cutoff -> kept
+        await store.upsert("2020-05-31", "k", 2)  # < cutoff -> deleted
 
         removed = await store.prune_before("2020-06-01")
 
@@ -240,8 +240,8 @@ class TestPruneBefore:
 
     async def test_exclude_days_spares_listed_days(self, isolated_db):
         store = _store(isolated_db)
-        await store.upsert("2020-01-01", "k", 1)  # excluded → kept
-        await store.upsert("2020-02-01", "k", 2)  # < cutoff, not excluded → deleted
+        await store.upsert("2020-01-01", "k", 1)  # excluded -> kept
+        await store.upsert("2020-02-01", "k", 2)  # < cutoff, not excluded -> deleted
 
         removed = await store.prune_before("2020-06-01", exclude_days=("2020-01-01",))
 
@@ -264,7 +264,7 @@ class TestPruneBefore:
 
 
 # ===========================================================================
-# MetricsPruneStep.run — cutoff computation + exclusion wiring (Req 15.6)
+# MetricsPruneStep.run - cutoff computation + exclusion wiring (Req 15.6)
 # ===========================================================================
 
 
@@ -273,13 +273,13 @@ class TestMetricsPruneStep:
         self, isolated_db, monkeypatch
     ):
         store = _store(isolated_db)
-        # Older than the retention window → deleted.
+        # Older than the retention window -> deleted.
         await store.upsert(_day(10), "k", 1)
-        # On the cutoff boundary (today - retention) → kept (delete is strict <).
+        # On the cutoff boundary (today - retention) -> kept (delete is strict <).
         await store.upsert(_day(5), "k", 2)
-        # Inside the window → kept.
+        # Inside the window -> kept.
         await store.upsert(_day(3), "k", 3)
-        # Reserved sentinel → never pruned.
+        # Reserved sentinel -> never pruned.
         await store.upsert(_TOTALS_DAY, "totalUsers", 99)
 
         # Point the step at the isolated store + a controlled retention window.

@@ -6,15 +6,15 @@ import { defineConfig, devices } from '@playwright/test';
  * Exercises the running FitWright stack (frontend :3000 + backend :8000). By
  * default it reuses an already-running dev server; in CI set the servers up
  * first (or let `webServer` boot the frontend). The AI-heavy core path
- * (tailor → cover letter → export) runs only when RUN_AI_E2E=1 and a funded,
- * non-rate-limited LLM key is configured — otherwise those steps are skipped so
+ * (tailor -> cover letter -> export) runs only when RUN_AI_E2E=1 and a funded,
+ * non-rate-limited LLM key is configured - otherwise those steps are skipped so
  * the suite stays green without burning provider quota.
  */
 export default defineConfig({
   testDir: './e2e',
   // Gated hosted auth journeys need a pre-authenticated browser + a seeded 2nd
   // device; this global setup logs in through the real backend and persists
-  // `storageState` — but ONLY when RUN_AUTH_E2E=1 (otherwise it is a no-op, so
+  // `storageState` - but ONLY when RUN_AUTH_E2E=1 (otherwise it is a no-op, so
   // the deterministic default run is untouched). See e2e/auth.setup.ts.
   globalSetup: require.resolve('./e2e/auth.setup.ts'),
   fullyParallel: false,

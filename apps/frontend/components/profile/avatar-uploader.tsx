@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 import { uploadAvatar, deleteAvatar, type AvatarResult } from '@/lib/api/profile';
 
 /**
- * AvatarUploader — the ONE canonical profile-photo upload experience.
+ * AvatarUploader - the ONE canonical profile-photo upload experience.
  *
  * Shared by Profile Settings and the resume builder's PhotoControls so there is
  * a single upload/replace/remove flow across the whole app (no duplicate logic).
@@ -184,9 +184,9 @@ export function AvatarUploader({
         </div>
         <p className="mt-1 text-xs text-[var(--muted-foreground)]" aria-live="polite">
           {busy === 'uploading'
-            ? 'Uploading…'
+            ? 'Uploading...'
             : busy === 'removing'
-              ? 'Removing…'
+              ? 'Removing...'
               : 'Drag & drop, paste, or upload. JPEG/PNG/WebP/AVIF/HEIC, up to 5 MB.'}
         </p>
       </div>

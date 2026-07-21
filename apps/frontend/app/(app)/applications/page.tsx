@@ -5,10 +5,10 @@
  *
  * Kanban board + list view across the full lifecycle. Cards move three ways so
  * every device is served intentionally:
- *   • drag-and-drop (mouse, touch, and keyboard via dnd-kit) on the board,
- *   • a one-tap "advance to next stage" control (large touch target) — the
+ *   - drag-and-drop (mouse, touch, and keyboard via dnd-kit) on the board,
+ *   - a one-tap "advance to next stage" control (large touch target) - the
  *     accessible equivalent of swipe-to-advance for mobile,
- *   • an explicit stage menu (works everywhere, screen-reader friendly).
+ *   - an explicit stage menu (works everywhere, screen-reader friendly).
  * Auto-populated on tailor; cards open the Application Workspace.
  */
 import * as React from 'react';
@@ -270,7 +270,7 @@ export default function ApplicationsPage() {
         setView('list');
       }
     } catch {
-      /* matchMedia unavailable (e.g. tests) — keep the board default */
+      /* matchMedia unavailable (e.g. tests) - keep the board default */
     }
   }, []);
   const [board, setBoard] = React.useState<ApplicationColumns>(emptyColumns);
@@ -366,7 +366,7 @@ export default function ApplicationsPage() {
                 type="search"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search role or company…"
+                placeholder="Search role or company..."
                 aria-label="Search applications"
                 className="w-full pl-9 sm:w-56"
               />

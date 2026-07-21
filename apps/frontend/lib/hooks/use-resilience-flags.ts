@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * useResilienceFlags — reads the P4 feature flags (GET /config/flags) once and
+ * useResilienceFlags - reads the P4 feature flags (GET /config/flags) once and
  * caches them (R6.4). Components use these to decide which durability paths to
  * activate: streaming vs non-stream, offline/SW registration, server autosave.
  * Falls back to safe defaults (autosave on, streaming/offline off) on error.

@@ -36,7 +36,7 @@ FRONTEND = app_settings.frontend_base_url.rstrip("/")
 
 
 # ---------------------------------------------------------------------------
-# Mock IdP provider — deterministic, records single-use codes for replay tests
+# Mock IdP provider - deterministic, records single-use codes for replay tests
 # ---------------------------------------------------------------------------
 
 
@@ -59,7 +59,7 @@ class MockProvider(OAuthProvider):
         if self.fail_exchange:
             raise OAuthError("token_exchange_failed", "boom")
         if code in self.used_codes:
-            # Single-use authorization code — replay is rejected (R4.6).
+            # Single-use authorization code - replay is rejected (R4.6).
             raise OAuthError("code_replayed", "authorization code already used")
         self.used_codes.add(code)
         return OAuthTokens(id_token=f"idtoken-for-{code}", raw={"code": code})
@@ -154,7 +154,7 @@ class TestOAuthStart:
                 params={"code": "c1", "state": state},
                 follow_redirects=False,
             )
-        # The unsafe next is dropped → falls back to /home (never off-site).
+        # The unsafe next is dropped -> falls back to /home (never off-site).
         assert cb.headers["location"] == f"{FRONTEND}/home"
 
     async def test_start_unknown_provider_404(self, auth_env):
@@ -164,7 +164,7 @@ class TestOAuthStart:
         assert resp.json()["error"]["code"] == "unknown_provider"
 
     async def test_start_unconfigured_google_clean_error(self, auth_env, monkeypatch):
-        # Google is on the allow-list but has no credentials locally → clean error,
+        # Google is on the allow-list but has no credentials locally -> clean error,
         # not a 500, and local zero-config boot is unaffected.
         monkeypatch.setattr(app_settings, "google_client_id", "")
         monkeypatch.setattr(app_settings, "google_client_secret", "")
@@ -231,7 +231,7 @@ class TestOAuthCallback:
         assert _is_cleared(_cookie_str(cb, OAUTH_TXN_COOKIE))
 
     async def test_callback_missing_state_cookie_fails(self, auth_env, mock_provider):
-        # No prior /start → no transient cookie → fail closed.
+        # No prior /start -> no transient cookie -> fail closed.
         async with _client() as client:
             cb = await client.get(
                 "/api/v1/auth/oauth/mock/callback",
@@ -315,7 +315,7 @@ class TestOAuthCallback:
 
     async def test_callback_reused_code_rejected(self, auth_env, mock_provider):
         # Even with a fresh transient cookie, a provider single-use code that was
-        # already redeemed is rejected by the provider → oauth_failed (no session).
+        # already redeemed is rejected by the provider -> oauth_failed (no session).
         async with _client() as client:
             start1 = await _start(client)
             state1 = _extract_state(start1)

@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Profile version history (P5) — a timeline of immutable snapshots with restore.
+ * Profile version history (P5) - a timeline of immutable snapshots with restore.
  *
  * Snapshots are captured automatically on every write (manual/import/merge/ai)
  * plus the initial ``migration`` baseline. Restore is non-destructive: it applies
@@ -106,7 +106,7 @@ export function VersionHistory() {
                   </div>
                   <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
                     {formatWhen(v.created_at)}
-                    {idx === 0 && ' · latest'}
+                    {idx === 0 && ' - latest'}
                   </p>
                 </div>
                 {idx !== 0 && (

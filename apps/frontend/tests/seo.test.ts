@@ -88,8 +88,8 @@ describe('buildMetadata', () => {
   });
 
   it('mirrors title/description into OpenGraph + Twitter', () => {
-    expect(md.openGraph?.title).toBe(`Contact · ${SITE_NAME}`);
-    expect(md.twitter?.title).toBe(`Contact · ${SITE_NAME}`);
+    expect(md.openGraph?.title).toBe(`Contact - ${SITE_NAME}`);
+    expect(md.twitter?.title).toBe(`Contact - ${SITE_NAME}`);
     expect(md.openGraph?.description).toBe('Reach out.');
   });
 
@@ -114,7 +114,7 @@ describe('buildMetadata', () => {
   });
 });
 
-describe('structured data — entity graph', () => {
+describe('structured data - entity graph', () => {
   it('Organization links the founder Person and lists sameAs', () => {
     const org = organizationSchema();
     expect(org['@type']).toBe('Organization');
@@ -174,7 +174,7 @@ describe('structured data — entity graph', () => {
   });
 });
 
-describe('structured data — content schemas', () => {
+describe('structured data - content schemas', () => {
   it('FAQPage mirrors the provided Q/A pairs', () => {
     const faqs = [
       { q: 'Q1?', a: 'A1.' },
@@ -365,7 +365,7 @@ describe('capability landing pages', () => {
     const descriptions = new Set<string>();
     for (const slug of CAPABILITY_SLUGS) {
       const c = CAPABILITIES[slug];
-      // Unique title/description — no duplicate metadata across pages.
+      // Unique title/description - no duplicate metadata across pages.
       expect(titles.has(c.metaTitle)).toBe(false);
       expect(descriptions.has(c.metaDescription)).toBe(false);
       titles.add(c.metaTitle);
@@ -377,7 +377,7 @@ describe('capability landing pages', () => {
     }
   });
 
-  it('is fully cross-linked (nav covers every capability — no orphans)', () => {
+  it('is fully cross-linked (nav covers every capability - no orphans)', () => {
     const navSlugs = CAPABILITY_NAV.map((n) => n.slug).sort();
     expect(navSlugs).toEqual([...CAPABILITY_SLUGS].sort());
     expect(capabilityPath('resume-tailoring')).toBe('/resume-tailoring');

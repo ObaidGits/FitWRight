@@ -137,7 +137,7 @@ export const ResumeModern: React.FC<ResumeModernProps> = ({
                     >
                       {exp.description.map((desc, index) => (
                         <li key={index} className="flex">
-                          <span className="mr-1.5 flex-shrink-0">•&nbsp;</span>
+                          <span className="mr-1.5 flex-shrink-0">-&nbsp;</span>
                           <span>
                             <SafeHtml html={desc} />
                           </span>
@@ -224,7 +224,7 @@ export const ResumeModern: React.FC<ResumeModernProps> = ({
                     >
                       {project.description.map((desc, index) => (
                         <li key={index} className="flex">
-                          <span className="mr-1.5 flex-shrink-0">•&nbsp;</span>
+                          <span className="mr-1.5 flex-shrink-0">-&nbsp;</span>
                           <span>
                             <SafeHtml html={desc} />
                           </span>
@@ -525,7 +525,7 @@ function renderDynamicContent(
                 <ul className={`ml-4 ${baseStyles['resume-list']} ${baseStyles['resume-text-sm']}`}>
                   {item.description.map((desc, index) => (
                     <li key={index} className="flex">
-                      <span className="mr-1.5 flex-shrink-0">•&nbsp;</span>
+                      <span className="mr-1.5 flex-shrink-0">-&nbsp;</span>
                       <span>
                         <SafeHtml html={desc} />
                       </span>

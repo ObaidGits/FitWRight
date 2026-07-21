@@ -1,7 +1,7 @@
-"""Notification Center endpoints (P3 §B, Requirements 4–6).
+"""Notification Center endpoints (P3 §B, Requirements 4-6).
 
 User-scoped, auth-guarded, cursor-paginated, and gated by the ``NOTIFICATIONS``
-feature flag (off → 404). The unread badge reads the denormalized O(1) counter
+feature flag (off -> 404). The unread badge reads the denormalized O(1) counter
 (never a COUNT scan); the transport (polling vs SSE) is advertised to the client
 so the same endpoints back both delivery modes.
 """
@@ -111,7 +111,7 @@ async def mark_all_read(
     user_id: str = Depends(get_effective_user_id),
     _: None = Depends(_require_enabled),
 ) -> ActionResponse:
-    """Mark all unread notifications read; unread counter → 0."""
+    """Mark all unread notifications read; unread counter -> 0."""
     affected = await get_notification_repo().mark_all_read(user_id)
     return ActionResponse(affected=affected)
 

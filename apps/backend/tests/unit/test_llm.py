@@ -16,7 +16,7 @@ class TestSupportsTemperature:
     """Tests for _supports_temperature()."""
 
     def test_none_temperature_returns_true(self):
-        """When temperature is None, the caller isn't setting a value — allow."""
+        """When temperature is None, the caller isn't setting a value - allow."""
         assert _supports_temperature("gpt-4", None) is True
 
     def test_ollama_always_true(self):
@@ -34,7 +34,7 @@ class TestSupportsTemperature:
 
     @patch("app.llm.litellm.get_model_info")
     def test_model_without_temperature_param(self, mock_get_model_info):
-        """Model registry omits temperature → not supported."""
+        """Model registry omits temperature -> not supported."""
         mock_get_model_info.return_value = {
             "supported_openai_params": ["max_tokens"]
         }
@@ -47,7 +47,7 @@ class TestSupportsTemperature:
             "supported_openai_params": ["temperature", "max_tokens"]
         }
         assert _supports_temperature("anthropic/claude-opus-4-7", 0.7) is False
-        # Also check with temperature=1 — still deprecated
+        # Also check with temperature=1 - still deprecated
         assert _supports_temperature("anthropic/claude-opus-4-7", 1.0) is False
 
     @patch("app.llm.litellm.get_model_info")
@@ -61,7 +61,7 @@ class TestSupportsTemperature:
 
     @patch("app.llm.litellm.get_model_info")
     def test_model_not_in_registry(self, mock_get_model_info):
-        """Unknown model not in registry — be conservative, skip temperature."""
+        """Unknown model not in registry - be conservative, skip temperature."""
         mock_get_model_info.side_effect = Exception("model not found")
         assert _supports_temperature("unknown-vendor/model", 0.7) is False
 
@@ -98,7 +98,7 @@ class TestGetRetryTemperature:
 
     @patch("app.llm.litellm.get_model_info")
     def test_opus4_returns_none(self, mock_get_model_info):
-        """Opus 4 doesn't support temperature → None on all retries."""
+        """Opus 4 doesn't support temperature -> None on all retries."""
         mock_get_model_info.return_value = {
             "supported_openai_params": ["temperature", "max_tokens"]
         }
@@ -107,7 +107,7 @@ class TestGetRetryTemperature:
 
     @patch("app.llm.litellm.get_model_info")
     def test_kimi_k26_returns_one(self, mock_get_model_info):
-        """Kimi K2.6 only allows temperature=1 → always 1.0."""
+        """Kimi K2.6 only allows temperature=1 -> always 1.0."""
         mock_get_model_info.return_value = {
             "supported_openai_params": ["temperature", "max_tokens"]
         }
@@ -176,7 +176,7 @@ class TestAppearsTruncated:
         assert _appears_truncated(data, schema_type="resume") is False
 
     def test_resume_missing_fields_not_empty(self):
-        """Missing fields are not the same as empty arrays — not flagged."""
+        """Missing fields are not the same as empty arrays - not flagged."""
         data = {
             "personalInfo": {"name": "John"},
             "workExperience": [{"title": "Dev"}],
@@ -258,14 +258,14 @@ class TestCompleteJsonFallback:
     ):
         """When JSON mode returns invalid JSON, fallback to prompt-only mode.
 
-        First call: JSON mode enabled → returns malformed JSON (trailing comma)
-          → _extract_json succeeds → json.loads fails → JSONDecodeError
-        Second call: JSON mode disabled → returns valid JSON → success
+        First call: JSON mode enabled -> returns malformed JSON (trailing comma)
+          -> _extract_json succeeds -> json.loads fails -> JSONDecodeError
+        Second call: JSON mode disabled -> returns valid JSON -> success
         """
         mock_supports_json.return_value = True
         mock_get_name.return_value = "openrouter/openai/gpt-5.4"
 
-        # First response: balanced braces but trailing comma → json.loads fails
+        # First response: balanced braces but trailing comma -> json.loads fails
         bad_choice = MagicMock()
         bad_choice.message.content = '{"items_to_enrich": [], "questions": [],}'
         bad_response = MagicMock()
@@ -312,9 +312,9 @@ class TestCompleteJsonFallback:
         """Issue #857: an OpenAI-compatible server (e.g. LM Studio) rejects
         ``response_format={"type": "json_object"}`` with a 400.
 
-        First call: JSON mode enabled → server raises ``BadRequestError``
+        First call: JSON mode enabled -> server raises ``BadRequestError``
           ("'response_format.type' must be 'json_schema' or 'text'").
-        Second call: JSON mode disabled → returns valid JSON → success.
+        Second call: JSON mode disabled -> returns valid JSON -> success.
 
         Before the fix the 400 was re-raised immediately (the existing fallback
         only handled malformed JSON, not rejection of the parameter itself),
@@ -414,7 +414,7 @@ class TestCompleteJsonFallback:
     ):
         """A 400 unrelated to response_format must still propagate, not retry.
 
-        Uses a context-length error that *also names* response_format — the
+        Uses a context-length error that *also names* response_format - the
         false-positive case raised in review (cubic/Kilo). Dropping JSON mode
         would not help, so the fallback must NOT fire and the error must surface.
         """

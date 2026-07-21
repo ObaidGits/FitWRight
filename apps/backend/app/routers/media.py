@@ -40,7 +40,7 @@ async def get_avatar(user_id: str, filename: str) -> FileResponse:
         target,
         media_type="image/webp",
         # Object keys are content-unique (per-upload UUID + checksum dedup), so a
-        # given URL never changes — cache it immutably for a year (a new photo
+        # given URL never changes - cache it immutably for a year (a new photo
         # gets a new URL). Mirrors Cloudinary's immutable CDN delivery.
         headers={"Cache-Control": "public, max-age=31536000, immutable"},
     )

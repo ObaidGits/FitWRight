@@ -2,13 +2,13 @@
 
 Two distinct CSRF defenses live here (design `§Session mechanics`, R12.1/12.2):
 
-1. **Per-session double-submit** — once a session exists, the JS-readable
+1. **Per-session double-submit** - once a session exists, the JS-readable
    ``csrf`` cookie carries ``HMAC(session.csrf_secret, session.id)``. Every state-
    changing request must echo that value in the ``X-CSRF-Token`` header; the
    server recomputes and compares in constant time. Because the value is bound to
    a server-side secret (``csrf_secret``, stored on the session row) an attacker
    who can only *set* a cookie cannot forge a matching header.
-2. **Pre-session token** — login and signup happen before any session exists, so
+2. **Pre-session token** - login and signup happen before any session exists, so
    they are protected against *login-CSRF* by a signed double-submit token from
    ``GET /auth/csrf``: a random nonce plus ``HMAC(SESSION_SECRET, nonce)``. The
    value is placed in a cookie and returned in the body; the client submits it in
@@ -18,8 +18,8 @@ Two distinct CSRF defenses live here (design `§Session mechanics`, R12.1/12.2):
    makes secret rotation seamless (R16.3).
 
 Also here: :func:`validate_next_path`, the shared open-redirect guard used by
-login and OAuth — a safe ``next`` must be a single-leading-slash, same-origin app
-path (``//host``, ``https://…``, and backslash tricks are rejected, R11.4).
+login and OAuth - a safe ``next`` must be a single-leading-slash, same-origin app
+path (``//host``, ``https://...``, and backslash tricks are rejected, R11.4).
 """
 
 from __future__ import annotations
@@ -73,7 +73,7 @@ def verify_csrf_token(provided: str | None, session_id: str, csrf_secret: str) -
 
 
 # ---------------------------------------------------------------------------
-# Pre-session CSRF (signed double-submit for login/signup — login-CSRF defense)
+# Pre-session CSRF (signed double-submit for login/signup - login-CSRF defense)
 # ---------------------------------------------------------------------------
 
 
@@ -138,8 +138,8 @@ def validate_next_path(next_path: str | None) -> str | None:
     Rules (R11.4): the value must be a non-empty string that starts with a single
     ``/`` and is **not** a scheme-relative (``//host``) or protocol
     (``https:``) URL, and must contain no backslash (which some browsers
-    normalize to ``/``) or control characters. Anything else — including an
-    absolute URL to another origin — is rejected so a crafted ``next`` cannot
+    normalize to ``/``) or control characters. Anything else - including an
+    absolute URL to another origin - is rejected so a crafted ``next`` cannot
     bounce the user off-site after login.
     """
     if not next_path or not isinstance(next_path, str):
@@ -151,7 +151,7 @@ def validate_next_path(next_path: str | None) -> str | None:
     if "\\" in next_path:
         return None
     # Must be an absolute *path* on this origin: exactly one leading slash.
-    # ``//host`` (scheme-relative) and any absolute URL are thereby rejected —
+    # ``//host`` (scheme-relative) and any absolute URL are thereby rejected -
     # an absolute URL like ``https://evil`` does not start with ``/`` at all.
     if not next_path.startswith("/") or next_path.startswith("//"):
         return None

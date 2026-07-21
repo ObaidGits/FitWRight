@@ -6,7 +6,7 @@ truly index-served at scale (Requirements 4.2, 11.1, 11.2):
 - **Postgres** (the hosted target): prefix `LIKE 'x%'` on a non-C collation only
   uses a btree index when it is declared with the ``text_pattern_ops`` operator
   class. So we add ``ix_users_email_pattern (email text_pattern_ops)`` and
-  ``ix_users_name_lower_pattern (lower(name) text_pattern_ops)`` — the email is
+  ``ix_users_name_lower_pattern (lower(name) text_pattern_ops)`` - the email is
   matched on the bare (lowercase-normalized) column and the name on
   ``lower(name)``. Plus ``ix_sessions_last_seen_at (last_seen_at)`` so the
   active-user range filter (`last_seen_at >= cutoff`) is an index range scan

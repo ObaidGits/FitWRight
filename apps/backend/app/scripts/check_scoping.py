@@ -4,14 +4,14 @@ This is the enforcement counterpart to :class:`app.repository.Repo`. It statical
 analyzes the backend source with the ``ast`` module and fails if either rule is
 violated:
 
-**Rule 1 — owned queries live only in the repository layer.** Any ORM query
-against an owned table (``select(Resume)``, ``session.get(Job, …)``,
+**Rule 1 - owned queries live only in the repository layer.** Any ORM query
+against an owned table (``select(Resume)``, ``session.get(Job, ...)``,
 ``delete(ApiKey)``, ``update(Application)``, ``select(func.count()).select_from(
 Improvement)``) is allowed only inside ``app/database.py`` (the ``Repo`` layer)
 and a small set of documented system files. A router or service that builds an
 owned query directly is a scoping-bypass risk and is rejected.
 
-**Rule 2 — every repository method that queries an owned table is scoped.**
+**Rule 2 - every repository method that queries an owned table is scoped.**
 Inside ``app/database.py``, any function that builds an owned-table query must
 reference ``user_id`` (it composes the scope through ``Repo.scoped`` /
 ``Repo.owns`` / a ``user_id`` filter). A function touching an owned table without
@@ -19,7 +19,7 @@ reference ``user_id`` (it composes the scope through ``Repo.scoped`` /
 
 System files that legitimately run unscoped (schema definitions, the ``Repo``
 composer itself, the bootstrap owner backfill, one-time importers, and Alembic
-migrations) are allow-listed — they operate before/around multi-user and are not
+migrations) are allow-listed - they operate before/around multi-user and are not
 user-facing request paths.
 
 Run standalone: ``uv run python -m app.scripts.check_scoping`` (exit code 1 on
@@ -138,7 +138,7 @@ def _is_allowlisted(path: Path) -> bool:
 
 
 def check_source(app_dir: Path) -> list[Violation]:
-    """Return all scoping violations under ``app_dir`` (empty ⇒ clean)."""
+    """Return all scoping violations under ``app_dir`` (empty => clean)."""
     violations: list[Violation] = []
     for path in sorted(app_dir.rglob("*.py")):
         rel = path.relative_to(app_dir.parent)
@@ -174,7 +174,7 @@ def check_source(app_dir: Path) -> list[Violation]:
                     str(rel),
                     line,
                     "owned-table query issued outside the repository layer "
-                    "(app/database.py) — route it through the db facade / Repo.scoped",
+                    "(app/database.py) - route it through the db facade / Repo.scoped",
                 )
             )
     return violations
@@ -184,9 +184,9 @@ def main() -> int:
     app_dir = Path(__file__).resolve().parents[1]  # .../app
     violations = check_source(app_dir)
     if not violations:
-        print("scoping guard: OK — no unscoped owned-table queries found")
+        print("scoping guard: OK - no unscoped owned-table queries found")
         return 0
-    print("scoping guard: FAILED — unscoped owned-table query violations:")
+    print("scoping guard: FAILED - unscoped owned-table query violations:")
     for v in violations:
         print(f"  {v.path}:{v.line}: {v.message}")
     return 1

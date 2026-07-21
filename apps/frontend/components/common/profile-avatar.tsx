@@ -4,15 +4,15 @@ import React from 'react';
 import { toSrcSetAttr, type SrcsetEntry } from '@/lib/cloudinary';
 
 /**
- * ProfileAvatar — the shared, SEO-/perf-optimized public photo display.
+ * ProfileAvatar - the shared, SEO-/perf-optimized public photo display.
  *
  * Used by every *public* surface (profile page, portfolio) so there is one
- * avatar rendering path. It derives nothing itself — the responsive `srcset` is
+ * avatar rendering path. It derives nothing itself - the responsive `srcset` is
  * built server-side from the canonical master (`avatarSrcset`) so no extra bytes
  * are stored. Features: responsive `srcSet` + `sizes`, explicit width/height for
  * CLS reservation, dominant-colour placeholder (no layout jank), `decoding`,
- * and a loading strategy (`priority` → eager + high fetchpriority for above-the-
- * fold hero; lazy otherwise). Falls back to initials when there is no photo — or
+ * and a loading strategy (`priority` -> eager + high fetchpriority for above-the-
+ * fold hero; lazy otherwise). Falls back to initials when there is no photo - or
  * if the image fails to load at runtime (transient CDN/404), via `onError`.
  *
  * A client component so the `onError` fallback works; the initial `<img>` (with
@@ -27,7 +27,7 @@ export interface ProfileAvatarProps {
   sizes?: string;
   name?: string | null;
   dominantColor?: string | null;
-  /** Above-the-fold hero → eager load + high fetchpriority. */
+  /** Above-the-fold hero -> eager load + high fetchpriority. */
   priority?: boolean;
   className?: string;
 }
@@ -81,7 +81,7 @@ export function ProfileAvatar({
         src={url}
         srcSet={srcSet}
         sizes={srcSet ? (sizes ?? `${size}px`) : undefined}
-        alt={name ? `${name} — profile photo` : 'Profile photo'}
+        alt={name ? `${name} - profile photo` : 'Profile photo'}
         width={size}
         height={size}
         loading={priority ? 'eager' : 'lazy'}

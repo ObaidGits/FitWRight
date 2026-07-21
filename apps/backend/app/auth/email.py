@@ -3,7 +3,7 @@
 Auth flows (verification links, password-reset links, email-change confirmation)
 send mail through the :class:`EmailSender` interface, never a concrete provider.
 The shipped default, :class:`LoggingEmailSender`, is the *intended* local/dev
-behavior — it logs the message (subject + recipient + a redacted body preview)
+behavior - it logs the message (subject + recipient + a redacted body preview)
 so a developer running without an email provider can copy the verification/reset
 link straight from the server log. It is a real, working adapter, not a stub.
 
@@ -45,7 +45,7 @@ __all__ = [
     "PermanentEmailError",
 ]
 
-# Resend transactional-email send endpoint (fixed — SSRF-safe).
+# Resend transactional-email send endpoint (fixed - SSRF-safe).
 RESEND_SEND_ENDPOINT = "https://api.resend.com/emails"
 
 # Default bounded retry policy for transient send failures (see send_email_safe).
@@ -56,7 +56,7 @@ _EMAIL_BASE_DELAY = 0.5
 class PermanentEmailError(Exception):
     """A send failed for a non-retryable reason (bad recipient/sender, 4xx).
 
-    Senders raise this to tell :func:`send_email_safe` NOT to retry — retrying a
+    Senders raise this to tell :func:`send_email_safe` NOT to retry - retrying a
     rejected recipient or an auth/validation error only wastes attempts and can
     look like abuse to the provider. Any *other* exception is treated as
     transient and retried with backoff.
@@ -75,9 +75,9 @@ async def send_email_safe(
 
     The enumeration-safe auth flows (verification/reset request) MUST return
     their uniform acknowledgement even when the transactional-email provider is
-    down (design §Reliability): a provider outage must never surface as a 500 —
+    down (design §Reliability): a provider outage must never surface as a 500 -
     which would leak, via the differing response, that the address is registered
-    — nor block the caller.
+    - nor block the caller.
 
     Transient failures (network blips, disconnects, 429/5xx) are retried up to
     ``attempts`` times with exponential backoff; a :class:`PermanentEmailError`
@@ -133,7 +133,7 @@ def _link(base_url: str, path: str, raw_token: str) -> str:
     """Build a frontend link carrying a raw token in the query string.
 
     The raw token lives only in this link and in the email body preview logged
-    by the dev sender — never in the database (only its ``sha256`` is stored).
+    by the dev sender - never in the database (only its ``sha256`` is stored).
     """
     from urllib.parse import quote
 
@@ -187,7 +187,7 @@ def _render_branded_email(
         f"This link will expire in {expires_phrase}.\n\n"
         f"{security_note}\n\n"
         f"Need help? Contact us at {_SUPPORT_EMAIL}.\n\n"
-        f"— The {_BRAND_NAME} team"
+        f"- The {_BRAND_NAME} team"
     )
 
     safe_heading = _html_escape(heading)
@@ -234,7 +234,7 @@ def _render_branded_email(
 def build_verification_email(
     *, to: str, raw_token: str, base_url: str, expires_seconds: int = 60 * 60 * 24
 ) -> "EmailMessage":
-    """Compose the branded email-verification message (link → ``/verify``).
+    """Compose the branded email-verification message (link -> ``/verify``).
 
     Includes an HTML + plain-text body with branding, a verify button, a
     plain-URL fallback, an expiration notice, a security note, and a support
@@ -253,12 +253,12 @@ def build_verification_email(
         expires_phrase=_humanize_duration(expires_seconds),
         security_note=(
             "If you didn't create a FitWright account, you can safely ignore this "
-            "message — no account will be activated."
+            "message - no account will be activated."
         ),
     )
     return EmailMessage(
         to=to,
-        subject=f"Verify your email address — {_BRAND_NAME}",
+        subject=f"Verify your email address - {_BRAND_NAME}",
         text_body=text_body,
         html_body=html_body,
     )
@@ -267,7 +267,7 @@ def build_verification_email(
 def build_password_reset_email(
     *, to: str, raw_token: str, base_url: str, expires_seconds: int = 60 * 30
 ) -> "EmailMessage":
-    """Compose the branded password-reset message (link → ``/reset``)."""
+    """Compose the branded password-reset message (link -> ``/reset``)."""
     link = _link(base_url, "/reset", raw_token)
     text_body, html_body = _render_branded_email(
         heading="Reset your password",
@@ -279,13 +279,13 @@ def build_password_reset_email(
         link=link,
         expires_phrase=_humanize_duration(expires_seconds),
         security_note=(
-            "If you didn't request this, you can safely ignore this message — your "
+            "If you didn't request this, you can safely ignore this message - your "
             "password will not change."
         ),
     )
     return EmailMessage(
         to=to,
-        subject=f"Reset your password — {_BRAND_NAME}",
+        subject=f"Reset your password - {_BRAND_NAME}",
         text_body=text_body,
         html_body=html_body,
     )
@@ -294,7 +294,7 @@ def build_password_reset_email(
 def build_email_change_email(
     *, to: str, raw_token: str, base_url: str, expires_seconds: int = 60 * 60 * 24
 ) -> "EmailMessage":
-    """Compose the branded email-change confirmation (link → ``/verify-email``).
+    """Compose the branded email-change confirmation (link -> ``/verify-email``).
 
     Sent to the *new* address in a verify-before-switch email change (R7.4): the
     account's primary email only changes once this link is confirmed.
@@ -311,13 +311,13 @@ def build_email_change_email(
         link=link,
         expires_phrase=_humanize_duration(expires_seconds),
         security_note=(
-            "If you didn't request this, you can safely ignore this message — your "
+            "If you didn't request this, you can safely ignore this message - your "
             "account email will not change."
         ),
     )
     return EmailMessage(
         to=to,
-        subject=f"Confirm your new email address — {_BRAND_NAME}",
+        subject=f"Confirm your new email address - {_BRAND_NAME}",
         text_body=text_body,
         html_body=html_body,
     )
@@ -391,7 +391,7 @@ def build_review_notification_email(
     lines += ["", "Review:", body]
     return EmailMessage(
         to=to,
-        subject=f"[FitWright review] {rating}★ — {title}",
+        subject=f"[FitWright review] {rating}★ - {title}",
         text_body="\n".join(lines),
     )
 
@@ -403,15 +403,15 @@ def build_contact_acknowledgement_email(
     first = name.split(" ", 1)[0] if name else "there"
     return EmailMessage(
         to=to,
-        subject="Thanks for reaching out — FitWright",
+        subject="Thanks for reaching out - FitWright",
         text_body=(
             f"Hi {first},\n\n"
             "Thanks for getting in touch. Your message has been received and I'll "
-            "get back to you as soon as I can — typically within 1–2 business days.\n\n"
+            "get back to you as soon as I can - typically within 1-2 business days.\n\n"
             f"Reference: {reference}\n"
             f"Subject: {subject}\n\n"
             "If your message is time-sensitive, just reply to this email.\n\n"
-            "— Obaidullah Zeeshan · FitWright"
+            "- Obaidullah Zeeshan - FitWright"
         ),
     )
 
@@ -429,7 +429,7 @@ def _preview(body: str, *, limit: int = 200) -> str:
     """Single-line, length-bounded preview of a body for safe logging."""
     collapsed = " ".join(body.split())
     if len(collapsed) > limit:
-        return collapsed[:limit] + "…"
+        return collapsed[: limit - 3] + "..."
     return collapsed
 
 
@@ -474,7 +474,7 @@ def _build_mime(message: "EmailMessage", *, sender: str) -> MimeEmailMessage:
 class SmtpTransport(Protocol):
     """Minimal transport seam over ``smtplib`` so the SMTP sender is testable.
 
-    Tests monkeypatch this with an in-memory fake — no real socket is opened.
+    Tests monkeypatch this with an in-memory fake - no real socket is opened.
     """
 
     def send(self, mime: MimeEmailMessage) -> None:
@@ -565,7 +565,7 @@ class SmtpEmailSender(EmailSender):
             smtplib.SMTPSenderRefused,
             smtplib.SMTPNotSupportedError,
         ) as exc:
-            # Permanent: recipient/sender rejected or feature unsupported — no
+            # Permanent: recipient/sender rejected or feature unsupported - no
             # amount of retrying will help, so don't (send_email_safe honors this).
             raise PermanentEmailError(str(exc)) from exc
 
@@ -579,7 +579,7 @@ class ResendHttpClient(Protocol):
 
 
 class HttpxResendClient:
-    """Default httpx-backed Resend client (fixed endpoint — SSRF-safe)."""
+    """Default httpx-backed Resend client (fixed endpoint - SSRF-safe)."""
 
     def __init__(self, *, timeout: float = 10.0) -> None:
         self._timeout = timeout
@@ -644,7 +644,7 @@ class ResendEmailSender(EmailSender):
                 json=body,
             )
         except Exception as exc:
-            # A permanent 4xx (bad request / auth / invalid recipient — but NOT
+            # A permanent 4xx (bad request / auth / invalid recipient - but NOT
             # 429 rate limit) should not be retried; 429 and 5xx are transient.
             status = getattr(getattr(exc, "response", None), "status_code", None)
             if isinstance(status, int) and 400 <= status < 500 and status != 429:

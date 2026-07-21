@@ -3,7 +3,7 @@
 This is the runtime half of the Supabase-readiness proof. It complements the
 Alembic chain (which owns the schema on Postgres) by exercising the *application*
 data layer against a **real Postgres** reached through a **transaction-mode
-connection pooler** — i.e. exactly the topology Supabase uses (PgBouncer on the
+connection pooler** - i.e. exactly the topology Supabase uses (PgBouncer on the
 6543 pooled endpoint).
 
 Why a pooler is the interesting case: under transaction pooling a client's
@@ -15,7 +15,7 @@ psycopg, both behind ``NullPool``). If that config is wrong, the repeated-query
 stress loop below fails with ``prepared statement "__asyncpg_stmt_..." already
 exists``. A clean run proves the pooler-safe path works.
 
-Prerequisites (the harness does NOT migrate — keep migration on the DIRECT
+Prerequisites (the harness does NOT migrate - keep migration on the DIRECT
 connection, mirroring the runbook):
 
     # 1) migrate schema on the DIRECT (non-pooled) connection
@@ -49,7 +49,7 @@ def _require_env() -> None:
     if not url:
         sys.exit("DATABASE_URL is required (point it at the POOLED Postgres endpoint).")
     if url.startswith("sqlite"):
-        sys.exit("DATABASE_URL must be a Postgres URL — this harness verifies Postgres, not SQLite.")
+        sys.exit("DATABASE_URL must be a Postgres URL - this harness verifies Postgres, not SQLite.")
 
 
 class _Check:
@@ -62,7 +62,7 @@ class _Check:
     def ok(self, label: str, condition: bool, detail: str = "") -> None:
         self.count += 1
         mark = "PASS" if condition else "FAIL"
-        suffix = f" — {detail}" if detail else ""
+        suffix = f" - {detail}" if detail else ""
         print(f"  [{mark}] {label}{suffix}", flush=True)
         if not condition:
             self.failures.append(label)

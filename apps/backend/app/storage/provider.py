@@ -1,13 +1,13 @@
 """Pluggable object-storage provider (design §H, ADR-10).
 
 ``STORAGE_PROVIDER`` selects the adapter with no code change:
-- ``local`` (dev default) — writes under ``data/avatars`` and serves via a
+- ``local`` (dev default) - writes under ``data/avatars`` and serves via a
   backend static path; a real, working adapter (not a stub).
-- ``cloudinary`` (free tier) — uploads via the Cloudinary REST API using a
+- ``cloudinary`` (free tier) - uploads via the Cloudinary REST API using a
   server-side signature (no browser secret), returns the CDN URL.
-- ``s3`` (premium) — reserved; raises a clear error until configured.
+- ``s3`` (premium) - reserved; raises a clear error until configured.
 
-The interface is intentionally tiny: ``put`` (bytes → key + public URL) and
+The interface is intentionally tiny: ``put`` (bytes -> key + public URL) and
 ``delete`` (key), which is all the avatar pipeline + orphan GC need.
 """
 
@@ -42,7 +42,7 @@ class StorageError(Exception):
 
 
 # HTTP statuses worth retrying (transient): request timeout, too-early, rate
-# limit, and the 5xx family. A 4xx like 400/401 is a permanent error — no retry.
+# limit, and the 5xx family. A 4xx like 400/401 is a permanent error - no retry.
 _TRANSIENT_STATUS = frozenset({408, 425, 429, 500, 502, 503, 504})
 
 
@@ -67,7 +67,7 @@ class LocalStorageProvider(StorageProvider):
         self._root.mkdir(parents=True, exist_ok=True)
 
     def _safe_path(self, key: str) -> Path:
-        # Prevent path traversal — the key is server-generated, but defense in depth.
+        # Prevent path traversal - the key is server-generated, but defense in depth.
         target = (self._root / key).resolve()
         if not str(target).startswith(str(self._root.resolve())):
             raise ValueError("invalid storage key")
@@ -106,7 +106,7 @@ class CloudinaryTransport(Protocol):
 
 
 class _HttpxCloudinaryTransport:
-    """Default httpx-backed transport (fixed Cloudinary host — SSRF-safe)."""
+    """Default httpx-backed transport (fixed Cloudinary host - SSRF-safe)."""
 
     def __init__(self, *, timeout: float = 15.0) -> None:
         self._timeout = timeout
@@ -139,7 +139,7 @@ class CloudinaryStorageProvider(StorageProvider):
     Production hardening: bounded **retries with exponential backoff** on
     transient failures (network errors, 429, 5xx), a hard per-request
     **timeout**, and permanent 4xx failures that fail fast (no wasteful retry).
-    ``put`` raises :class:`StorageError` on exhaustion (router → 503); ``delete``
+    ``put`` raises :class:`StorageError` on exhaustion (router -> 503); ``delete``
     is best-effort (a failed delete only leaves an orphan the GC job reclaims).
     """
 
@@ -177,7 +177,7 @@ class CloudinaryStorageProvider(StorageProvider):
             is_last = attempt == self._max_attempts - 1
             try:
                 status, payload = await self._transport.post(url, data=data, files=files)
-            except Exception as exc:  # transport/network error → transient
+            except Exception as exc:  # transport/network error -> transient
                 last_detail = f"transport error: {exc!r}"
                 if is_last:
                     raise StorageError(last_detail) from exc
@@ -189,7 +189,7 @@ class CloudinaryStorageProvider(StorageProvider):
                 last_detail = f"transient status {status}"
                 await self._sleep(self._base_delay * (2**attempt))
                 continue
-            # Permanent 4xx (or transient on the last attempt) → fail.
+            # Permanent 4xx (or transient on the last attempt) -> fail.
             raise StorageError(f"cloudinary responded {status}")
         raise StorageError(last_detail)  # pragma: no cover - loop always returns/raises
 

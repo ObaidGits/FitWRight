@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Per-application reminder + interview hooks (P3 §E/§F) — TanStack Query.
+ * Per-application reminder + interview hooks (P3 §E/§F) - TanStack Query.
  *
  * Reads are keyed per application; every mutation invalidates both the per-app
  * list and the global agenda so all surfaces stay consistent.

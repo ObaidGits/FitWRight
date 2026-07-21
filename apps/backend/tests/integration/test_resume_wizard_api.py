@@ -123,7 +123,7 @@ async def test_finalize_creates_ready_master_resume(isolated_db, owner_id) -> No
 async def test_finalize_saves_regular_resume_when_master_exists(
     isolated_db, owner_id, sample_resume
 ) -> None:
-    # When a master already exists, saving from the wizard must NOT fail — it
+    # When a master already exists, saving from the wizard must NOT fail - it
     # saves a regular (non-master) resume and never replaces the master.
     await isolated_db.create_resume(
         owner_id,
@@ -228,7 +228,7 @@ async def test_turn_skip_advances_without_llm_or_modifying_resume_data(isolated_
     state.step = "question"
     state.current_question = ResumeWizardQuestion(text="Education?", section="education")
 
-    # W-P0.4: skip is deterministic — it must make ZERO LLM calls.
+    # W-P0.4: skip is deterministic - it must make ZERO LLM calls.
     with patch(
         "app.services.resume_wizard.complete_json",
         new_callable=AsyncMock,
@@ -475,7 +475,7 @@ async def test_assist_parse_entries(isolated_db) -> None:
                 "title": "Full Stack Engineer Intern",
                 "company": "TechStax",
                 "location": "Remote",
-                "years": "Jul 2025 – Jan 2026",
+                "years": "Jul 2025 - Jan 2026",
                 "description": ["Engineered backend APIs"],
             }
         ]
@@ -491,7 +491,7 @@ async def test_assist_parse_entries(isolated_db) -> None:
                 json={
                     "kind": "parse_entries",
                     "section": "workExperience",
-                    "text": "TechStax\nRemote\nFull Stack Engineer Intern\nJul 2025 – Jan 2026",
+                    "text": "TechStax\nRemote\nFull Stack Engineer Intern\nJul 2025 - Jan 2026",
                 },
             )
     assert response.status_code == 200
@@ -525,7 +525,7 @@ async def test_turn_structured_requires_payload(isolated_db) -> None:
 async def test_deterministic_actions_do_not_consume_llm_rate_limit(isolated_db) -> None:
     # Only the `answer` action calls the LLM, so only it should enforce the LLM
     # rate limit. Deterministic turns (start/back/skip/review/structured) must NOT
-    # — otherwise the prefill `start` fired on every mount would burn LLM budget.
+    # - otherwise the prefill `start` fired on every mount would burn LLM budget.
     transport = ASGITransport(app=app)
     base = build_initial_wizard_state()
     base.step = "question"

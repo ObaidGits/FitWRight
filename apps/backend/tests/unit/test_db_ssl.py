@@ -3,7 +3,7 @@
 These guard the Supabase-critical behavior that asyncpg rejects a raw
 ``sslmode`` kwarg: the URL's libpq SSL params must be stripped and translated
 into an asyncpg ``ssl`` connect arg / psycopg ``sslmode`` string, with a secure
-hosted default. Pure-function tests — no database or network.
+hosted default. Pure-function tests - no database or network.
 """
 
 from __future__ import annotations
@@ -63,7 +63,7 @@ def test_db_ssl_setting_overrides_url(monkeypatch):
 
 
 def test_pgbouncer_param_is_stripped(local_mode):
-    """A Supabase/Prisma ``?pgbouncer=true`` hint must be dropped — asyncpg and
+    """A Supabase/Prisma ``?pgbouncer=true`` hint must be dropped - asyncpg and
     psycopg reject it as a connect kwarg (regression: ``connect() got an
     unexpected keyword argument 'pgbouncer'``)."""
     clean, _mode = _extract_pg_ssl_mode(

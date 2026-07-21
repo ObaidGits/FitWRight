@@ -208,9 +208,9 @@ FitWright supports multiple AI providers. You can configure your provider throug
 | **Google Gemini** | `LLM_PROVIDER=gemini`<br>`LLM_MODEL=gemini/gemini-3-flash-preview` | [aistudio.google.com](https://aistudio.google.com/app/apikey) |
 | **OpenRouter** | `LLM_PROVIDER=openrouter`<br>`LLM_MODEL=deepseek/deepseek-chat` | [openrouter.ai](https://openrouter.ai/keys) |
 | **DeepSeek** | `LLM_PROVIDER=deepseek`<br>`LLM_MODEL=deepseek-chat` | [platform.deepseek.com](https://platform.deepseek.com/) |
-| **OpenAI-Compatible** | `LLM_PROVIDER=openai_compatible`<br>`LLM_MODEL=llama-3.1-8b`<br>`LLM_API_BASE=http://localhost:8080/v1` | — (local) |
+| **OpenAI-Compatible** | `LLM_PROVIDER=openai_compatible`<br>`LLM_MODEL=llama-3.1-8b`<br>`LLM_API_BASE=http://localhost:8080/v1` | - (local) |
 
-**OpenAI-Compatible** targets any local server that exposes the OpenAI Chat Completions API — llama.cpp, vLLM, LM Studio, etc. API key is optional.
+**OpenAI-Compatible** targets any local server that exposes the OpenAI Chat Completions API - llama.cpp, vLLM, LM Studio, etc. API key is optional.
 
 Example `.env` for Anthropic:
 
@@ -287,9 +287,9 @@ PORT=4000 docker compose up -d
 | `LOG_LEVEL` | `INFO` | Application-wide Python/Uvicorn log level (`ERROR`, `WARNING`, `INFO`, `DEBUG`) |
 | `LOG_LLM` | `WARNING` | LiteLLM log level (`ERROR`, `WARNING`, `INFO`, `DEBUG`) |
 | `LLM_PROVIDER` | `openai` | AI provider (openai, anthropic, gemini, etc.) |
-| `LLM_MODEL` | — | Model to use (configured via Settings UI) |
-| `LLM_API_KEY` | — | API key (recommended: configure via Settings UI) |
-| `LLM_API_BASE` | — | Custom API endpoint (for Ollama or proxies) |
+| `LLM_MODEL` | - | Model to use (configured via Settings UI) |
+| `LLM_API_KEY` | - | API key (recommended: configure via Settings UI) |
+| `LLM_API_BASE` | - | Custom API endpoint (for Ollama or proxies) |
 
 > **Note:** Changes to `LOG_LEVEL` and `LOG_LLM` require a container restart to take effect.
 
@@ -510,32 +510,32 @@ CORS_ORIGINS=["http://localhost:3001", "http://127.0.0.1:3001"]
 
 ```
 FitWRight/
-├── apps/
-│   ├── backend/                 # Python FastAPI backend
-│   │   ├── app/
-│   │   │   ├── main.py          # Application entry point
-│   │   │   ├── config.py        # Environment configuration
-│   │   │   ├── database.py      # TinyDB wrapper
-│   │   │   ├── llm.py           # AI provider integration
-│   │   │   ├── routers/         # API endpoints
-│   │   │   ├── services/        # Business logic
-│   │   │   ├── schemas/         # Data models
-│   │   │   └── prompts/         # LLM prompt templates
-│   │   ├── data/                # Database storage (auto-created)
-│   │   ├── .env.example         # Environment template
-│   │   └── pyproject.toml       # Python dependencies
-│   │
-│   └── frontend/                # Next.js React frontend
-│       ├── app/                 # Pages (dashboard, builder, etc.)
-│       ├── components/          # Reusable React components
-│       ├── lib/                 # Utilities and API client
-│       ├── .env.sample          # Environment template
-│       └── package.json         # Node.js dependencies
-│
-├── docs/                        # Additional documentation
-├── docker-compose.yml           # Docker configuration
-├── Dockerfile                   # Container build instructions
-└── README.md                    # Project overview
++-- apps/
+|   +-- backend/                 # Python FastAPI backend
+|   |   +-- app/
+|   |   |   +-- main.py          # Application entry point
+|   |   |   +-- config.py        # Environment configuration
+|   |   |   +-- database.py      # TinyDB wrapper
+|   |   |   +-- llm.py           # AI provider integration
+|   |   |   +-- routers/         # API endpoints
+|   |   |   +-- services/        # Business logic
+|   |   |   +-- schemas/         # Data models
+|   |   |   +-- prompts/         # LLM prompt templates
+|   |   +-- data/                # Database storage (auto-created)
+|   |   +-- .env.example         # Environment template
+|   |   +-- pyproject.toml       # Python dependencies
+|   |
+|   +-- frontend/                # Next.js React frontend
+|       +-- app/                 # Pages (dashboard, builder, etc.)
+|       +-- components/          # Reusable React components
+|       +-- lib/                 # Utilities and API client
+|       +-- .env.sample          # Environment template
+|       +-- package.json         # Node.js dependencies
+|
++-- docs/                        # Additional documentation
++-- docker-compose.yml           # Docker configuration
++-- Dockerfile                   # Container build instructions
++-- README.md                    # Project overview
 ```
 
 ---
@@ -554,7 +554,7 @@ Stuck? Here are your options:
 |----------|-------------|
 | [backend-guide.md](docs/agent/architecture/backend-guide.md) | Backend architecture and API details |
 | [frontend-workflow.md](docs/agent/architecture/frontend-workflow.md) | User flow and component architecture |
-| [swiss-design-system/](docs/portable/swiss-design-system/README.md) | UI design system (Swiss International Style) — portable pack |
+| [swiss-design-system/](docs/portable/swiss-design-system/README.md) | UI design system (Swiss International Style) - portable pack |
 
 ---
 

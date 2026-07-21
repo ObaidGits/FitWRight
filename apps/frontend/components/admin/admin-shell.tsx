@@ -77,7 +77,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       <main className="flex min-h-0 min-w-0 flex-1 flex-col">
-        {/* Mobile admin nav — the sidebar is desktop-only, so provide a
+        {/* Mobile admin nav - the sidebar is desktop-only, so provide a
             horizontally-scrollable tab bar + exit link on small screens. Pinned
             above the scroll region. */}
         <div className="shrink-0 border-b border-[var(--border)] bg-[var(--card)] md:hidden">

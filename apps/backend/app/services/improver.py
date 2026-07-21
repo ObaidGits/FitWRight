@@ -59,7 +59,7 @@ def _sanitize_user_input(text: str) -> str:
 def _check_for_truncation(data: dict[str, Any]) -> None:
     """LLM-006: Log warnings for obvious truncation signs before Pydantic validation.
 
-    Note: personalInfo is intentionally excluded — the improve prompts tell the
+    Note: personalInfo is intentionally excluded - the improve prompts tell the
     LLM to skip it, and _preserve_personal_info() restores it from the original.
     """
 
@@ -76,13 +76,13 @@ def _check_for_truncation(data: dict[str, Any]) -> None:
 
 _PATH_SEGMENT_RE = re.compile(r"([a-zA-Z_]+)(?:\[(\d+)\])?")
 
-# Allowed path patterns — only these can be modified by diffs
+# Allowed path patterns - only these can be modified by diffs
 _ALLOWED_PATH_PATTERNS = [
     re.compile(r"^summary$"),
     re.compile(r"^workExperience\[\d+\]\.description(\[\d+\])?$"),
     re.compile(r"^personalProjects\[\d+\]\.description(\[\d+\])?$"),
     # Education description is a single string (Education.description: str | None),
-    # so only the scalar path is allowed — not a [j]-indexed bullet form.
+    # so only the scalar path is allowed - not a [j]-indexed bullet form.
     re.compile(r"^education\[\d+\]\.description$"),
     re.compile(r"^additional\.technicalSkills$"),
     re.compile(r"^additional\.languages$"),
@@ -90,14 +90,14 @@ _ALLOWED_PATH_PATTERNS = [
     re.compile(r"^additional\.awards$"),
 ]
 
-# Blocked path prefixes — always rejected
+# Blocked path prefixes - always rejected
 _BLOCKED_PATH_PREFIXES = frozenset({
     "personalInfo",
     "customSections",
     "sectionMeta",
 })
 
-# Blocked field names — rejected when they appear as the leaf of a path
+# Blocked field names - rejected when they appear as the leaf of a path
 _BLOCKED_FIELD_NAMES = frozenset({
     "years",
     "company",
@@ -215,9 +215,9 @@ def _set_at_path(data: dict[str, Any], path: str, value: Any) -> bool:
 def _verify_original_matches(actual: Any, expected: str | list[str] | None) -> bool:
     """Verify that the original text from the diff matches the actual value."""
     if expected is None:
-        return True  # no original provided (e.g. append) — nothing to verify
+        return True  # no original provided (e.g. append) - nothing to verify
     if not isinstance(expected, str):
-        return False  # a non-str original on a text action is malformed — reject
+        return False  # a non-str original on a text action is malformed - reject
     if not isinstance(actual, str):
         return False
     return actual.strip().casefold() == expected.strip().casefold()
@@ -332,7 +332,7 @@ def apply_diffs(
                 # reorder. Rather than dropping the whole change, apply the SAFE
                 # subset *in the requested order*: walk the proposed list, placing
                 # each existing item where the model put it (so prioritized JD
-                # skills stay near the top) and — for the skills list only —
+                # skills stay near the top) and - for the skills list only -
                 # inserting new items that pass the SAME verified gate as
                 # add_skill. Originals the model omitted are appended at the end
                 # so a real item is never silently lost. Other lists
@@ -353,7 +353,7 @@ def apply_diffs(
                         bucket = casefold_to_originals[cf]
                         if bucket:  # place original in requested position (dupes preserved)
                             reordered.append(bucket.pop(0))
-                        # else: a duplicate of an already-placed original — skip
+                        # else: a duplicate of an already-placed original - skip
                     elif is_skills and cf not in added_new:
                         skill = item.strip()
                         if skill and _normalize_skill_key(skill) in allowed_skill_keys:
@@ -361,7 +361,7 @@ def apply_diffs(
                             added_new.add(cf)
                         else:
                             logger.info("Reorder salvage dropped unverified skill: %s", skill)
-                    # else: non-skills new item → dropped (no verifier to ground it)
+                    # else: non-skills new item -> dropped (no verifier to ground it)
                 for item in actual_value:  # append any originals the model omitted
                     if isinstance(item, str):
                         bucket = casefold_to_originals[item.casefold()]
@@ -435,14 +435,14 @@ def verify_diff_result(
 ) -> list[str]:
     """Local quality checks on the diff result. Returns list of warnings.
 
-    All checks are local (zero LLM cost). Warnings are informational —
+    All checks are local (zero LLM cost). Warnings are informational -
     they don't block the response.
     """
     warnings: list[str] = []
 
     # Check 1: No empty result
     if not applied_changes:
-        warnings.append("No changes were applied — resume returned unchanged")
+        warnings.append("No changes were applied - resume returned unchanged")
         return warnings
 
     # Check 2: Section counts preserved
@@ -455,7 +455,7 @@ def verify_diff_result(
         result_count = len(result.get(key, []))
         if orig_count != result_count:
             warnings.append(
-                f"Section count changed: {label} ({orig_count} → {result_count})"
+                f"Section count changed: {label} ({orig_count} -> {result_count})"
             )
 
     # Check 3: Identity fields unchanged
@@ -474,7 +474,7 @@ def verify_diff_result(
                 if o_val and o_val != r_val:
                     warnings.append(
                         f"Identity field changed: {key}[{i}].{field} "
-                        f"('{o_val}' → '{r_val}')"
+                        f"('{o_val}' -> '{r_val}')"
                     )
 
     # Check 4: Word count ratio
@@ -483,14 +483,14 @@ def verify_diff_result(
     if orig_words > 0 and result_words > orig_words * 1.8:
         warnings.append(
             f"Word count increased significantly: "
-            f"{orig_words} → {result_words} ({result_words / orig_words:.1f}x)"
+            f"{orig_words} -> {result_words} ({result_words / orig_words:.1f}x)"
         )
 
     # Check 5: Invented metrics (covers both replace and append)
     for change in applied_changes:
         if change.action in ("replace", "append") and isinstance(change.value, str):
             new_metrics = set(_METRIC_RE.findall(change.value))
-            # For append, original is None — any metric is potentially invented
+            # For append, original is None - any metric is potentially invented
             original_text = change.original or ""
             old_metrics = set(_METRIC_RE.findall(original_text))
             invented = new_metrics - old_metrics
@@ -570,7 +570,7 @@ async def generate_resume_diffs(
         schema_type="diff",
     )
 
-    # Parse result — handle LLM ignoring diff format gracefully
+    # Parse result - handle LLM ignoring diff format gracefully
     raw_changes = result.get("changes", [])
     if not isinstance(raw_changes, list):
         logger.warning("LLM returned non-list changes: %s", type(raw_changes))
@@ -591,11 +591,11 @@ async def generate_resume_diffs(
                 )
             )
         except Exception as e:
-            logger.warning("Skipping malformed change: %s — %s", raw, e)
+            logger.warning("Skipping malformed change: %s - %s", raw, e)
 
     strategy_notes = str(result.get("strategy_notes", ""))
     if not raw_changes and "changes" not in result:
-        strategy_notes = "LLM output had no changes key — returned zero diffs"
+        strategy_notes = "LLM output had no changes key - returned zero diffs"
         logger.warning("LLM output missing 'changes' key: %s", list(result.keys()))
 
     return ImproveDiffResult(changes=changes, strategy_notes=strategy_notes)
@@ -801,9 +801,9 @@ def verify_skill_target_plan(
             )
         elif skill_key in jd_skills:
             # JD-required/preferred skills are accepted as targets so the résumé
-            # can be tailored to actually pass ATS/recruiter screening — adding
+            # can be tailored to actually pass ATS/recruiter screening - adding
             # relevant JD skills is the product's purpose. (Truly unsupported
-            # skills — neither in the JD nor the résumé — are still rejected
+            # skills - neither in the JD nor the résumé - are still rejected
             # below.) The user reviews additions in the diff preview before save.
             accepted.append(
                 {
@@ -953,7 +953,7 @@ async def improve_resume(
 
     # Use structured JSON when available for higher-fidelity LLM input,
     # but fall back to raw markdown if the structured data has truncated
-    # (year-only) dates — the markdown preserves months from the original PDF.
+    # (year-only) dates - the markdown preserves months from the original PDF.
     if original_resume_data is not None:
         if _has_month_in_dates(original_resume_data):
             resume_input = json.dumps(original_resume_data)
@@ -986,7 +986,7 @@ async def improve_resume(
 
     # The improve prompts intentionally skip personalInfo; the LLM must never
     # rewrite identity/contact. Restore it verbatim from the original so the
-    # header — including the Photo System config (photo + avatarUrl) — is
+    # header - including the Photo System config (photo + avatarUrl) - is
     # preserved exactly on the tailored resume (never invented, never dropped).
     if original_resume_data is not None and isinstance(
         original_resume_data.get("personalInfo"), dict
@@ -1450,7 +1450,7 @@ def calculate_resume_diff(
         original.get("education", []),
         improved.get("education", []),
         _format_education_entry,
-        {"description"},  # diffed separately in step 4b — avoid duplicate entry-level diffs
+        {"description"},  # diffed separately in step 4b - avoid duplicate entry-level diffs
     )
     _append_entry_changes(
         changes,

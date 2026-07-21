@@ -34,7 +34,7 @@ interface RegenerateDiffPreviewProps {
 }
 
 /**
- * RegenerateDiffPreview Component — third step of the regenerate wizard. Shows a
+ * RegenerateDiffPreview Component - third step of the regenerate wizard. Shows a
  * side-by-side comparison of original vs regenerated content.
  */
 export const RegenerateDiffPreview: React.FC<RegenerateDiffPreviewProps> = ({
@@ -146,7 +146,7 @@ export const RegenerateDiffPreview: React.FC<RegenerateDiffPreviewProps> = ({
             <ul className="mt-2 space-y-1">
               {regenerateErrors.map((failed) => (
                 <li key={failed.item_id} className="text-xs text-[var(--muted-foreground)]">
-                  • {getItemLabel(failed)}
+                  - {getItemLabel(failed)}
                 </li>
               ))}
             </ul>

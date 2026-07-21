@@ -1,5 +1,5 @@
 /**
- * Branded 404 — shown for any unmatched route across the app. Renders within
+ * Branded 404 - shown for any unmatched route across the app. Renders within
  * the root layout (fonts + providers available). Scoped to `.atelier` so it
  * uses the same design tokens as the rest of the app.
  */

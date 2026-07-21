@@ -2,8 +2,8 @@
 
 /**
  * Email verification (Task 8.3 / R5.*, R15.4).
- * - Landing (`?token=…`): redeem the token, then confirm success/failure.
- * - Pending (`?email=…`): a "check your inbox" banner + resend (rate-limited,
+ * - Landing (`?token=...`): redeem the token, then confirm success/failure.
+ * - Pending (`?email=...`): a "check your inbox" banner + resend (rate-limited,
  *   uniform response).
  */
 import * as React from 'react';
@@ -55,7 +55,7 @@ function VerifyLanding({ token }: { token: string }) {
     <Card className="space-y-4 p-6 text-center">
       <h1 className="text-xl font-semibold">Verify your email</h1>
       {state === 'confirming' && (
-        <p className="text-sm text-[var(--muted-foreground)]">Confirming your email…</p>
+        <p className="text-sm text-[var(--muted-foreground)]">Confirming your email...</p>
       )}
       {state === 'ok' && (
         <>
@@ -106,7 +106,7 @@ function VerifyPending({ initialEmail, sent }: { initialEmail: string; sent: boo
     setPending(true);
     try {
       await authApi.requestVerification(email || undefined);
-      // Uniform response — never discloses whether the address is registered.
+      // Uniform response - never discloses whether the address is registered.
       setInfo('If that email needs verifying, a new link is on its way.');
       setCooldown(RESEND_COOLDOWN_SECONDS);
     } catch (err) {

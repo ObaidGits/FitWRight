@@ -1,8 +1,8 @@
 /**
- * Landing page (Task 4 / Req 4) — premium, AI-native, story-driven.
- * Hero → problem → how it works → AI analysis → capabilities → tracking →
- * bring-your-own-key + providers → privacy + open source → FAQ → final CTA.
- * Truthful by design: product demonstrations and real capabilities only —
+ * Landing page (Task 4 / Req 4) - premium, AI-native, story-driven.
+ * Hero -> problem -> how it works -> AI analysis -> capabilities -> tracking ->
+ * bring-your-own-key + providers -> privacy + open source -> FAQ -> final CTA.
+ * Truthful by design: product demonstrations and real capabilities only -
  * no testimonials, fake stats, or manufactured social proof.
  */
 import Link from 'next/link';
@@ -49,14 +49,14 @@ import {
 
 export const metadata: Metadata = {
   // Absolute title: the home page owns the full brand headline and must not get
-  // the "· FitWright" template suffix (which would duplicate the brand name).
-  title: { absolute: 'FitWright — AI Resume Builder & Tailor' },
+  // the "- FitWright" template suffix (which would duplicate the brand name).
+  title: { absolute: 'FitWright - AI Resume Builder & Tailor' },
   description:
     'Tailor your resume to every job with AI. Honest ATS scoring, cover letters, interview prep, and an application tracker. Bring your own API key. Free and open source.',
   keywords: [...KEYWORDS.landing],
   alternates: { canonical: '/' },
   openGraph: {
-    title: 'FitWright — AI Resume Builder & Tailor',
+    title: 'FitWright - AI Resume Builder & Tailor',
     description:
       'Tailor your resume to every job with AI. Honest ATS scoring, cover letters, interview prep, and application tracking. Bring your own API key. Free and open source.',
     url: '/',
@@ -98,7 +98,7 @@ const STEPS = [
     icon: FileSearch,
     n: '02',
     title: 'Paste the job',
-    body: 'FitWright analyzes the role and extracts what matters — before generating.',
+    body: 'FitWright analyzes the role and extracts what matters - before generating.',
   },
   {
     icon: Sparkles,
@@ -124,12 +124,12 @@ const CAPABILITIES = [
   {
     icon: Sparkles,
     title: 'Contextual AI',
-    body: 'Ask AI to rewrite, shorten, or quantify any single bullet — preview the change before it applies.',
+    body: 'Ask AI to rewrite, shorten, or quantify any single bullet - preview the change before it applies.',
   },
   {
     icon: Gauge,
     title: 'Honest ATS score',
-    body: 'A real match score with keyword, skills, and section sub-scores — plus exactly what is missing.',
+    body: 'A real match score with keyword, skills, and section sub-scores - plus exactly what is missing.',
   },
   {
     icon: Mail,
@@ -190,7 +190,7 @@ export default function LandingPage() {
           howToSchema({
             name: 'How to tailor your resume to a job with FitWright',
             description:
-              'Add your resume, paste the job description, and let FitWright tailor it with AI — then refine, export, and track your application.',
+              'Add your resume, paste the job description, and let FitWright tailor it with AI - then refine, export, and track your application.',
             steps: STEPS.map((s) => ({ name: s.title, text: s.body })),
           }),
           breadcrumbSchema([{ name: 'Home', path: '/' }]),
@@ -209,8 +209,8 @@ export default function LandingPage() {
           <Reveal as="div">
             <SectionHeading
               eyebrow="The problem"
-              title="Sending the same resume everywhere doesn’t work"
-              sub="Roles differ, and the systems that screen you optimize for a specific fit. Manual tailoring is the fix — but it’s slow."
+              title="Sending the same resume everywhere doesn't work"
+              sub="Roles differ, and the systems that screen you optimize for a specific fit. Manual tailoring is the fix - but it's slow."
             />
           </Reveal>
           <div className="mt-12 grid gap-4 md:grid-cols-3">
@@ -231,7 +231,7 @@ export default function LandingPage() {
           </div>
           <Reveal className="mt-10 text-center" delay={120}>
             <p className="mx-auto max-w-xl text-lg font-medium">
-              FitWright does the tailoring for you — in seconds, grounded in your real experience.
+              FitWright does the tailoring for you - in seconds, grounded in your real experience.
             </p>
           </Reveal>
         </div>
@@ -284,14 +284,14 @@ export default function LandingPage() {
             <p className="mt-3 text-[var(--muted-foreground)]">
               FitWright reads the job description, detects the role, and extracts the skills and
               keywords that matter. You get a transparent breakdown of what your resume already
-              covers — and what it’s missing — so nothing is a black box.
+              covers - and what it's missing - so nothing is a black box.
             </p>
             <ul className="mt-6 space-y-3">
               {[
                 { icon: Brain, t: 'Role detection & keyword extraction' },
                 { icon: ListChecks, t: 'Matched vs. missing skills, at a glance' },
                 { icon: Gauge, t: 'Keyword, skills & section sub-scores' },
-                { icon: Eye, t: 'Explainable — every change is reviewable' },
+                { icon: Eye, t: 'Explainable - every change is reviewable' },
               ].map((f) => {
                 const Icon = f.icon;
                 return (
@@ -317,7 +317,7 @@ export default function LandingPage() {
           <SectionHeading
             eyebrow="Capabilities"
             title="Everything to land the interview"
-            sub="A complete, AI-native toolkit — not a form with a button."
+            sub="A complete, AI-native toolkit - not a form with a button."
           />
         </Reveal>
         <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -353,7 +353,7 @@ export default function LandingPage() {
             </h2>
             <p className="mt-3 text-[var(--muted-foreground)]">
               Every time you tailor a resume, an application is created automatically. Move it
-              across stages — applied, interviewing, offer — with drag-and-drop, and keep the
+              across stages - applied, interviewing, offer - with drag-and-drop, and keep the
               tailored resume, cover letter, interview prep, and notes together for each role.
             </p>
             <div className="mt-6">
@@ -379,7 +379,7 @@ export default function LandingPage() {
             </h2>
             <p className="mt-3 text-[var(--muted-foreground)]">
               Connect the AI provider you already use. You control the model, the cost, and the data
-              — your key is encrypted at rest on your own instance. Prefer zero cost and full
+              - your key is encrypted at rest on your own instance. Prefer zero cost and full
               privacy? Run local models with Ollama.
             </p>
             <div className="mt-6 grid gap-3 sm:grid-cols-3">
@@ -433,7 +433,7 @@ export default function LandingPage() {
               <h3 className="mt-4 text-xl font-semibold">Privacy first</h3>
               <p className="mt-2 text-sm text-[var(--muted-foreground)]">
                 Your resume content stays in your own database. Your API key is encrypted at rest.
-                Nothing is sent anywhere except the AI provider you explicitly choose — no hidden
+                Nothing is sent anywhere except the AI provider you explicitly choose - no hidden
                 processing, no data resale.
               </p>
               <ul className="mt-4 space-y-2 text-sm">
@@ -453,7 +453,7 @@ export default function LandingPage() {
               <h3 className="mt-4 text-xl font-semibold">Open source</h3>
               <p className="mt-2 text-sm text-[var(--muted-foreground)]">
                 FitWright is fully open source. Read exactly how it works, self-host it on your own
-                machine, and shape it with the community. Transparency you can verify — not just a
+                machine, and shape it with the community. Transparency you can verify - not just a
                 promise.
               </p>
               <div className="mt-5">
@@ -529,7 +529,7 @@ export default function LandingPage() {
         </Reveal>
       </section>
 
-      {/* Let's work together — personal contact CTA (introduces the developer
+      {/* Let's work together - personal contact CTA (introduces the developer
           and routes to /contact). Replaces the thin "About the developer"
           blurb with a richer, conversion-focused section right where the
           reader has just finished the product story. */}

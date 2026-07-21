@@ -6,12 +6,12 @@
  * Auth plumbing (Task 8.2):
  * - Every request is sent with `credentials: 'include'` so the httpOnly
  *   `__Host-session` cookie rides along. Tokens are NEVER read from JS or stored
- *   in localStorage — the session lives only in the httpOnly cookie.
+ *   in localStorage - the session lives only in the httpOnly cookie.
  * - Mutating requests (POST/PUT/PATCH/DELETE) get the double-submit CSRF token
  *   injected into `X-CSRF-Token`, read from the JS-readable `csrf` cookie.
  * - A single 401 interceptor invokes a registered handler (the SessionProvider
  *   clears its session query, broadcasts a multi-tab logout, and routes to
- *   `/login?next=…`). Auth-flow calls opt out via `skipAuthHandling` so an
+ *   `/login?next=...`). Auth-flow calls opt out via `skipAuthHandling` so an
  *   expected 401 (guest session probe, wrong password, step-up required) is
  *   handled inline instead of bouncing the user to the login page.
  */
@@ -64,7 +64,7 @@ export const API_URL = normalizeApiUrl(process.env.NEXT_PUBLIC_API_URL ?? DEFAUL
 export const API_BASE = resolveRuntimeApiBase(toApiBase(API_URL));
 
 // Default request timeout (ms). MUST match the backend's REQUEST_TIMEOUT_SECONDS
-// and the Next.js proxyTimeout (next.config.ts) — the shortest layer aborts
+// and the Next.js proxyTimeout (next.config.ts) - the shortest layer aborts
 // first, so all three are driven by the same NEXT_PUBLIC_REQUEST_TIMEOUT_MS env
 // var. Bounded to [30s, 30min]. Local LLMs often need more than the 240s default.
 const rawTimeoutMs = process.env.NEXT_PUBLIC_REQUEST_TIMEOUT_MS;
@@ -103,7 +103,7 @@ let unauthorizedHandler: UnauthorizedHandler | null = null;
 /**
  * Register the handler invoked when an authenticated app request returns 401.
  * The SessionProvider registers a handler that clears the cached session,
- * broadcasts a multi-tab logout, and routes to `/login?next=…`.
+ * broadcasts a multi-tab logout, and routes to `/login?next=...`.
  */
 export function setUnauthorizedHandler(handler: UnauthorizedHandler | null): void {
   unauthorizedHandler = handler;
@@ -158,7 +158,7 @@ export async function apiFetch(
 
   // Inject the double-submit CSRF token on every mutating request (browser
   // only). This covers both the per-session token (after login) and the
-  // pre-session token (after GET /auth/csrf) — both live on the `csrf` cookie.
+  // pre-session token (after GET /auth/csrf) - both live on the `csrf` cookie.
   const method = (init.method ?? 'GET').toUpperCase();
   if (MUTATING_METHODS.has(method)) {
     const csrf = readCsrfToken();
@@ -170,7 +170,7 @@ export async function apiFetch(
   }
 
   // Defaults to DEFAULT_TIMEOUT_MS, which tracks the backend's
-  // REQUEST_TIMEOUT_SECONDS (see next.config.ts proxyTimeout — all three layers
+  // REQUEST_TIMEOUT_SECONDS (see next.config.ts proxyTimeout - all three layers
   // must agree or the shortest aborts first).
   const timeout = timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const controller = new AbortController();

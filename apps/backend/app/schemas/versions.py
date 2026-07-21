@@ -1,4 +1,4 @@
-"""Pydantic schemas for resume version history (P3 §A, Requirements 1–3)."""
+"""Pydantic schemas for resume version history (P3 §A, Requirements 1-3)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 
 class VersionMetadata(BaseModel):
-    """Metadata-only view of a snapshot (never carries the payload — R3.1)."""
+    """Metadata-only view of a snapshot (never carries the payload - R3.1)."""
 
     id: str
     resume_id: str

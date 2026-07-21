@@ -54,12 +54,12 @@ __all__ = [
     "reset_token_service",
 ]
 
-# Raw token entropy (bytes) before base64url encoding — 256 bits.
+# Raw token entropy (bytes) before base64url encoding - 256 bits.
 _TOKEN_BYTES = 32
 
 
 def hash_token_value(raw_token: str) -> str:
-    """Return ``sha256(raw_token)`` hex — the value stored in ``token_hash``."""
+    """Return ``sha256(raw_token)`` hex - the value stored in ``token_hash``."""
     return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
 
 
@@ -78,7 +78,7 @@ class TokenConsumeResult:
 
     ``ok`` is the decision. On success ``user_id`` is the token's owner. On
     failure ``reason`` is one of ``"invalid"`` (no such token), ``"used"``
-    (already redeemed), or ``"expired"`` — callers collapse all three into a
+    (already redeemed), or ``"expired"`` - callers collapse all three into a
     single generic error so nothing about *why* is disclosed (R5.5).
     """
 

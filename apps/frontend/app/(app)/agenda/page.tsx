@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Agenda (P3 §G / Requirement 12) — one place for everything coming up.
+ * Agenda (P3 §G / Requirement 12) - one place for everything coming up.
  *
  * A merged, time-ordered feed of upcoming reminders + interviews across all
  * applications, grouped into Overdue / Today / This week / Later. Quick actions
@@ -243,8 +243,8 @@ function AgendaRow({
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium text-[var(--foreground)]">{item.title}</p>
         <p className="text-xs text-[var(--muted-foreground)]">
-          <span className="capitalize">{item.kind}</span> · {formatWhen(item.when, item.tz)}
-          {overdue && <span className="ml-1 text-[var(--destructive)]">· overdue</span>}
+          <span className="capitalize">{item.kind}</span> - {formatWhen(item.when, item.tz)}
+          {overdue && <span className="ml-1 text-[var(--destructive)]">- overdue</span>}
         </p>
       </div>
       <div className="flex shrink-0 items-center gap-1">

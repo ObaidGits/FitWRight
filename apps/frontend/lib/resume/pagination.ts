@@ -5,8 +5,8 @@
  * the PDF uses, so line wrapping and horizontal layout match pixel-for-pixel.
  * The backend renders the PDF with headless Chromium's `page.pdf`, which lays
  * pages out in CSS pixels at 96 DPI (1in = 96px). Reproducing that geometry
- * here — page size in px, margins as the page padding, content width = page −
- * margins — is what makes the preview a true representation of the export.
+ * here - page size in px, margins as the page padding, content width = page −
+ * margins - is what makes the preview a true representation of the export.
  *
  * This module is intentionally PURE (no DOM, no React) so the geometry and the
  * page-break algorithm are unit-testable without a browser.
@@ -52,7 +52,7 @@ export interface FlowBlock {
   bottom: number;
   /**
    * Keep this block on the same page as the one that follows it (e.g. a section
-   * title must not be orphaned at the bottom of a page — it stays with its
+   * title must not be orphaned at the bottom of a page - it stays with its
    * first item). Mirrors CSS `break-after: avoid`.
    */
   keepWithNext?: boolean;
@@ -90,7 +90,7 @@ export function groupFlowBlocks(blocks: FlowBlock[]): Array<{ top: number; botto
  * Compute the content-region Y offset at which each page starts.
  *
  * Walks the (grouped) flow blocks in document order and opens a new page just
- * before any block whose bottom would overflow the current page's content box —
+ * before any block whose bottom would overflow the current page's content box -
  * never splitting a block (break-inside: avoid). A block taller than a full
  * page is left to overflow (visually clipped) rather than looping forever, and
  * the following block opens its own page, matching a forced break.
@@ -110,7 +110,7 @@ export function computePageOffsets(blocks: FlowBlock[], pageContentHeight: numbe
       pageStart = g.top;
       offsets.push(pageStart);
     }
-    // else: it fits, or it's an oversized block already at the page top — leave
+    // else: it fits, or it's an oversized block already at the page top - leave
     // it (clipped); the next block that overflows will open the following page.
   }
   return offsets;

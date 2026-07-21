@@ -2,7 +2,7 @@
 
 How to compose Swiss-style components into full pages. The system rewards mathematical grids and asymmetric balance over centered, decorative arrangements.
 
-> Sibling docs: [tokens](tokens.md) · [components](components.md) · [anti-patterns](anti-patterns.md)
+> Sibling docs: [tokens](tokens.md) - [components](components.md) - [anti-patterns](anti-patterns.md)
 
 ---
 
@@ -18,7 +18,7 @@ Swiss design is grid-first. Pick a column count up front and stick to it.
 </div>
 ```
 
-5-column on large screens is unusual on purpose — it creates the asymmetric rhythm the style is known for. 3- or 4-column also works; avoid 2-column for collections (too symmetric).
+5-column on large screens is unusual on purpose - it creates the asymmetric rhythm the style is known for. 3- or 4-column also works; avoid 2-column for collections (too symmetric).
 
 ### Editor + preview split
 
@@ -33,7 +33,7 @@ Swiss design is grid-first. Pick a column count up front and stick to it.
 </div>
 ```
 
-The hard black divider is what makes this Swiss instead of generic. Don't use a thin grey divider — it weakens the structure.
+The hard black divider is what makes this Swiss instead of generic. Don't use a thin grey divider - it weakens the structure.
 
 ### Sidebar + content
 
@@ -48,7 +48,7 @@ The hard black divider is what makes this Swiss instead of generic. Don't use a 
 </div>
 ```
 
-Fixed sidebar width (256px / `w-64`), fluid content. Resist the urge to make the sidebar collapsible with smooth animations — if it collapses, it snaps.
+Fixed sidebar width (256px / `w-64`), fluid content. Resist the urge to make the sidebar collapsible with smooth animations - if it collapses, it snaps.
 
 ---
 
@@ -79,13 +79,13 @@ The color of the square encodes the panel's role (input, output, status, etc.). 
 Asymmetric balance comes from **uneven** padding around content blocks.
 
 ```jsx
-// Symmetric — feels generic
+// Symmetric - feels generic
 <div className="p-8">
   <h1>Title</h1>
   <p>Body</p>
 </div>
 
-// Asymmetric — feels Swiss
+// Asymmetric - feels Swiss
 <div className="pt-6 pb-12 pl-8 pr-16">
   <h1>Title</h1>
   <p>Body</p>
@@ -102,8 +102,8 @@ If you're targeting print, anchor on standard page sizes:
 
 ```typescript
 const PAGE_SIZES = {
-  A4:     { width: 210,   height: 297   },  // mm — international standard
-  LETTER: { width: 215.9, height: 279.4 },  // mm — US standard
+  A4:     { width: 210,   height: 297   },  // mm - international standard
+  LETTER: { width: 215.9, height: 279.4 },  // mm - US standard
 };
 
 // Convert mm to px at 96 DPI
@@ -123,7 +123,7 @@ For browser-based PDF rendering (e.g., headless Chromium), set the page size on 
 
 ## Typography rhythm
 
-Headers should sit **closer** to the content they introduce than to the content above them. The default browser margins do the opposite — fix this.
+Headers should sit **closer** to the content they introduce than to the content above them. The default browser margins do the opposite - fix this.
 
 ```jsx
 <h2 className="font-serif text-2xl font-bold mt-12 mb-2">Section Title</h2>
@@ -138,7 +138,7 @@ Headers should sit **closer** to the content they introduce than to the content 
 
 See [anti-patterns.md](anti-patterns.md) for the full list. The layout-specific ones:
 
-- Don't center everything — Swiss style is left-aligned by default
-- Don't use card carousels — show the grid
-- Don't soften dividers — borders are 1–2px black, never grey
-- Don't animate panel transitions — they snap
+- Don't center everything - Swiss style is left-aligned by default
+- Don't use card carousels - show the grid
+- Don't soften dividers - borders are 1-2px black, never grey
+- Don't animate panel transitions - they snap

@@ -5,10 +5,10 @@ sink the admin services/router call, readable via :meth:`AdminMetrics.snapshot`
 (exposed through the internal metrics endpoint). It carries exactly the signals
 the design's "Observability & operations" section (R12.1) requires:
 
-- ``admin_action_total{action,result}`` — every admin mutation, labelled by
+- ``admin_action_total{action,result}`` - every admin mutation, labelled by
   action (disable/enable/role_change/delete/restore/bulk_disable/purge) and
   result (ok/no_op/denied/error/last_active_admin).
-- admin API latency (sum/count per route-class → derived average) and error rate
+- admin API latency (sum/count per route-class -> derived average) and error rate
   (``admin_request_total`` split by 2xx/4xx/5xx).
 - dashboard cache hit ratio + staleness age, rollup lag, purge backlog gauge,
   and the ``authz.denied`` counter (compromised-admin / scraping signal).
@@ -132,7 +132,7 @@ def get_admin_metrics() -> AdminMetrics:
 
 
 # ---------------------------------------------------------------------------
-# Middleware — admin API latency + status-bucket metrics (R12.1)
+# Middleware - admin API latency + status-bucket metrics (R12.1)
 # ---------------------------------------------------------------------------
 
 

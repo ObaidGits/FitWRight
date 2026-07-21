@@ -76,7 +76,7 @@ import { StepUpProvider, useStepUp } from '@/components/auth/step-up-modal';
 async function expectNoA11yViolations(container: HTMLElement) {
   const results = await axe.run(container, {
     rules: {
-      // jsdom has no layout engine → contrast is unmeasurable here (see header).
+      // jsdom has no layout engine -> contrast is unmeasurable here (see header).
       'color-contrast': { enabled: false },
       // These are whole-page rules; the tests render component fragments.
       region: { enabled: false },
@@ -90,7 +90,7 @@ async function expectNoA11yViolations(container: HTMLElement) {
   expect(violations).toEqual([]);
 }
 
-describe('auth a11y — screen-reader labels & aria', () => {
+describe('auth a11y - screen-reader labels & aria', () => {
   beforeEach(() => {
     replaceMock.mockClear();
     stepUpMock.mockReset();
@@ -148,7 +148,7 @@ describe('auth a11y — screen-reader labels & aria', () => {
   });
 });
 
-describe('auth a11y — keyboard & focus-visible', () => {
+describe('auth a11y - keyboard & focus-visible', () => {
   it('email, password and submit are all keyboard-focusable in order', () => {
     render(<AuthCard mode="login" />);
     const email = screen.getByLabelText('Email');
@@ -181,7 +181,7 @@ describe('auth a11y — keyboard & focus-visible', () => {
   });
 });
 
-describe('auth a11y — password-manager autocomplete (R15.1)', () => {
+describe('auth a11y - password-manager autocomplete (R15.1)', () => {
   it('login uses email + current-password autocomplete', () => {
     render(<AuthCard mode="login" />);
     expect(screen.getByLabelText('Email')).toHaveAttribute('autocomplete', 'email');
@@ -194,7 +194,7 @@ describe('auth a11y — password-manager autocomplete (R15.1)', () => {
   });
 });
 
-describe('step-up modal — focus management (focus trap + Escape)', () => {
+describe('step-up modal - focus management (focus trap + Escape)', () => {
   function Consumer() {
     const { run } = useStepUp();
     return (
@@ -221,7 +221,7 @@ describe('step-up modal — focus management (focus trap + Escape)', () => {
     const dialog = await screen.findByRole('dialog');
     // The dialog is labelled by its title (screen-reader announceable).
     expect(dialog).toHaveAccessibleName(/confirm it's you/i);
-    // Focus is moved into the dialog on open — the focus-trap contract (Radix
+    // Focus is moved into the dialog on open - the focus-trap contract (Radix
     // uses focus guards + aria-hidden on outside content to trap Tab).
     await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
     // The password control inside is labelled.
@@ -241,7 +241,7 @@ describe('step-up modal — focus management (focus trap + Escape)', () => {
   });
 });
 
-describe('auth mobile — responsive layout & mobile-safe OAuth redirect', () => {
+describe('auth mobile - responsive layout & mobile-safe OAuth redirect', () => {
   it('primary actions are full-width for a comfortable touch target', () => {
     render(<AuthCard mode="login" />);
     expect(screen.getByRole('button', { name: /sign in/i }).className).toMatch(/w-full/);
@@ -277,7 +277,7 @@ describe('auth mobile — responsive layout & mobile-safe OAuth redirect', () =>
   });
 });
 
-describe('auth a11y — reduced motion (design-token CSS)', () => {
+describe('auth a11y - reduced motion (design-token CSS)', () => {
   it('neutralises animations under prefers-reduced-motion', () => {
     const css = fs.readFileSync(path.resolve(__dirname, '../styles/atelier.css'), 'utf8');
     expect(css).toMatch(/@media\s*\(prefers-reduced-motion:\s*reduce\)/);

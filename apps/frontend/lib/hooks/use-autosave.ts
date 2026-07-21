@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * useAutosave — the durable editing linchpin (P4 R2, R3, R4, R5, R7, R8).
+ * useAutosave - the durable editing linchpin (P4 R2, R3, R4, R5, R7, R8).
  *
  * Wires the pure controllers + durable store into the React editor:
  * - {@link SaveController} debounced server autosave (version CAS + idempotency
@@ -252,7 +252,7 @@ export function useAutosave<T extends Record<string, unknown>>(
         }
       },
       // Live autosave only when reachable, leader, AND no queued offline work
-      // (the SyncController drains the outbox first — single writer at a time).
+      // (the SyncController drains the outbox first - single writer at a time).
       isOnline: () => reach.isReachable() && coord.isLeader() && outboxCountRef.current === 0,
       newIdempotencyKey,
       onStatus: (s, meta) => {

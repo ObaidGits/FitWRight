@@ -42,7 +42,7 @@ class ApplicationResponse(BaseModel):
 class ApplicationDetailResponse(ApplicationResponse):
     """A card plus the embedded job description and applied resume.
 
-    ``resume`` is null when the referenced resume has been deleted — the modal
+    ``resume`` is null when the referenced resume has been deleted - the modal
     renders "resume unavailable" rather than 500ing.
     """
 
@@ -73,7 +73,7 @@ class ManualApplicationCreate(BaseModel):
 
 
 class ApplicationUpdate(BaseModel):
-    """Partial update — every field optional."""
+    """Partial update - every field optional."""
 
     status: ApplicationStatus | None = None
     position: int | None = None

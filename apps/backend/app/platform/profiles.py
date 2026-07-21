@@ -9,7 +9,7 @@ derived view during the migration (IMPLEMENTATION_PLAN Phase 1).
 Resolution precedence (explicit beats implicit):
 1. An explicit ``DEPLOYMENT_PROFILE`` setting, if present and valid.
 2. Otherwise derived from the legacy ``single_user_mode`` boolean
-   (``True`` → ``desktop``; ``False`` → ``saas``) so existing ``.env`` files
+   (``True`` -> ``desktop``; ``False`` -> ``saas``) so existing ``.env`` files
    keep working unchanged.
 
 Pure module: no I/O, no framework. Safe to import anywhere in ``platform``/
@@ -24,7 +24,7 @@ import enum
 class DeploymentProfile(str, enum.Enum):
     """The declared shape of a deployment (ARCHITECTURE §4).
 
-    ``development``/``test``/``ci`` are thin presets of ``desktop``/``saas`` —
+    ``development``/``test``/``ci`` are thin presets of ``desktop``/``saas`` -
     they exist for clarity, not divergent architecture (ARCHITECTURE §22).
     """
 
@@ -72,7 +72,7 @@ def resolve_profile(settings) -> DeploymentProfile:
 
     ``settings`` is the app ``Settings`` instance. An explicit
     ``deployment_profile`` wins; otherwise the legacy ``single_user_mode``
-    boolean is mapped (``True`` → desktop, ``False`` → saas) so this is a
+    boolean is mapped (``True`` -> desktop, ``False`` -> saas) so this is a
     zero-behavior-change addition for existing deployments.
     """
     explicit = _coerce(getattr(settings, "deployment_profile", "") or None)

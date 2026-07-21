@@ -27,7 +27,7 @@ async def test_llm_endpoint_rate_limited(auth_env, owner_id, monkeypatch):
 
     async with _client() as client:
         # The cover-letter endpoint 404s on a missing resume, but the rate-limit
-        # route dependency runs BEFORE the body — so the first 2 calls get 404
+        # route dependency runs BEFORE the body - so the first 2 calls get 404
         # (limit not hit) and the 3rd is rejected with 429 before the handler.
         statuses = []
         for _ in range(3):
@@ -46,7 +46,7 @@ async def test_llm_endpoint_rate_limited(auth_env, owner_id, monkeypatch):
 async def test_llm_limit_disabled_when_zero(auth_env, owner_id, monkeypatch):
     monkeypatch.setattr(app_settings, "llm_rate_per_min_user", 0)
     async with _client() as client:
-        # Many calls, never rate-limited (limit disabled) — all resolve to 404.
+        # Many calls, never rate-limited (limit disabled) - all resolve to 404.
         for _ in range(6):
             r = await client.post("/api/v1/resumes/nonexistent/generate-cover-letter")
             assert r.status_code != 429

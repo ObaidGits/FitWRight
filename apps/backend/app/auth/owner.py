@@ -5,13 +5,13 @@ bootstrap owner and assigns every pre-existing owned row to it. Local dev uses
 the ORM ``create_all`` path (no migrations), so this module reproduces the same
 outcome at runtime:
 
-- :func:`ensure_owner` — idempotently creates the owner user (``role=admin``,
+- :func:`ensure_owner` - idempotently creates the owner user (``role=admin``,
   ``status=active``, email verified; email normalized from ``OWNER_EMAIL``,
   password hashed only if ``OWNER_PASSWORD`` is set) **and** backfills every
   owned row that still has ``user_id IS NULL`` to the owner. Mirrors ``0004``
   exactly so single-user local behaves identically to the enforced hosted shape.
-- :func:`resolve_owner_id_sync` — the synchronous path used by the encrypted
-  api-key hot read (``llm.py`` → ``resolve_api_key``), which runs off the sync
+- :func:`resolve_owner_id_sync` - the synchronous path used by the encrypted
+  api-key hot read (``llm.py`` -> ``resolve_api_key``), which runs off the sync
   engine and cannot ``await``.
 
 Both are idempotent and cache the resolved owner id **on the ``Database``
@@ -149,7 +149,7 @@ def resolve_owner_id_sync(db=None) -> str:
 
     Used by the encrypted api-key store reads (``llm.py`` runs synchronously and
     cannot ``await``). Reuses the cached id when present; otherwise resolves /
-    creates the owner off the sync engine. Does not run the owned-row backfill —
+    creates the owner off the sync engine. Does not run the owned-row backfill -
     that is handled by the async :func:`ensure_owner` on the request path and at
     startup.
     """

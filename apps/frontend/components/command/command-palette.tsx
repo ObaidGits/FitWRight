@@ -1,13 +1,13 @@
 'use client';
 
 /**
- * Command palette (⌘K) — Task 3.7 / Req 3.6, 27.3.
- * A POWER-USER ENHANCEMENT, not a required interaction model — every action it
+ * Command palette (⌘K) - Task 3.7 / Req 3.6, 27.3.
+ * A POWER-USER ENHANCEMENT, not a required interaction model - every action it
  * offers is also reachable in the visible UI. Combines navigation, object
  * actions, AI commands, global search, and recently-used destinations.
  *
  * Fully keyboard-driven (Linear/Raycast-class):
- * - ↑/↓ move the active option, Home/End jump, Enter runs it, Esc closes.
+ * - ^/v move the active option, Home/End jump, Enter runs it, Esc closes.
  * - Roving `aria-activedescendant` + per-option `aria-selected` so screen
  *   readers announce the highlighted command; the active row auto-scrolls in.
  * - Pointer hover and keyboard share one `activeIndex` (no dual highlight).
@@ -109,7 +109,7 @@ interface RecentEntry {
   id: string;
   label: string;
   href: string;
-  /** Search node type when applicable ('resume' | 'application' | 'jd' | …). */
+  /** Search node type when applicable ('resume' | 'application' | 'jd' | ...). */
   nodeType?: string;
 }
 
@@ -131,7 +131,7 @@ function saveRecent(entry: RecentEntry): RecentEntry[] {
   try {
     window.localStorage.setItem(RECENTS_KEY, JSON.stringify(next));
   } catch {
-    /* storage unavailable — recents are best-effort */
+    /* storage unavailable - recents are best-effort */
   }
   return next;
 }
@@ -201,7 +201,7 @@ export function CommandPaletteProvider({ children }: { children: React.ReactNode
     [router, recordRecent]
   );
 
-  // Global search index (Task 20 / Req 32) — fetched lazily only while the
+  // Global search index (Task 20 / Req 32) - fetched lazily only while the
   // palette is open, so it never fires on marketing/auth routes at rest.
   const { data: searchIndex } = useQuery<SearchIndexItem[]>({
     queryKey: ['command-search-index'],
@@ -230,7 +230,7 @@ export function CommandPaletteProvider({ children }: { children: React.ReactNode
         for (const a of list as Array<Record<string, unknown>>) {
           const company = (a.company as string) || '';
           const role = (a.role as string) || '';
-          const title = [role, company].filter(Boolean).join(' · ') || 'Application';
+          const title = [role, company].filter(Boolean).join(' - ') || 'Application';
           items.push({
             nodeType: 'application',
             id: a.application_id as string,
@@ -333,7 +333,7 @@ export function CommandPaletteProvider({ children }: { children: React.ReactNode
   React.useEffect(() => {
     const el = listRef.current?.querySelector<HTMLElement>(`[data-index="${activeIndex}"]`);
     // Guard: scrollIntoView is unavailable in some environments (jsdom, older
-    // engines) — it's a progressive enhancement, never a correctness dependency.
+    // engines) - it's a progressive enhancement, never a correctness dependency.
     el?.scrollIntoView?.({ block: 'nearest' });
   }, [activeIndex]);
 
@@ -385,7 +385,7 @@ export function CommandPaletteProvider({ children }: { children: React.ReactNode
                 setActiveIndex(0);
               }}
               onKeyDown={onInputKeyDown}
-              placeholder="Type a command or search…"
+              placeholder="Type a command or search..."
               aria-label="Command palette"
               aria-expanded
               aria-controls="command-palette-listbox"
@@ -452,7 +452,7 @@ export function CommandPaletteProvider({ children }: { children: React.ReactNode
           </ul>
           <div className="flex items-center gap-4 border-t border-[var(--border)] px-4 py-2 text-[11px] text-[var(--muted-foreground)]">
             <span className="flex items-center gap-1">
-              <kbd className="rounded bg-[var(--secondary)] px-1 py-0.5">↑↓</kbd> navigate
+              <kbd className="rounded bg-[var(--secondary)] px-1 py-0.5">^v</kbd> navigate
             </span>
             <span className="flex items-center gap-1">
               <kbd className="rounded bg-[var(--secondary)] px-1 py-0.5">↵</kbd> select

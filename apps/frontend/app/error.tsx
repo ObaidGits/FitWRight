@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Root segment error boundary — covers routes outside the (app) group (auth,
+ * Root segment error boundary - covers routes outside the (app) group (auth,
  * admin, marketing). The (app) group has its own boundary with shell-aware
  * copy; the global-error.tsx handles failures in the root layout itself.
  */

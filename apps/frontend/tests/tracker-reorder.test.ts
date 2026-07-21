@@ -42,7 +42,7 @@ describe('planMove', () => {
       ...emptyColumns(),
       applied: [card('a', 'applied', 0), card('b', 'applied', 1), card('c', 'applied', 2)],
     };
-    // Drag 'a' onto 'c' → a moves to the end.
+    // Drag 'a' onto 'c' -> a moves to the end.
     const plan = planMove(columns, 'a', 'c');
     expect(plan).not.toBeNull();
     expect(plan!.status).toBe('applied');
@@ -57,7 +57,7 @@ describe('planMove', () => {
       applied: [card('a', 'applied', 0), card('b', 'applied', 1)],
       interview: [card('c', 'interview', 0)],
     };
-    // Drop 'a' onto 'c' in the interview column → inserts before c (index 0).
+    // Drop 'a' onto 'c' in the interview column -> inserts before c (index 0).
     const plan = planMove(columns, 'a', 'c');
     expect(plan!.status).toBe('interview');
     expect(plan!.position).toBe(0);

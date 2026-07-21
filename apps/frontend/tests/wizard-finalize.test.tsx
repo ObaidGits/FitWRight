@@ -70,7 +70,7 @@ function seedReviewDraft() {
   );
 }
 
-describe('Wizard save — master choice', () => {
+describe('Wizard save - master choice', () => {
   it('offers "set as master" (default on) when the user has no master', async () => {
     statusData = { llm_configured: true, has_master_resume: false };
     mockedFinalize.mockResolvedValueOnce({

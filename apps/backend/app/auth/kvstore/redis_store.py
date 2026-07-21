@@ -1,15 +1,15 @@
-"""Redis/Upstash ``KVStore`` adapter — hosted free-tier & premium (ADR-6).
+"""Redis/Upstash ``KVStore`` adapter - hosted free-tier & premium (ADR-6).
 
 Upstash Redis (free serverless, HTTP/TLS) is the free-tier hosted default; a
 full managed Redis is the premium value. Both speak the Redis protocol, so this
-single adapter serves both — selected purely by the ``KVSTORE_URL`` scheme
+single adapter serves both - selected purely by the ``KVSTORE_URL`` scheme
 (``redis://`` / ``rediss://``), no code change (ADR-14).
 
 Semantics map directly onto native Redis primitives:
-- ``get``/``set`` (with ``EX``)/``delete`` → ``GET``/``SET``/``DEL``;
-- ``incr`` → ``INCRBY`` plus an ``EXPIRE`` applied only when the counter is first
+- ``get``/``set`` (with ``EX``)/``delete`` -> ``GET``/``SET``/``DEL``;
+- ``incr`` -> ``INCRBY`` plus an ``EXPIRE`` applied only when the counter is first
   created (so the rate-limit window is set once);
-- ``lock`` → ``SET key token NX PX ttl`` with a compare-and-delete release
+- ``lock`` -> ``SET key token NX PX ttl`` with a compare-and-delete release
   (Lua) so a caller only ever releases the lock it still owns.
 """
 
@@ -85,7 +85,7 @@ class RedisKVStore(KVStore):
 
     @classmethod
     def from_url(cls, url: str, **kwargs: Any) -> "RedisKVStore":
-        """Build from a ``redis://`` / ``rediss://`` URL (lazy — no connect).
+        """Build from a ``redis://`` / ``rediss://`` URL (lazy - no connect).
 
         Production resilience defaults are applied unless the caller overrides
         them: bounded socket connect/read timeouts (so a dead Redis fails fast
@@ -130,7 +130,7 @@ class RedisKVStore(KVStore):
     ) -> int:
         new_value = int(await self._client.incrby(key, amount))
         if ttl_seconds and ttl_seconds > 0 and new_value == amount:
-            # First increment created the key — set the window once.
+            # First increment created the key - set the window once.
             await self._client.pexpire(key, max(int(ttl_seconds * 1000), 1))
         return new_value
 

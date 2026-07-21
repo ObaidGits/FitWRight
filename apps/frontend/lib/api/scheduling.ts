@@ -1,5 +1,5 @@
 /**
- * Reminders, interviews, and agenda API (P3 §E/§F/§G, Requirements 10–12).
+ * Reminders, interviews, and agenda API (P3 §E/§F/§G, Requirements 10-12).
  *
  * Reminders + interviews are nested under an application; the agenda is a merged,
  * time-ordered view across all applications. Creates accept an optional

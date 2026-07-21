@@ -1,4 +1,4 @@
-"""Pydantic schemas for global search (P3 §C, Requirements 7–8)."""
+"""Pydantic schemas for global search (P3 §C, Requirements 7-8)."""
 
 from __future__ import annotations
 

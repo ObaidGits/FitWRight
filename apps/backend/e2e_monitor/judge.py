@@ -1,4 +1,4 @@
-"""LLM-judge move — reuses the eval rubric via app.llm.complete_json."""
+"""LLM-judge move - reuses the eval rubric via app.llm.complete_json."""
 
 from __future__ import annotations
 
@@ -10,14 +10,14 @@ from typing import Any
 # than legitimate ATS tailoring. Maintainer policy (2026-06): surfacing JD keywords
 # IS the product's job, so a moderate amount is expected and must not be scored as a
 # truthfulness violation. This knob ONLY softens the judge's (LLM, qualitative)
-# truthfulness lens — the hard structural guards in flow.score_tailoring
+# truthfulness lens - the hard structural guards in flow.score_tailoring
 # (no_fabricated_employers, personal_info_unchanged) stay strict and are NOT affected.
 # Trade-off (flagged at review): a higher value buys ATS match at the cost of letting
 # more JD-sourced claims through; employers, titles, dates, and overall profession
 # stay inviolate regardless. Dial this down to tighten truthfulness.
 JD_KEYWORD_TOLERANCE = 0.20
 
-_RUBRIC = (  # diverges from tests/evals/test_tailoring_eval.py by design — adds the JD tolerance
+_RUBRIC = (  # diverges from tests/evals/test_tailoring_eval.py by design - adds the JD tolerance
     "You are a strict but fair technical recruiter grading how well a resume was "
     "tailored to a job description on RELEVANCE, TRUTHFULNESS, and FORMATTING. "
     "Incorporating job-description keywords and skills into the resume is EXPECTED, "

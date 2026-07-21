@@ -61,7 +61,7 @@ async def test_lifespan_internal_mode_starts_and_cancels_reaper(monkeypatch, _qu
         assert len(created) == 1
         assert not created[0].done()
 
-    # Shutdown cancelled it cleanly — no leak.
+    # Shutdown cancelled it cleanly - no leak.
     assert created[0].done()
 
 

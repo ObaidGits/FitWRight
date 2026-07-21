@@ -1,7 +1,7 @@
 /**
  * Global Resume Template Catalog (metadata-driven).
  *
- * A catalog template is NOT a new renderer — it is a curated *preset* over the
+ * A catalog template is NOT a new renderer - it is a curated *preset* over the
  * existing layout engines (`TemplateType`) plus rich, structured metadata
  * (category, industry, experience level, country, ATS score, photo behavior,
  * recommendations). This is the whole point: the app has a small set of proven
@@ -40,14 +40,14 @@ export interface ResumeTemplate {
   id: string;
   name: string;
   category: TemplateCategory;
-  /** Layout engine this preset renders through (shared renderer — no dup). */
+  /** Layout engine this preset renders through (shared renderer - no dup). */
   engine: TemplateType;
   /** Preset applied over the engine defaults (accent/fonts/spacing/page/etc.). */
   settings: Partial<TemplateSettings>;
   photoSupport: PhotoSupport;
   /** Preferred photo slot when a photo is shown (defaults to the engine's). */
   photoPosition?: PhotoPosition;
-  /** 1–5 ATS friendliness with a short, honest reason. */
+  /** 1-5 ATS friendliness with a short, honest reason. */
   atsScore: 1 | 2 | 3 | 4 | 5;
   atsNote: string;
   industries: string[];
@@ -57,7 +57,7 @@ export interface ResumeTemplate {
   /** Persona/role tags used by search + recommendations. */
   recommendedFor: string[];
   tags: string[];
-  /** Editorial popularity weight (0–100) for the default sort. */
+  /** Editorial popularity weight (0-100) for the default sort. */
   popularity: number;
   /** Metadata/preset version for migration + backward compatibility. */
   version: number;
@@ -78,7 +78,7 @@ export const RESUME_TEMPLATES: ResumeTemplate[] = [
     settings: { accentColor: 'blue', spacing: { section: 3, item: 2, lineHeight: 3 } },
     photoSupport: 'none',
     atsScore: 5,
-    atsNote: 'Single column, standard headings — parses cleanly in every ATS.',
+    atsNote: 'Single column, standard headings - parses cleanly in every ATS.',
     industries: ['general', 'operations', 'administration'],
     experienceLevels: ['entry', 'mid', 'senior'],
     countries: ['US', 'CA', 'AU'],
@@ -118,7 +118,7 @@ export const RESUME_TEMPLATES: ResumeTemplate[] = [
     },
     photoSupport: 'none',
     atsScore: 5,
-    atsNote: 'Serif, generous spacing for senior scannability — still ATS-clean.',
+    atsNote: 'Serif, generous spacing for senior scannability - still ATS-clean.',
     industries: ['general', 'finance', 'operations'],
     experienceLevels: ['senior', 'executive'],
     countries: ['US', 'UK', 'CA'],
@@ -161,7 +161,7 @@ export const RESUME_TEMPLATES: ResumeTemplate[] = [
     photoSupport: 'supported',
     photoPosition: 'sidebar',
     atsScore: 4,
-    atsNote: 'Two-column with a skills sidebar — great for humans, good for ATS.',
+    atsNote: 'Two-column with a skills sidebar - great for humans, good for ATS.',
     industries: ['business', 'operations', 'sales'],
     experienceLevels: ['mid', 'senior'],
     countries: ['US', 'UK', 'CA', 'AU'],
@@ -260,7 +260,7 @@ export const RESUME_TEMPLATES: ResumeTemplate[] = [
     photoSupport: 'supported',
     photoPosition: 'header-left',
     atsScore: 4,
-    atsNote: 'Accent header with a clean body — modern but still parseable.',
+    atsNote: 'Accent header with a clean body - modern but still parseable.',
     industries: ['technology', 'software'],
     experienceLevels: ['entry', 'mid', 'senior'],
     countries: ['US', 'CA', 'EU'],
@@ -601,7 +601,7 @@ export function getTemplateById(id: string): ResumeTemplate | undefined {
  * Compose a catalog template into full {@link TemplateSettings}, layering its
  * preset over the engine defaults (via {@link applyTemplatePreset}, which seeds
  * signature fonts for single-typeface engines). This is what feeds the shared
- * renderer + the PDF export query params — one settings shape, no duplication.
+ * renderer + the PDF export query params - one settings shape, no duplication.
  */
 export function templateToSettings(
   template: ResumeTemplate,

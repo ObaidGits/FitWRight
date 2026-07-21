@@ -1,15 +1,15 @@
 """Background-jobs panel read service (Task 7.1, Requirement 8).
 
 ``JobsPanelService.panel()`` assembles the :class:`~app.admin.schemas.JobsPanel`
-served by ``GET /api/v1/admin/jobs`` — a per-job status table plus the
+served by ``GET /api/v1/admin/jobs`` - a per-job status table plus the
 worker-independent queue/backlog gauges the operator needs to see whether the
 background jobs are running, stuck, or backed up.
 
-**O(1), never a row scan (Req 8.4 — <500ms).** Every field is read from data
+**O(1), never a row scan (Req 8.4 - <500ms).** Every field is read from data
 that is already pre-computed off the request path:
 
 - Per-job state comes from the KV **run markers** written by
-  :mod:`app.admin.job_markers` (``job_marker:{job_name}`` snapshots) — a handful
+  :mod:`app.admin.job_markers` (``job_marker:{job_name}`` snapshots) - a handful
   of KV point reads, one per job.
 - The purge backlog comes from the in-process ``AdminMetrics`` gauge (set by the
   rollup/purge jobs), falling back to the worker-independent
@@ -20,8 +20,8 @@ that is already pre-computed off the request path:
 No path here scans ``audit_log``/``users``/``metrics_daily`` rows.
 
 **Job set.** Only the three jobs run through
-:func:`app.admin.jobs.run_admin_jobs` — ``rollup``, ``purge``,
-``audit_retention`` — have run markers and single-flight lock keys, so those are
+:func:`app.admin.jobs.run_admin_jobs` - ``rollup``, ``purge``,
+``audit_retention`` - have run markers and single-flight lock keys, so those are
 the rows surfaced. ``reaper``/``outbox`` are driven from a *separate* path (the
 session reaper loop / the productivity outbox worker in the Product bounded
 context) and do not publish admin run markers or an ``AdminMetrics`` gauge, so
@@ -30,26 +30,26 @@ cross-context coupling and a live query, violating Req 8.4/21). The outbox/queue
 length is likewise surfaced as *unavailable* (Req 8.7) until a worker-independent
 admin gauge for it exists.
 
-**Requirement → field mapping (documented derivations).**
+**Requirement -> field mapping (documented derivations).**
 
 - *Execution state {running, failed, completed} (Req 8.1).* ``JobRow`` has no
-  explicit ``state`` enum — by design (Task 5.1). The panel expresses state via
+  explicit ``state`` enum - by design (Task 5.1). The panel expresses state via
   existing fields, and the frontend (Task 7.2) derives the badge from them:
-    - **running**  ⇔ ``runningSince`` is not null (or ``lockState == "held"``),
-    - **failed**   ⇔ ``lastOutcome == "failure"``,
-    - **completed** ⇔ ``lastOutcome in ("success", "skipped")`` and not running.
+    - **running**  <=> ``runningSince`` is not null (or ``lockState == "held"``),
+    - **failed**   <=> ``lastOutcome == "failure"``,
+    - **completed** <=> ``lastOutcome in ("success", "skipped")`` and not running.
   No schema field is added, avoiding churn to the shared model + its secret-free
   test.
 - *Retry count (Req 8.1).* These jobs are **single-flighted and resumable**, not
   retried within a run: a crash mid-run is recovered by the *next* scheduled
   invocation, and no retry counter is recorded in the markers. There is therefore
   no per-run retry count to surface, and ``JobRow`` deliberately carries no
-  ``retryCount`` field (documented gap — adding a nullable/zero field would only
+  ``retryCount`` field (documented gap - adding a nullable/zero field would only
   ever report 0). If a genuine bounded-retry mechanism is introduced later, a
   nullable ``retryCount`` can be added to ``JobRow`` + the frontend type together.
 - *last/next execution (Req 8.1/8.5).* ``lastRun`` = marker ``last_run``;
   ``nextRun`` = marker ``next_run`` (**null when unscheduled** under external
-  cron — Req 8.5).
+  cron - Req 8.5).
 - *last-success / running-since / current & expected duration (Req 8.8/8.9).*
   From the marker's ``last_success`` / ``running_since`` /
   ``expected_duration_seconds``; ``currentDurationSeconds`` = ``now -
@@ -88,7 +88,7 @@ logger = logging.getLogger(__name__)
 
 __all__ = ["JobsPanelService", "get_jobs_panel_service", "reset_jobs_panel_service"]
 
-# The jobs run through ``run_admin_jobs`` — the only ones with KV run markers +
+# The jobs run through ``run_admin_jobs`` - the only ones with KV run markers +
 # a single-flight lock key. ``(job_name, lock_key)`` pairs; job_name matches the
 # stable marker name written by ``app.admin.job_markers``.
 _JOBS: tuple[tuple[str, str], ...] = (
@@ -133,14 +133,14 @@ async def _lock_state(kvstore, lock_key: str) -> str | None:
     The KVStore lock is represented differently per adapter, so we inspect the
     concrete adapter and read where that adapter records a held lock:
 
-    - Redis: ``SET lock:{key} <token> NX PX`` → probe ``get("lock:{key}")``.
-    - DB:    a ``kv`` row keyed ``\\x00lock\\x00{key}`` → probe ``get`` on it
+    - Redis: ``SET lock:{key} <token> NX PX`` -> probe ``get("lock:{key}")``.
+    - DB:    a ``kv`` row keyed ``\\x00lock\\x00{key}`` -> probe ``get`` on it
              (``get`` already honors the row's TTL, so an expired lock reads free).
-    - Local: the in-process ``_lock_until`` map (not on the public key path) →
+    - Local: the in-process ``_lock_until`` map (not on the public key path) ->
              read it directly and compare against the monotonic clock.
 
     Returns ``"held"`` / ``"free"``, or ``None`` (unavailable) for an unknown
-    adapter or any error — a lock probe must never crash the panel (Req 8.7).
+    adapter or any error - a lock probe must never crash the panel (Req 8.7).
     """
     try:
         from app.auth.kvstore.db import DBKVStore, _LOCK_PREFIX
@@ -164,7 +164,7 @@ async def _lock_state(kvstore, lock_key: str) -> str | None:
     except Exception:  # pragma: no cover - best-effort; unavailable, not a crash
         logger.debug("Lock-state probe failed for %s", lock_key, exc_info=True)
         return None
-    # Unknown adapter type — cannot determine, surface as unavailable.
+    # Unknown adapter type - cannot determine, surface as unavailable.
     return None
 
 
@@ -197,7 +197,7 @@ class JobsPanelService:
     # -- public API ----------------------------------------------------------
 
     async def panel(self) -> JobsPanel:
-        """Assemble the full jobs panel (O(1) — one KV read per job + gauges)."""
+        """Assemble the full jobs panel (O(1) - one KV read per job + gauges)."""
         store = self._metric_store()
         kvstore = self._kvstore()
         now = _now()
@@ -265,7 +265,7 @@ class JobsPanelService:
         """Potentially-stuck detection from markers + config only (Req 8.10).
 
         A job is only ever "stuck" while it is running. When an expected duration
-        exists, stuck ⇔ current > expected * multiplier; otherwise stuck ⇔ current
+        exists, stuck <=> current > expected * multiplier; otherwise stuck <=> current
         exceeds the absolute ceiling. No new monitoring is introduced.
         """
         if current_seconds is None:
@@ -309,7 +309,7 @@ class JobsPanelService:
     def _queue_length(self) -> tuple[int | None, bool]:
         """Queue/outbox length from an ``AdminMetrics`` gauge, else unavailable.
 
-        No worker-independent admin gauge for the outbox/queue length exists — the
+        No worker-independent admin gauge for the outbox/queue length exists - the
         outbox backlog is owned by the Product bounded context and reading it here
         would require a cross-context live query (a Non-Goal + not O(1)). Until an
         admin gauge is published, this is surfaced as unavailable (Req 8.7).

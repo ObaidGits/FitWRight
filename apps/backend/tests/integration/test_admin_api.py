@@ -5,15 +5,15 @@ against an isolated temp database with real sessions (no dependency overrides),
 in **hosted** mode so authN/CSRF/rate-limit/capability all apply:
 
 - authz matrix (anon 401, non-admin 403, admin 200) for read + manage;
-- stats + usage-series (unknown_metric → 400);
+- stats + usage-series (unknown_metric -> 400);
 - users list: search (email/name prefix), filters, cursor pagination, deleted;
-- user detail: audited ``admin.user_viewed``, unknown → 404, content-free;
-- enable/disable (idempotent no-op → changed:false, sessions revoked);
+- user detail: audited ``admin.user_viewed``, unknown -> 404, content-free;
+- enable/disable (idempotent no-op -> changed:false, sessions revoked);
 - role change (self blocked, sessions revoked);
 - atomic last-active-admin guard (409) across disable/demote/delete;
 - delete (typed-email confirm + mismatch), restore, purge job (audit retained);
 - bulk-disable; audit view (append-only) + no-mutate API;
-- response field allowlist (no secret ever serializes — Property 2).
+- response field allowlist (no secret ever serializes - Property 2).
 
 Requirements: 1.*, 2.*, 3.*, 4.*, 5.*, 6.*, 7.*, 8.*, 9.*, 10.2, 11.*, 14.*
 """
@@ -312,10 +312,10 @@ class TestRoleAndGuard:
         assert resp.json()["error"]["code"] == "last_active_admin"
 
     async def test_concurrent_disable_of_two_admins_one_wins(self, auth_env, hosted):
-        """Property 3: two concurrent disables of the two admins → ≥1 survives.
+        """Property 3: two concurrent disables of the two admins -> ≥1 survives.
 
         The atomic conditional UPDATE serializes: one disable succeeds and the
-        other affects 0 rows (no other active admin at write time) → 409. The
+        other affects 0 rows (no other active admin at write time) -> 409. The
         invariant "at least one active admin remains" holds under concurrency.
         """
         import asyncio
@@ -331,7 +331,7 @@ class TestRoleAndGuard:
             async def _disable(uid):
                 return await client.post(f"/api/v1/admin/users/{uid}/disable")
 
-            # First disable A and B in parallel — actor remains, so both allowed.
+            # First disable A and B in parallel - actor remains, so both allowed.
             r1, r2 = await asyncio.gather(_disable(admin_a.id), _disable(admin_b.id))
             assert {r1.status_code, r2.status_code} <= {200}
 
@@ -430,7 +430,7 @@ class TestBulkDisable:
 
     async def test_bulk_disable_cannot_zero_out_admins(self, auth_env, hosted):
         """Security invariant: a bulk-disable can never remove the last active
-        admin — the acting admin is skipped (self) and the atomic per-target
+        admin - the acting admin is skipped (self) and the atomic per-target
         guard protects the rest, so ≥1 active admin always remains.
         """
         from sqlalchemy import func, select
@@ -456,7 +456,7 @@ class TestBulkDisable:
                     .where(User.role == "admin", User.status == "active", User.deleted_at.is_(None))
                 )
             ).scalar()
-        assert active >= 1  # the actor survives → never zero admins
+        assert active >= 1  # the actor survives -> never zero admins
 
 
 # ---------------------------------------------------------------------------

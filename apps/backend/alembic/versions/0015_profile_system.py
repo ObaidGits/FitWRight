@@ -3,12 +3,12 @@
 Adds the document-oriented professional profile
 (docs/architecture/PROFILE_SYSTEM_PLAN.md):
 
-- ``profiles`` — one canonical ``ProfileData`` JSON document per user
+- ``profiles`` - one canonical ``ProfileData`` JSON document per user
   (``data``), with a cached ``completeness`` score and a ``version``
   optimistic-concurrency token. ``UNIQUE(user_id)`` enforces one profile per
   user (single-source-of-truth invariant).
-- ``profile_versions`` — immutable, gzip-compressed, content-hash-deduped
-  snapshots of ``profiles.data`` scoped to ``(user_id, profile_id)`` — mirrors
+- ``profile_versions`` - immutable, gzip-compressed, content-hash-deduped
+  snapshots of ``profiles.data`` scoped to ``(user_id, profile_id)`` - mirrors
   ``resume_versions``.
 
 Purely **additive** and **reversible**: no existing table is touched, no

@@ -1,4 +1,4 @@
-"""Persistent AI analysis cache — the "compute once, reuse everywhere" service.
+"""Persistent AI analysis cache - the "compute once, reuse everywhere" service.
 
 Thin, transport-agnostic layer over the ``analysis_artifacts`` table (see
 ``app.models.AnalysisArtifact``). Callers wrap an expensive operation in
@@ -31,8 +31,8 @@ def _db():
     """Resolve the live DB facade at call time.
 
     Referencing the module attribute (rather than binding ``db`` at import)
-    means tests that swap ``app.database.db`` for an isolated database — via the
-    ``isolated_db`` fixture — are transparently honored here too.
+    means tests that swap ``app.database.db`` for an isolated database - via the
+    ``isolated_db`` fixture - are transparently honored here too.
     """
     return _database.db
 
@@ -91,7 +91,7 @@ async def get_or_compute(
     result is persisted before being returned. ``force=True`` skips the lookup
     (an explicit "Regenerate") but still writes the fresh result back.
 
-    Never writes a failed computation as a reusable hit — a ``compute`` raise
+    Never writes a failed computation as a reusable hit - a ``compute`` raise
     propagates to the caller and nothing is cached.
     """
     if not force:

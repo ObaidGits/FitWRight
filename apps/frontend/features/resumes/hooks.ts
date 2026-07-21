@@ -1,6 +1,6 @@
 'use client';
 
-/** Resume library + editor data hooks (Task 7) — reuse existing API via Query. */
+/** Resume library + editor data hooks (Task 7) - reuse existing API via Query. */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   fetchResumeList,

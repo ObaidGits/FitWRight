@@ -3,7 +3,7 @@
 Defense layers, all enforced here:
 - **scheme allow-list** (http/https only) + **port allow-list** (80/443);
 - **DNS resolved once, connection pinned to the validated IP** (anti
-  DNS-rebinding) — the TLS SNI/cert still use the original hostname;
+  DNS-rebinding) - the TLS SNI/cert still use the original hostname;
 - **every resolved IP validated** against private/loopback/link-local/CGNAT/
   metadata/reserved ranges (IPv4 + IPv6, incl. IPv4-mapped);
 - **each redirect hop re-validated** (max 3), never auto-followed by the client;
@@ -44,7 +44,7 @@ _USER_AGENT = "FitWrightBot/1.0 (+job-description-import)"
 class SsrfError(Exception):
     """A fetch was blocked/failed. ``reason`` is for logs/metrics only.
 
-    The router surfaces a single opaque ``fetch_failed`` to the caller — the
+    The router surfaces a single opaque ``fetch_failed`` to the caller - the
     reason (blocked IP, bad scheme, timeout, too big) is never leaked, so the
     endpoint can't be used as an internal port/host scanner.
     """
@@ -110,7 +110,7 @@ class _PinnedTransport(httpx.AsyncHTTPTransport):
     """Force the connection to a pre-validated IP while keeping hostname TLS.
 
     Rewrites the request URL host to the pinned IP (so the socket connects to the
-    address we already validated — closing the DNS-rebinding TOCTOU) and sets the
+    address we already validated - closing the DNS-rebinding TOCTOU) and sets the
     ``sni_hostname`` extension + ``Host`` header to the original hostname so TLS
     SNI, certificate verification, and virtual-host routing all stay correct.
     """

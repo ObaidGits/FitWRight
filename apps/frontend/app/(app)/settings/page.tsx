@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Settings (Task 13 / Req 18,19) — Profile · AI Providers & Key · Preferences ·
+ * Settings (Task 13 / Req 18,19) - Profile - AI Providers & Key - Preferences -
  * Account. Wired to the existing config API. Replaces the legacy settings page.
  */
 import * as React from 'react';
@@ -231,7 +231,7 @@ function AiSection() {
         </Select>
         {provider === 'openai_compatible' && (
           <p className="text-xs text-[var(--muted-foreground)]">
-            Use this for any endpoint that speaks the OpenAI API — self-hosted servers or cloud
+            Use this for any endpoint that speaks the OpenAI API - self-hosted servers or cloud
             gateways. Set the Base URL below.
           </p>
         )}
@@ -272,7 +272,7 @@ function AiSection() {
           onChange={(e) => setApiKey(e.target.value)}
           placeholder={
             savedKey?.configured
-              ? `Saved (${savedKey.masked_key ?? '••••'}) — enter to replace`
+              ? `Saved (${savedKey.masked_key ?? '----'}) - enter to replace`
               : PROVIDER_INFO[provider]?.requiresKey
                 ? 'Enter API key'
                 : 'Optional for this provider'

@@ -5,7 +5,7 @@
  * informed choice: **keep mine**, **take latest**, or **field-merge**. Field
  * merge is only offered when the two edits touched *disjoint* field sets;
  * otherwise the safe options are keep/latest (no automatic merge of overlapping
- * edits — this spec explicitly does not do CRDT).
+ * edits - this spec explicitly does not do CRDT).
  *
  * "Fields" here are the top-level keys of the structured resume object plus a
  * shallow notion of change: a key is "changed" if its JSON serialisation

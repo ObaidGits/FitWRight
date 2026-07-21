@@ -1,8 +1,8 @@
 """Follow-up reminder endpoints (P3 §E, Requirement 10).
 
-Nested under an application (parent-ownership → 404), user-scoped, feature-flag
+Nested under an application (parent-ownership -> 404), user-scoped, feature-flag
 gated, idempotency-key aware on create. The claim-based scheduler fires due
-reminders → notifications; recurring reminders materialize their next occurrence.
+reminders -> notifications; recurring reminders materialize their next occurrence.
 """
 
 from __future__ import annotations

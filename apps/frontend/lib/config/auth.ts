@@ -9,7 +9,7 @@
  * hydration + route guards.
  *
  * SECURITY NOTE: this flag only changes *UX* (whether we bother hydrating a
- * session / redirecting). The server is always the access boundary — in hosted
+ * session / redirecting). The server is always the access boundary - in hosted
  * mode every owned-resource endpoint enforces the authenticated `user_id`.
  */
 
@@ -22,7 +22,7 @@ export const CSRF_COOKIE_NAME = 'csrf';
 
 /**
  * Name of the httpOnly session cookie. `middleware.ts` only checks for its
- * *presence* (it can never read the value — httpOnly). The `__Host-` prefix is
+ * *presence* (it can never read the value - httpOnly). The `__Host-` prefix is
  * used in hosted (HTTPS) mode; over plain HTTP the browser drops the prefix, so
  * we check both spellings for a robust presence probe.
  */

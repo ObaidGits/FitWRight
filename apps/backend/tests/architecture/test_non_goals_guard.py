@@ -5,7 +5,7 @@ The new observability / product-analytics code lives under ``app/admin/*`` and
 ``app/analytics/*`` and is deliberately built on **daily aggregates + KV
 snapshots**, never on host metrics, live object-storage queries, raw-log
 explorers, or per-event storage. This is a static/import-based guard that reads
-the module sources and asserts none of those Non-Goals sneak back in — a
+the module sources and asserts none of those Non-Goals sneak back in - a
 regression here would otherwise be invisible until it hurt scale or leaked data.
 
 What is asserted:
@@ -13,7 +13,7 @@ What is asserted:
 - **No host metrics (Req 21.3/21.4).** No new admin/analytics module imports a
   host-sampling library (``psutil``, ``resource`` for ``getrusage``, or
   ``os.getloadavg``). Host CPU/RAM/disk is a Non-Goal unless the backend already
-  produces it — and it does not. (Plain ``os`` / ``platform`` for non-metric use
+  produces it - and it does not. (Plain ``os`` / ``platform`` for non-metric use
   is allowed; only the metric-sampling entry points are forbidden.)
 
 - **No live object-storage query on the request path (Req 21.5).** The
@@ -23,7 +23,7 @@ What is asserted:
   the *rollup step*, off the request path.
 
 - **No raw-log / trace explorer (Req 21.2-adjacent).** The errors summary is
-  grouped buckets only — the ``ErrorsSummary`` schema has no raw-log / stack /
+  grouped buckets only - the ``ErrorsSummary`` schema has no raw-log / stack /
   trace / exception-message field.
 
 - **No per-event storage (Req 21.1).** Every durable Metric_Key is a **daily
@@ -106,18 +106,18 @@ def _top_level_imports(path: Path) -> set[str]:
 
 
 # ---------------------------------------------------------------------------
-# Req 21.3 / 21.4 — no host-metric sampling libraries
+# Req 21.3 / 21.4 - no host-metric sampling libraries
 # ---------------------------------------------------------------------------
 
 # Import roots that only exist to sample host CPU/RAM/disk/load. Plain ``os`` and
-# ``platform`` are intentionally NOT here (they have legitimate non-metric uses —
+# ``platform`` are intentionally NOT here (they have legitimate non-metric uses -
 # ``os.walk`` for the rollup disk sample, ``platform``/version strings, etc.); we
 # forbid the specific host-sampling entry points instead.
 _FORBIDDEN_HOST_METRIC_IMPORTS = frozenset({"psutil", "resource"})
 # Forbidden host-sampling call/attribute patterns in the source text.
 _FORBIDDEN_HOST_METRIC_PATTERNS = (
-    "getloadavg",       # os.getloadavg — 1/5/15-min load average
-    "getrusage",        # resource.getrusage — process CPU/RSS
+    "getloadavg",       # os.getloadavg - 1/5/15-min load average
+    "getrusage",        # resource.getrusage - process CPU/RSS
     "psutil.",          # any psutil sampler
     "virtual_memory",   # psutil.virtual_memory
     "cpu_percent",      # psutil.cpu_percent
@@ -136,7 +136,7 @@ def test_no_admin_module_imports_a_host_metric_library():
             ):
                 violations.append(f"{dotted} imports host-metric library '{forbidden}'")
     assert not violations, (
-        "Host-metric sampling is a Non-Goal (Req 21.3/21.4) — the dashboard uses "
+        "Host-metric sampling is a Non-Goal (Req 21.3/21.4) - the dashboard uses "
         "only signals the backend already produces:\n" + "\n".join(violations)
     )
 
@@ -156,7 +156,7 @@ def test_no_admin_module_uses_a_host_metric_sampling_pattern():
 
 
 # ---------------------------------------------------------------------------
-# Req 21.5 — no live object-storage query / enumeration on the request path
+# Req 21.5 - no live object-storage query / enumeration on the request path
 # ---------------------------------------------------------------------------
 
 
@@ -164,11 +164,11 @@ def test_storage_read_path_never_touches_the_object_storage_provider():
     """Req 21.5: ``StorageMetricsService`` request path is cached-only.
 
     The panel read model and its private helpers must not resolve the storage
-    provider or enumerate objects — object-storage usage comes only from the KV
+    provider or enumerate objects - object-storage usage comes only from the KV
     ``"storage"`` snapshot the *rollup step* wrote. We read the source of every
     method on the read-model class and assert none of them reference the
     provider-resolution / object-walk entry points (which live, correctly, in the
-    module's rollup ``*Step`` classes and its module-level helper — off the
+    module's rollup ``*Step`` classes and its module-level helper - off the
     request path).
     """
     import inspect
@@ -176,7 +176,7 @@ def test_storage_read_path_never_touches_the_object_storage_provider():
     from app.admin import storage_metrics
     from app.admin.storage_metrics import StorageMetricsService
 
-    # Source of the read-model class ONLY (its methods) — not the rollup steps or
+    # Source of the read-model class ONLY (its methods) - not the rollup steps or
     # the module-level ``_object_storage_usage`` helper, which are job-time code.
     read_model_source = inspect.getsource(StorageMetricsService)
 
@@ -236,7 +236,7 @@ def test_no_request_path_service_imports_the_storage_provider_at_module_top():
 
 
 # ---------------------------------------------------------------------------
-# Req 21.2-adjacent — the errors summary is grouped buckets only (no log/trace)
+# Req 21.2-adjacent - the errors summary is grouped buckets only (no log/trace)
 # ---------------------------------------------------------------------------
 
 
@@ -259,7 +259,7 @@ def test_errors_summary_schema_is_grouped_only_no_raw_log_fields():
         "trend",
         # Availability metadata: lists the grouped fields that have no durable
         # source so the UI can show "Not instrumented" instead of a misleading
-        # zero/empty. Not a raw-log/trace field — the panel stays grouped-only.
+        # zero/empty. Not a raw-log/trace field - the panel stays grouped-only.
         "notInstrumented",
         "computedAt",
     }
@@ -282,14 +282,14 @@ def test_errors_summary_schema_is_grouped_only_no_raw_log_fields():
 
 
 # ---------------------------------------------------------------------------
-# Req 21.1 — no per-event storage: every durable key is a bounded daily aggregate
+# Req 21.1 - no per-event storage: every durable key is a bounded daily aggregate
 # ---------------------------------------------------------------------------
 
 
 def test_all_metric_keys_are_a_bounded_static_daily_aggregate_set():
     """Req 21.1: the durable key set is closed, bounded, and per-day (no per-event).
 
-    Per-event/per-request storage is a Non-Goal — durable signals live in
+    Per-event/per-request storage is a Non-Goal - durable signals live in
     ``metrics_daily`` under a **fixed** set of statically-registered keys. We
     assert the registry is a small bounded set and that its lookup helpers can
     only ever return an already-registered key (so nothing is composed per event).
@@ -303,7 +303,7 @@ def test_all_metric_keys_are_a_bounded_static_daily_aggregate_set():
     # brittle to legitimate one-line additions.
     assert 0 < len(keys) <= 100, (
         f"metrics_daily key set must stay bounded (Req 21.1/20.4); got {len(keys)} "
-        "keys — a per-event key family would make this unbounded."
+        "keys - a per-event key family would make this unbounded."
     )
     # Every registry spec key is registered (no runtime-derived stragglers), and
     # the closed dimension maps only ever resolve to already-registered keys.

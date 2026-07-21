@@ -4,13 +4,13 @@ import { test, expect } from '@playwright/test';
  * Core-path E2E (Task 17.4 / Req 24.5).
  *
  * The navigation + real-data smoke path runs against the live stack and is
- * quota-independent. The AI-native core (import → tailor → cover letter →
+ * quota-independent. The AI-native core (import -> tailor -> cover letter ->
  * export) is authored below but gated behind RUN_AI_E2E=1 so it only fires when
- * a funded, non-rate-limited LLM key is configured — this keeps the suite green
+ * a funded, non-rate-limited LLM key is configured - this keeps the suite green
  * without spending provider quota on every run.
  */
 
-test.describe('FitWright — navigation & real-data smoke', () => {
+test.describe('FitWright - navigation & real-data smoke', () => {
   test('landing page renders the hero, story sections and primary CTA', async ({ page }) => {
     await page.goto('/');
     await expect(page).toHaveTitle(/FitWright/i);
@@ -22,7 +22,7 @@ test.describe('FitWright — navigation & real-data smoke', () => {
     await expect(page.getByRole('heading', { name: /Questions, answered/i })).toBeVisible();
   });
 
-  test('app shell: Home → Resumes → Applications navigation works', async ({ page }) => {
+  test('app shell: Home -> Resumes -> Applications navigation works', async ({ page }) => {
     await page.goto('/home');
     // Primary launchpad action is always present.
     await expect(page.getByRole('link', { name: /Tailor to a job/i }).first()).toBeVisible();
@@ -66,10 +66,10 @@ test.describe('FitWright — navigation & real-data smoke', () => {
 
 const AI = process.env.RUN_AI_E2E === '1';
 
-test.describe('FitWright — AI-native core (requires quota)', () => {
+test.describe('FitWright - AI-native core (requires quota)', () => {
   test.skip(!AI, 'Set RUN_AI_E2E=1 with a funded LLM key to run the AI path.');
 
-  test('tailor → review → accept creates an application', async ({ page }) => {
+  test('tailor -> review -> accept creates an application', async ({ page }) => {
     await page.goto('/tailor');
     const jd =
       'Senior Backend Engineer. Python, FastAPI, PostgreSQL, Docker, AWS. Design scalable REST APIs, ' +

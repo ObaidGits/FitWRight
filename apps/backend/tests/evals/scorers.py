@@ -3,7 +3,7 @@
 These are **pure, deterministic** functions: given an original resume and a
 tailored one, they check invariants that must hold regardless of the exact
 wording the LLM produced. They never call an LLM, never touch the network, and
-never read from disk — so they run for free in the normal test suite and form
+never read from disk - so they run for free in the normal test suite and form
 the cheap first line of defence against "a prompt change broke something."
 
 The invariants encoded here mirror the truthfulness / preservation rules the
@@ -79,7 +79,7 @@ def _iter_text_fragments(value: Any) -> list[str]:
 def flatten_resume_text(data: dict) -> str:
     """Flatten an entire resume dict into one lowercased text blob.
 
-    Used for case-insensitive keyword search across every field — summary,
+    Used for case-insensitive keyword search across every field - summary,
     bullets, skills, custom sections, the lot.
     """
     return " ".join(_iter_text_fragments(data)).lower()
@@ -136,7 +136,7 @@ def no_fabricated_employers(original: dict, tailored: dict) -> list[str]:
 
 
 def jd_keywords_present(tailored: dict, keywords: list[str]) -> float:
-    """Fraction (0.0–1.0) of ``keywords`` that appear in the tailored resume.
+    """Fraction (0.0-1.0) of ``keywords`` that appear in the tailored resume.
 
     Matching is case-insensitive substring search over the flattened resume
     text. With an empty ``keywords`` list there is nothing to miss, so the

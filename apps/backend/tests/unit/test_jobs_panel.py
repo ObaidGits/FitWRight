@@ -1,6 +1,6 @@
 """Unit tests for the Background-Jobs panel read service (Task 7.3, Req 8).
 
-Exercises :class:`app.admin.jobs_panel.JobsPanelService` in isolation — the
+Exercises :class:`app.admin.jobs_panel.JobsPanelService` in isolation - the
 per-job field mapping from KV run markers, the ``currentDurationSeconds`` /
 running-since derivation, the potentially-stuck detection math, lock-state
 probing across KVStore adapters, the queue/purge-backlog gauges, graceful
@@ -128,7 +128,7 @@ class TestFieldMapping:
         assert row.nextRun == "2024-05-02T10:00:00+00:00"
         assert row.lastSuccess == "2024-05-01T10:00:00+00:00"
         assert row.expectedDurationSeconds == 42
-        # not running → no current duration, not stuck
+        # not running -> no current duration, not stuck
         assert row.runningSince is None
         assert row.currentDurationSeconds is None
         assert row.potentiallyStuck is False
@@ -160,7 +160,7 @@ class TestCurrentDuration:
         assert row.runningSince == running_since
         assert row.currentDurationSeconds is not None
         assert 28 <= row.currentDurationSeconds <= 40
-        # runningSince set → the frontend can infer "running".
+        # runningSince set -> the frontend can infer "running".
 
     async def test_running_since_null_yields_none(self):
         svc = _service({"rollup": _marker(running_since=None)})
@@ -176,7 +176,7 @@ class TestCurrentDuration:
 class TestStuckDetection:
     async def test_running_over_expected_times_multiplier_is_stuck(self, monkeypatch):
         monkeypatch.setattr(settings, "admin_job_stuck_multiplier", 3)
-        # expected=10, multiplier=3 → threshold 30s; run for 100s → stuck.
+        # expected=10, multiplier=3 -> threshold 30s; run for 100s -> stuck.
         running_since = _iso(_now() - timedelta(seconds=100))
         svc = _service({"rollup": _marker(running_since=running_since,
                                           expected_duration_seconds=10.0)})
@@ -185,7 +185,7 @@ class TestStuckDetection:
 
     async def test_running_just_under_expected_threshold_not_stuck(self, monkeypatch):
         monkeypatch.setattr(settings, "admin_job_stuck_multiplier", 3)
-        # expected=100, multiplier=3 → threshold 300s; run for 10s → not stuck.
+        # expected=100, multiplier=3 -> threshold 300s; run for 10s -> not stuck.
         running_since = _iso(_now() - timedelta(seconds=10))
         svc = _service({"rollup": _marker(running_since=running_since,
                                           expected_duration_seconds=100.0)})
@@ -206,7 +206,7 @@ class TestStuckDetection:
         svc = _service({"rollup": _marker(running_since=running_since,
                                           expected_duration_seconds=0.0)})
         row = await _row(await svc.panel(), "rollup")
-        # expected 0 → falls back to ceiling; 30s < 3600s → not stuck.
+        # expected 0 -> falls back to ceiling; 30s < 3600s -> not stuck.
         assert row.potentiallyStuck is False
 
     async def test_not_running_is_never_stuck(self, monkeypatch):
@@ -321,7 +321,7 @@ class TestMissingAndFailedMarkers:
         assert row.potentiallyStuck is False
         # lock state still probed from the injected adapter.
         assert row.lockState == "free"
-        # A missing (None) marker is not itself an error → not stale.
+        # A missing (None) marker is not itself an error -> not stale.
         assert panel.stale is False
 
     async def test_failed_marker_read_sets_stale_and_does_not_crash(self):
@@ -340,7 +340,7 @@ class TestMissingAndFailedMarkers:
 
 class TestNoRetryField:
     async def test_job_row_has_no_retry_field(self):
-        # Retry is documented as N/A — JobRow carries no retryCount field, and
+        # Retry is documented as N/A - JobRow carries no retryCount field, and
         # the panel builds successfully without one.
         svc = _service({"rollup": _marker()})
         panel = await svc.panel()
@@ -356,7 +356,7 @@ class TestNoRetryField:
 
 
 # ===========================================================================
-# 8. O(1) bound — one KV read per job, independent of data volume (Req 8.6)
+# 8. O(1) bound - one KV read per job, independent of data volume (Req 8.6)
 # ===========================================================================
 
 

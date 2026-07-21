@@ -11,13 +11,13 @@ their durable flush (see :mod:`app.admin.ai_metrics`):
   ``CostMonitor.global_spent()`` microdollar counter floored by 1,000,000.
 - **Allowlist (Req 4 §4 / 15.8).** ``record_call``'s signature, ``snapshot``'s
   keys, and the ``AiAnalytics`` model fields expose ONLY the allowlisted signals
-  — never temperature/prompt-length/model/system-prompt/tool-calls/reasoning/ids
-  — and the ``llm.py`` call sites pass only allowlisted kwargs.
+  - never temperature/prompt-length/model/system-prompt/tool-calls/reasoning/ids
+  - and the ``llm.py`` call sites pass only allowlisted kwargs.
 - **Flush reset-on-success / retain-on-failure / idempotent (Req 4.2 / 4.8).**
   A clean flush consumes exactly the persisted amounts; a per-key ``add`` failure
   retains that key's accumulator (retried next run, no double-count); a re-flush
   with no new activity adds nothing.
-- **provider_to_enum.** Known spellings map to the closed enum; unknown/blank →
+- **provider_to_enum.** Known spellings map to the closed enum; unknown/blank ->
   ``None`` (global counters still move, no per-provider key invented).
 
 Requirements: 4.2, 4.5, 4.6, 4.7, 4.8, 15.8.
@@ -172,7 +172,7 @@ class TestRateInvariant:
         result = await _service(store).analytics(window=30)
 
         assert result.totalCalls == total
-        # EXACT equality at 4dp — the design's complement guarantee.
+        # EXACT equality at 4dp - the design's complement guarantee.
         assert result.successRate + result.failureRate == 1.0
         assert result.successRate == round(success / total, 4)
         assert result.failureRate == round(1.0 - result.successRate, 4)
@@ -247,7 +247,7 @@ class TestCostTruncation:
 
 
 # ===========================================================================
-# 4. Allowlist — rejected fields never accepted / stored / serialized (15.8)
+# 4. Allowlist - rejected fields never accepted / stored / serialized (15.8)
 # ===========================================================================
 
 
@@ -255,7 +255,7 @@ class TestAllowlist:
     """Validates: Requirements 15.8"""
 
     def test_record_call_signature_is_allowlist_only(self):
-        """``record_call`` accepts ONLY the six allowlisted params — no rejected
+        """``record_call`` accepts ONLY the six allowlisted params - no rejected
         field (temperature/prompt/model/system_prompt/tool_calls/reasoning/id)."""
         params = set(inspect.signature(AiMetricsService.record_call).parameters)
         params.discard("self")
@@ -400,7 +400,7 @@ class TestFlushIdempotent:
         assert (await step.run(today)).ok is True
         assert await store.sum([AI_CALLS], today, today) == 1
 
-        # No new calls → snapshot empty → the second flush adds nothing.
+        # No new calls -> snapshot empty -> the second flush adds nothing.
         assert svc.snapshot()["calls"] == 0
         assert (await step.run(today)).ok is True
         assert await store.sum([AI_CALLS], today, today) == 1
@@ -413,7 +413,7 @@ class TestFlushIdempotent:
 
 
 class TestProviderMapping:
-    """Validates: Requirements 4.1 (bounded cardinality — supports 15.8)"""
+    """Validates: Requirements 4.1 (bounded cardinality - supports 15.8)"""
 
     @pytest.mark.parametrize(
         "spelling,expected",

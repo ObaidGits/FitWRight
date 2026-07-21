@@ -71,7 +71,7 @@ export interface ApplicationActionResponse {
 }
 
 // FastAPI returns `detail` as a string for HTTPException but as an array of
-// `{ msg, loc, ... }` objects for validation errors — coerce both to a string
+// `{ msg, loc, ... }` objects for validation errors - coerce both to a string
 // so error messages never render as "[object Object]".
 function extractDetail(data: unknown): string | null {
   if (!data || typeof data !== 'object') return null;
@@ -85,7 +85,7 @@ function extractDetail(data: unknown): string | null {
       .filter((m): m is string => Boolean(m));
     if (messages.length > 0) return messages.join('; ');
   }
-  // A dict detail (e.g. HTTPException(detail={...})) — stringify so it reads as
+  // A dict detail (e.g. HTTPException(detail={...})) - stringify so it reads as
   // something rather than "[object Object]".
   if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
     try {

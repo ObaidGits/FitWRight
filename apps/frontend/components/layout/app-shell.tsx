@@ -24,7 +24,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     // Dashboard shell: exactly one viewport tall (`h-dvh` handles mobile browser
     // chrome), and the shell itself never scrolls (`overflow-hidden`). The fixed
     // sidebar and the scrollable <main> are independent scroll regions, so the
-    // navigation is always visible while only content scrolls — no double
+    // navigation is always visible while only content scrolls - no double
     // scrollbars, no layout shift. Overlays (dialogs/sheets/command palette/
     // toasts) portal to <body> above this at higher z-index, unaffected.
     <div className="flex h-dvh overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
@@ -35,7 +35,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         Skip to content
       </a>
 
-      {/* Fixed navigation — full height, scrolls internally only if it overflows. */}
+      {/* Fixed navigation - full height, scrolls internally only if it overflows. */}
       <Sidebar />
 
       {/* Content column: fills the remaining width; `min-h-0` lets the inner

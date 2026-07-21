@@ -4,7 +4,7 @@ import * as React from 'react';
 import { cn } from '@/lib/utils';
 
 /**
- * Atelier TabStrip — a token-based segmented control for the controlled
+ * Atelier TabStrip - a token-based segmented control for the controlled
  * (activeTab / onTabChange) pattern used where panels are rendered outside a
  * Radix Tabs tree (e.g. split editor/preview layouts). Visually matches the
  * Atelier TabsList/TabsTrigger styling.

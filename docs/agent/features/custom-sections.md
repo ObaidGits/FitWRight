@@ -13,7 +13,7 @@
 
 ## Section Features
 
-- **Rename sections**: Change display names (e.g., "Education" → "Academic Background")
+- **Rename sections**: Change display names (e.g., "Education" -> "Academic Background")
 - **Reorder sections**: Up/down buttons to change section order
 - **Hide sections**: Toggle visibility (hidden sections still editable, just not in PDF)
 - **Delete sections**: Remove custom sections entirely
@@ -25,11 +25,11 @@ Each section (except Personal Info) has these controls in the header:
 
 | Control | Icon | Function |
 |---------|------|----------|
-| Visibility | 👁 Eye / EyeOff | Toggle show/hide in PDF preview |
-| Move Up | ⬆ ChevronUp | Move section earlier in order |
-| Move Down | ⬇ ChevronDown | Move section later in order |
-| Rename | ✏️ Pencil | Edit section display name |
-| Delete | 🗑 Trash | Hide (default) or delete (custom) |
+| Visibility | Eye / EyeOff | Toggle show/hide in PDF preview |
+| Move Up | ^ ChevronUp | Move section earlier in order |
+| Move Down | v ChevronDown | Move section later in order |
+| Rename | Pencil | Edit section display name |
+| Delete | Trash | Hide (default) or delete (custom) |
 
 ## Hidden Section Behavior
 

@@ -28,28 +28,28 @@ describe('ProfileAvatar (public/SEO)', () => {
         priority
       />
     );
-    const img = screen.getByAltText('Ada Lovelace — profile photo') as HTMLImageElement;
+    const img = screen.getByAltText('Ada Lovelace - profile photo') as HTMLImageElement;
     expect(img).toBeInTheDocument();
     expect(img.getAttribute('srcset')).toContain('96w');
     expect(img.getAttribute('srcset')).toContain('192w');
     expect(img.getAttribute('width')).toBe('80');
     expect(img.getAttribute('height')).toBe('80');
-    // Above-the-fold hero → eager load.
+    // Above-the-fold hero -> eager load.
     expect(img.getAttribute('loading')).toBe('eager');
   });
 
   it('lazy-loads when not priority', () => {
     render(<ProfileAvatar url={CLOUD} name="X" />);
-    const img = screen.getByAltText('X — profile photo');
+    const img = screen.getByAltText('X - profile photo');
     expect(img.getAttribute('loading')).toBe('lazy');
   });
 
   it('falls back to initials when the image fails to load', () => {
     render(<ProfileAvatar url={CLOUD} name="Ada Lovelace" />);
-    const img = screen.getByAltText('Ada Lovelace — profile photo');
+    const img = screen.getByAltText('Ada Lovelace - profile photo');
     fireEvent.error(img);
     // The broken image is replaced by the initials fallback.
-    expect(screen.queryByAltText('Ada Lovelace — profile photo')).toBeNull();
+    expect(screen.queryByAltText('Ada Lovelace - profile photo')).toBeNull();
     expect(screen.getByText('AL')).toBeInTheDocument();
   });
 });
@@ -77,13 +77,13 @@ describe('PublicProfileView wires the responsive avatar', () => {
       education: [],
     };
     render(<PublicProfileView profile={profile} vcardUrl="/v.vcf" theme="minimal" />);
-    const img = screen.getByAltText('Ada Lovelace — profile photo');
+    const img = screen.getByAltText('Ada Lovelace - profile photo');
     expect(img.getAttribute('srcset')).toContain('96w');
     expect(img.getAttribute('loading')).toBe('eager');
   });
 });
 
-describe('PhotoFrame (resume render — preview == PDF)', () => {
+describe('PhotoFrame (resume render - preview == PDF)', () => {
   const baseData: ResumeData = {
     personalInfo: {
       name: 'Ada',
@@ -115,7 +115,7 @@ describe('PhotoFrame (resume render — preview == PDF)', () => {
     expect(resolveResumePhoto(hidden, 'swiss-single')).toBeNull();
   });
 
-  it('applies crop → object-fit and offset → object-position', () => {
+  it('applies crop -> object-fit and offset -> object-position', () => {
     const cfg = {
       ...DEFAULT_PHOTO_CONFIG,
       show: true,

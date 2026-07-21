@@ -207,7 +207,7 @@ class TestRevoke:
         raw_token, info = await service.create_session(uid)
         assert await service.resolve(raw_token) is not None  # caches it
         await service.revoke_session(info.id)
-        # Cache was evicted write-through → next resolve fails immediately.
+        # Cache was evicted write-through -> next resolve fails immediately.
         assert await service.resolve(raw_token) is None
 
     async def test_cache_entry_evicted_on_revoke(self, service, factory):
@@ -313,7 +313,7 @@ class TestSlidingExpiry:
         service._clock_obj.advance(80)  # now t0+80
         resolved = await service.resolve(raw_token)
         assert resolved is not None
-        # idle_deadline = t0+80+100 = t0+180; absolute cap = t0+120 → min = t0+120.
+        # idle_deadline = t0+80+100 = t0+180; absolute cap = t0+120 -> min = t0+120.
         created = service._clock_obj.now - timedelta(seconds=80)
         expected_cap = (created + timedelta(seconds=120)).isoformat()
         assert resolved.expires_at == expected_cap

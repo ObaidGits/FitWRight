@@ -4,9 +4,9 @@ Exercises ``GET /api/v1/admin/analytics/feature-usage`` end-to-end over an ASGI
 transport against an isolated temp database with real sessions (no dependency
 overrides), in **hosted** mode so authN/CSRF/rate-limit/capability all apply:
 
-- authz matrix: anon → 401, non-admin → 403, admin → 200 (Req 16 read authz);
-- window validation: admin + ``window=45`` → 400 ``invalid_window``; admin +
-  ``window=30`` → 200 with a secret-free, aggregate-only body (Req 16.3/16.6);
+- authz matrix: anon -> 401, non-admin -> 403, admin -> 200 (Req 16 read authz);
+- window validation: admin + ``window=45`` -> 400 ``invalid_window``; admin +
+  ``window=30`` -> 200 with a secret-free, aggregate-only body (Req 16.3/16.6);
 - the response passes the response-boundary forbidden-field guard (Req 15.8).
 
 Requirements: 16.3, 16.6, 15.8.

@@ -1,4 +1,4 @@
-# Resume Template Library — Metadata-Driven Template System
+# Resume Template Library - Metadata-Driven Template System
 
 A browsable catalog of resume templates built as curated presets over a small
 set of proven layout engines, sharing the single WYSIWYG renderer so preview,
@@ -17,14 +17,14 @@ The template system builds on the following existing pieces:
 - **`TemplateSettings`** (template, pageSize, margins, spacing, fontSize {base,
   headerScale, headerFont, bodyFont}, compactMode, showContactIcons,
   accentColor) + `settingsToCssVars` + `applyTemplatePreset`.
-- **Photo capabilities** per engine (`template-capabilities.ts`) — templates are
+- **Photo capabilities** per engine (`template-capabilities.ts`) - templates are
   photo-aware, not photo-coupled; the renderer adapts automatically.
 - **PDF export** driven entirely by `TemplateSettings` query params.
 
 What was missing was the *system on top*: a browsable catalog with metadata,
 categories, ATS scores, recommendations, and a gallery.
 
-## 2. Design — a template is metadata + a preset (no new renderers)
+## 2. Design - a template is metadata + a preset (no new renderers)
 
 A catalog template is **not** a new rendering component. It is a curated
 **preset over an existing engine** plus structured metadata:
@@ -34,14 +34,14 @@ ResumeTemplate = {
   id, name, category, engine (TemplateType),
   settings: Partial<TemplateSettings>,   // accent, fonts, spacing, density, page
   photoSupport: 'none' | 'supported' | 'required', photoPosition,
-  atsScore (1–5) + atsNote, industries, experienceLevels, countries,
+  atsScore (1-5) + atsNote, industries, experienceLevels, countries,
   recommendedFor, tags, popularity, version, description,
 }
 ```
 
 `templateToSettings(template)` composes the preset over the engine defaults (via
 `applyTemplatePreset`, which seeds signature fonts for single-typeface engines)
-into a full `TemplateSettings` — the **same** shape the shared renderer and the
+into a full `TemplateSettings` - the **same** shape the shared renderer and the
 PDF export already consume. So preview, PDF, print, and export are automatically
 consistent, with **zero duplicated layout logic**.
 
@@ -51,8 +51,8 @@ enforces that every entry maps to a real engine and that photo support is
 consistent with the engine's capabilities.
 
 Why presets over engines rather than 25 bespoke CSS layouts: it is exactly how
-premium builders (e.g. Reactive Resume) scale — a few proven, ATS-tested layout
-engines themed into many purposeful templates — and it keeps every template on
+premium builders (e.g. Reactive Resume) scale - a few proven, ATS-tested layout
+engines themed into many purposeful templates - and it keeps every template on
 the single audited renderer instead of 25 drift-prone stylesheets.
 
 ## 3. Components
@@ -83,12 +83,12 @@ the single audited renderer instead of 25 drift-prone stylesheets.
 
 ## 4. Tests
 
-- `tests/template-catalog.test.ts` — unique URL-safe ids, every engine valid,
-  ATS 1–5 with reasons, photo/engine consistency, category + photo coverage,
+- `tests/template-catalog.test.ts` - unique URL-safe ids, every engine valid,
+  ATS 1-5 with reasons, photo/engine consistency, category + photo coverage,
   `templateToSettings` composition, filter/sort, and recommendation ranking
-  (SWE → software-engineer, fresher → student templates, role match outscores
+  (SWE -> software-engineer, fresher -> student templates, role match outscores
   unrelated).
-- `tests/template-gallery.test.tsx` — renders cards + count, no-photo filter,
+- `tests/template-gallery.test.tsx` - renders cards + count, no-photo filter,
   free-text search, `onSelect`, and the preferred-template bridge round-trip /
   unknown-id fallback.
 

@@ -1,11 +1,11 @@
-"""Security sign-off suite (Task 10.2) — mapped to Correctness Properties.
+"""Security sign-off suite (Task 10.2) - mapped to Correctness Properties.
 
 A consolidated, adversarial pass over the P1 auth surface. Each test is annotated
 with the design Property it defends (1 isolation, 3 session integrity, 4 no
 enumeration, 5 OAuth authenticity/linking, 6 step-up). Everything here is
 deterministic: Argon2 is dialed down by the ``auth_env`` fixture, the LLM/network
 are never touched, and the OAuth flow runs against an injected mock IdP. The one
-timing test is statistical-but-stable — the *authoritative* guarantee is the
+timing test is statistical-but-stable - the *authoritative* guarantee is the
 structural spy assertion (the dummy-hash branch actually executes on the
 unknown-email path); the timing test only corroborates it, comparing medians
 against a two-sided band, so it never flakes.
@@ -77,7 +77,7 @@ def _is_cleared(cookie: str | None) -> bool:
 
 
 # ===========================================================================
-# CSRF — Property 3 / R12.1, R12.2
+# CSRF - Property 3 / R12.1, R12.2
 # ===========================================================================
 
 
@@ -131,7 +131,7 @@ class TestCsrf:
 
 
 # ===========================================================================
-# Session fixation — Property 3 / R2.1
+# Session fixation - Property 3 / R2.1
 # ===========================================================================
 
 
@@ -212,7 +212,7 @@ class TestSessionFixation:
 
 
 # ===========================================================================
-# No enumeration — Property 4 / R1.2, R2.2, R6.1, R13.4
+# No enumeration - Property 4 / R1.2, R2.2, R6.1, R13.4
 # ===========================================================================
 
 
@@ -224,7 +224,7 @@ class TestNoEnumeration:
         async with _client() as c2:
             unknown = await _login(c2, "enum-nobody@example.com", password="wrong-password-here-1")
         assert wrong.status_code == unknown.status_code == 401
-        assert wrong.json() == unknown.json()  # identical envelope → no disclosure
+        assert wrong.json() == unknown.json()  # identical envelope -> no disclosure
 
     async def test_signup_uniform_when_verification_on(self, auth_env, monkeypatch):
         monkeypatch.setattr(app_settings, "single_user_mode", False)
@@ -304,7 +304,7 @@ class TestNoEnumeration:
         known median. The band is deliberately wide because Argon2 is dialed to a
         test-fast cost by ``auth_env`` (so per-call time is tiny and dominated by
         ASGI/JSON overhead + noise); a tighter bound at this cost would flake,
-        which is precisely why the spy — not this test — is the source of truth.
+        which is precisely why the spy - not this test - is the source of truth.
         """
         await _seed_active_user(auth_env, "enum-timing@example.com")
 
@@ -326,7 +326,7 @@ class TestNoEnumeration:
             await _time_login("enum-absent-timing@example.com")
 
         known, unknown = [], []
-        for _ in range(40):  # modestly more samples → a more stable median
+        for _ in range(40):  # modestly more samples -> a more stable median
             known.append(await _time_login("enum-timing@example.com"))
             unknown.append(await _time_login("enum-absent-timing@example.com"))
 
@@ -348,7 +348,7 @@ class TestNoEnumeration:
 
 
 # ===========================================================================
-# Open redirect — Property (R11.4) — next validation matrix
+# Open redirect - Property (R11.4) - next validation matrix
 # ===========================================================================
 
 
@@ -391,7 +391,7 @@ class TestOpenRedirect:
 
 
 # ===========================================================================
-# OAuth authenticity + safe linking — Property 5 / R4.2, R4.4, R4.6
+# OAuth authenticity + safe linking - Property 5 / R4.2, R4.4, R4.6
 # ===========================================================================
 
 
@@ -417,7 +417,7 @@ class TestOAuthSecurity:
                 follow_redirects=False,
             )
             assert first.headers["location"] == f"{FRONTEND}/home"
-            # Transient cookie was cleared → replay of the same state fails closed.
+            # Transient cookie was cleared -> replay of the same state fails closed.
             replay = await client.get(
                 "/api/v1/auth/oauth/mock/callback",
                 params={"code": "c2", "state": state},
@@ -465,7 +465,7 @@ class TestOAuthSecurity:
 
 
 # ===========================================================================
-# Step-up bypass — Property 6 / R9.1
+# Step-up bypass - Property 6 / R9.1
 # ===========================================================================
 
 
@@ -532,7 +532,7 @@ class TestStepUpBypass:
 
 
 # ===========================================================================
-# Breached password — R13.3
+# Breached password - R13.3
 # ===========================================================================
 
 
@@ -552,7 +552,7 @@ class TestBreachedPassword:
 
 
 # ===========================================================================
-# Cookie attribute assertions — R12.1
+# Cookie attribute assertions - R12.1
 # ===========================================================================
 
 
@@ -577,7 +577,7 @@ class TestCookieHardening:
 
 
 # ===========================================================================
-# IDOR cross-user — Property 1 / R10.2, R10.3
+# IDOR cross-user - Property 1 / R10.2, R10.3
 # ===========================================================================
 
 

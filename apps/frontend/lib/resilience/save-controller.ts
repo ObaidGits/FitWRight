@@ -1,11 +1,11 @@
 /**
- * SaveController — advanced autosave state machine (P4 R4, Property 2 & 4).
+ * SaveController - advanced autosave state machine (P4 R4, Property 2 & 4).
  *
  * A transport-injected pure controller (no direct DOM/network) so it is fully
  * unit-testable without a browser. Guarantees:
  *
  * - **Debounce + coalesce**: rapid edits collapse into at most one in-flight
- *   request plus one trailing save (latest content wins) — never blocks typing.
+ *   request plus one trailing save (latest content wins) - never blocks typing.
  * - **Durable-draft-first (R4.5)**: the durable local draft is written on every
  *   debounce tick *before* any network attempt, so at all times either the
  *   server has the latest accepted content or the local draft does.
@@ -54,7 +54,7 @@ export interface Timers {
 export interface SaveControllerOptions<T> {
   /** Perform the network save (version CAS + idempotency). */
   save: (payload: T, ctx: SaveContext) => Promise<SaveOutcome>;
-  /** Write the durable local draft (IndexedDB) — the crash safety net. */
+  /** Write the durable local draft (IndexedDB) - the crash safety net. */
   persistDraft: (payload: T) => Promise<void>;
   /** True when the backend is reachable (reachability probe, not navigator.onLine). */
   isOnline: () => boolean;
@@ -95,7 +95,7 @@ export class SaveController<T> {
   private attempts = 0;
   private lastSavedAt: number | null = null;
   // Serialized form of the last content known to be on the server. Used to make
-  // an identical-content save a client-side no-op (R4.2) — this also prevents a
+  // an identical-content save a client-side no-op (R4.2) - this also prevents a
   // redundant re-save after an offline outbox drain reconciles the same content.
   private lastSavedSerialized: string | null = null;
   private debounceHandle: unknown = null;

@@ -6,7 +6,7 @@ break: a locale JSON that does not structurally match ``en.json`` fails
 modes it must catch:
 
 * a MISSING key,
-* a leaf-vs-object SHAPE mismatch (the key path is present but its kind differs —
+* a leaf-vs-object SHAPE mismatch (the key path is present but its kind differs -
   the gap a presence-only check would let through; raised by cubic on PR #820),
 * MALFORMED JSON (a clean exit 1, not a raw traceback),
 
@@ -53,7 +53,7 @@ def test_fails_on_missing_key(messages_dir: Path) -> None:
 
 def test_fails_on_leaf_vs_object_mismatch(messages_dir: Path) -> None:
     # a.b is a string in en but an object here: the key path a.b is still
-    # present, so a presence-only diff PASSES — yet `next build` would fail.
+    # present, so a presence-only diff PASSES - yet `next build` would fail.
     _write(messages_dir, "es.json", {"a": {"b": {"x": "deep"}, "c": "ya"}, "d": "z"})
     assert clp.main(["prog", str(messages_dir)]) == 1
 
@@ -65,7 +65,7 @@ def test_fails_on_object_vs_leaf_mismatch(messages_dir: Path) -> None:
 
 
 def test_fails_on_string_vs_number_mismatch(messages_dir: Path) -> None:
-    # a.b is a string in en but a number here — also breaks `next build`, and a
+    # a.b is a string in en but a number here - also breaks `next build`, and a
     # coarse branch/leaf classification would have missed it.
     _write(messages_dir, "es.json", {"a": {"b": 5, "c": "ya"}, "d": "z"})
     assert clp.main(["prog", str(messages_dir)]) == 1

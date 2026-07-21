@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Structured section surfaces for the wizard (Phase P1 — W-P1.1/W-P1.2).
+ * Structured section surfaces for the wizard (Phase P1 - W-P1.1/W-P1.2).
  *
  * Identity, Contact, and Skills are captured with discrete, validated fields
  * (and chips for skills) rather than free-text prose parsed by an LLM. Each
@@ -303,7 +303,7 @@ export function composeEducationDescription(edu: {
     const a = achievement.trim();
     if (a) parts.push(a);
   }
-  return parts.join(' • ');
+  return parts.join(' - ');
 }
 
 /** Build the `years` display string from structured year fields. */
@@ -321,7 +321,7 @@ export function educationYearsDisplay(edu: {
 
 /**
  * Apply a structured update to a copy of resume data for the OPTIMISTIC preview
- * (W-P1.3) — reflected instantly, before/without the server round-trip.
+ * (W-P1.3) - reflected instantly, before/without the server round-trip.
  */
 export function applyStructuredToResume(
   data: ResumeData,
@@ -377,8 +377,8 @@ export function applyStructuredToResume(
 export function composeYears(start?: string, end?: string, current?: boolean): string {
   const s = (start ?? '').trim();
   const e = (end ?? '').trim();
-  if (current) return s ? `${s} – Present` : 'Present';
-  if (s && e) return `${s} – ${e}`;
+  if (current) return s ? `${s} - Present` : 'Present';
+  if (s && e) return `${s} - ${e}`;
   return s || e;
 }
 
@@ -585,7 +585,7 @@ function BulletsEditor({
   canDraft: boolean;
 }) {
   const draftMsg = useRotatingMessages(
-    ['Drafting your highlights…', 'Grounded in what you described — nothing invented.'],
+    ['Drafting your highlights...', 'Grounded in what you described - nothing invented.'],
     { active: drafting, intervalMs: 2000 }
   );
   return (
@@ -643,7 +643,7 @@ function BulletsEditor({
   );
 }
 
-/** A "paste a blob → AI extracts structured entries" sub-surface (W-P2.2). */
+/** A "paste a blob -> AI extracts structured entries" sub-surface (W-P2.2). */
 function PasteExtractor({
   section,
   onExtracted,
@@ -655,7 +655,7 @@ function PasteExtractor({
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState('');
   const busyMsg = useRotatingMessages(
-    ['Reading your paste…', 'Splitting into roles…', 'Structuring the fields…'],
+    ['Reading your paste...', 'Splitting into roles...', 'Structuring the fields...'],
     { active: busy, intervalMs: 1800 }
   );
 
@@ -665,7 +665,7 @@ function PasteExtractor({
     try {
       const res = await assistResumeWizard({ kind: 'parse_entries', section, text: text.trim() });
       if (!res.entries.length) {
-        setError('No entries detected — try manual entry.');
+        setError('No entries detected - try manual entry.');
         return;
       }
       onExtracted(res.entries);
@@ -681,7 +681,7 @@ function PasteExtractor({
       <Textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
-        placeholder="Paste one or more roles here — company, title, dates and bullets — and AI will split them into fields for you to confirm."
+        placeholder="Paste one or more roles here - company, title, dates and bullets - and AI will split them into fields for you to confirm."
         className="min-h-28"
         aria-label="Paste your experience"
       />
@@ -784,7 +784,7 @@ export function ExperienceCard({
           Enter manually
         </button>
         <span aria-hidden className="text-[var(--muted-foreground)]">
-          ·
+          -
         </span>
         <button
           type="button"
@@ -807,8 +807,8 @@ export function ExperienceCard({
               {parsed.map((e, i) => (
                 <li key={i}>
                   <strong>{e.title || 'Role'}</strong>
-                  {e.company ? ` · ${e.company}` : ''}
-                  {e.years ? ` · ${e.years}` : ''} — {(e.description ?? []).length} highlight(s)
+                  {e.company ? ` - ${e.company}` : ''}
+                  {e.years ? ` - ${e.years}` : ''} - {(e.description ?? []).length} highlight(s)
                 </li>
               ))}
             </ul>
@@ -975,7 +975,7 @@ export function ProjectCard({ onChange, onValidityChange }: FieldProps) {
           Enter manually
         </button>
         <span aria-hidden className="text-[var(--muted-foreground)]">
-          ·
+          -
         </span>
         <button
           type="button"

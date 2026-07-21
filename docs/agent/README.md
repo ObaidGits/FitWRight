@@ -1,4 +1,4 @@
-# FitWright — Developer Documentation
+# FitWright - Developer Documentation
 
 > Contributor reference for the FitWright codebase.
 
@@ -22,7 +22,7 @@ Generic, reusable guides (Swiss design system, Next.js performance) live in [`..
 | [frontend-architecture](architecture/frontend-architecture.md) | Components, pages, state |
 | [frontend-workflow](architecture/frontend-workflow.md) | User flows in the frontend |
 
-### System design (deep dives — `../architecture/`)
+### System design (deep dives - `../architecture/`)
 | Doc | Purpose |
 |-----|---------|
 | [ARCHITECTURE](../architecture/ARCHITECTURE.md) | System-shape constitution: rings, ports, deployment profiles |
@@ -69,33 +69,33 @@ Generic, reusable guides (Swiss design system, Next.js performance) live in [`..
 ### Portable packs (live outside this folder)
 | Pack | Purpose |
 |------|---------|
-| [swiss-design-system](../portable/swiss-design-system/README.md) | Full Swiss style design system — required reading for frontend work |
-| [nextjs-performance](../portable/nextjs-performance/README.md) | Next.js performance optimizations — required reading for frontend work |
+| [swiss-design-system](../portable/swiss-design-system/README.md) | Full Swiss style design system - required reading for frontend work |
+| [nextjs-performance](../portable/nextjs-performance/README.md) | Next.js performance optimizations - required reading for frontend work |
 
 ## Project Structure
 
 ```
 apps/
-├── backend/                 # FastAPI + Python
-│   ├── app/
-│   │   ├── main.py          # Entry point
-│   │   ├── routers/         # API endpoints
-│   │   ├── services/        # Business logic
-│   │   └── prompts/         # LLM templates
-│   └── data/                # Database storage
-│
-└── frontend/                # Next.js + React
-    ├── app/                 # Pages
-    ├── components/          # UI components
-    └── lib/                 # Utilities, API client
++-- backend/                 # FastAPI + Python
+|   +-- app/
+|   |   +-- main.py          # Entry point
+|   |   +-- routers/         # API endpoints
+|   |   +-- services/        # Business logic
+|   |   +-- prompts/         # LLM templates
+|   +-- data/                # Database storage
+|
++-- frontend/                # Next.js + React
+    +-- app/                 # Pages
+    +-- components/          # UI components
+    +-- lib/                 # Utilities, API client
 ```
 
 ## How to Use
 
-**New tasks:** Read `scope-and-principles` → `quickstart` → `workflow`
+**New tasks:** Read `scope-and-principles` -> `quickstart` -> `workflow`
 
-**Backend changes:** `backend-architecture` → `front-end-apis` → `llm-integration`
+**Backend changes:** `backend-architecture` -> `front-end-apis` -> `llm-integration`
 
-**Frontend changes:** `frontend-architecture` → portable [`swiss-design-system`](../portable/swiss-design-system/README.md) → portable [`nextjs-performance`](../portable/nextjs-performance/README.md) → `coding-standards`
+**Frontend changes:** `frontend-architecture` -> portable [`swiss-design-system`](../portable/swiss-design-system/README.md) -> portable [`nextjs-performance`](../portable/nextjs-performance/README.md) -> `coding-standards`
 
-**Template/PDF changes:** `pdf-template-guide` → `template-system`
+**Template/PDF changes:** `pdf-template-guide` -> `template-system`

@@ -4,7 +4,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 /**
- * Settings → Account security (Task 8.3): the device list renders active
+ * Settings -> Account security (Task 8.3): the device list renders active
  * sessions and revokes a non-current one. The auth API + session are mocked.
  */
 
@@ -58,7 +58,7 @@ function renderShell() {
   );
 }
 
-describe('AccountSecurity — device list', () => {
+describe('AccountSecurity - device list', () => {
   beforeEach(() => {
     listSessionsMock.mockReset();
     revokeSessionMock.mockClear();

@@ -1,16 +1,16 @@
-"""Render smoke tests for app/pdf.py — the 'resume won't render' incident class.
+"""Render smoke tests for app/pdf.py - the 'resume won't render' incident class.
 
 A live demo of FitWright once broke a YouTuber's stream because PDF
 rendering failed. These tests give real coverage to the render path:
 
-* Pure helpers (format/margins) always run — no browser required.
+* Pure helpers (format/margins) always run - no browser required.
 * A real headless-Chromium render proves the happy path actually emits PDF
   bytes (magic header + non-trivial size), not just "no exception".
 
 The real frontend is not available under test, so the render targets a
 self-contained ``data:`` URL that already contains the ``.resume-print``
 selector. ``networkidle`` and ``wait_for_selector`` both resolve on a static
-data: URL, exercising the same goto → wait → page.pdf flow as production.
+data: URL, exercising the same goto -> wait -> page.pdf flow as production.
 
 Real-render tests skip cleanly (never hard-fail) when no Chromium binary can
 be launched.
@@ -46,11 +46,11 @@ def _refused_url():
 
     Bind an ephemeral port to claim a free number, read it, then CLOSE the
     socket: with nothing bound, the kernel answers a connect with RST, so
-    Chromium navigation fails fast with net::ERR_CONNECTION_REFUSED — the signal
+    Chromium navigation fails fast with net::ERR_CONNECTION_REFUSED - the signal
     this test needs.
 
     We deliberately close rather than hold the socket bound-but-unlistening:
-    that was tried, and on macOS a bound, non-listening socket does NOT refuse —
+    that was tried, and on macOS a bound, non-listening socket does NOT refuse -
     the SYN is dropped and Chromium hangs until its 30s navigation timeout (a
     different, slower failure path), so the test would stop exercising
     connection-refused. The residual window between close() and connect() is
@@ -69,8 +69,8 @@ def _refused_url():
 async def _render_or_skip(url, **kwargs):
     """Render ``url`` to PDF, or skip the test if Chromium is unavailable.
 
-    Distinguishes "Chromium can't launch" (skip — environment limitation) from
-    a genuine render/navigation failure (re-raise — that's the bug we test for).
+    Distinguishes "Chromium can't launch" (skip - environment limitation) from
+    a genuine render/navigation failure (re-raise - that's the bug we test for).
     A missing-browser failure surfaces as a PDFRenderError mentioning the
     executable, or as a raw PlaywrightError about a missing executable.
     """
@@ -90,13 +90,13 @@ async def _render_or_skip(url, **kwargs):
 
 
 class TestResolvePdfFormat:
-    """_resolve_pdf_format — page-size string → Playwright PDF format."""
+    """_resolve_pdf_format - page-size string -> Playwright PDF format."""
 
     def test_a4_maps_to_a4(self):
         assert _resolve_pdf_format("A4") == "A4"
 
     def test_letter_maps_to_letter(self):
-        # Note the case change: input "LETTER" → Playwright's "Letter".
+        # Note the case change: input "LETTER" -> Playwright's "Letter".
         assert _resolve_pdf_format("LETTER") == "Letter"
 
     def test_unknown_defaults_to_a4(self):
@@ -107,7 +107,7 @@ class TestResolvePdfFormat:
 
 
 class TestResolvePdfMargins:
-    """_resolve_pdf_margins — margin dict → mm-suffixed Playwright margins."""
+    """_resolve_pdf_margins - margin dict -> mm-suffixed Playwright margins."""
 
     def test_none_returns_ten_mm_on_all_sides(self):
         assert _resolve_pdf_margins(None) == {
@@ -152,8 +152,8 @@ class TestRenderPageWaitStrategy:
     """#799/#808: rendering must wait on a deterministic readiness condition
     (document 'load' + the resume content selector + fonts), NOT the
     environment-fragile 'networkidle' that hangs against the Next.js dev server
-    (HMR/Turbopack/RSC streaming keep the network busy, so idle never arrives →
-    30s timeout → 503). These are browser-free: they mock the Playwright Page.
+    (HMR/Turbopack/RSC streaming keep the network busy, so idle never arrives ->
+    30s timeout -> 503). These are browser-free: they mock the Playwright Page.
     """
 
     async def test_goto_uses_load_with_bounded_timeout(self):
@@ -167,7 +167,7 @@ class TestRenderPageWaitStrategy:
         assert isinstance(timeout, (int, float)) and timeout > 0
 
     async def test_still_gates_on_content_selector(self):
-        """The real readiness signal — the resume content must be present."""
+        """The real readiness signal - the resume content must be present."""
         page = AsyncMock()
         page.pdf.return_value = b"%PDF-1.4 fake"
         await _render_page_to_pdf(page, "http://f/print/r", ".resume-print", "A4", {"top": "10mm"})
@@ -177,7 +177,7 @@ class TestRenderPageWaitStrategy:
 
     async def test_still_waits_for_fonts_bounded(self):
         """Fonts must be loaded before snapshot (else text renders unstyled), and
-        the wait must be bounded by the nav timeout — not Playwright's default."""
+        the wait must be bounded by the nav timeout - not Playwright's default."""
         page = AsyncMock()
         page.pdf.return_value = b"%PDF-1.4 fake"
         await _render_page_to_pdf(page, "http://f/print/r", ".resume-print", "A4", {"top": "10mm"})
@@ -229,7 +229,7 @@ class TestPlaywrightErrorMapping:
 
 
 class TestRenderResumePdf:
-    """render_resume_pdf — real headless-Chromium render of a self-contained page.
+    """render_resume_pdf - real headless-Chromium render of a self-contained page.
 
     These require a launchable Chromium and skip cleanly when one is absent.
     Teardown tears down the module-global browser so a leaked process can't
@@ -261,7 +261,7 @@ class TestRenderResumePdf:
 
 
 class TestRenderResumePdfErrors:
-    """render_resume_pdf error mapping — connection failures become PDFRenderError."""
+    """render_resume_pdf error mapping - connection failures become PDFRenderError."""
 
     @pytest.fixture(autouse=True)
     async def _teardown_renderer(self):
@@ -270,7 +270,7 @@ class TestRenderResumePdfErrors:
 
     async def test_connection_refused_raises_pdf_render_error(self):
         """A refused target must surface as PDFRenderError, not a raw Playwright
-        error — this is the 'cannot connect to frontend' incident path.
+        error - this is the 'cannot connect to frontend' incident path.
 
         Skips only when Chromium itself can't launch (it still needs a browser
         to *attempt* the connection); a genuine connection failure must raise.
@@ -282,7 +282,7 @@ class TestRenderResumePdfErrors:
             if "Executable doesn't exist" in str(exc):
                 pytest.skip(f"chromium unavailable: {exc}")
             raise
-        # The browser launched but couldn't reach the frontend — but if the only
+        # The browser launched but couldn't reach the frontend - but if the only
         # failure was a missing executable surfaced as PDFRenderError, treat that
         # as a skip rather than a false-positive pass.
         message = str(exc_info.value).lower()

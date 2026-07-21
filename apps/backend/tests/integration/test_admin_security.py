@@ -50,7 +50,7 @@ class TestCsrf:
         target = await _seed(auth_env, "t@example.com")
         async with _client() as client:
             await _login(client, "admin@example.com")
-            # No X-CSRF-Token header on a state-changing request → 403 csrf_failed.
+            # No X-CSRF-Token header on a state-changing request -> 403 csrf_failed.
             resp = await client.post(f"/api/v1/admin/users/{target.id}/disable")
         assert resp.status_code == 403
 
@@ -71,7 +71,7 @@ class TestLogInjection:
         async with _client() as client:
             await _login(client, "admin3@example.com")
             client.headers["X-CSRF-Token"] = client.cookies.get("csrf")
-            # A CRLF-laden search must not error or inject — just returns a page.
+            # A CRLF-laden search must not error or inject - just returns a page.
             resp = await client.get("/api/v1/admin/users?q=evil%0d%0ainjected")
         assert resp.status_code == 200
 
@@ -125,7 +125,7 @@ class TestBulkBounds:
 
 class TestErasure:
     async def test_no_pii_in_audit_after_soft_delete(self, auth_env, hosted):
-        """H3: the retained audit trail must carry no PII (email) — ids only (R8.4)."""
+        """H3: the retained audit trail must carry no PII (email) - ids only (R8.4)."""
         from app.admin.repo import get_admin_repo
 
         await _seed(auth_env, "erase-admin@example.com", role="admin")

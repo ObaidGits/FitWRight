@@ -5,7 +5,7 @@ failure rate exceeds thresholds, the circuit breaker trips and the orchestrator
 skips that adapter (cascading to generic extraction).
 
 Uses rolling 1-hour windows via TTL-based counters (approximate but adequate
-for drift detection — true time-series requires Prometheus, a P3 concern).
+for drift detection - true time-series requires Prometheus, a P3 concern).
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ class DriftMonitor:
 
     def __init__(self, kv):
         self._kv = kv
-        self._tripped: dict[str, float] = {}  # platform → trip timestamp
+        self._tripped: dict[str, float] = {}  # platform -> trip timestamp
         self._probing: set[str] = set()       # platforms in half-open self-heal probe
 
     def _success_key(self, platform: str) -> str:
@@ -47,7 +47,7 @@ class DriftMonitor:
         """Record a successful extraction for a platform.
 
         Self-healing: if the platform was in a half-open probe, a success fully
-        heals the circuit — we reset the rolling counters so a handful of stale
+        heals the circuit - we reset the rolling counters so a handful of stale
         failures from before the outage don't immediately re-trip it.
         """
         if platform in self._probing:

@@ -102,7 +102,7 @@ class TestAvatar:
         assert resp.json()["error"]["code"] == "invalid_file"
 
     async def test_lying_mime_still_sniffed(self, auth_env):
-        # Claims to be a PNG but is not an image → rejected by magic-byte sniff.
+        # Claims to be a PNG but is not an image -> rejected by magic-byte sniff.
         async with _client() as c:
             await _login_new_user(c, auth_env, "av3@example.com")
             resp = await c.post(
@@ -143,7 +143,7 @@ class TestAvatar:
                 )
             ).json()
         assert body["width"] and body["height"]
-        # Master is NOT square-cropped — 3:2 aspect is preserved.
+        # Master is NOT square-cropped - 3:2 aspect is preserved.
         assert body["aspect_ratio"] == pytest.approx(1.5, rel=0.02)
         assert body["format"] == "png"
         assert body["dominant_color"].startswith("#")
@@ -176,7 +176,7 @@ class TestAvatar:
 
     async def test_profile_identity_live_resolves_avatar(self, auth_env):
         # The professional profile's identity.avatarUrl is resolved LIVE from the
-        # account master on every read — so changing the account photo is
+        # account master on every read - so changing the account photo is
         # reflected with no stored-profile write and no drift.
         async with _client() as c:
             await _login_new_user(c, auth_env, "av-live@example.com")
@@ -194,7 +194,7 @@ class TestAvatar:
         assert p1["data"]["identity"]["avatarUrl"] == url
 
     async def test_session_reflects_avatar(self, auth_env):
-        # The top-bar avatar reads /auth/session — it must carry the live URL so
+        # The top-bar avatar reads /auth/session - it must carry the live URL so
         # the badge shows the photo (and clears when removed).
         async with _client() as c:
             await _login_new_user(c, auth_env, "av9@example.com")

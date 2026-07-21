@@ -1,16 +1,16 @@
 """Unit tests for the admin-panel-upgrade foundation modules (Task 1.5).
 
-Covers the three foundation building blocks landed in tasks 1.1–1.3:
+Covers the three foundation building blocks landed in tasks 1.1-1.3:
 
-- ``app.admin.metric_registry`` — the static Metric_Registry. A source-level
+- ``app.admin.metric_registry`` - the static Metric_Registry. A source-level
   (``ast``) lint test proves **no Metric_Key is composed at runtime** (every
-  registered key is a plain ``str`` literal — Req 20.2), plus **bounded
+  registered key is a plain ``str`` literal - Req 20.2), plus **bounded
   cardinality** and closed/exhaustive dimension maps (Req 20.3/20.4).
-- ``app.admin.metric_store`` — the shared low-level ``metrics_daily`` (+ KV)
+- ``app.admin.metric_store`` - the shared low-level ``metrics_daily`` (+ KV)
   path. Tests the UPSERT/add idempotency + accumulation, windowed ``sum``,
   0-filled trailing ``series``, and JSON snapshot round-trip.
-- ``app.config.Settings`` — the 10 new ``admin_*`` / ``alert_*`` settings:
-  documented defaults, blank-env→default, and range clamping/validators.
+- ``app.config.Settings`` - the 10 new ``admin_*`` / ``alert_*`` settings:
+  documented defaults, blank-env->default, and range clamping/validators.
 
 Requirements: 20.2, 20.4, 15.8.
 """
@@ -60,7 +60,7 @@ pytestmark = pytest.mark.unit
 
 
 # ===========================================================================
-# Metric_Registry — static/lint: NO runtime-composed keys (Req 20.2)
+# Metric_Registry - static/lint: NO runtime-composed keys (Req 20.2)
 # ===========================================================================
 
 
@@ -79,13 +79,13 @@ class TestNoRuntimeComposedKeys:
     """
 
     def test_module_contains_no_fstrings(self):
-        """No f-string anywhere in the registry — keys can't be interpolated."""
+        """No f-string anywhere in the registry - keys can't be interpolated."""
         tree = _registry_ast()
         joined = [n for n in ast.walk(tree) if isinstance(n, ast.JoinedStr)]
         assert joined == [], "metric_registry must contain no f-strings (runtime-composed keys)"
 
     def test_module_contains_no_format_calls(self):
-        """No ``.format(...)`` call — keys can't be format-composed."""
+        """No ``.format(...)`` call - keys can't be format-composed."""
         tree = _registry_ast()
         offenders = [
             n
@@ -102,7 +102,7 @@ class TestNoRuntimeComposedKeys:
         We collect the module-level ``NAME = "literal"`` assignments, then verify
         that every symbol passed as the first argument of a ``MetricKeySpec(...)``
         (and every value in the two closed dimension maps) is one of those plain
-        literals — never a name bound to a concatenation/format/f-string.
+        literals - never a name bound to a concatenation/format/f-string.
         """
         tree = _registry_ast()
 
@@ -147,14 +147,14 @@ class TestNoRuntimeComposedKeys:
                 assert isinstance(first, ast.Name), "the key must be a bare constant name, not an expression"
                 key_symbols.append(first.id)
 
-        assert key_symbols, "no MetricKeySpec entries found — parse failed"
+        assert key_symbols, "no MetricKeySpec entries found - parse failed"
 
         # 3. Every key symbol must be a plain literal constant, never composed.
         for symbol in key_symbols:
             assert symbol not in composed_names, f"{symbol} is a runtime-composed key"
             assert symbol in literal_consts, f"{symbol} is not a plain string-literal constant"
 
-        # 4. The static literals must exactly match the runtime key set — ties
+        # 4. The static literals must exactly match the runtime key set - ties
         #    the source-level guarantee to the live registry.
         literal_values = {literal_consts[s] for s in key_symbols}
         assert literal_values == set(all_keys())
@@ -168,12 +168,12 @@ class TestNoRuntimeComposedKeys:
 
 
 # ===========================================================================
-# Metric_Registry — bounded cardinality + closed dimensions (Req 20.3/20.4)
+# Metric_Registry - bounded cardinality + closed dimensions (Req 20.3/20.4)
 # ===========================================================================
 
 
 # Fixed cardinality broken out by owning category (self-documenting). Bumping
-# any of these is an explicit, reviewed edit — never a runtime side effect.
+# any of these is an explicit, reviewed edit - never a runtime side effect.
 _EXPECTED_PER_CATEGORY = {
     MetricCategory.AI: 12,
     MetricCategory.ERRORS: 3,
@@ -272,7 +272,7 @@ class TestRegistryHelpers:
 
 
 # ===========================================================================
-# Metric_Store — I/O idempotency + accumulation over an isolated DB
+# Metric_Store - I/O idempotency + accumulation over an isolated DB
 # ===========================================================================
 
 
@@ -426,7 +426,7 @@ class TestMetricStoreSnapshot:
 
 
 # ===========================================================================
-# Config — defaults / blank-env→default / range validators
+# Config - defaults / blank-env->default / range validators
 # ===========================================================================
 
 

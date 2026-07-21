@@ -1,30 +1,30 @@
-"""Central, static Metric_Registry — the single source of truth for keys (Req 20).
+"""Central, static Metric_Registry - the single source of truth for keys (Req 20).
 
 Every durable observability / product-analytics signal is stored in
 ``metrics_daily`` under a **Metric_Key**. This module is the *only* place those
 keys are defined, and it defines each one as a compile-time ``str`` **literal
 constant** with an owning category and a one-line description (Req 20.1).
 
-Design guarantees enforced structurally here (Req 20.2–20.5, Property 8):
+Design guarantees enforced structurally here (Req 20.2-20.5, Property 8):
 
 - **No runtime-composed keys.** Every key is a literal assigned to a module-level
   constant. Nothing in this module concatenates, formats, or otherwise derives a
-  key from a runtime or user-supplied value — a static-analysis/lint test
+  key from a runtime or user-supplied value - a static-analysis/lint test
   (Task 1.5) asserts this.
 - **Closed, enumerated dimensions.** Where a metric is dimensioned (AI provider,
   downsamplable audit event), each dimension value is its *own* pre-registered
   static key drawn from a closed set (the 5 per-provider ``AI_CALLS_*`` keys and
-  the single ``AUDIT_DOWNSAMPLED_*`` key). The provider/event → key mappings are
+  the single ``AUDIT_DOWNSAMPLED_*`` key). The provider/event -> key mappings are
   fixed dictionaries over closed :class:`enum.Enum` inputs, so a lookup can only
   ever return an already-registered constant (never a new key). Adding a provider
   or event is a one-line edit here.
 - **Bounded cardinality.** The total number of distinct keys changes only by an
-  explicit edit to this module — never by runtime data. :func:`all_keys` and
+  explicit edit to this module - never by runtime data. :func:`all_keys` and
   :data:`METRIC_REGISTRY` let the cardinality test enumerate the full, fixed set.
 - **Single source of truth.** Every Domain_Metrics_Service and every Rollup_Step
   references these constants; no key string is written inline elsewhere.
 
-Categories (each with an owning component — see the design's Metric_Registry
+Categories (each with an owning component - see the design's Metric_Registry
 table): AI, errors, security, storage, resume, feature-usage, audit-downsample.
 The ``in_usage_series`` flag marks the subset the usage-series chart exposes
 (``AI_CALLS``, ``REQUEST_5XX``, ``SEC_LOGIN_FAILED``, all ``RESUMES_*`` and all
@@ -96,7 +96,7 @@ __all__ = [
 
 
 class MetricCategory(str, Enum):
-    """Owning category for every Metric_Key (bounded, closed set — Req 20.1)."""
+    """Owning category for every Metric_Key (bounded, closed set - Req 20.1)."""
 
     AI = "ai"
     ERRORS = "errors"
@@ -108,10 +108,10 @@ class MetricCategory(str, Enum):
 
 
 class AiProvider(str, Enum):
-    """Closed set of supported AI providers (the AI-call key dimension — Req 20.3).
+    """Closed set of supported AI providers (the AI-call key dimension - Req 20.3).
 
     A new provider is a one-line addition here plus its static ``AI_CALLS_*``
-    key + one :data:`AI_CALLS_BY_PROVIDER` entry — never a runtime-composed key.
+    key + one :data:`AI_CALLS_BY_PROVIDER` entry - never a runtime-composed key.
     """
 
     OPENAI = "openai"
@@ -128,7 +128,7 @@ class DownsamplableEvent(str, Enum):
 
 
 # ---------------------------------------------------------------------------
-# Static Metric_Key constants — one documented, category-owned literal each.
+# Static Metric_Key constants - one documented, category-owned literal each.
 # These are the ONLY key definitions in the codebase (Req 20.1/20.5).
 # ---------------------------------------------------------------------------
 
@@ -141,7 +141,7 @@ AI_RETRIES = "ai_retries"  # AI call retry attempts.
 AI_TOKENS_SUM = "ai_tokens_sum"  # Summed tokens across AI calls (for averages).
 AI_LATENCY_MS_SUM = "ai_latency_ms_sum"  # Summed AI latency in ms (for averages).
 
-# Per-provider AI call counts — a closed enumeration (5 static keys), never
+# Per-provider AI call counts - a closed enumeration (5 static keys), never
 # ``ai_calls:<provider>`` composed at runtime (Req 20.2/20.3).
 AI_CALLS_OPENAI = "ai_calls_openai"  # AI calls to OpenAI.
 AI_CALLS_GEMINI = "ai_calls_gemini"  # AI calls to Gemini.
@@ -196,7 +196,7 @@ class MetricKeySpec:
 
 
 # ---------------------------------------------------------------------------
-# The registry — the full, fixed enumeration of every Metric_Key. Ordering is
+# The registry - the full, fixed enumeration of every Metric_Key. Ordering is
 # by category. This tuple is the single thing the cardinality/lint test walks.
 # ---------------------------------------------------------------------------
 METRIC_REGISTRY: tuple[MetricKeySpec, ...] = (
@@ -245,7 +245,7 @@ METRIC_REGISTRY: tuple[MetricKeySpec, ...] = (
 
 
 # ---------------------------------------------------------------------------
-# Closed dimension → static-key maps. A lookup can only ever return an
+# Closed dimension -> static-key maps. A lookup can only ever return an
 # already-registered constant, so no key is composed at runtime (Req 20.2/20.3).
 # ---------------------------------------------------------------------------
 AI_CALLS_BY_PROVIDER: dict[AiProvider, str] = {

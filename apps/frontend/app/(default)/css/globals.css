@@ -1,13 +1,13 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
-/* Atelier design language — new token layer that coexists with the legacy
+/* Atelier design language - new token layer that coexists with the legacy
    Swiss tokens below (scoped under `.atelier`; see styles/atelier.css). */
 @import '../../../styles/atelier.css';
 
 @source "../../../{app,components,hooks,lib,messages}/**/*.{js,ts,jsx,tsx,mdx}";
 
 @theme inline {
-  /* No --radius-* tokens — Swiss style commits to rounded-none everywhere.
+  /* No --radius-* tokens - Swiss style commits to rounded-none everywhere.
      Dead tokens removed. */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -43,7 +43,7 @@
 
   /* Swiss Style brand tokens. --color-primary, --color-destructive,
      --color-secondary, --color-background already exist above via the
-     legacy var(--xxx) chain — these are only the additional brand
+     legacy var(--xxx) chain - these are only the additional brand
      semantics that didn't exist as @theme tokens before. */
   --color-canvas: #f0f0e8;
   --color-ink: #000000;
@@ -51,12 +51,12 @@
   --color-warning: #f97316;
 
   /* Brand-tinted neutrals (OKLCH, chroma tinted ~0.005-0.018 toward
-     Hyper Blue hue 264) — replace ad-hoc Tailwind grays. */
+     Hyper Blue hue 264) - replace ad-hoc Tailwind grays. */
   --color-paper-tint: oklch(96% 0.005 264); /* replaces gray-50/100/200 */
   --color-steel-grey: oklch(64% 0.012 264); /* replaces gray-300/400/500 */
   --color-ink-soft: oklch(38% 0.018 264); /* replaces gray-600/700/800/900 */
 
-  /* Hard offset shadows in solid ink — Swiss style commits to no blur.
+  /* Hard offset shadows in solid ink - Swiss style commits to no blur.
      Sized small (1px) through xl (12px) for Hero/featured surfaces. */
   --shadow-sw-xs: 1px 1px 0px 0px #000000;
   --shadow-sw-sm: 2px 2px 0px 0px #000000;
@@ -128,7 +128,7 @@
   --sidebar-ring: #1d4ed8;
 }
 
-/* Light theme only — Swiss/Brutalist works on the warm Canvas background.
+/* Light theme only - Swiss/Brutalist works on the warm Canvas background.
    The half-finished dark mode mapping was removed; the brand commits to
    light only. */
 

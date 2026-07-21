@@ -3,7 +3,7 @@
  *
  * Every generator returns a plain, serializable object designed to be rendered
  * through the `<JsonLd>` server component. Relationships use stable `@id`
- * anchors (Organization ⇄ WebSite ⇄ SoftwareApplication ⇄ Person) so search
+ * anchors (Organization <-> WebSite <-> SoftwareApplication <-> Person) so search
  * engines and AI retrieval systems can resolve the entity graph unambiguously.
  *
  * Content is truthful to the product: FitWright is free, open source, and
@@ -40,7 +40,7 @@ export function personSchema(): JsonLdObject {
   };
 }
 
-/** Organization behind the product — founder-linked for credibility. */
+/** Organization behind the product - founder-linked for credibility. */
 export function organizationSchema(): JsonLdObject {
   return {
     '@context': 'https://schema.org',
@@ -174,14 +174,14 @@ export function contactPageSchema(path = '/contact'): JsonLdObject {
 }
 
 /**
- * The open-source project as SoftwareSourceCode — a strong, truthful EEAT +
+ * The open-source project as SoftwareSourceCode - a strong, truthful EEAT +
  * knowledge-graph signal (real public repository, Apache-2.0 licensed).
  */
 export function softwareSourceCodeSchema(): JsonLdObject {
   return {
     '@context': 'https://schema.org',
     '@type': 'SoftwareSourceCode',
-    name: `${SITE_NAME} — source code`,
+    name: `${SITE_NAME} - source code`,
     codeRepository: GITHUB_REPO,
     url: GITHUB_REPO,
     programmingLanguage: ['TypeScript', 'Python'],
@@ -191,7 +191,7 @@ export function softwareSourceCodeSchema(): JsonLdObject {
   };
 }
 
-/** Generic WebPage — reusable for future static content pages. */
+/** Generic WebPage - reusable for future static content pages. */
 export function webPageSchema(input: {
   name: string;
   path: string;
@@ -208,7 +208,7 @@ export function webPageSchema(input: {
   };
 }
 
-/** Generic CollectionPage — reusable for portfolios, template galleries, etc. */
+/** Generic CollectionPage - reusable for portfolios, template galleries, etc. */
 export function collectionPageSchema(input: {
   name: string;
   path: string;
@@ -229,7 +229,7 @@ export function profilePageSchema(path = '/connect'): JsonLdObject {
   return {
     '@context': 'https://schema.org',
     '@type': 'ProfilePage',
-    name: `Connect with the developer — ${SITE_NAME}`,
+    name: `Connect with the developer - ${SITE_NAME}`,
     url: absoluteUrl(path),
     isPartOf: { '@id': SITE_ID },
     mainEntity: personSchema(),

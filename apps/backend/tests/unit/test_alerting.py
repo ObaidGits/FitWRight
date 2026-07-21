@@ -2,12 +2,12 @@
 
 Exercises ``run_alerting_job`` and its supporting helpers (``_apply_alert``,
 ``_high_error_rate``, ``_job_marker_stuck``, ``_cooldown_seconds``,
-``_deliver_alert``) in isolation — no real DB/KVStore. Dependencies are driven
+``_deliver_alert``) in isolation - no real DB/KVStore. Dependencies are driven
 via fake/mock objects injected through the ``kvstore`` param and monkeypatching
 ``get_metric_store`` / ``get_health_service`` / ``settings``.
 
 Covers: independent evaluation (Req 12.2), cooldown suppression (Req 12.3),
-resolve → re-raise (Req 12.4), misconfig skip (Req 12.6), no new collection
+resolve -> re-raise (Req 12.4), misconfig skip (Req 12.6), no new collection
 (Req 12.1/21.8), and fixed alert-set (Req 12.2).
 """
 
@@ -169,13 +169,13 @@ class TestLockBehavior:
 
 
 # ===========================================================================
-# 2. All conditions healthy — no alerts
+# 2. All conditions healthy - no alerts
 # ===========================================================================
 
 
 class TestAllHealthy:
     async def test_all_conditions_healthy_no_alerts(self, monkeypatch):
-        """All tiles healthy, no markers stuck → no raises/resolves."""
+        """All tiles healthy, no markers stuck -> no raises/resolves."""
         store, _ = _patch_alerting_deps(monkeypatch)
         kv = FakeKVStore(lock_acquired=True)
 
@@ -226,22 +226,22 @@ class TestIndependentConditions:
 
 class TestCooldownSuppression:
     async def test_cooldown_suppresses_reraise(self, monkeypatch):
-        """Raise once, call again within cooldown → not re-raised."""
+        """Raise once, call again within cooldown -> not re-raised."""
         health = _make_health({"Database": "down"})
         store, _ = _patch_alerting_deps(monkeypatch, health=health, cooldown=3600)
         kv = FakeKVStore(lock_acquired=True)
 
-        # First run — raises
+        # First run - raises
         result1 = await run_alerting_job(kvstore=kv)
         assert "db_unhealthy" in result1["raised"]
 
-        # Second run — within cooldown, should NOT re-raise
+        # Second run - within cooldown, should NOT re-raise
         result2 = await run_alerting_job(kvstore=kv)
         assert "db_unhealthy" not in result2["raised"]
         assert "db_unhealthy" not in result2["resolved"]
 
     async def test_cooldown_elapsed_allows_reraise(self, monkeypatch):
-        """Raise once, call again after cooldown → re-raised."""
+        """Raise once, call again after cooldown -> re-raised."""
         health = _make_health({"Database": "down"})
         store, _ = _patch_alerting_deps(monkeypatch, health=health, cooldown=60)
         kv = FakeKVStore(lock_acquired=True)
@@ -262,30 +262,30 @@ class TestCooldownSuppression:
             "updated_at": old_time,
         })
 
-        # Second run — cooldown has elapsed, should re-raise
+        # Second run - cooldown has elapsed, should re-raise
         result2 = await run_alerting_job(kvstore=kv)
         assert "db_unhealthy" in result2["raised"]
 
 
 # ===========================================================================
-# 5. Resolve → re-raise (Req 12.4)
+# 5. Resolve -> re-raise (Req 12.4)
 # ===========================================================================
 
 
 class TestResolveThenReraise:
     async def test_resolve_then_reraise_fresh(self, monkeypatch):
-        """Raise → condition clears → resolved; fires again → raises fresh."""
+        """Raise -> condition clears -> resolved; fires again -> raises fresh."""
         store = FakeMetricStore()
         kv = FakeKVStore(lock_acquired=True)
 
-        # Phase 1: DB is down → raise
+        # Phase 1: DB is down -> raise
         health_down = _make_health({"Database": "down"})
         _patch_alerting_deps(monkeypatch, health=health_down, store=store, cooldown=9999)
 
         result1 = await run_alerting_job(kvstore=kv)
         assert "db_unhealthy" in result1["raised"]
 
-        # Phase 2: DB recovers → resolve
+        # Phase 2: DB recovers -> resolve
         health_ok = _make_health({"Database": "ok"})
         mock_health_svc = MagicMock()
         mock_health_svc.compose_health = AsyncMock(return_value=health_ok)
@@ -297,7 +297,7 @@ class TestResolveThenReraise:
         result2 = await run_alerting_job(kvstore=kv)
         assert "db_unhealthy" in result2["resolved"]
 
-        # Phase 3: DB goes down again → raises fresh (no cooldown gate)
+        # Phase 3: DB goes down again -> raises fresh (no cooldown gate)
         mock_health_svc.compose_health = AsyncMock(return_value=health_down)
 
         result3 = await run_alerting_job(kvstore=kv)
@@ -311,7 +311,7 @@ class TestResolveThenReraise:
 
 class TestMisconfigSkip:
     async def test_misconfig_cooldown_skips_raises_but_resolves_still_work(self, monkeypatch):
-        """Invalid cooldown → true conditions skipped, but resolves still process."""
+        """Invalid cooldown -> true conditions skipped, but resolves still process."""
         store = FakeMetricStore()
         kv = FakeKVStore(lock_acquired=True)
 
@@ -338,7 +338,7 @@ class TestMisconfigSkip:
         assert "db_unhealthy" in result2["resolved"]
 
     async def test_misconfig_cooldown_skips_triggered_conditions(self, monkeypatch):
-        """Invalid cooldown → triggered conditions are skipped (not raised)."""
+        """Invalid cooldown -> triggered conditions are skipped (not raised)."""
         health_down = _make_health({"Database": "down"})
         store = FakeMetricStore()
         kv = FakeKVStore(lock_acquired=True)
@@ -355,7 +355,7 @@ class TestMisconfigSkip:
         assert "db_unhealthy" not in result["raised"]
 
     async def test_misconfig_error_rate_pct_skips_high_error_rate(self, monkeypatch):
-        """Invalid alert_error_rate_pct → high_error_rate condition is skipped."""
+        """Invalid alert_error_rate_pct -> high_error_rate condition is skipped."""
         store = FakeMetricStore()
         kv = FakeKVStore(lock_acquired=True)
 
@@ -391,7 +391,7 @@ class TestNoNewCollection:
         # compose_health WAS called (reads existing signal)
         mock_health_svc.compose_health.assert_called_once()
 
-        # No new data collection — upsert and add should NOT be called
+        # No new data collection - upsert and add should NOT be called
         store.upsert.assert_not_called()
         store.add.assert_not_called()
 
@@ -470,7 +470,7 @@ class TestHighErrorRate:
         assert result is False
 
     async def test_high_error_rate_zero_total_not_triggered(self, monkeypatch):
-        """Zero total requests → 0% → not triggered."""
+        """Zero total requests -> 0% -> not triggered."""
         store = FakeMetricStore()
 
         from app.config import settings
@@ -489,21 +489,21 @@ class TestHighErrorRate:
 
 class TestJobMarkerStuck:
     def test_job_marker_stuck_detected(self, monkeypatch):
-        """Marker with running_since far in the past → stuck → alert raised."""
+        """Marker with running_since far in the past -> stuck -> alert raised."""
         from app.config import settings
 
         monkeypatch.setattr(settings, "admin_job_stuck_multiplier", 3)
         monkeypatch.setattr(settings, "admin_job_stuck_ceiling_seconds", 3600)
 
         now = datetime.now(timezone.utc)
-        # running for 5000 seconds with no expected duration → exceeds 3600 ceiling
+        # running for 5000 seconds with no expected duration -> exceeds 3600 ceiling
         marker = {
             "running_since": (now - timedelta(seconds=5000)).isoformat(),
         }
         assert _job_marker_stuck(marker, now) is True
 
     def test_job_marker_not_stuck_within_ceiling(self, monkeypatch):
-        """Marker running within ceiling → not stuck."""
+        """Marker running within ceiling -> not stuck."""
         from app.config import settings
 
         monkeypatch.setattr(settings, "admin_job_stuck_multiplier", 3)
@@ -517,14 +517,14 @@ class TestJobMarkerStuck:
         assert _job_marker_stuck(marker, now) is False
 
     def test_job_marker_stuck_with_expected_duration(self, monkeypatch):
-        """Marker exceeding expected * multiplier → stuck."""
+        """Marker exceeding expected * multiplier -> stuck."""
         from app.config import settings
 
         monkeypatch.setattr(settings, "admin_job_stuck_multiplier", 3)
         monkeypatch.setattr(settings, "admin_job_stuck_ceiling_seconds", 3600)
 
         now = datetime.now(timezone.utc)
-        # expected 60s, multiplier 3 → stuck if >180s; running for 200s
+        # expected 60s, multiplier 3 -> stuck if >180s; running for 200s
         marker = {
             "running_since": (now - timedelta(seconds=200)).isoformat(),
             "expected_duration_seconds": 60,
@@ -532,7 +532,7 @@ class TestJobMarkerStuck:
         assert _job_marker_stuck(marker, now) is True
 
     def test_job_marker_none_not_stuck(self, monkeypatch):
-        """No marker → not stuck."""
+        """No marker -> not stuck."""
         from app.config import settings
 
         monkeypatch.setattr(settings, "admin_job_stuck_multiplier", 3)
@@ -542,7 +542,7 @@ class TestJobMarkerStuck:
         assert _job_marker_stuck(None, now) is False
 
     def test_job_marker_not_running_not_stuck(self, monkeypatch):
-        """Marker without running_since → not stuck."""
+        """Marker without running_since -> not stuck."""
         from app.config import settings
 
         monkeypatch.setattr(settings, "admin_job_stuck_multiplier", 3)
@@ -577,7 +577,7 @@ class TestDeliverAlert:
 
 class TestApplyAlert:
     async def test_fresh_triggered_raises_immediately(self):
-        """triggered + no prior state → raise immediately."""
+        """triggered + no prior state -> raise immediately."""
         store = FakeMetricStore()
         now = datetime.now(timezone.utc)
         raised = []
@@ -592,7 +592,7 @@ class TestApplyAlert:
         assert resolved == []
 
     async def test_triggered_within_cooldown_suppressed(self):
-        """triggered + already raised within cooldown → suppressed."""
+        """triggered + already raised within cooldown -> suppressed."""
         store = FakeMetricStore()
         now = datetime.now(timezone.utc)
 
@@ -617,7 +617,7 @@ class TestApplyAlert:
         assert resolved == []
 
     async def test_not_triggered_was_raised_resolves(self):
-        """not triggered + was raised → resolve."""
+        """not triggered + was raised -> resolve."""
         store = FakeMetricStore()
         now = datetime.now(timezone.utc)
 
@@ -641,7 +641,7 @@ class TestApplyAlert:
         assert "test_cond" in resolved
 
     async def test_not_triggered_not_raised_noop(self):
-        """not triggered + not previously raised → nothing."""
+        """not triggered + not previously raised -> nothing."""
         store = FakeMetricStore()
         now = datetime.now(timezone.utc)
         raised = []
@@ -704,7 +704,7 @@ class TestCooldownSeconds:
 
 class TestBackgroundJobStuckIntegration:
     async def test_job_marker_stuck_raises_alert(self, monkeypatch):
-        """A stuck job marker in the full run → background_job_stuck alert raised."""
+        """A stuck job marker in the full run -> background_job_stuck alert raised."""
         store = FakeMetricStore()
         kv = FakeKVStore(lock_acquired=True)
 

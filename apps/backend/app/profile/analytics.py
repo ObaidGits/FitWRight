@@ -1,4 +1,4 @@
-"""Profile Analytics — privacy-respecting, event-driven usage counters.
+"""Profile Analytics - privacy-respecting, event-driven usage counters.
 
 Analytics is a **consumer**, not a concern woven through business logic: domain
 services emit typed events to the outbox; the analytics consumer

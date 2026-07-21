@@ -208,7 +208,7 @@ export const ResumeModernTwoColumn: React.FC<ResumeModernTwoColumnProps> = ({
                     >
                       <span>
                         {exp.company}
-                        {exp.location && <> • {exp.location}</>}
+                        {exp.location && <> - {exp.location}</>}
                       </span>
                     </div>
 
@@ -218,7 +218,7 @@ export const ResumeModernTwoColumn: React.FC<ResumeModernTwoColumnProps> = ({
                       >
                         {exp.description.map((desc, index) => (
                           <li key={index} className="flex">
-                            <span className="mr-1.5 flex-shrink-0">•&nbsp;</span>
+                            <span className="mr-1.5 flex-shrink-0">-&nbsp;</span>
                             <span>
                               <SafeHtml html={desc} />
                             </span>
@@ -308,7 +308,7 @@ export const ResumeModernTwoColumn: React.FC<ResumeModernTwoColumnProps> = ({
                         >
                           {project.description.map((desc, index) => (
                             <li key={index} className="flex">
-                              <span className="mr-1.5 flex-shrink-0">•&nbsp;</span>
+                              <span className="mr-1.5 flex-shrink-0">-&nbsp;</span>
                               <span>
                                 <SafeHtml html={desc} />
                               </span>
@@ -329,7 +329,7 @@ export const ResumeModernTwoColumn: React.FC<ResumeModernTwoColumnProps> = ({
               <ul className={`ml-4 ${baseStyles['resume-list']} ${baseStyles['resume-text-xs']}`}>
                 {certificationsTraining.map((cert, index) => (
                   <li key={index} className="flex">
-                    <span className="mr-1.5 flex-shrink-0">•&nbsp;</span>
+                    <span className="mr-1.5 flex-shrink-0">-&nbsp;</span>
                     <span>{cert}</span>
                   </li>
                 ))}
@@ -422,7 +422,7 @@ export const ResumeModernTwoColumn: React.FC<ResumeModernTwoColumnProps> = ({
               >
                 {headingFallbacks.languages}
               </h3>
-              <p className={baseStyles['resume-text-xs']}>{languages.join(' • ')}</p>
+              <p className={baseStyles['resume-text-xs']}>{languages.join(' - ')}</p>
             </div>
           )}
 

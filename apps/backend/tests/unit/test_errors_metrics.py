@@ -8,10 +8,10 @@ Metric_Keys via an injected :class:`~app.admin.metric_store.MetricStore`:
   sums of ``REQUEST_4XX`` / ``REQUEST_5XX``; ``bySource.api`` is their total;
   ``bySource.ai`` is the windowed ``AI_FAILURE`` sum; ``job`` / ``storage`` are
   0 (documented gaps); a day older than the window is excluded.
-- **Trend (Req 5.4).** Exactly ``window`` daily points, oldest→newest, each equal
+- **Trend (Req 5.4).** Exactly ``window`` daily points, oldest->newest, each equal
   to ``REQUEST_4XX + REQUEST_5XX`` for that day (0 for empty days); last is today.
 - **top-N ordering (Req 5.2).** ``topRouteClasses`` is ``[]`` by design (no
-  durable per-route-class failure key) — which satisfies "fewer than 10".
+  durable per-route-class failure key) - which satisfies "fewer than 10".
 - **Zero/empty (Req 5.1/5.3/5.4).** An empty store yields all-zero counts, an
   all-zero by-source, an all-zero trend, and an empty route-class list.
 - **Secret-free (Req 15.8).** The serialized summary passes the response-boundary
@@ -64,7 +64,7 @@ class _CountingStore:
     """A ``MetricStore``-shaped wrapper that counts ``sum`` / ``series`` calls.
 
     Delegates every read to the wrapped real store so the returned data is real,
-    while tallying how many bounded reads a single ``summary`` issues — the proof
+    while tallying how many bounded reads a single ``summary`` issues - the proof
     of O(1)-w.r.t.-data-volume (Req 5.7). ``upsert`` is delegated for seeding.
     """
 
@@ -86,7 +86,7 @@ class _CountingStore:
 
 
 # ===========================================================================
-# 1. Bucket math (Req 5.1 / 5.3) — windowed sums, out-of-window excluded
+# 1. Bucket math (Req 5.1 / 5.3) - windowed sums, out-of-window excluded
 # ===========================================================================
 
 
@@ -105,7 +105,7 @@ class TestBucketMath:
         await store.upsert(_day(29), REQUEST_4XX, 1)
         await store.upsert(_day(29), REQUEST_5XX, 1)
         await store.upsert(_day(29), AI_FAILURE, 1)
-        # A day OUTSIDE the window (40 days ago) — must be excluded entirely.
+        # A day OUTSIDE the window (40 days ago) - must be excluded entirely.
         await store.upsert(_day(40), REQUEST_4XX, 100)
         await store.upsert(_day(40), REQUEST_5XX, 100)
         await store.upsert(_day(40), AI_FAILURE, 100)
@@ -137,7 +137,7 @@ class TestBucketMath:
 
 
 # ===========================================================================
-# 2. Trend (Req 5.4) — window points, oldest→newest, per-day 4xx+5xx
+# 2. Trend (Req 5.4) - window points, oldest->newest, per-day 4xx+5xx
 # ===========================================================================
 
 
@@ -155,7 +155,7 @@ class TestTrend:
 
         # Exactly `window` points.
         assert len(summary.trend) == 7
-        # Oldest→newest: dates strictly ascending.
+        # Oldest->newest: dates strictly ascending.
         dates = [p.date for p in summary.trend]
         assert dates == sorted(dates)
         # Last point is today, value = 4xx + 5xx for today.
@@ -171,7 +171,7 @@ class TestTrend:
 
 
 # ===========================================================================
-# 3. top-N ordering (Req 5.2) — empty by design, satisfies "fewer than 10"
+# 3. top-N ordering (Req 5.2) - empty by design, satisfies "fewer than 10"
 # ===========================================================================
 
 
@@ -235,7 +235,7 @@ class TestSecretFree:
 
 
 # ===========================================================================
-# 6. O(1) read (Req 5.7) — fixed store-read count regardless of data volume
+# 6. O(1) read (Req 5.7) - fixed store-read count regardless of data volume
 # ===========================================================================
 
 
@@ -262,6 +262,6 @@ class TestO1Read:
         # Fixed shape: 3 sum reads (4xx, 5xx, AI_FAILURE) + 2 series reads (4xx, 5xx).
         assert small.sum_calls == 3
         assert small.series_calls == 2
-        # Identical regardless of how much data was seeded — O(1) w.r.t. volume.
+        # Identical regardless of how much data was seeded - O(1) w.r.t. volume.
         assert big.sum_calls == small.sum_calls
         assert big.series_calls == small.series_calls

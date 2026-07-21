@@ -41,7 +41,7 @@ def seed_master_db(data_dir: Path, master: dict[str, Any]) -> str:
 
     The upload endpoint only accepts documents (and runs a non-deterministic LLM
     parse), so for a controlled, deterministic master we write it straight into
-    the isolated TinyDB file via app.database.Database — the same file the server
+    the isolated TinyDB file via app.database.Database - the same file the server
     opens once booted with DATA_DIR=<data_dir>. Returns the master's resume_id.
     """
     from app.database import Database

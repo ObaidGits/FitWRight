@@ -50,7 +50,7 @@ def test_adapters_are_only_constructed_in_platform():
             if stripped.startswith("def "):
                 continue  # the builder *definition* is allowed in its owner module
             if _CALL.search(line):
-                offenders.append(f"{rel}:{i}: constructs an adapter outside platform/ → {stripped}")
+                offenders.append(f"{rel}:{i}: constructs an adapter outside platform/ -> {stripped}")
     assert not offenders, (
         "Adapter construction escaped the composition root (Phase 3 exit criterion).\n"
         "Receive the adapter from the composition Container instead:\n" + "\n".join(offenders)

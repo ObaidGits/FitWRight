@@ -6,7 +6,7 @@ Prunes unbounded growth on a slow cadence, single-flighted via the KVStore lock:
   rows are retained for the operator to inspect/replay);
 - (snapshot caps are enforced inline on write; a future sweep can reconcile).
 
-Idempotent + resumable — each run re-scans from scratch, so a crash mid-batch is
+Idempotent + resumable - each run re-scans from scratch, so a crash mid-batch is
 recovered next run. Windows are configurable; the job never touches live/unread
 data or the audit log.
 """
@@ -45,7 +45,7 @@ async def run_retention_jobs(*, kvstore=None) -> dict:
         from app.config import settings
         from app.notifications.service import get_notification_service
 
-        # Prune through the owning modules' services — retention orchestrates,
+        # Prune through the owning modules' services - retention orchestrates,
         # each module remains the sole writer of its tables (Amendment E).
         notifications_pruned = await get_notification_service().prune_read_before(
             _cutoff_iso(settings.notification_retention_days)
@@ -71,7 +71,7 @@ async def _reclaim_orphan_avatars() -> int:
     """Delete stored avatar objects no longer referenced by any user (R13.2).
 
     Local provider only (the on-disk sweep); hosted CDN objects are reclaimed by
-    the provider's lifecycle rules. Best-effort — never raises into the batch.
+    the provider's lifecycle rules. Best-effort - never raises into the batch.
     """
     from app.config import settings
 

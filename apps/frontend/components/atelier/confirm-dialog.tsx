@@ -17,7 +17,7 @@ import { cn } from '@/lib/utils';
 import { useTranslations } from '@/lib/i18n';
 
 /**
- * Atelier Confirm Dialog — token-based modal for confirming user actions.
+ * Atelier Confirm Dialog - token-based modal for confirming user actions.
  * Semantic variants map to the Atelier Button variants and success/warning/
  * destructive tokens. Replaces the legacy Swiss confirm dialog; same props API.
  */

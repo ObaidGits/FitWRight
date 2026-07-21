@@ -24,7 +24,7 @@ const eslintConfig = [
     },
     rules: {
       'prettier/prettier': 'error',
-      // Disable new rule from eslint-config-next@16 — existing code uses
+      // Disable new rule from eslint-config-next@16 - existing code uses
       // setState in effects for syncing props and DOM measurements.
       'react-hooks/set-state-in-effect': 'off',
     },

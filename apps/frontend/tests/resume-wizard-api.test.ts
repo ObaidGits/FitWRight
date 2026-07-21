@@ -61,7 +61,7 @@ describe('resume wizard api', () => {
         headers: { 'content-type': 'application/json' },
       })
     );
-    // readJson extracts `detail` — the user never sees the `{"detail":...}` blob.
+    // readJson extracts `detail` - the user never sees the `{"detail":...}` blob.
     await expect(finalizeResumeWizard(createInitialResumeWizardState())).rejects.toThrow(
       'A master resume already exists.'
     );

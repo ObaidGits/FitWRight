@@ -29,7 +29,7 @@ export default function AppError({
         </span>
         <h1 className="text-2xl font-semibold">Something went wrong</h1>
         <p className="mt-2 text-[var(--muted-foreground)]">
-          This page hit an unexpected error. Try again, or return home — your saved work is safe.
+          This page hit an unexpected error. Try again, or return home - your saved work is safe.
         </p>
         <div className="mt-6 flex justify-center gap-3">
           <Button onClick={() => reset()}>Try again</Button>

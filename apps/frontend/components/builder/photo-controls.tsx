@@ -39,15 +39,15 @@ interface PhotoControlsProps {
   profileAvatarUrl: string | null | undefined;
   /** Called after a successful upload/removal so the parent can refresh the URL. */
   onProfileAvatarChange?: (url: string | null) => void;
-  /** Active template — drives capability-aware defaults + the live preview. */
+  /** Active template - drives capability-aware defaults + the live preview. */
   template: TemplateType;
   onError?: (message: string) => void;
 }
 
 /**
- * PhotoControls — the per-resume Photo System editor (Phases 5, 6, 16).
+ * PhotoControls - the per-resume Photo System editor (Phases 5, 6, 16).
  *
- * Manages both the *canonical profile photo* (upload / replace / remove — the
+ * Manages both the *canonical profile photo* (upload / replace / remove - the
  * one master) and this resume's *presentation + provenance* config (show, shape,
  * size, position, crop, reposition, zoom, frame). The live preview uses the same
  * `<PhotoFrame>` the templates render, so what you set is exactly what prints.
@@ -80,7 +80,7 @@ export function PhotoControls({
 
   return (
     <div className="space-y-4">
-      {/* Upload / replace / remove — the shared canonical-photo uploader. */}
+      {/* Upload / replace / remove - the shared canonical-photo uploader. */}
       <div>
         <h4 className={headingCls}>Profile photo</h4>
         <AvatarUploader
@@ -126,7 +126,7 @@ export function PhotoControls({
             <p className="mt-1 text-[11px] text-[var(--muted-foreground)]">
               {config.ref === 'canonical'
                 ? 'Updates automatically when you change your profile photo.'
-                : 'Frozen to the current photo — future profile changes won’t affect this resume.'}
+                : "Frozen to the current photo - future profile changes won't affect this resume."}
             </p>
           </div>
 

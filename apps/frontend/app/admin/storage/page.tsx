@@ -12,7 +12,7 @@
  * Every optional/absent field renders an explicit indicator, never a blank or a
  * misleading zero (Req 7):
  *  - a size that is `null` shows "Unavailable"; a stale sample adds a "Stale"
- *    badge (text + color, never color alone — a11y);
+ *    badge (text + color, never color alone - a11y);
  *  - when `growthUnavailable`, the growth card shows "Unavailable" with the
  *    backend-provided reason instead of a fabricated rate.
  *
@@ -35,14 +35,14 @@ import { useStorage } from '@/features/admin/hooks';
 import type { StoragePanel } from '@/lib/api/admin';
 
 // ---------------------------------------------------------------------------
-// Byte formatting — a small local, null-safe helper (binary units, 1 KB = 1024
+// Byte formatting - a small local, null-safe helper (binary units, 1 KB = 1024
 // bytes) so a sampled size renders as "1.2 GB". Returns `null` for absent values
 // so the caller renders an explicit "Unavailable" indicator rather than a 0.
 // ---------------------------------------------------------------------------
 
 const BYTE_UNITS = ['bytes', 'KB', 'MB', 'GB', 'TB', 'PB'] as const;
 
-/** `1288490188 → "1.2 GB"`; `0 → "0 bytes"`; `null`/negative/NaN → `null`. */
+/** `1288490188 -> "1.2 GB"`; `0 -> "0 bytes"`; `null`/negative/NaN -> `null`. */
 function formatBytes(bytes?: number | null): string | null {
   if (bytes == null || !Number.isFinite(bytes) || bytes < 0) return null;
   if (bytes === 0) return '0 bytes';
@@ -54,7 +54,7 @@ function formatBytes(bytes?: number | null): string | null {
   return `${value.toFixed(digits)} ${BYTE_UNITS[i]}`;
 }
 
-/** `bytes/day → "1.2 GB / day"`; `null` when the estimate is unavailable. */
+/** `bytes/day -> "1.2 GB / day"`; `null` when the estimate is unavailable. */
 function formatGrowth(bytesPerDay?: number | null): string | null {
   const formatted = formatBytes(bytesPerDay);
   return formatted == null ? null : `${formatted} / day`;
@@ -64,7 +64,7 @@ function formatGrowth(bytesPerDay?: number | null): string | null {
 // Presentational pieces
 // ---------------------------------------------------------------------------
 
-/** An explicit "Unavailable" badge (text + color) — never a blank or fake 0. */
+/** An explicit "Unavailable" badge (text + color) - never a blank or fake 0. */
 function UnavailableBadge({ label }: { label: string }) {
   return (
     <Badge variant="outline" aria-label={`${label}: unavailable`}>
@@ -206,7 +206,7 @@ export default function AdminStoragePage() {
               As of <LocalTime iso={data.computedAt} />
             </p>
 
-            {/* Sampled sizes — DB + object storage (stale/unavailable aware). */}
+            {/* Sampled sizes - DB + object storage (stale/unavailable aware). */}
             <section aria-label="Storage usage">
               <div className="grid gap-4 sm:grid-cols-2">
                 <SizeCard

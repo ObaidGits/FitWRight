@@ -65,7 +65,7 @@ class TestStreamRegistry:
 
     async def test_cancel_is_isolated_across_users(self, kv):
         """A cancel for one user's stream can never abort another user's stream
-        with the same request id (cross-user isolation — Property 5)."""
+        with the same request id (cross-user isolation - Property 5)."""
         reg = StreamRegistry(kv)
         await reg.request_cancel("attacker", "shared-req-id")
         # The victim's identically-named stream is unaffected.

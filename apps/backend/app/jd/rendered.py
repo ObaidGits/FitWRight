@@ -1,10 +1,10 @@
 """Browser-extension fallback: extract from a user's already-rendered DOM (Phase 4).
 
-Some pages can never be extracted server-side — hard logins, aggressive anti-bot
+Some pages can never be extracted server-side - hard logins, aggressive anti-bot
 (Cloudflare/DataDome), or heavily client-rendered SPAs behind auth. For these, a
 browser extension can capture the DOM the USER is already looking at (in their
 authenticated session) and POST it here. We then run the SAME static extractors
-(classification → JSON-LD → hydration → DOM scoring) on that HTML — no fetch, no
+(classification -> JSON-LD -> hydration -> DOM scoring) on that HTML - no fetch, no
 scraping, no credentials touched. The content came from the user's own browser.
 
 This is the truthful "last mile": we never fabricate; if the provided DOM has no
@@ -38,7 +38,7 @@ MAX_RENDERED_BYTES = 5 * 1024 * 1024  # 5 MiB cap on user-supplied DOM
 def extract_from_rendered(url: str, html: str) -> ExtractionResult:
     """Extract a JD from user-supplied rendered HTML (no network).
 
-    Runs the static cascade (JSON-LD → hydration → DOM). Always returns an
+    Runs the static cascade (JSON-LD -> hydration -> DOM). Always returns an
     ExtractionResult; empty content + error_code on failure (never fabricated).
     """
     canonical = canonicalize_url(url) if url else ""
@@ -50,13 +50,13 @@ def extract_from_rendered(url: str, html: str) -> ExtractionResult:
     if len(html) > MAX_RENDERED_BYTES:
         html = html[:MAX_RENDERED_BYTES]
 
-    # Classify first — a rendered login/expired page is still a login/expired page.
+    # Classify first - a rendered login/expired page is still a login/expired page.
     page_class = classify_page(html)
     if page_class in (PageClass.LOGIN_REQUIRED, PageClass.EXPIRED_JOB, PageClass.CAPTCHA, PageClass.WAF_BLOCKED):
         traces.append(StageTrace(stage="classify", duration_ms=0, status="failed", detail=page_class))
         return _empty(
             url, canonical, page_class,
-            "The captured page looks like a login, expired, or blocked page — no job description found.",
+            "The captured page looks like a login, expired, or blocked page - no job description found.",
             traces,
         )
 
@@ -101,7 +101,7 @@ def extract_from_rendered(url: str, html: str) -> ExtractionResult:
         dom.explanation = ExtractionExplanation(
             summary="Extracted from your browser's rendered page.",
             pipeline_trace=traces,
-            suggestions=["Verify the text below — it was captured from the live page you were viewing."],
+            suggestions=["Verify the text below - it was captured from the live page you were viewing."],
         )
         return dom
     traces.append(StageTrace(stage="dom_scored", duration_ms=(time.perf_counter() - t0) * 1000, status="failed", detail="insufficient content"))

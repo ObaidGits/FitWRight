@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Shared AI-progress primitives (Loading Experience audit — P0).
+ * Shared AI-progress primitives (Loading Experience audit - P0).
  *
  * Two pure client-side hooks that back the {@link AiProgress} timeline:
  *
@@ -42,7 +42,7 @@ export interface DeterministicStagesResult {
 }
 
 export interface DeterministicStagesOptions {
-  /** Flip to true when the real work resolves — completes the timeline honestly. */
+  /** Flip to true when the real work resolves - completes the timeline honestly. */
   done: boolean;
   /** Whether the flow is currently running (false pauses/resets to idle). */
   active: boolean;
@@ -56,7 +56,7 @@ export interface DeterministicStagesOptions {
  * Advance through `count` stages on a decelerating timer while `active`.
  *
  * The final stage is a HOLD: the timer stops one short of the last stage and
- * only lands on it — and marks `complete` — once `done` is true. This guarantees
+ * only lands on it - and marks `complete` - once `done` is true. This guarantees
  * the UI never claims completion before the promise resolves.
  */
 export function useDeterministicStages(

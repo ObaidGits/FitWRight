@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * <AiProgress> — the shared, premium loading timeline for genuine multi-second
- * AI work (Loading Experience audit — P0). Extracted from the Tailor flow so
+ * <AiProgress> - the shared, premium loading timeline for genuine multi-second
+ * AI work (Loading Experience audit - P0). Extracted from the Tailor flow so
  * every AI operation reads identically.
  *
  * Two drive modes:
@@ -38,7 +38,7 @@ export interface AiProgressProps {
   done?: boolean;
   /** Rotating reassurance microcopy (fades under motion-safe). */
   messages?: string[];
-  /** Honest, static time hint, e.g. "Usually 5–10 seconds." */
+  /** Honest, static time hint, e.g. "Usually 5-10 seconds." */
   estimate?: string;
   /** Reassurance shown if the run runs long (deterministic mode only). */
   overdueMessage?: string;
@@ -79,7 +79,7 @@ export function AiProgress({
   done = false,
   messages,
   estimate,
-  overdueMessage = 'Still working — this can take a little longer for larger inputs.',
+  overdueMessage = 'Still working - this can take a little longer for larger inputs.',
   preview,
   className,
 }: AiProgressProps) {
@@ -121,7 +121,7 @@ export function AiProgress({
   return (
     <div className={cn('space-y-4', className)}>
       <div role="status" aria-live="polite" className="sr-only">
-        {det.complete ? 'Done.' : activeLabel ? `${activeLabel}.` : 'Working…'}
+        {det.complete ? 'Done.' : activeLabel ? `${activeLabel}.` : 'Working...'}
       </div>
 
       <ol className="space-y-2.5">

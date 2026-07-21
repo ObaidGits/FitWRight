@@ -12,7 +12,7 @@ const HEROKU_503_HTML =
   '<!DOCTYPE html>\n<html><head><title>Application Error</title></head>' +
   '<body><div class="message"><h2>Application Error</h2></div></body></html>';
 
-describe('parseError — never leaks HTML', () => {
+describe('parseError - never leaks HTML', () => {
   it('maps a Heroku 503 HTML page to a clean, status-specific message', async () => {
     const err = await parseError(new Response(HEROKU_503_HTML, { status: 503 }));
     expect(err).toBeInstanceOf(ApiError);
@@ -51,7 +51,7 @@ describe('parseError — never leaks HTML', () => {
   });
 });
 
-describe('toMessage — sanitizes stray HTML', () => {
+describe('toMessage - sanitizes stray HTML', () => {
   it('never returns an HTML string even if an Error carries one', () => {
     expect(toMessage(new Error(HEROKU_503_HTML), 'fallback')).toBe('fallback');
   });
@@ -60,7 +60,7 @@ describe('toMessage — sanitizes stray HTML', () => {
   });
 });
 
-describe('previewImproveResume — Tailor path', () => {
+describe('previewImproveResume - Tailor path', () => {
   let fetchMock: ReturnType<typeof vi.fn>;
   beforeEach(() => {
     fetchMock = vi.fn();

@@ -15,7 +15,7 @@ Both are guarded by a **shared secret** (``INTERNAL_JOB_TOKEN``) supplied in the
 ``X-Internal-Job-Token`` header and compared in **constant time**. They require
 no user session (a machine has none) and therefore are naturally outside the
 per-session CSRF check (the ``AuthMiddleware`` only enforces CSRF when a session
-principal is present). A missing token → 401, a wrong token → 403, and when no
+principal is present). A missing token -> 401, a wrong token -> 403, and when no
 token is configured (the zero-config local default) *every* caller is rejected
 so auth metrics / job control are never exposed unauthenticated.
 """
@@ -44,11 +44,11 @@ _TOKEN_HEADER = "X-Internal-Job-Token"
 def _authorize(provided: str | None) -> None:
     """Constant-time shared-secret check for the internal endpoints.
 
-    - No configured ``INTERNAL_JOB_TOKEN`` → reject everyone (401): the endpoints
+    - No configured ``INTERNAL_JOB_TOKEN`` -> reject everyone (401): the endpoints
       must never serve data / run jobs unauthenticated, and locally they are
       simply unused.
-    - Missing header → 401 ``unauthorized``.
-    - Present but wrong → 403 ``forbidden``.
+    - Missing header -> 401 ``unauthorized``.
+    - Present but wrong -> 403 ``forbidden``.
     """
     configured = settings.internal_job_token
     if not configured:
@@ -85,7 +85,7 @@ async def run_jobs(
     _authorize(x_internal_job_token)
     counts = await get_session_service().reap()
     logger.info("Internal run-jobs reaped %s", counts)
-    # P2 Admin scheduled jobs (rollup + purge) — single-flighted, idempotent, and
+    # P2 Admin scheduled jobs (rollup + purge) - single-flighted, idempotent, and
     # safe to run on every call (rollup only writes closed days; purge only acts
     # on grace-elapsed users). Kept best-effort so a job hiccup never fails the
     # reaper cron.
@@ -98,7 +98,7 @@ async def run_jobs(
         logger.exception("Internal run-jobs: admin jobs failed")
         admin_jobs = {"status": "error"}
     # P3 productivity jobs (outbox drain + notification emails + scheduler scans +
-    # retention) — single-flighted + idempotent, best-effort so a hiccup never
+    # retention) - single-flighted + idempotent, best-effort so a hiccup never
     # fails the reaper cron.
     productivity: dict[str, object] = {}
     try:
@@ -127,7 +127,7 @@ async def metrics(
     The auth counters stay at the top level (stable shape for existing pollers);
     the P2 admin metrics snapshot is added under the ``admin`` key (R12.1).
 
-    In-process counters are per-worker (an accepted operational boundary — scrape
+    In-process counters are per-worker (an accepted operational boundary - scrape
     every worker to aggregate). The operationally-critical **purge backlog** and
     soft-deleted totals are instead computed **live from the DB** here, so they
     are authoritative and worker-independent regardless of which worker answers

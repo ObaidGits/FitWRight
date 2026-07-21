@@ -2,9 +2,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 
 /**
- * Phase P3 — prefill from profile (W-P3.2): on first load, if the server returns
+ * Phase P3 - prefill from profile (W-P3.2): on first load, if the server returns
  * a profile-prefilled state, the wizard adopts it (jumping past known sections)
- * — but only while still pristine.
+ * - but only while still pristine.
  */
 
 vi.mock('next/navigation', () => ({
@@ -72,7 +72,7 @@ function prefilledState(): ResumeWizardState {
   };
 }
 
-describe('Wizard P3 — prefill from profile (W-P3.2)', () => {
+describe('Wizard P3 - prefill from profile (W-P3.2)', () => {
   it('adopts a profile-prefilled state on mount', async () => {
     mockedPrefill.mockResolvedValueOnce(prefilledState());
     render(<WizardPage />);

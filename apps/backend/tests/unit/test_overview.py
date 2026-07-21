@@ -6,14 +6,14 @@ injected fakes/spies (no DB, no singletons):
 
 - **KPI math + UTC day/window boundaries (Req 13.3).** ``totalUsers`` from the
   injected ``MetricsService.stats()`` snapshot; ``newUsersToday`` from a single
-  day-bounded ``AdminRepo.metric_for_day("signups", …)`` whose start/end are
-  asserted to be *exactly* today's UTC day bounds (``00:00:00`` → next day
+  day-bounded ``AdminRepo.metric_for_day("signups", ...)`` whose start/end are
+  asserted to be *exactly* today's UTC day bounds (``00:00:00`` -> next day
   ``00:00:00``); ``aiCallsToday`` from ``MetricStore.sum([AI_CALLS], today,
   today)``; ``errorRate24h`` = ``5xx / (2xx+4xx+5xx) * 100`` over the last two
-  UTC days (today + yesterday) — asserted; ``purgeBacklog`` from the in-process
+  UTC days (today + yesterday) - asserted; ``purgeBacklog`` from the in-process
   gauge.
-- **errorRate24h zero + clamp (Req 13.3).** ``total == 0`` ⇒ ``0.00`` (a
-  computable value, not "unavailable"); result is clamped to ``0.00``–``100.00``.
+- **errorRate24h zero + clamp (Req 13.3).** ``total == 0`` => ``0.00`` (a
+  computable value, not "unavailable"); result is clamped to ``0.00``-``100.00``.
 - **unavailable-KPI partial response (Req 13.7).** One failing source isolates to
   its own KPI (``value=None``, ``unavailable=True``) while every other KPI still
   computes; the whole ``kpis()`` call succeeds. The unset ``purge_backlog`` gauge
@@ -44,12 +44,12 @@ pytestmark = pytest.mark.unit
 
 
 # ---------------------------------------------------------------------------
-# Injectable fakes / spies (shared primitives only — no DB, no singletons)
+# Injectable fakes / spies (shared primitives only - no DB, no singletons)
 # ---------------------------------------------------------------------------
 
 
 class FakeMetricsService:
-    """Stand-in for ``MetricsService`` — ``stats()`` returns a canned dict."""
+    """Stand-in for ``MetricsService`` - ``stats()`` returns a canned dict."""
 
     def __init__(self, stats: dict | None = None, *, raises: bool = False) -> None:
         self._stats = stats or {}
@@ -109,7 +109,7 @@ class FakeMetricStore:
 
 
 class FakeAdminMetrics:
-    """Stand-in for ``AdminMetrics`` — ``snapshot()`` returns a gauges dict."""
+    """Stand-in for ``AdminMetrics`` - ``snapshot()`` returns a gauges dict."""
 
     def __init__(self, gauges: dict | None = None, *, raises: bool = False) -> None:
         self._gauges = gauges
@@ -187,7 +187,7 @@ class TestKpiMathAndUtcBoundaries:
         metric, start, end = repo.calls[0]
         assert metric == "signups"
         # The captured bounds equal today's UTC day bounds: 00:00:00 (inclusive)
-        # → next day 00:00:00 (exclusive). This proves UTC boundaries (Req 13.3).
+        # -> next day 00:00:00 (exclusive). This proves UTC boundaries (Req 13.3).
         expected_start, expected_end = _day_bounds(_today())
         assert (start, end) == (expected_start, expected_end)
         # Structural cross-check: start is midnight today, end is midnight next day.
@@ -242,7 +242,7 @@ class TestErrorRateZeroAndClamp:
     """Validates: Requirements 13.3"""
 
     async def test_zero_total_requests_is_zero_not_unavailable(self):
-        # total == 0 → 0.00 (0 requests is 0% error, a computable value).
+        # total == 0 -> 0.00 (0 requests is 0% error, a computable value).
         store = FakeMetricStore(ai_calls=0, err_5xx=0, req_total=0)
         kpis = await _service(metric_store=store).kpis()
         assert kpis.errorRate24h.value == 0.0
@@ -261,7 +261,7 @@ class TestErrorRateZeroAndClamp:
         assert kpis.errorRate24h.value == 100.0
 
     async def test_rate_rounded_to_two_decimals(self):
-        # 1 / 3 * 100 = 33.333... → 33.33 (2dp).
+        # 1 / 3 * 100 = 33.333... -> 33.33 (2dp).
         store = FakeMetricStore(err_5xx=1, req_total=3)
         kpis = await _service(metric_store=store).kpis()
         assert kpis.errorRate24h.value == 33.33
@@ -276,13 +276,13 @@ class TestPartialResponseIsolation:
     """Validates: Requirements 13.7"""
 
     async def test_totals_source_failure_isolates_to_total_users(self):
-        # metrics_service.stats() raises → totalUsers unavailable, rest computed.
+        # metrics_service.stats() raises -> totalUsers unavailable, rest computed.
         svc = _service(metrics_service=FakeMetricsService(raises=True))
         kpis = await svc.kpis()
 
         assert kpis.totalUsers.unavailable is True
         assert kpis.totalUsers.value is None
-        # stale cannot be confirmed → stays False.
+        # stale cannot be confirmed -> stays False.
         assert kpis.stale is False
         # Every other KPI still computed with a value.
         assert kpis.newUsersToday.value == 12
@@ -324,7 +324,7 @@ class TestPartialResponseIsolation:
         assert kpis.purgeBacklog.value == 7
 
     async def test_purge_backlog_gauge_unset_is_unavailable(self):
-        # Gauge never set → cannot report a count (unavailable, not a false 0).
+        # Gauge never set -> cannot report a count (unavailable, not a false 0).
         svc = _service(admin_metrics=FakeAdminMetrics({}))
         kpis = await svc.kpis()
 

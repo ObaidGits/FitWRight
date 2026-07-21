@@ -1,17 +1,17 @@
 """Unit tests for Config diagnostics + Maintenance actions (Task 8.4).
 
-Covers the two read-only/thin-dispatcher services landed in tasks 8.1–8.2 at the
+Covers the two read-only/thin-dispatcher services landed in tasks 8.1-8.2 at the
 pure-logic level (no DB, no HTTP), complementing the end-to-end integration
 suite in ``tests/integration/test_admin_config_maintenance_api.py``:
 
-- ``app.admin.config_diag.ConfigService`` — the read-only, secret-free config
+- ``app.admin.config_diag.ConfigService`` - the read-only, secret-free config
   diagnostics assembler. Tests prove the payload is **secret-free** (passes
-  ``assert_no_forbidden_fields`` and exposes secrets only as presence booleans —
+  ``assert_no_forbidden_fields`` and exposes secrets only as presence booleans -
   Req 10.2/15.8) and that the service exposes **no mutation** surface at all
   (Req 10.3): its only public method is ``diagnostics``.
-- ``app.admin.maintenance.MaintenanceService`` — the thin, frozen dispatcher.
+- ``app.admin.maintenance.MaintenanceService`` - the thin, frozen dispatcher.
   Tests prove there are **exactly four** allowed actions and the map is immutable
-  (structurally "no other/destructive action exists" — Req 18.5) and that
+  (structurally "no other/destructive action exists" - Req 18.5) and that
   ``run(action)`` maps each underlying job's native status to the small
   maintenance vocabulary (Req 18.3).
 
@@ -37,7 +37,7 @@ pytestmark = pytest.mark.unit
 
 
 # ===========================================================================
-# ConfigService — secret-free (Req 10.2 / 15.8)
+# ConfigService - secret-free (Req 10.2 / 15.8)
 # ===========================================================================
 
 
@@ -50,7 +50,7 @@ class TestConfigSecretFree:
         assert_no_forbidden_fields(model.model_dump(by_alias=True))
 
     def test_configured_values_are_presence_booleans_only(self):
-        """``configured`` surfaces each secret ONLY as a bool — never its value."""
+        """``configured`` surfaces each secret ONLY as a bool - never its value."""
         model = get_config_service().diagnostics()
         assert model.configured, "expected at least one presence indicator"
         for key, value in model.configured.items():
@@ -68,7 +68,7 @@ class TestConfigSecretFree:
         """Spot-check: no configured/versions/featureFlags value is a secret string.
 
         ``configured``/``featureFlags``/``killSwitches`` values are booleans and
-        ``versions`` values are plain version identifiers — none should equal a
+        ``versions`` values are plain version identifiers - none should equal a
         secret-looking string (a long opaque token).
         """
         model = get_config_service().diagnostics()
@@ -82,7 +82,7 @@ class TestConfigSecretFree:
 
 
 # ===========================================================================
-# ConfigService — no mutation surface (Req 10.3)
+# ConfigService - no mutation surface (Req 10.3)
 # ===========================================================================
 
 
@@ -109,7 +109,7 @@ class TestConfigNoMutation:
 
 
 # ===========================================================================
-# MaintenanceService — exactly four + immutable (Req 18.5)
+# MaintenanceService - exactly four + immutable (Req 18.5)
 # ===========================================================================
 
 
@@ -123,7 +123,7 @@ class TestMaintenanceActionSet:
         assert ALLOWED_ACTIONS == frozenset(self._EXPECTED)
 
     def test_actions_map_is_immutable(self):
-        """``ACTIONS`` is a MappingProxyType — assignment/deletion raises TypeError."""
+        """``ACTIONS`` is a MappingProxyType - assignment/deletion raises TypeError."""
         from types import MappingProxyType
 
         assert isinstance(MaintenanceService.ACTIONS, MappingProxyType)
@@ -175,7 +175,7 @@ class TestMaintenanceActionSet:
 
 
 # ===========================================================================
-# MaintenanceService — status mapping (Req 18.3)
+# MaintenanceService - status mapping (Req 18.3)
 # ===========================================================================
 
 
@@ -207,7 +207,7 @@ class TestMaintenanceStatusMapping:
         assert result == {"status": expected}
 
     async def test_refresh_metrics_started_when_lock_free(self, monkeypatch):
-        """refresh-metrics acquires the rollup lock, refreshes snapshot → started."""
+        """refresh-metrics acquires the rollup lock, refreshes snapshot -> started."""
         import app.admin.metrics_service as metrics_service
 
         calls = {"n": 0}

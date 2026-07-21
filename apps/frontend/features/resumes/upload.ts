@@ -97,12 +97,12 @@ export async function streamUploadResumeFile(
     });
   } catch (e) {
     if (opts.signal?.aborted) throw e instanceof Error ? e : new Error('aborted');
-    // Could not even open the stream (network / CORS) → fall back.
+    // Could not even open the stream (network / CORS) -> fall back.
     throw new Error(STREAM_UNAVAILABLE);
   }
 
   if (!res.ok || !res.body) {
-    // 409 (flag off), 404, or any non-2xx → transparent fallback.
+    // 409 (flag off), 404, or any non-2xx -> transparent fallback.
     throw new Error(STREAM_UNAVAILABLE);
   }
 

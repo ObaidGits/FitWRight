@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Profile search — quick, ranked, highlighted lookup across the whole profile.
+ * Profile search - quick, ranked, highlighted lookup across the whole profile.
  *
  * Debounced query to the backend search endpoint; results render with matched
  * terms marked; choosing a result jumps to the owning section. Keyboard- and
@@ -87,7 +87,7 @@ export function ProfileSearch({ onNavigate }: { onNavigate: (section: string) =>
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => results.length && setOpen(true)}
           onBlur={() => setTimeout(() => setOpen(false), 150)}
-          placeholder="Search your profile…"
+          placeholder="Search your profile..."
           aria-label="Search your profile"
           role="combobox"
           aria-expanded={open}
@@ -119,7 +119,7 @@ export function ProfileSearch({ onNavigate }: { onNavigate: (section: string) =>
                   {TYPE_LABEL[r.type] ?? r.type}
                   {r.subtitle && (
                     <>
-                      {' · '}
+                      {' - '}
                       <Highlighted text={r.subtitle} />
                     </>
                   )}

@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * RecoveryCenter (P4 R5.2, R5.3, R5.5) — a single coherent surface listing
+ * RecoveryCenter (P4 R5.2, R5.3, R5.5) - a single coherent surface listing
  * quarantined records and queued/failed outbox entries with non-destructive
  * actions (export / discard / retry). Keyboard-navigable and SR-labelled; shown
  * only when there is something to recover.
@@ -96,12 +96,12 @@ export function RecoveryCenter({
                   className="flex items-center justify-between gap-3 rounded-[var(--radius-at-md)] border border-[var(--border)] px-3 py-2 text-sm"
                 >
                   <span className="min-w-0 flex-1 truncate">
-                    Resume {e.resumeId} · queued {age(e.createdAt)}
+                    Resume {e.resumeId} - queued {age(e.createdAt)}
                     {e.attempts > 0 && (
-                      <span className="text-[var(--at-warning)]"> · {e.attempts} attempt(s)</span>
+                      <span className="text-[var(--at-warning)]"> - {e.attempts} attempt(s)</span>
                     )}
                     {e.lastError && (
-                      <span className="text-[var(--muted-foreground)]"> · {e.lastError}</span>
+                      <span className="text-[var(--muted-foreground)]"> - {e.lastError}</span>
                     )}
                   </span>
                   <Button
@@ -125,7 +125,7 @@ export function RecoveryCenter({
           </h3>
           {quarantine.length === 0 ? (
             <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-              No corrupt records — your local data is healthy.
+              No corrupt records - your local data is healthy.
             </p>
           ) : (
             <ul className="mt-2 space-y-2">
@@ -139,7 +139,7 @@ export function RecoveryCenter({
                       className="mr-1 inline h-3.5 w-3.5 text-[var(--at-warning)]"
                       aria-hidden="true"
                     />
-                    {q.kind} · {q.reason} · {age(q.quarantinedAt)}
+                    {q.kind} - {q.reason} - {age(q.quarantinedAt)}
                   </span>
                   <div className="flex items-center gap-1">
                     <Button

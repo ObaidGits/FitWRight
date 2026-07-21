@@ -1,18 +1,18 @@
 """Password hashing, policy, and enumeration-safe verification (Task 2.1).
 
 This module is the single place authentication flows hash and verify passwords.
-It bundles three concerns the design (`§Auth flows → Passwords`, R1.2/1.3/1.5/
+It bundles three concerns the design (`§Auth flows -> Passwords`, R1.2/1.3/1.5/
 2.2/13.3) requires to live together:
 
 1. **Argon2id hashing** via ``argon2-cffi`` using the operator-tuned parameters
    from :class:`app.config.Settings` (memory/time/parallelism), with transparent
    rehash detection so parameters can be raised over time.
-2. **Password policy** — a length floor (≥12) and cap (128, to bound Argon2
+2. **Password policy** - a length floor (≥12) and cap (128, to bound Argon2
    cost), a common-password denylist, and a lightweight *zxcvbn-style* strength
-   gate (no forced composition rules — passphrases are welcome, R1.3a). An
+   gate (no forced composition rules - passphrases are welcome, R1.3a). An
    optional breached-password check is layered on via the injected
    :class:`~app.auth.breach.BreachedPasswordCheck` adapter (fail-open, logged).
-3. **Timing equalization** — verification always runs a real Argon2 computation,
+3. **Timing equalization** - verification always runs a real Argon2 computation,
    even on the "unknown email" / "OAuth-only account with no password" branches,
    by verifying against a precomputed **dummy hash**. This makes the negative
    path indistinguishable in timing from the positive one, closing the account-
@@ -132,7 +132,7 @@ def normalize_password(password: str) -> str:
 
     Normalizing avoids the surprise where a password typed with a
     canonically-equivalent but differently-encoded character fails to verify on
-    a different keyboard/OS. We do **not** case-fold or strip — those are real
+    a different keyboard/OS. We do **not** case-fold or strip - those are real
     entropy.
     """
     return unicodedata.normalize("NFKC", password)
@@ -142,7 +142,7 @@ class PasswordService:
     """Argon2id hashing, policy enforcement, and enumeration-safe verify."""
 
     # A fixed, syntactically valid password used only to generate the per-process
-    # dummy hash. Its value is irrelevant — it never authenticates anything.
+    # dummy hash. Its value is irrelevant - it never authenticates anything.
     _DUMMY_PASSWORD = "dummy-timing-equalization-password"
 
     def __init__(
@@ -173,7 +173,7 @@ class PasswordService:
     def hash_password(self, password: str) -> str:
         """Return the Argon2id hash of ``password`` (NFKC-normalized first).
 
-        Raises :class:`ValueError` if the password exceeds the length cap — the
+        Raises :class:`ValueError` if the password exceeds the length cap - the
         cap must be enforced *before* hashing so an attacker cannot force
         unbounded Argon2 work.
         """
@@ -223,7 +223,7 @@ class PasswordService:
 
         The optional ``email``/``name`` let the strength gate reject passwords
         that merely echo the user's own identifiers. The breached-password check
-        (network) is intentionally separate — see :meth:`check_breach` — so this
+        (network) is intentionally separate - see :meth:`check_breach` - so this
         stays pure and fast.
         """
         normalized = normalize_password(password)
@@ -239,7 +239,7 @@ class PasswordService:
             unmet.append("is a commonly used password")
 
         # Only run the (more expensive/heuristic) strength checks when the length
-        # is in range — a too-short/too-long password already failed.
+        # is in range - a too-short/too-long password already failed.
         if self._min_length <= len(normalized) <= self._max_length:
             weak_reason = self._strength_reason(normalized, email=email, name=name)
             if weak_reason:
@@ -289,7 +289,7 @@ class PasswordService:
 
         Fail-open by contract (R13.3): if no adapter is configured, the provider
         is unavailable, **or the adapter raises**, the password is accepted and a
-        warning is logged — a third party being down must never block a
+        warning is logged - a third party being down must never block a
         legitimate signup/password-change. Only a *positive* breach result
         rejects (``breached_password``).
         """

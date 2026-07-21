@@ -5,7 +5,7 @@
 ## Core User Flow
 
 ```
-Dashboard → Upload Master Resume → Tailor for Job → View/Edit → Download PDF
+Dashboard -> Upload Master Resume -> Tailor for Job -> View/Edit -> Download PDF
 ```
 
 ## Pages
@@ -23,13 +23,13 @@ Dashboard → Upload Master Resume → Tailor for Job → View/Edit → Download
 
 ### 3. Tailor (`/tailor`)
 - Job description textarea (min 50 chars)
-- Process: Upload JD → Improve → Redirect to viewer
+- Process: Upload JD -> Improve -> Redirect to viewer
 
 ### 4. Builder (`/builder`)
 - **Left panel:** Editor (forms + formatting)
 - **Right panel:** WYSIWYG preview
 - **Tabs:** Resume | Cover Letter | Outreach
-- Data priority: URL param → Context → localStorage → defaults
+- Data priority: URL param -> Context -> localStorage -> defaults
 
 ### 5. Settings (`/settings`)
 - System status (cached)
@@ -59,10 +59,10 @@ Dashboard → Upload Master Resume → Tailor for Job → View/Edit → Download
 
 ## Delete Flow
 
-1. Click Delete → Confirmation dialog
+1. Click Delete -> Confirmation dialog
 2. API: `DELETE /resumes/{id}`
 3. Clear localStorage if master
-4. Success dialog → Redirect to dashboard
+4. Success dialog -> Redirect to dashboard
 
 ## Section Management
 

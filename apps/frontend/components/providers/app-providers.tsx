@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * Combined client providers (Task 3.5/3.6). Order: Query → Theme → Session →
- * Toast → Tooltip → CommandPalette. Wrapped once near the root so both new and
+ * Combined client providers (Task 3.5/3.6). Order: Query -> Theme -> Session ->
+ * Toast -> Tooltip -> CommandPalette. Wrapped once near the root so both new and
  * legacy routes get theme + data layer; new (app) routes additionally opt into
  * `.atelier` styling via their layout.
  */

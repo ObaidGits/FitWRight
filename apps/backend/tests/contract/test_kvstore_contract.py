@@ -7,7 +7,7 @@ adapter (e.g. Redis, exercised against a real/fake server) is a single new entry
 in ``kvstore_impl``.
 
 Governance (ARCHITECTURE §19): a port implementation without a contract test
-must fail CI — this file is that test for KVStore's Local and DB adapters.
+must fail CI - this file is that test for KVStore's Local and DB adapters.
 """
 
 from __future__ import annotations
@@ -87,7 +87,7 @@ class TestIncr:
         assert await kvstore_impl.incr("win", ttl_seconds=0.1) == 1
         assert await kvstore_impl.incr("win") == 2
         await asyncio.sleep(0.16)
-        # Window expired → counter resets to the amount on next incr.
+        # Window expired -> counter resets to the amount on next incr.
         assert await kvstore_impl.incr("win") == 1
 
 

@@ -7,11 +7,11 @@
  * secret-free release/deployment fields, and backend uptime. Every tile carries
  * BOTH a color AND a literal text status label so status is never conveyed by
  * color alone (Req 3.8, a11y). On fetch failure or timeout the page shows an
- * explicit error state with a working retry control (Req 3.9) — never a blank or
+ * explicit error state with a working retry control (Req 3.9) - never a blank or
  * partial-without-indication view.
  *
  * This page renders ONLY what `AdminHealth` provides. It deliberately shows no
- * CPU / RAM / disk / host metrics (Non-Goals — Req 21.3 / 21.4).
+ * CPU / RAM / disk / host metrics (Non-Goals - Req 21.3 / 21.4).
  *
  * The background-jobs table (task 7.2, Req 3.4 / 8.4) is its OWN observability
  * query (`useJobs`) so it loads, errors and refreshes independently of the health
@@ -103,7 +103,7 @@ function TileCard({ tile }: { tile: HealthTile }) {
     <Card className="p-5">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2">
-          {/* Color dot — decorative; the adjacent text label is authoritative. */}
+          {/* Color dot - decorative; the adjacent text label is authoritative. */}
           <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${presentation.dot}`} aria-hidden />
           <span className="text-sm font-semibold">{tile.name}</span>
         </div>
@@ -122,13 +122,13 @@ function ReleaseField({ label, value }: { label: string; value: React.ReactNode 
   return (
     <div className="flex items-center justify-between gap-4 py-1.5">
       <dt className="text-[var(--muted-foreground)]">{label}</dt>
-      <dd className="text-right font-medium">{value ?? '—'}</dd>
+      <dd className="text-right font-medium">{value ?? '-'}</dd>
     </div>
   );
 }
 
 function formatUptime(seconds?: number | null): string {
-  if (seconds == null || !Number.isFinite(seconds)) return '—';
+  if (seconds == null || !Number.isFinite(seconds)) return '-';
   const total = Math.max(0, Math.floor(seconds));
   const days = Math.floor(total / 86_400);
   const hours = Math.floor((total % 86_400) / 3_600);
@@ -161,7 +161,7 @@ function ReleaseCard({
         <ReleaseField label="Build" value={release.build} />
         <ReleaseField
           label="Commit"
-          value={release.commit ? <span className="font-mono text-xs">{release.commit}</span> : '—'}
+          value={release.commit ? <span className="font-mono text-xs">{release.commit}</span> : '-'}
         />
         <ReleaseField
           label="Migration (applied)"
@@ -176,7 +176,7 @@ function ReleaseCard({
                 )}
               </span>
             ) : (
-              '—'
+              '-'
             )
           }
         />
@@ -186,7 +186,7 @@ function ReleaseCard({
             release.migrationHead ? (
               <span className="font-mono text-xs">{release.migrationHead}</span>
             ) : (
-              '—'
+              '-'
             )
           }
         />
@@ -222,18 +222,18 @@ export default function AdminHealthPage() {
 
         <TabsContent value="overview" className="space-y-6">
           <HealthOverview />
-          {/* Grouped errors summary — its own independent query (Req 5). */}
+          {/* Grouped errors summary - its own independent query (Req 5). */}
           <ErrorsCard />
-          {/* Performance signals — its own independent query (Req 6). */}
+          {/* Performance signals - its own independent query (Req 6). */}
           <PerformanceCard />
-          {/* Background-jobs table — its own independent query (Req 3.4 / 8.4). */}
+          {/* Background-jobs table - its own independent query (Req 3.4 / 8.4). */}
           <JobsCard />
         </TabsContent>
 
         <TabsContent value="configuration" className="space-y-6">
-          {/* Read-only diagnostics (Req 11.4) — no edit/save/delete controls. */}
+          {/* Read-only diagnostics (Req 11.4) - no edit/save/delete controls. */}
           <ConfigTab />
-          {/* Maintenance writes — rendered ONLY to manage-capable admins (Req 11.6). */}
+          {/* Maintenance writes - rendered ONLY to manage-capable admins (Req 11.6). */}
           <MaintenancePanel />
         </TabsContent>
       </Tabs>
@@ -273,7 +273,7 @@ function HealthOverview() {
       </div>
 
       {health.isError ? (
-        // Explicit error state with a retry control (Req 3.9) — never blank/partial.
+        // Explicit error state with a retry control (Req 3.9) - never blank/partial.
         <ErrorState
           title="Couldn't load system health"
           description={(health.error as Error)?.message}
@@ -305,7 +305,7 @@ function HealthOverview() {
 }
 
 // ---------------------------------------------------------------------------
-// Background jobs (Req 8) — separate observability query from the health tiles.
+// Background jobs (Req 8) - separate observability query from the health tiles.
 // ---------------------------------------------------------------------------
 
 /** Frontend-derived lifecycle state of one job (never sent by the backend). */
@@ -313,10 +313,10 @@ type JobState = 'running' | 'failed' | 'completed' | 'idle';
 
 /**
  * Derive a job's state from its run markers (Req 8.4):
- * - running   ⇔ `runningSince` is set OR the single-flight lock is held;
- * - failed    ⇔ the last recorded outcome was a failure;
- * - completed ⇔ the last outcome was success/skipped and it is not running;
- * - idle      ⇔ never run (no outcome) and not running.
+ * - running   <=> `runningSince` is set OR the single-flight lock is held;
+ * - failed    <=> the last recorded outcome was a failure;
+ * - completed <=> the last outcome was success/skipped and it is not running;
+ * - idle      <=> never run (no outcome) and not running.
  * Running takes precedence so an in-flight run is never masked by a stale outcome.
  */
 function deriveJobState(job: JobRow): JobState {
@@ -342,9 +342,9 @@ const JOB_STATE_PRESENTATION: Record<
   idle: { label: 'Idle', badge: 'neutral', icon: Circle },
 };
 
-/** Human-friendly duration ("45s", "3m", "1h 5m", "2d 3h"). `—` when unknown. */
+/** Human-friendly duration ("45s", "3m", "1h 5m", "2d 3h"). `-` when unknown. */
 function formatDuration(seconds?: number | null): string {
-  if (seconds == null || !Number.isFinite(seconds)) return '—';
+  if (seconds == null || !Number.isFinite(seconds)) return '-';
   const total = Math.max(0, Math.floor(seconds));
   if (total < 60) return `${total}s`;
   const days = Math.floor(total / 86_400);
@@ -366,7 +366,7 @@ function JobStateBadges({ job, state }: { job: JobRow; state: JobState }) {
         <Icon className={`h-3.5 w-3.5 ${presentation.spin ? 'animate-spin' : ''}`} aria-hidden />
         {presentation.label}
       </Badge>
-      {/* Stuck detection is advisory — surfaced as its own text+color badge. */}
+      {/* Stuck detection is advisory - surfaced as its own text+color badge. */}
       {job.potentiallyStuck && (
         <Badge variant="warning" aria-label="Potentially stuck">
           <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
@@ -377,7 +377,7 @@ function JobStateBadges({ job, state }: { job: JobRow; state: JobState }) {
   );
 }
 
-/** The lock's held/free state (or `—` when unknown), text + color. */
+/** The lock's held/free state (or `-` when unknown), text + color. */
 function LockCell({ lockState }: { lockState: JobRow['lockState'] }) {
   if (lockState === 'held')
     return (
@@ -386,7 +386,7 @@ function LockCell({ lockState }: { lockState: JobRow['lockState'] }) {
       </Badge>
     );
   if (lockState === 'free') return <span className="text-[var(--muted-foreground)]">Free</span>;
-  return <span className="text-[var(--muted-foreground)]">—</span>;
+  return <span className="text-[var(--muted-foreground)]">-</span>;
 }
 
 /** Current run duration (when running) with the expected duration as sub-text. */
@@ -399,7 +399,7 @@ function DurationCell({ job, state }: { job: JobRow; state: JobState }) {
           {formatDuration(job.currentDurationSeconds)}
         </span>
       ) : (
-        <span className="text-[var(--muted-foreground)]">—</span>
+        <span className="text-[var(--muted-foreground)]">-</span>
       )}
       <span className="text-xs text-[var(--muted-foreground)]">
         exp {formatDuration(job.expectedDurationSeconds)}
@@ -426,7 +426,7 @@ function GaugeStat({
           Unavailable
         </Badge>
       ) : (
-        <span className="font-medium">{value ?? '—'}</span>
+        <span className="font-medium">{value ?? '-'}</span>
       )}
     </div>
   );
@@ -562,7 +562,7 @@ function JobsCard() {
                         </dd>
                         <dt className="text-[var(--muted-foreground)]">Duration</dt>
                         <dd className="text-right">
-                          {state === 'running' ? formatDuration(job.currentDurationSeconds) : '—'}
+                          {state === 'running' ? formatDuration(job.currentDurationSeconds) : '-'}
                           <span className="ml-1 text-xs text-[var(--muted-foreground)]">
                             (exp {formatDuration(job.expectedDurationSeconds)})
                           </span>
@@ -585,12 +585,12 @@ function JobsCard() {
 }
 
 // ---------------------------------------------------------------------------
-// Errors summary (Req 5) — grouped buckets only, its own observability query.
+// Errors summary (Req 5) - grouped buckets only, its own observability query.
 //
 // Renders ONLY what `ErrorsSummary` provides: grouped 4xx/5xx counts, by-source
 // failure counts (API / job / storage / AI), a daily error-count trend, and the
 // top failing route-classes (may be empty). It mounts NO raw log / stack /
-// trace / exception / replay explorer — the dashboard is an operational summary,
+// trace / exception / replay explorer - the dashboard is an operational summary,
 // not a log explorer (Non-Goal, Req 21.2). Its own 7/30/90 window selector +
 // loading/error/retry states, independent of the health tiles/jobs.
 // ---------------------------------------------------------------------------
@@ -615,7 +615,7 @@ function ErrorStat({
       {notInstrumented ? (
         <p
           className="mt-1 text-sm font-medium text-[var(--muted-foreground)]"
-          title="No durable metric source — not instrumented"
+          title="No durable metric source - not instrumented"
         >
           Not instrumented
         </p>
@@ -626,7 +626,7 @@ function ErrorStat({
   );
 }
 
-/** The top failing route-classes list — grouped buckets, empty state when none. */
+/** The top failing route-classes list - grouped buckets, empty state when none. */
 function TopRouteClasses({ data }: { data: ErrorsSummary }) {
   const rows = data.topRouteClasses ?? [];
   if (rows.length === 0) {
@@ -692,7 +692,7 @@ function ErrorsCard() {
           <h2 className="text-sm font-semibold text-[var(--muted-foreground)]">Errors</h2>
           {errors.data && (
             <span className="text-xs text-[var(--muted-foreground)]">
-              As of <LocalTime iso={errors.data.computedAt} /> · last {errors.data.window} days
+              As of <LocalTime iso={errors.data.computedAt} /> - last {errors.data.window} days
             </span>
           )}
         </div>
@@ -745,7 +745,7 @@ function ErrorsCard() {
               </div>
             </section>
 
-            {/* Failure counts by originating subsystem (absent sources → 0). */}
+            {/* Failure counts by originating subsystem (absent sources -> 0). */}
             <section aria-label="Errors by source">
               <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
                 By source
@@ -799,20 +799,20 @@ function ErrorsCard() {
 }
 
 // ---------------------------------------------------------------------------
-// Performance signals (Req 6) — its own observability query.
+// Performance signals (Req 6) - its own observability query.
 //
-// Renders ONLY what `PerformanceSignals` provides — latency/cache aggregates the
+// Renders ONLY what `PerformanceSignals` provides - latency/cache aggregates the
 // backend ALREADY produces. It mounts NO host-metric (CPU/RAM/disk) display: the
 // backend omits those fields entirely (Non-Goal, Req 21.4), so they arrive as
 // `undefined` and simply are not shown. Any field listed in `unavailable` (e.g.
 // `dbQueryTimeMs`) is rendered with an explicit "Unavailable" indicator rather
-// than a fabricated value (Req 6.7). No new instrumentation, no query params —
+// than a fabricated value (Req 6.7). No new instrumentation, no query params -
 // its own loading/error/retry states, independent of the tiles/errors/jobs.
 // ---------------------------------------------------------------------------
 
-/** Format a millisecond aggregate (`1,234.5 ms`); `—` when absent. */
+/** Format a millisecond aggregate (`1,234.5 ms`); `-` when absent. */
 function formatMs(ms?: number | null): string {
-  if (ms == null || !Number.isFinite(ms)) return '—';
+  if (ms == null || !Number.isFinite(ms)) return '-';
   return `${ms.toLocaleString(undefined, { maximumFractionDigits: 2 })} ms`;
 }
 
@@ -872,7 +872,7 @@ function SlowRoutesTable({ rows }: { rows: RouteClassLatency[] }) {
                 <TableCell className="font-medium">{r.routeClass}</TableCell>
                 <TableCell className="tabular-nums">{formatMs(r.avgMs)}</TableCell>
                 <TableCell className="tabular-nums text-[var(--muted-foreground)]">
-                  {r.p95Ms == null ? '—' : formatMs(r.p95Ms)}
+                  {r.p95Ms == null ? '-' : formatMs(r.p95Ms)}
                 </TableCell>
               </TableRow>
             ))}
@@ -893,7 +893,7 @@ function SlowRoutesTable({ rows }: { rows: RouteClassLatency[] }) {
               <dd className="text-right tabular-nums">{formatMs(r.avgMs)}</dd>
               <dt className="text-[var(--muted-foreground)]">p95</dt>
               <dd className="text-right tabular-nums">
-                {r.p95Ms == null ? '—' : formatMs(r.p95Ms)}
+                {r.p95Ms == null ? '-' : formatMs(r.p95Ms)}
               </dd>
             </dl>
           </li>
@@ -990,14 +990,14 @@ function PerformanceCard() {
           (() => {
             const data: PerformanceSignals = performance.data;
             // A field is "unavailable" when the backend lists it (Req 6.7) or its
-            // value is absent — render an explicit indicator, never a fake value.
+            // value is absent - render an explicit indicator, never a fake value.
             const dbUnavailable =
               data.unavailable.includes('dbQueryTimeMs') || data.dbQueryTimeMs == null;
             const cacheUnavailable =
               data.unavailable.includes('cacheHitRatio') || data.cacheHitRatio == null;
             const cachePct =
               data.cacheHitRatio == null
-                ? '—'
+                ? '-'
                 : `${(data.cacheHitRatio * 100).toLocaleString(undefined, {
                     maximumFractionDigits: 1,
                   })}%`;
@@ -1044,16 +1044,16 @@ function PerformanceCard() {
 }
 
 // ---------------------------------------------------------------------------
-// Configuration diagnostics (Req 10 / 11.4) — a strictly READ-ONLY tab.
+// Configuration diagnostics (Req 10 / 11.4) - a strictly READ-ONLY tab.
 //
 // This section renders ONLY what `ConfigDiagnostics` provides and mounts NO
 // input / edit / save / delete control of any kind (Req 10.3 / 11.4). Secrets
 // never cross the boundary: each configured secret is shown solely as a
 // "Configured / Not configured" presence indicator derived from a boolean
-// (Req 10.4) — never a value.
+// (Req 10.4) - never a value.
 // ---------------------------------------------------------------------------
 
-/** On/off indicator for a boolean flag — text + color + icon (never color alone). */
+/** On/off indicator for a boolean flag - text + color + icon (never color alone). */
 function BoolIndicator({
   on,
   onLabel = 'On',
@@ -1105,7 +1105,7 @@ function ConfigField({ label, value }: { label: string; value: React.ReactNode }
   return (
     <div className="flex items-center justify-between gap-4 py-1.5">
       <dt className="text-[var(--muted-foreground)]">{label}</dt>
-      <dd className="text-right font-medium">{value ?? '—'}</dd>
+      <dd className="text-right font-medium">{value ?? '-'}</dd>
     </div>
   );
 }
@@ -1174,7 +1174,7 @@ function ConfigTab() {
           </dl>
         </Card>
 
-        {/* Configured-secret presence booleans — NEVER a value (Req 10.4). */}
+        {/* Configured-secret presence booleans - NEVER a value (Req 10.4). */}
         <Card className="p-5">
           <h2 className="mb-3 text-sm font-semibold text-[var(--muted-foreground)]">
             Configured secrets
@@ -1235,13 +1235,13 @@ function ConfigTab() {
 }
 
 // ---------------------------------------------------------------------------
-// Maintenance panel (Req 11.6 / 18) — the ONLY manage-controls on this page.
+// Maintenance panel (Req 11.6 / 18) - the ONLY manage-controls on this page.
 //
 // Rendered ONLY to manage-capable admins. Capability gating note: the client
 // session currently exposes a single `isAdmin` flag (role === 'admin') and does
 // NOT model the finer admin.read-vs-admin.manage distinction. We therefore gate
 // on `isAdmin`; a hypothetical read-only admin isn't represented client-side.
-// This is a UX affordance only — the backend still enforces `require_admin_manage`
+// This is a UX affordance only - the backend still enforces `require_admin_manage`
 // on every action, so hiding the panel is never the security boundary.
 // ---------------------------------------------------------------------------
 
@@ -1289,7 +1289,7 @@ function MaintenancePanel() {
     : undefined;
 
   function trigger(action: MaintenanceAction, label: string) {
-    setStatus(`Starting ${label}…`);
+    setStatus(`Starting ${label}...`);
     runMaintenance.mutate(action, {
       onSuccess: (result) => {
         const { message, variant } = describeOutcome(label, result.status);
@@ -1313,7 +1313,7 @@ function MaintenancePanel() {
         </Badge>
       </div>
       <p className="mb-4 text-sm text-[var(--muted-foreground)]">
-        Re-invoke a background job. Each action is safe and idempotent — a job that is already
+        Re-invoke a background job. Each action is safe and idempotent - a job that is already
         running is left untouched.
       </p>
 

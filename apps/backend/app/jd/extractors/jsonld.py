@@ -1,7 +1,7 @@
 """JSON-LD structured data extractor (§13 of enhancement plan).
 
 Extracts JobPosting schema.org data from <script type="application/ld+json"> tags.
-This runs on the already-fetched static HTML — zero additional network cost.
+This runs on the already-fetched static HTML - zero additional network cost.
 """
 
 from __future__ import annotations

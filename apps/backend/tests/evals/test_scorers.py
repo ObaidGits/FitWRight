@@ -3,7 +3,7 @@
 This is the anti-theater proof for the eval harness: every scorer is exercised
 with BOTH a known-good and a known-bad input, so we know it actually detects
 violations instead of always returning "OK". None of these tests touch an LLM
-or the network — they run for free in the normal suite.
+or the network - they run for free in the normal suite.
 
 The ``tailored_good`` / ``tailored_bad`` golden fixtures double as realistic
 end-to-end checks: the good tailoring must pass every scorer, the bad one must
@@ -85,7 +85,7 @@ class TestNoFabricatedEmployers:
     def test_case_and_whitespace_insensitive(self, sample_resume):
         tailored = copy.deepcopy(sample_resume)
         tailored["workExperience"][0]["company"] = "  acme corp  "
-        # Same employer, different casing/whitespace — not a fabrication.
+        # Same employer, different casing/whitespace - not a fabrication.
         assert no_fabricated_employers(sample_resume, tailored) == []
 
     def test_each_fabricated_employer_listed_once(self, sample_resume):
@@ -130,7 +130,7 @@ class TestIsValidResume:
         # Canary: every ResumeData field currently has a default, so {} validates
         # as an empty resume. If a future schema change makes a field REQUIRED
         # (no default), is_valid_resume({}) flips to False and this test fails
-        # LOUDLY — by design — flagging that the scorers' "empty is valid"
+        # LOUDLY - by design - flagging that the scorers' "empty is valid"
         # assumption no longer holds.
         assert is_valid_resume({}) is True
 

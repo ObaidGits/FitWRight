@@ -1,9 +1,9 @@
 /**
- * HTML sanitizer — environment-split entry point.
+ * HTML sanitizer - environment-split entry point.
  *
  * Sanitization guards every `dangerouslySetInnerHTML` sink (resume rich-text
  * bullets, LLM output). Whitelist: strong/em/u/a + href/target/rel; everything
- * else — scripts, event handlers, dangerous URL schemes, non-whitelisted tags —
+ * else - scripts, event handlers, dangerous URL schemes, non-whitelisted tags -
  * is stripped.
  *
  * The real implementation is resolved by the bundler via the

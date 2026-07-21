@@ -46,7 +46,7 @@ export function Hero() {
             </span>
           </h1>
           <p className="mx-auto mt-5 max-w-lg text-lg text-[var(--muted-foreground)] lg:mx-0">
-            FitWright reshapes your resume for each role in seconds — with an honest match score,
+            FitWright reshapes your resume for each role in seconds - with an honest match score,
             cover letters, interview prep, and a tracker to run your whole search.
           </p>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3 lg:justify-start">
@@ -66,7 +66,7 @@ export function Hero() {
               </a>
             </Button>
           </div>
-          {/* Honest trust signals — capabilities, not fabricated social proof. */}
+          {/* Honest trust signals - capabilities, not fabricated social proof. */}
           <div className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-[var(--muted-foreground)] lg:justify-start">
             <span className="inline-flex items-center gap-1.5">
               <ShieldCheck className="h-3.5 w-3.5 text-[var(--at-success)]" /> Never fabricates

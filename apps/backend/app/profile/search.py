@@ -1,4 +1,4 @@
-"""Profile Search — ranked, highlighted search across the profile document.
+"""Profile Search - ranked, highlighted search across the profile document.
 
 Searches the user's own canonical profile (experience / education / projects /
 skills / certifications / achievements + identity) with deterministic ranking
@@ -10,7 +10,7 @@ provider).
 
 Ranking: exact-token and prefix matches on the primary field (title/name)
 outrank body matches; more matched query tokens rank higher. Highlights wrap the
-matched substrings in ``[[…]]`` sentinels the UI renders as marks (kept markup-
+matched substrings in ``[[...]]`` sentinels the UI renders as marks (kept markup-
 free here so the API stays presentation-agnostic).
 """
 
@@ -125,7 +125,7 @@ def _index(profile: ProfileData) -> list[SearchRecord]:
 
 
 def _highlight(text: str, query_tokens: set[str]) -> str:
-    """Wrap matched whole tokens in ``[[…]]`` sentinels (presentation-agnostic)."""
+    """Wrap matched whole tokens in ``[[...]]`` sentinels (presentation-agnostic)."""
     if not text:
         return text
 

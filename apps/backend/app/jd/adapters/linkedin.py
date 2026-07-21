@@ -36,7 +36,7 @@ class LinkedInAdapter:
         return host == "linkedin.com" or host.endswith(".linkedin.com")
 
     def extract_api_url(self, parsed: ParseResult) -> str | None:
-        # No public anonymous JSON API — defer to JSON-LD extractor.
+        # No public anonymous JSON API - defer to JSON-LD extractor.
         return None
 
     def job_id(self, parsed: ParseResult) -> str | None:

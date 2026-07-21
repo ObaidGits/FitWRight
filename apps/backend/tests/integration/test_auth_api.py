@@ -140,7 +140,7 @@ class TestSignup:
 
     async def test_signup_requires_presession_csrf(self, auth_env):
         async with _client() as client:
-            # No GET /auth/csrf and no header → double-submit fails.
+            # No GET /auth/csrf and no header -> double-submit fails.
             resp = await client.post(
                 "/api/v1/auth/signup",
                 json={"email": "nocsrf@example.com", "password": STRONG_PW, "name": "A"},
@@ -149,8 +149,8 @@ class TestSignup:
         assert resp.json()["error"]["code"] == "csrf_failed"
 
     async def test_signup_uniform_when_verification_on(self, auth_env, monkeypatch):
-        # Hosted mode → email verification on: new and existing emails must be
-        # indistinguishable (no session, identical body) — Property 4.
+        # Hosted mode -> email verification on: new and existing emails must be
+        # indistinguishable (no session, identical body) - Property 4.
         monkeypatch.setattr(app_settings, "single_user_mode", False)
         # Pre-existing account for the "existing" branch.
         await _seed_active_user(auth_env, "known@example.com")
@@ -193,7 +193,7 @@ class TestLogin:
     async def test_login_unknown_email_is_uniform(self, auth_env):
         async with _client() as client:
             resp = await _login(client, "ghost@example.com")
-        # Same status + code as a wrong password → no enumeration.
+        # Same status + code as a wrong password -> no enumeration.
         assert resp.status_code == 401
         assert resp.json()["error"]["code"] == "invalid_credentials"
 
@@ -299,7 +299,7 @@ class TestLogout:
             await _login(client, "la@example.com")
             csrf_value = client.cookies.get("csrf")
 
-            # No recent step-up → blocked.
+            # No recent step-up -> blocked.
             blocked = await client.post(
                 "/api/v1/auth/logout-all", headers={"X-CSRF-Token": csrf_value}
             )

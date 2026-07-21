@@ -1,10 +1,10 @@
-"""Import adapters — pluggable sources that derive a ``ProfileData`` candidate.
+"""Import adapters - pluggable sources that derive a ``ProfileData`` candidate.
 
 Every import source (a parsed resume today; LinkedIn / GitHub / Europass /
 Portfolio later) implements one contract: turn its native payload into a
 ``ProfileData`` the Merge Engine can plan against. Adding a source is a new
-adapter + registry entry — the merge/preview/apply pipeline is untouched
-(open/closed — design §P3 "Import Sources").
+adapter + registry entry - the merge/preview/apply pipeline is untouched
+(open/closed - design §P3 "Import Sources").
 
 Only the **resume** and **json_resume** adapters are implemented now; the others
 are declared as ``NotImplementedError`` stubs so the surface is discoverable and
@@ -71,7 +71,7 @@ def _from_json_resume(payload: dict[str, Any]) -> ProfileData:
         {
             "title": w.get("position", ""),
             "company": w.get("name") or w.get("company") or "",
-            "years": " – ".join(x for x in [w.get("startDate"), w.get("endDate")] if x),
+            "years": " - ".join(x for x in [w.get("startDate"), w.get("endDate")] if x),
             "description": _str_list(w.get("highlights")),
         }
         for w in doc.get("work") or []
@@ -81,7 +81,7 @@ def _from_json_resume(payload: dict[str, Any]) -> ProfileData:
         {
             "institution": e.get("institution", ""),
             "degree": " ".join(x for x in [e.get("studyType"), e.get("area")] if x),
-            "years": " – ".join(x for x in [e.get("startDate"), e.get("endDate")] if x),
+            "years": " - ".join(x for x in [e.get("startDate"), e.get("endDate")] if x),
         }
         for e in doc.get("education") or []
         if isinstance(e, dict)
@@ -122,7 +122,7 @@ def _not_implemented(name: str) -> Callable[[dict[str, Any]], ProfileData]:
     return _adapter
 
 
-# Registry: source key → adapter. Extend by adding an entry (open/closed).
+# Registry: source key -> adapter. Extend by adding an entry (open/closed).
 IMPORT_SOURCES: dict[str, Callable[[dict[str, Any]], ProfileData]] = {
     "resume": _from_resume,
     "json_resume": _from_json_resume,

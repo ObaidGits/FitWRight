@@ -1,6 +1,6 @@
 # Server Actions Security (CRITICAL)
 
-> Sibling docs: [waterfalls](01-waterfalls.md) · [bundle size](02-bundle-size.md) · [server-side perf](04-server-side-perf.md) · [checklist](checklist.md)
+> Sibling docs: [waterfalls](01-waterfalls.md) - [bundle size](02-bundle-size.md) - [server-side perf](04-server-side-perf.md) - [checklist](checklist.md)
 
 ---
 
@@ -17,7 +17,7 @@ Every Server Action must verify auth and authorization **inside the action body*
 ## The vulnerable pattern
 
 ```tsx
-// ❌ BAD: No auth check — anyone can delete any record
+// BAD: No auth check - anyone can delete any record
 'use server';
 
 export async function deleteResource(resourceId: string) {
@@ -39,20 +39,20 @@ There is no client-side guard you can add that fixes this.
 ## The safe pattern
 
 ```tsx
-// ✅ GOOD: Verify auth, then ownership, then act
+// GOOD: Verify auth, then ownership, then act
 'use server';
 
 import { auth } from '@/lib/auth';
 import { revalidatePath } from 'next/cache';
 
 export async function deleteResource(resourceId: string) {
-  // 1. Authentication — is anyone logged in?
+  // 1. Authentication - is anyone logged in?
   const session = await auth();
   if (!session?.user) {
     throw new Error('Unauthorized');
   }
 
-  // 2. Authorization — does this user own this resource?
+  // 2. Authorization - does this user own this resource?
   const resource = await db.resource.findUnique({ where: { id: resourceId } });
   if (!resource || resource.userId !== session.user.id) {
     throw new Error('Forbidden');
@@ -77,7 +77,7 @@ The order matters: **authenticate, then authorize, then act**.
 | **Authorization** | Does this user have permission to act on this resource? | `Forbidden` (403-equivalent) |
 | **Validation** | Is the input shape and value sane? | `Invalid input` (400-equivalent) |
 
-Skipping any layer is a security hole. The most common mistake is checking auth but skipping authorization — "logged in" is not the same as "allowed to touch this record".
+Skipping any layer is a security hole. The most common mistake is checking auth but skipping authorization - "logged in" is not the same as "allowed to touch this record".
 
 ---
 
@@ -149,7 +149,7 @@ export const deleteResource = authedAction(async (resourceId: string, userId) =>
 });
 ```
 
-The wrapper guarantees auth happens. You still have to write the per-resource authorization check yourself — there's no shortcut for that.
+The wrapper guarantees auth happens. You still have to write the per-resource authorization check yourself - there's no shortcut for that.
 
 ---
 

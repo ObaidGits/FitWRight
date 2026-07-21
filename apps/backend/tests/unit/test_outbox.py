@@ -1,6 +1,6 @@
 """Unit/integration tests for the shared event outbox (design §Platform, R16).
 
-Exercises emit → consume → idempotency → retry → DLQ → replay against a real
+Exercises emit -> consume -> idempotency -> retry -> DLQ -> replay against a real
 isolated DB, using a local KVStore for the single-flight lock.
 """
 
@@ -82,7 +82,7 @@ class TestRetryAndDlq:
         outbox_mod.register_handler("test.event", boom)
         await emit("test.event", {}, user_id="u1")
 
-        # max_attempts=2 → first pass fails (attempts=1), second dead-letters.
+        # max_attempts=2 -> first pass fails (attempts=1), second dead-letters.
         r1 = await process_outbox_batch(kvstore=_kv(), max_attempts=2)
         assert r1["failed"] == 1 and r1["dead"] == 0
         r2 = await process_outbox_batch(kvstore=_kv(), max_attempts=2)
@@ -98,7 +98,7 @@ class TestRetryAndDlq:
 
         outbox_mod.register_handler("test.event", boom)
         await emit("test.event", {}, user_id="u1")
-        await process_outbox_batch(kvstore=_kv(), max_attempts=1)  # → DLQ immediately
+        await process_outbox_batch(kvstore=_kv(), max_attempts=1)  # -> DLQ immediately
         assert (await outbox_stats())["dead"] == 1
 
         replayed = await replay_dead_letters()

@@ -60,7 +60,7 @@ describe('JdMatchCard', () => {
 
     await waitFor(() => expect(screen.getByText(/matched/i)).toBeInTheDocument());
     expect(fetchJobDescriptionMock).toHaveBeenCalledWith('r1');
-    // "python" and "postgres" from the JD appear in the resume → highlighted <mark>.
+    // "python" and "postgres" from the JD appear in the resume -> highlighted <mark>.
     const marks = document.querySelectorAll('mark');
     const marked = Array.from(marks).map((m) => m.textContent?.toLowerCase());
     expect(marked).toContain('python');

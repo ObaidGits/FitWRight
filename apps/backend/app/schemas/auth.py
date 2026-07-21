@@ -2,7 +2,7 @@
 
 ``SafeUser`` is the **only** shape a user is ever serialized into on the wire
 (R7.5): it carries ``id/name/email/role/status/emailVerified/aal`` (+ optional
-``avatarUrl``) and *nothing else* — never ``password_hash``, tokens, or internal
+``avatarUrl``) and *nothing else* - never ``password_hash``, tokens, or internal
 flags. ``model_config = extra="forbid"`` plus :func:`assert_safe_user` are the
 serialization safeguard: a field that is not explicitly whitelisted here can not
 be constructed into (or leak out of) a ``SafeUser``.
@@ -35,7 +35,7 @@ __all__ = [
 ]
 
 # The exhaustive whitelist of fields a user may be serialized with. Any other
-# attribute (password_hash, mfa_enrolled, created_at, …) is intentionally absent.
+# attribute (password_hash, mfa_enrolled, created_at, ...) is intentionally absent.
 SAFE_USER_FIELDS: frozenset[str] = frozenset(
     {"id", "name", "email", "role", "status", "emailVerified", "aal", "avatarUrl"}
 )
@@ -156,7 +156,7 @@ class LoginRequest(BaseModel):
 
 
 class UpdateProfileRequest(BaseModel):
-    """``PATCH /users/me`` — name only (role/status are ignored, R7.2).
+    """``PATCH /users/me`` - name only (role/status are ignored, R7.2).
 
     ``updated_at`` is the optimistic-concurrency token the client last saw; when
     provided and stale it yields a 409 (R Reliability §``PATCH /users/me``).
@@ -203,7 +203,7 @@ class MessageResponse(BaseModel):
 
 
 class VerificationRequestRequest(BaseModel):
-    """``POST /auth/verify/request`` — (re)send an email-verification link.
+    """``POST /auth/verify/request`` - (re)send an email-verification link.
 
     ``email`` is optional: an authenticated caller re-sends for their own
     account (email ignored); an anonymous caller supplies the address. Either
@@ -220,13 +220,13 @@ class VerificationRequestRequest(BaseModel):
 
 
 class VerificationConfirmRequest(BaseModel):
-    """``POST /auth/verify/confirm`` — redeem a verification token."""
+    """``POST /auth/verify/confirm`` - redeem a verification token."""
 
     token: str = Field(min_length=1, max_length=512)
 
 
 class ForgotPasswordRequest(BaseModel):
-    """``POST /auth/password/forgot`` — request a password-reset link.
+    """``POST /auth/password/forgot`` - request a password-reset link.
 
     The response is uniform regardless of whether the email is registered
     (R6.1/6.5, Property 4).
@@ -241,7 +241,7 @@ class ForgotPasswordRequest(BaseModel):
 
 
 class ResetPasswordRequest(BaseModel):
-    """``POST /auth/password/reset`` — set a new password with a reset token.
+    """``POST /auth/password/reset`` - set a new password with a reset token.
 
     For an OAuth-only account (no existing password) this *sets* a password,
     linking password auth (R6.3).
@@ -263,14 +263,14 @@ class UniformAckResponse(BaseModel):
 
 
 class StepUpRequest(BaseModel):
-    """``POST /auth/step-up`` — re-verify the current password to open a sudo
+    """``POST /auth/step-up`` - re-verify the current password to open a sudo
     window for sensitive actions (R9.1). MFA is a future additive factor."""
 
     password: str = Field(min_length=1)
 
 
 class ChangePasswordRequest(BaseModel):
-    """``POST /auth/password/change`` — change the password from within a session.
+    """``POST /auth/password/change`` - change the password from within a session.
 
     Requires a recent step-up (R9.1). The current password is re-verified
     (constant-time) and the new one is policy/breach-checked before the swap
@@ -282,7 +282,7 @@ class ChangePasswordRequest(BaseModel):
 
 
 class ChangeEmailRequest(BaseModel):
-    """``POST /users/me/email`` — begin a verify-before-switch email change.
+    """``POST /users/me/email`` - begin a verify-before-switch email change.
 
     Requires a recent step-up (R9.1). A confirmation link is sent to the *new*
     address; the primary email is switched only after that link is confirmed
@@ -298,7 +298,7 @@ class ChangeEmailRequest(BaseModel):
 
 
 class EmailChangeConfirmRequest(BaseModel):
-    """``POST /users/me/email/confirm`` — redeem an email-change token.
+    """``POST /users/me/email/confirm`` - redeem an email-change token.
 
     The token was delivered to the new address, proving ownership; confirming it
     swaps the account's primary email to that address (R7.4).

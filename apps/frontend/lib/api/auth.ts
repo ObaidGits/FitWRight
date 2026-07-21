@@ -1,5 +1,5 @@
 /**
- * Auth API client (Task 8.3) — real wiring to the backend `/api/v1/auth` +
+ * Auth API client (Task 8.3) - real wiring to the backend `/api/v1/auth` +
  * `/api/v1/users/me` surface.
  *
  * SECURITY MODEL:
@@ -81,7 +81,7 @@ async function toError(response: Response): Promise<AuthApiError> {
       code = body.detail;
     }
   } catch {
-    /* non-JSON body — keep the generic message */
+    /* non-JSON body - keep the generic message */
   }
   const retryHeader = response.headers.get('Retry-After');
   const retryAfter = retryHeader ? Number(retryHeader) : undefined;
@@ -198,7 +198,7 @@ export async function confirmVerification(token: string): Promise<void> {
 // Password reset
 // ---------------------------------------------------------------------------
 
-/** Request a password-reset link (uniform response — no enumeration). */
+/** Request a password-reset link (uniform response - no enumeration). */
 export async function forgotPassword(email: string): Promise<void> {
   await fetchCsrf();
   await ok(await apiPost('/auth/password/forgot', { email }, undefined, INLINE));

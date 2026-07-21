@@ -17,10 +17,10 @@ export function cn(...inputs: ClassValue[]): string {
  * Uses ASCII hyphen-minus (-) instead of en-dash for reliable PDF text extraction.
  *
  * Handles various input formats:
- * - "Jun 2025 Aug 2025" → "Jun 2025 - Aug 2025"
- * - "Jun 2025 - Aug 2025" → "Jun 2025 - Aug 2025"
- * - "2023 2025" → "2023 - 2025"
- * - "Present" → "Present" (no change for single dates)
+ * - "Jun 2025 Aug 2025" -> "Jun 2025 - Aug 2025"
+ * - "Jun 2025 - Aug 2025" -> "Jun 2025 - Aug 2025"
+ * - "2023 2025" -> "2023 - 2025"
+ * - "Present" -> "Present" (no change for single dates)
  *
  * @param dateString - The date range string to format
  * @returns Formatted date string with hyphen separator

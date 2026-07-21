@@ -2,7 +2,7 @@
 
 Covers the in-process :class:`AuthMetrics` counters (incl. the derived session-
 cache hit ratio and the labelled oauth-failure-by-reason map) and the
-:class:`JsonLogFormatter` — specifically that it emits one JSON object with the
+:class:`JsonLogFormatter` - specifically that it emits one JSON object with the
 request correlation fields and that it scrubs secrets / log-injection newlines so
 no token or PII lands in a log line.
 """
@@ -42,7 +42,7 @@ class TestAuthMetrics:
 
     def test_session_cache_hit_ratio(self):
         m = AuthMetrics()
-        # No lookups yet → 0.0 (no division by zero).
+        # No lookups yet -> 0.0 (no division by zero).
         assert m.session_cache_hit_ratio == 0.0
         m.record_session_cache(hit=True)
         m.record_session_cache(hit=True)

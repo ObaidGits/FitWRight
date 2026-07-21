@@ -53,7 +53,7 @@ class TestLlmConfig:
         self, mock_load, mock_save, mock_log_health, client
     ):
         # PUT /llm-api-key persists provider/model/api_base but NO LONGER the
-        # api_key — keys live in the encrypted per-provider store (PUT
+        # api_key - keys live in the encrypted per-provider store (PUT
         # /config/api-keys). Writing the legacy single slot here is exactly what
         # made providers overwrite each other, so it must not happen.
         mock_load.return_value = {}
@@ -518,7 +518,7 @@ class TestLegacyKeyMigration:
         import app.config as config_module
         from app.config import migrate_legacy_keys
 
-        # No config.json at all → no-op, no crash.
+        # No config.json at all -> no-op, no crash.
         if config_module.CONFIG_FILE_PATH.exists():
             config_module.CONFIG_FILE_PATH.unlink()
         migrate_legacy_keys()

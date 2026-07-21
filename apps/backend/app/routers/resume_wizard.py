@@ -84,11 +84,11 @@ async def resume_wizard_turn(
 ) -> ResumeWizardTurnResponse:
     """Advance the resume wizard by one structured turn.
 
-    Only the ``answer`` action calls the LLM (``run_ai_turn`` → ``complete_json``);
+    Only the ``answer`` action calls the LLM (``run_ai_turn`` -> ``complete_json``);
     every other action (``start``/``back``/``skip``/``review``/``structured``) is
     deterministic and free. The per-user LLM rate limit is therefore enforced
     ONLY on the ``answer`` path (below) rather than as a blanket route dependency
-    — otherwise cheap/deterministic turns (including the profile-prefill ``start``
+    - otherwise cheap/deterministic turns (including the profile-prefill ``start``
     fired on every wizard load) would spuriously burn the user's LLM budget and
     could 429 them out of real AI turns.
 
@@ -109,7 +109,7 @@ async def resume_wizard_turn(
             return ResumeWizardTurnResponse(state=apply_review(request.state))
 
         # Skip never touches resume_data and never needs the model to choose the
-        # next question — resolve it deterministically with zero tokens (W-P0.4).
+        # next question - resolve it deterministically with zero tokens (W-P0.4).
         if action == "skip":
             return ResumeWizardTurnResponse(state=apply_skip(request.state))
 
@@ -126,7 +126,7 @@ async def resume_wizard_turn(
         if request.state.asked_count >= RESUME_WIZARD_MAX_QUESTIONS:
             return ResumeWizardTurnResponse(state=apply_review(request.state))
 
-        # Only the answer path spends provider tokens — enforce the LLM rate
+        # Only the answer path spends provider tokens - enforce the LLM rate
         # limit here (not on the whole route).
         await enforce_llm_rate_limit(user_id)
         answer_text = request.answer.text if request.answer else ""
@@ -154,7 +154,7 @@ async def resume_wizard_assist(
 
     ``draft_bullets`` writes resume bullets from a plain description; ``parse_entries``
     turns a pasted resume blob into structured entries. Both are LLM calls that
-    return content for the user to confirm — they never mutate wizard state — so
+    return content for the user to confirm - they never mutate wizard state - so
     the LLM rate limit is enforced here (same guard as the ``answer`` turn).
     """
     try:
@@ -187,7 +187,7 @@ async def finalize_resume_wizard(
     request: ResumeWizardFinalizeRequest,
     user_id: str = Depends(get_effective_user_id),
 ) -> ResumeWizardFinalizeResponse:
-    """Save the wizard draft as a resume — as the master, or as a regular resume.
+    """Save the wizard draft as a resume - as the master, or as a regular resume.
 
     Never fails when a master already exists: instead it saves the draft as a
     normal resume (the user can promote it later from the editor). The wizard
@@ -214,7 +214,7 @@ async def finalize_resume_wizard(
         if make_master:
             # Atomic master create (title set inline so a committed-but-untitled
             # master can't linger). If a master appears concurrently the row is
-            # still persisted as a regular resume — we keep it rather than fail.
+            # still persisted as a regular resume - we keep it rather than fail.
             resume = await db.create_resume_atomic_master(
                 user_id,
                 content=content,
@@ -239,7 +239,7 @@ async def finalize_resume_wizard(
         created_master = bool(resume.get("is_master", False))
 
         # W-P3.1: only backfill the canonical profile when THIS wizard produced
-        # the master (the profile mirrors the master). Best-effort — never fails
+        # the master (the profile mirrors the master). Best-effort - never fails
         # the save.
         if created_master:
             try:

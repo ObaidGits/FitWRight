@@ -7,7 +7,7 @@ import { DEFAULT_SECTION_META } from '@/lib/utils/section-helpers';
 import type { SectionMeta, CustomSection } from '@/components/dashboard/resume-component';
 
 /**
- * CustomSectionsEditor — section ordering/visibility + custom sections in the
+ * CustomSectionsEditor - section ordering/visibility + custom sections in the
  * atelier editor. A stateful harness mirrors the editor's ownership so we can
  * observe cumulative behaviour (add, reorder, hide, edit, delete).
  */

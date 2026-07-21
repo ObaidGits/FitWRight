@@ -1,9 +1,9 @@
-"""Public projection platform — reusable outputs derived from the profile (P6).
+"""Public projection platform - reusable outputs derived from the profile (P6).
 
 The profile is the single source; every *external* representation is a pure
 projection here, mirroring how resumes are produced by the Projection Engine.
-This module adds three sibling projectors — **public profile**, **portfolio**,
-and **JSON Resume export** — sharing the invariant that private fields
+This module adds three sibling projectors - **public profile**, **portfolio**,
+and **JSON Resume export** - sharing the invariant that private fields
 (salary expectation, visa/work-authorization, phone unless public) are never
 leaked. Adding a future output (personal website, LinkedIn export) is a new pure
 function here; no storage or API redesign.
@@ -79,7 +79,7 @@ def project_public_profile(profile: ProfileData, *, slug: str | None = None) -> 
             "github": ident.github,
             "avatarUrl": ident.avatarUrl,
             # Responsive, optimized variants derived from the one canonical
-            # master (CDN URL transforms — no extra storage). Empty-safe when no
+            # master (CDN URL transforms - no extra storage). Empty-safe when no
             # avatar or a non-CDN (local) master.
             "avatarSrcset": _avatar_srcset(ident.avatarUrl),
         },

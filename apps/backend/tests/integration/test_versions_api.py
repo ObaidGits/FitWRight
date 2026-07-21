@@ -50,7 +50,7 @@ class TestCapture:
     async def test_rapid_manual_saves_debounced(self, isolated_db, owner_id):
         r = await _resume(isolated_db, owner_id, {"summary": "a"})
         await vs.capture_snapshot(owner_id, r["resume_id"], {"summary": "a"}, "manual", debounce_seconds=300)
-        # Different content but within the debounce window → coalesced.
+        # Different content but within the debounce window -> coalesced.
         second = await vs.capture_snapshot(owner_id, r["resume_id"], {"summary": "b"}, "manual", debounce_seconds=300)
         assert second is None
         assert await isolated_db.count_resume_versions(owner_id, r["resume_id"]) == 1
@@ -59,7 +59,7 @@ class TestCapture:
         r = await _resume(isolated_db, owner_id, {"summary": "a"})
         await vs.capture_snapshot(owner_id, r["resume_id"], {"summary": "a"}, "manual", debounce_seconds=300)
         ai = await vs.capture_snapshot(owner_id, r["resume_id"], {"summary": "ai"}, "ai", debounce_seconds=300)
-        assert ai is not None  # only manual→manual is debounced
+        assert ai is not None  # only manual->manual is debounced
 
     async def test_cap_prunes_oldest_non_original(self, isolated_db, owner_id, monkeypatch):
         monkeypatch.setattr(app_settings, "version_history_cap", 3)
@@ -140,7 +140,7 @@ class TestRestore:
         # The resume now holds the restored data.
         refreshed = await isolated_db.get_resume(owner_id, r["resume_id"])
         assert refreshed["processed_data"]["summary"] == "old"
-        # Restore snapshotted the *current* state first → it is recoverable.
+        # Restore snapshotted the *current* state first -> it is recoverable.
         rows = await isolated_db.list_resume_versions(owner_id, r["resume_id"], limit=100)
         assert any(row["label"] == "Before restore" for row in rows)
 

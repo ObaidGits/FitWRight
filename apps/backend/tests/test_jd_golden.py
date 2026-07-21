@@ -1,7 +1,7 @@
 """Golden / contract tests for JD extraction (§35, §36 of enhancement plan).
 
 These tests run adapters and extractors against COMMITTED, frozen fixtures
-(``tests/fixtures/jd/``) — real-shaped platform API responses and multilingual
+(``tests/fixtures/jd/``) - real-shaped platform API responses and multilingual
 JSON-LD pages. They act as contract tests: if an adapter's parsing contract
 regresses, or the i18n language/section detection drifts, these fail offline
 with no network. Complements the synthetic-input unit tests in

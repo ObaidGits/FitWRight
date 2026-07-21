@@ -1,7 +1,7 @@
 /**
  * Route-guard middleware (Task 8.2).
  *
- * PRESENCE-ONLY fast path — this is UX, NOT the security boundary. It checks
+ * PRESENCE-ONLY fast path - this is UX, NOT the security boundary. It checks
  * only whether a session cookie is *present* (it can never read the httpOnly
  * value) and, if absent on a protected route, redirects to `/login?next=<path>`
  * before render so the user isn't briefly shown a protected shell. The
@@ -24,13 +24,13 @@ import { SINGLE_USER_MODE, SESSION_COOKIE_NAMES } from '@/lib/config/auth';
  * `OAUTH_REDIRECT_URI`/`FRONTEND_BASE_URL` are pinned to a single host. If a
  * user lands on a different host of the same site (e.g. the apex
  * `fitwright.tech` instead of `www.`), the OAuth transient cookie set on start
- * is NOT sent to the callback host → `state_mismatch` → intermittent
+ * is NOT sent to the callback host -> `state_mismatch` -> intermittent
  * "oauth_failed" that "works on retry" (the failure redirect lands them on the
  * canonical host). Redirecting to one canonical host up front removes that
  * whole class of cookie-fragmentation bugs.
  *
  * Runtime-configurable via `CANONICAL_HOST`; otherwise derived from the baked
- * `NEXT_PUBLIC_SITE_URL`. Empty → feature off (local/dev, single-origin).
+ * `NEXT_PUBLIC_SITE_URL`. Empty -> feature off (local/dev, single-origin).
  */
 const CANONICAL_HOST: string = (() => {
   const explicit = process.env.CANONICAL_HOST?.trim();
@@ -47,8 +47,8 @@ const CANONICAL_HOST: string = (() => {
 })();
 
 /** Registrable-domain match: only canonicalize hosts of the SAME site (so the
- * apex + any subdomain fold onto the canonical host, while unrelated hosts —
- * `localhost`, `*.herokuapp.com`, preview domains — are left untouched). */
+ * apex + any subdomain fold onto the canonical host, while unrelated hosts -
+ * `localhost`, `*.herokuapp.com`, preview domains - are left untouched). */
 function isSameSiteHost(host: string, canonical: string): boolean {
   if (!host || !canonical) return false;
   const base = canonical.split('.').slice(-2).join('.');
@@ -81,7 +81,7 @@ function hasSessionCookie(req: NextRequest): boolean {
 export function middleware(req: NextRequest): NextResponse {
   const { pathname, search } = req.nextUrl;
 
-  // Canonical-host redirect FIRST — before any auth logic — so every browser
+  // Canonical-host redirect FIRST - before any auth logic - so every browser
   // navigation (marketing, /login, app routes) settles on the single host that
   // owns the auth cookies. Skipped in single-user/local mode and when no
   // canonical host is configured. `x-forwarded-host` (set by Heroku's router)

@@ -62,7 +62,7 @@ _configure_application_logging()
 async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     # Startup
-    # Structured JSON logs (request_id + user_id correlation, no secrets/PII —
+    # Structured JSON logs (request_id + user_id correlation, no secrets/PII -
     # R16.1). Done in lifespan (not at import) so importing the app for tests
     # never reconfigures the root logger under pytest.
     configure_json_logging(getattr(logging, settings.log_level, logging.INFO))
@@ -82,7 +82,7 @@ async def lifespan(app: FastAPI):
             "Deployment profile validation failed: " + "; ".join(deployment_errors)
         )
     # Hosted Postgres: bring the schema to head under an advisory lock before we
-    # serve traffic (SQLite uses create_all and is a no-op here). Fail-fast — a
+    # serve traffic (SQLite uses create_all and is a no-op here). Fail-fast - a
     # migration/connection failure must abort startup, never serve a broken DB.
     from app.migrations_runtime import apply_migrations_if_configured
 
@@ -193,9 +193,9 @@ app = FastAPI(
 #
 # Order matters: Starlette runs the LAST-added middleware OUTERMOST. From the
 # outside in we want: security headers (so even an inner rejection carries them)
-# → request-context/observability (mints the request_id before auth logs/audits
+# -> request-context/observability (mints the request_id before auth logs/audits
 # fire, and reads the resolved principal *after* call_next for the access log +
-# metrics) → auth middleware → CORS innermost. The auth middleware only performs
+# metrics) -> auth middleware -> CORS innermost. The auth middleware only performs
 # a DB session lookup when a session cookie is present, and per-session CSRF
 # enforcement is gated on SINGLE_USER_MODE, so local zero-config boot and the
 # existing unauthenticated routes are unaffected.

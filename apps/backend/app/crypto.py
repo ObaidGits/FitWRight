@@ -6,7 +6,7 @@ so plaintext exists in memory only at call time.
 
 Resilience: a missing secret is generated on demand; a key that fails to
 decrypt (e.g. the secret was rotated/lost) is treated as empty rather than
-crashing — the user is prompted to re-enter, and stored ciphertext is never
+crashing - the user is prompted to re-enter, and stored ciphertext is never
 recoverable without the original secret.
 """
 
@@ -33,7 +33,7 @@ def _write_secret(path: Path, key: bytes, *, exclusive: bool = False) -> None:
     """Atomically write the secret with 0600 perms.
 
     The key is written **in full** to a temp file in the same directory (mode
-    0600 via ``mkstemp``), fsync'd, then moved into place atomically — so a
+    0600 via ``mkstemp``), fsync'd, then moved into place atomically - so a
     concurrent reader can never observe a partial key. With ``exclusive=True``
     the move is an atomic hard-link that raises ``FileExistsError`` if the
     target already exists (first-run generation must not clobber a secret that
@@ -86,7 +86,7 @@ def _load_fernet() -> Fernet:
             _write_secret(path, key, exclusive=True)
             logger.info("Generated new encryption secret at %s", path)
         except FileExistsError:
-            # Another caller generated the secret first — use theirs so we
+            # Another caller generated the secret first - use theirs so we
             # never overwrite a key that may already have encrypted data.
             key = path.read_bytes().strip()
 

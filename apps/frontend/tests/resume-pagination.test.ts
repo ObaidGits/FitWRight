@@ -16,7 +16,7 @@ import type { MarginSettings } from '@/lib/types/template-settings';
 
 const M = (v: number): MarginSettings => ({ top: v, bottom: v, left: v, right: v });
 
-describe('page geometry (px @ 96 DPI — matches Chromium PDF layout)', () => {
+describe('page geometry (px @ 96 DPI - matches Chromium PDF layout)', () => {
   it('converts mm to CSS px at 96 DPI', () => {
     expect(mmToPx(25.4)).toBeCloseTo(CSS_DPI, 5); // 1 inch = 96px
     expect(mmToPx(0)).toBe(0);
@@ -49,7 +49,7 @@ describe('fitScale (scale the canvas, never upscale)', () => {
   });
 });
 
-describe('groupFlowBlocks (break-after: avoid — titles glue to first item)', () => {
+describe('groupFlowBlocks (break-after: avoid - titles glue to first item)', () => {
   it('fuses a keepWithNext block with the following block', () => {
     const groups = groupFlowBlocks([
       { top: 0, bottom: 10, keepWithNext: true },
@@ -63,7 +63,7 @@ describe('groupFlowBlocks (break-after: avoid — titles glue to first item)', (
   });
 });
 
-describe('computePageOffsets (break-inside: avoid — never split a block)', () => {
+describe('computePageOffsets (break-inside: avoid - never split a block)', () => {
   it('keeps everything on one page when it all fits', () => {
     expect(
       computePageOffsets(
@@ -77,7 +77,7 @@ describe('computePageOffsets (break-inside: avoid — never split a block)', () 
   });
 
   it('opens a new page before a block that would overflow', () => {
-    // b3 (80→120) overflows a 100px page → page 2 starts at its top (80).
+    // b3 (80->120) overflows a 100px page -> page 2 starts at its top (80).
     expect(
       computePageOffsets(
         [
@@ -94,14 +94,14 @@ describe('computePageOffsets (break-inside: avoid — never split a block)', () 
   it('keeps a section title with its first item (no orphaned title)', () => {
     const title = { top: 80, bottom: 90, keepWithNext: true };
     const firstItem = { top: 90, bottom: 140 };
-    // Glued → both move to page 2 at the title top (80), not the item top (90).
+    // Glued -> both move to page 2 at the title top (80), not the item top (90).
     expect(computePageOffsets([title, firstItem], 100)).toEqual([0, 80]);
   });
 
   it('does not loop on an oversized block taller than a full page', () => {
     const offsets = computePageOffsets(
       [
-        { top: 0, bottom: 150 }, // taller than the 100px page → clipped, stays
+        { top: 0, bottom: 150 }, // taller than the 100px page -> clipped, stays
         { top: 150, bottom: 190 },
       ],
       100

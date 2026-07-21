@@ -10,8 +10,8 @@ Each pack lives in its own folder. Cross-references inside a pack are relative a
 
 | Pack | What it covers |
 |------|----------------|
-| [swiss-design-system/](swiss-design-system/) | Swiss International Style design system — tokens, components, layouts, AI prompt template, anti-patterns |
-| [nextjs-performance/](nextjs-performance/) | Next.js 15 performance optimizations — waterfalls, bundle size, Server Action security, server-side perf, pre-PR checklist |
+| [swiss-design-system/](swiss-design-system/) | Swiss International Style design system - tokens, components, layouts, AI prompt template, anti-patterns |
+| [nextjs-performance/](nextjs-performance/) | Next.js 15 performance optimizations - waterfalls, bundle size, Server Action security, server-side perf, pre-PR checklist |
 
 ---
 
@@ -33,13 +33,13 @@ No find-and-replace needed. The internal links use relative paths that resolve c
 
 ## Why "portable"?
 
-These docs originated as project-specific guides inside a larger codebase. They were generic enough to be useful anywhere — but the original versions had references to specific files, features, and conventions that made them awkward to reuse.
+These docs originated as project-specific guides inside a larger codebase. They were generic enough to be useful anywhere - but the original versions had references to specific files, features, and conventions that made them awkward to reuse.
 
 The versions in this folder have been rewritten so that:
 
-1. **No project-specific references** — generic examples only
-2. **No outbound links** — every link points to a sibling within the same pack
-3. **Standalone reading** — each file makes sense in isolation
-4. **Heavy structure** — split by topic, with explicit prerequisites and "when to apply" guidance
+1. **No project-specific references** - generic examples only
+2. **No outbound links** - every link points to a sibling within the same pack
+3. **Standalone reading** - each file makes sense in isolation
+4. **Heavy structure** - split by topic, with explicit prerequisites and "when to apply" guidance
 
-If you find a file that violates any of these rules, that's a bug — please fix it before distributing.
+If you find a file that violates any of these rules, that's a bug - please fix it before distributing.

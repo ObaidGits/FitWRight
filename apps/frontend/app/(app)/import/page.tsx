@@ -1,6 +1,6 @@
 'use client';
 
-/** Import a resume (Task 7.2 / Req 8) — drag-drop upload + parse status + wizard entry. */
+/** Import a resume (Task 7.2 / Req 8) - drag-drop upload + parse status + wizard entry. */
 import * as React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -62,13 +62,13 @@ export default function ImportPage() {
       invalidateResumeLists(qc);
       if (res.processing_status === 'failed') {
         // The file read fine (a genuinely unreadable/scanned file is rejected
-        // upstream with its own message) — this state means AI *structuring*
+        // upstream with its own message) - this state means AI *structuring*
         // failed. That is almost always a provider issue (missing/invalid key
         // or hit rate limit), so point the user there instead of wrongly
         // blaming the file.
         setError(
           'Your file was uploaded and its text was read, but the AI could not turn it into a structured resume. ' +
-            'This usually means your AI provider key is missing, invalid, or has hit its rate limit — ' +
+            'This usually means your AI provider key is missing, invalid, or has hit its rate limit - ' +
             'check your key in Settings and try again.'
         );
         setPhase('error');
@@ -105,7 +105,7 @@ export default function ImportPage() {
               ev.status === 'done' && !prev.done.includes(ev.stage)
                 ? [...prev.done, ev.stage]
                 : prev.done;
-            // Keep `active` sticky — only advance it on a real 'active' event,
+            // Keep `active` sticky - only advance it on a real 'active' event,
             // so a completed stage doesn't blank out the spinner.
             const active = ev.status === 'active' ? ev.stage : prev.active;
             return { active, done };
@@ -121,7 +121,7 @@ export default function ImportPage() {
           setPhase('error');
           return;
         }
-        // Streaming unavailable → fall through to the non-stream path below.
+        // Streaming unavailable -> fall through to the non-stream path below.
         setUsingStream(false);
       }
 
@@ -185,7 +185,7 @@ export default function ImportPage() {
         </Card>
       )}
 
-      {/* Upload zone — swapped for a premium, honest progress experience while
+      {/* Upload zone - swapped for a premium, honest progress experience while
           the file uploads and the AI structures it (Loading Experience audit). */}
       {phase === 'uploading' ? (
         <Card className="space-y-5 p-6">
@@ -235,7 +235,7 @@ export default function ImportPage() {
         >
           <UploadCloud className="h-8 w-8 text-[var(--muted-foreground)]" />
           <p className="text-sm font-medium">Drop your resume here, or click to browse</p>
-          <p className="text-xs text-[var(--muted-foreground)]">PDF, DOC, or DOCX · up to 4MB</p>
+          <p className="text-xs text-[var(--muted-foreground)]">PDF, DOC, or DOCX - up to 4MB</p>
           <input
             ref={inputRef}
             type="file"

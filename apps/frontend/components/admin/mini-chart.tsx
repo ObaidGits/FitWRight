@@ -31,7 +31,7 @@ export function MiniAreaChart({
       role="img"
       aria-label={label}
     >
-      {/* Accessible title element (R13.6) — screen readers announce this. */}
+      {/* Accessible title element (R13.6) - screen readers announce this. */}
       <title>{label}</title>
       <polygon points={area} fill="var(--primary)" opacity="0.12" />
       <polyline

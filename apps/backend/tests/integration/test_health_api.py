@@ -16,7 +16,7 @@ def client():
 
 
 class TestHealthEndpoint:
-    """GET /api/v1/health — lightweight liveness probe (does NOT call the LLM)."""
+    """GET /api/v1/health - lightweight liveness probe (does NOT call the LLM)."""
 
     async def test_health_returns_healthy(self, client):
         """Liveness probe always reports healthy and needs no LLM call."""
@@ -30,7 +30,7 @@ class TestHealthEndpoint:
         """/health is a liveness probe: it stays healthy even when the LLM is
         unhealthy, and must NOT call the provider. Readiness lives at /status.
 
-        Regression guard for the liveness-vs-readiness split — the previous
+        Regression guard for the liveness-vs-readiness split - the previous
         version of this test asserted the deleted '/health returns degraded'
         behavior and failed silently because nothing ran the suite.
         """
@@ -205,7 +205,7 @@ class TestStatusLlmHealthCache:
 
 
 class TestSetupStatusEndpoint:
-    """GET /api/v1/setup/status — deterministic persisted onboarding facts."""
+    """GET /api/v1/setup/status - deterministic persisted onboarding facts."""
 
     @patch("app.routers.health.check_llm_health", new_callable=AsyncMock)
     @patch("app.routers.health.db", new_callable=AsyncMock)

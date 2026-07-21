@@ -3,7 +3,7 @@
 /**
  * Shared on-screen resume renderer.
  *
- * There is ONE resume renderer in the app — the canonical `Resume` component
+ * There is ONE resume renderer in the app - the canonical `Resume` component
  * (components/dashboard/resume-component) that the print/PDF path uses. This
  * wrapper delegates to it via {@link ResumeDocument}, which lays the output onto
  * true-to-size A4/Letter page surfaces so the in-app preview is a WYSIWYG match

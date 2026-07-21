@@ -7,7 +7,7 @@ import path from 'node:path';
  *
  * WHY THIS EXISTS: the hosted-only journeys in `auth-journeys.spec.ts` (route
  * guards, multi-tab logout, device revoke, session-expiry redirect, admin-vs-user
- * guard) assume a *pre-authenticated* browser — and the device-revoke test needs
+ * guard) assume a *pre-authenticated* browser - and the device-revoke test needs
  * ≥2 active sessions. Without a login step + persisted `storageState`, the first
  * protected navigation would bounce to `/login` and every hosted test would fail.
  *
@@ -19,17 +19,17 @@ import path from 'node:path';
  * gated `describe` block wires that state in via `test.use({ storageState })`.
  *
  * NO-OP BY DEFAULT: with `RUN_AUTH_E2E` unset this returns immediately, so the
- * deterministic (mocked-backend) default run is completely unaffected — it never
+ * deterministic (mocked-backend) default run is completely unaffected - it never
  * touches the network and never writes a state file.
  *
- * ── Same-origin + cookie requirements ──────────────────────────────────────
+ * -- Same-origin + cookie requirements --------------------------------------
  * The session cookie is `__Host-session`, which browsers ONLY accept over HTTPS
  * (the `__Host-` prefix mandates `Secure`). It must also be same-origin with the
  * app the browser loads. So the hosted test stack must serve the frontend and
  * proxy `/api/v1/*` to the backend under ONE HTTPS origin (that is how it runs in
- * CI/production — the Next.js rewrite forwards `/api/v1` to the backend). Point
+ * CI/production - the Next.js rewrite forwards `/api/v1` to the backend). Point
  * `E2E_BASE_URL` at that origin (default `http://localhost:3000` for a plain-HTTP
- * dev proxy — see the note in `auth-journeys.spec.ts` about the `__Host-`/Secure
+ * dev proxy - see the note in `auth-journeys.spec.ts` about the `__Host-`/Secure
  * caveat on non-TLS local runs). `E2E_API_URL` may override the API origin if the
  * backend is reached directly rather than through the frontend proxy.
  */
@@ -47,7 +47,7 @@ function baseUrl(): string {
   return process.env.E2E_BASE_URL ?? 'http://localhost:3000';
 }
 
-/** API origin — same as the app by default (Next proxies `/api/v1`). */
+/** API origin - same as the app by default (Next proxies `/api/v1`). */
 function apiBase(): string {
   const api = process.env.E2E_API_URL ?? baseUrl();
   return `${api.replace(/\/+$/, '')}/api/v1`;
@@ -69,7 +69,7 @@ async function csrfToken(ctx: APIRequestContext): Promise<string> {
 
 /**
  * Establish an authenticated session in `ctx`. Tries signup first (which signs in
- * immediately only when email verification is OFF — the test stack must set
+ * immediately only when email verification is OFF - the test stack must set
  * `EMAIL_VERIFICATION=false`), and falls back to login when the user already
  * exists. Throws a clear, actionable error if neither path yields a session.
  */
@@ -84,7 +84,7 @@ async function authenticate(ctx: APIRequestContext): Promise<void> {
     const body = await signup.json().catch(() => ({}));
     if (body?.status === 'pending_verification') {
       throw new Error(
-        '[auth.setup] Signup returned pending_verification — the E2E stack has email ' +
+        '[auth.setup] Signup returned pending_verification - the E2E stack has email ' +
           'verification ON, so there is no session and no mailbox to confirm it. Run the ' +
           'hosted test backend with EMAIL_VERIFICATION=false so signup activates immediately.'
       );
@@ -92,7 +92,7 @@ async function authenticate(ctx: APIRequestContext): Promise<void> {
     return; // signed in immediately (session cookie is now in ctx)
   }
 
-  // Existing user (or verification-off duplicate) → log in for a fresh session.
+  // Existing user (or verification-off duplicate) -> log in for a fresh session.
   const login = await ctx.post(`${apiBase()}/auth/login`, {
     headers: { 'X-CSRF-Token': await csrfToken(ctx) },
     data: { email: E2E_EMAIL, password: E2E_PASSWORD, remember_me: true },
@@ -110,7 +110,7 @@ export default async function globalSetup(): Promise<void> {
   // No-op unless the gated hosted suite is explicitly requested.
   if (process.env.RUN_AUTH_E2E !== '1') return;
 
-  // 1) Primary session — persisted as the browser's storageState.
+  // 1) Primary session - persisted as the browser's storageState.
   const primary = await request.newContext({ baseURL: baseUrl() });
   await authenticate(primary);
 
@@ -130,7 +130,7 @@ export default async function globalSetup(): Promise<void> {
   await writeFile(STORAGE_STATE, JSON.stringify(state, null, 2), 'utf8');
   await primary.dispose();
 
-  // 2) Second device — a fresh cookie jar logs in again, creating a 2nd active
+  // 2) Second device - a fresh cookie jar logs in again, creating a 2nd active
   //    server-side session so the device-revoke test has something to revoke.
   const secondDevice = await request.newContext({ baseURL: baseUrl() });
   await authenticate(secondDevice);

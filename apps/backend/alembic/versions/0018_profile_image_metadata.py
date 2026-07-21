@@ -1,17 +1,17 @@
 """Photo System: canonical profile-image metadata on users
 
 Adds metadata-only columns for the canonical profile-image master (Photo
-System). Only metadata is stored — never binary; the master itself lives in the
+System). Only metadata is stored - never binary; the master itself lives in the
 object store (Cloudinary/local) keyed by ``avatar_key`` and delivered via
 ``avatar_url``. Responsive variants are CDN URL transforms of that one master
 (no extra rows, no re-uploads).
 
-- ``avatar_checksum`` — SHA-256 of the *original* upload bytes; content-addressed
+- ``avatar_checksum`` - SHA-256 of the *original* upload bytes; content-addressed
   dedup so re-uploading the same file is a no-op (no wasted CDN write).
-- ``avatar_width`` / ``avatar_height`` / ``avatar_format`` / ``avatar_bytes`` —
+- ``avatar_width`` / ``avatar_height`` / ``avatar_format`` / ``avatar_bytes`` -
   master dimensions/format for CLS-free layout + responsive sizing.
-- ``avatar_dominant_color`` — for skeletons / theme accents.
-- ``avatar_updated_at`` — cache-busting / provenance.
+- ``avatar_dominant_color`` - for skeletons / theme accents.
+- ``avatar_updated_at`` - cache-busting / provenance.
 
 Purely **additive** and **reversible**: no existing row is touched, all columns
 are nullable with no backfill (a pre-Photo-System avatar keeps NULLs until its

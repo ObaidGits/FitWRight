@@ -6,7 +6,7 @@ import {
 } from '@/lib/utils/keyword-matcher';
 
 /**
- * Pure JD↔resume keyword logic that drives the match highlighting / stats in
+ * Pure JD<->resume keyword logic that drives the match highlighting / stats in
  * the tailor view. Deterministic, no DOM.
  */
 

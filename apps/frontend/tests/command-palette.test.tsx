@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 /**
  * Command palette keyboard navigation (premium ⌘K parity):
- * - ⌘K toggles open, ↑/↓ move the active option (roving aria-selected),
+ * - ⌘K toggles open, ^/v move the active option (roving aria-selected),
  *   Enter runs the active command, and recently-used destinations lead the
  *   list when the query is empty.
  * The router + search APIs are mocked so nothing hits the network.
@@ -83,7 +83,7 @@ describe('CommandPalette keyboard navigation', () => {
     renderPalette();
     openPalette();
     const input = screen.getByRole('combobox', { name: /command palette/i });
-    // First option is "Go to Home" (→ /home).
+    // First option is "Go to Home" (-> /home).
     fireEvent.keyDown(input, { key: 'Enter' });
     expect(pushMock).toHaveBeenCalledWith('/home');
   });

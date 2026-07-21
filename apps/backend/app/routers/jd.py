@@ -33,7 +33,7 @@ def _require_enabled() -> None:
 
 
 def _result_to_response(result) -> FetchUrlResponse:
-    """Map a v2 ExtractionResult → the (backward-compatible) response schema."""
+    """Map a v2 ExtractionResult -> the (backward-compatible) response schema."""
     return FetchUrlResponse(
         content=result.content,
         low_confidence=result.low_confidence,
@@ -84,7 +84,7 @@ async def _fetch_v1(request: FetchUrlRequest, user_id: str) -> FetchUrlResponse:
 
 
 async def _fetch_v2(request: FetchUrlRequest, user_id: str) -> FetchUrlResponse:
-    """v2 cascade pipeline (API → JSON-LD → DOM)."""
+    """v2 cascade pipeline (API -> JSON-LD -> DOM)."""
     from app.jd.orchestrator import orchestrate_v2
 
     try:
@@ -122,7 +122,7 @@ async def extract_rendered(
 
     For pages we cannot fetch server-side (auth walls, anti-bot, client-only
     SPAs), a browser extension captures the DOM the user is viewing and posts it
-    here. We run the static extractors on it — no network, no scraping.
+    here. We run the static extractors on it - no network, no scraping.
     """
     if not settings.jd_extension_fallback_enabled:
         raise HTTPException(status_code=404, detail="extension_fallback_disabled")
@@ -171,7 +171,7 @@ async def adapter_health(
 async def employer_webhook(request: Request) -> dict:
     """Employer/ATS authoritative job push (zero-scrape, HMAC-authenticated).
 
-    Not user-authenticated — authenticated by an HMAC-SHA256 signature over the
+    Not user-authenticated - authenticated by an HMAC-SHA256 signature over the
     raw body (header ``X-JD-Signature``) using the shared ``jd_webhook_secret``.
     Stores the posting in the extraction cache as a HIGH-confidence result.
     """

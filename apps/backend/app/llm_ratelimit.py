@@ -3,14 +3,14 @@
 The auth surface is rate-limited, and stream-start / JD-from-URL have their own
 caps, but the other non-streaming generation endpoints (resume parse on upload,
 resume tailoring/improve, cover letter, outreach, interview prep, enrichment,
-resume wizard) previously had no per-user throttle — a single authenticated user
+resume wizard) previously had no per-user throttle - a single authenticated user
 could drive unbounded provider cost, amplified by the LiteLLM router's retries.
 
 This module centralizes a small fixed-window per-user limit applied via the
 shared KVStore (so it holds across workers/instances). It is exposed both as a
 plain helper (``enforce_llm_rate_limit``) and as a FastAPI route dependency
 (``llm_rate_limit_dep``) so a route just adds
-``dependencies=[Depends(llm_rate_limit_dep)]`` — non-invasive, and FastAPI
+``dependencies=[Depends(llm_rate_limit_dep)]`` - non-invasive, and FastAPI
 caches the resolved user id so it composes with the endpoint's own identity
 dependency. ``fail_closed=False`` mirrors the stream limiter: a KVStore blip must
 not hard-block generation, but genuine over-limit traffic gets a 429 +

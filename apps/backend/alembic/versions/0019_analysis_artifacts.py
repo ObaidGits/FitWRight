@@ -3,11 +3,11 @@
 Adds the generic, user-scoped ``analysis_artifacts`` cache that lets the app
 reuse the result of an expensive AI/analysis operation instead of recomputing
 it. It is complementary to ``resume_versions`` / ``profile_versions`` (user-
-facing edit history) — this table is an internal, content+algorithm-addressed
+facing edit history) - this table is an internal, content+algorithm-addressed
 cache.
 
 - Reuse key ``(user_id, artifact_type, source_id, checksum, version)`` is UNIQUE
-  → an exact lookup is a cache hit, and concurrent producers converge on one row.
+  -> an exact lookup is a cache hit, and concurrent producers converge on one row.
 - ``checksum`` is the SHA-256 of the canonical input; ``version`` encodes the
   prompt+model+algo, so a prompt/model change simply misses (lazy regeneration).
 - ``source_id`` / ``related_id`` support dependency-aware invalidation: deleting

@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Global error boundary — the last line of defense. Catches render errors that
+ * Global error boundary - the last line of defense. Catches render errors that
  * escape the root layout (which segment `error.tsx` boundaries cannot). Because
  * it replaces the whole document, it renders its own <html>/<body>. Kept
  * dependency-free and inline-styled so it works even if app CSS failed to load.

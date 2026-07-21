@@ -4,11 +4,11 @@ Implements independent cache layers with per-layer TTL and version-keyed
 invalidation. Uses the existing pluggable KVStore (Redis/Local/DB).
 
 Layers:
-  L0: Raw HTTP response (html + headers) — 60 min
-  L2: Structured extraction result — 60 min (version-keyed)
-  L5: Error state — 5 min (short, allows retry)
+  L0: Raw HTTP response (html + headers) - 60 min
+  L2: Structured extraction result - 60 min (version-keyed)
+  L5: Error state - 5 min (short, allows retry)
 
-Cache lookup order: L2 → L5 → full pipeline
+Cache lookup order: L2 -> L5 -> full pipeline
 On extractor upgrade: L2 invalidates (key includes version); L0 remains (re-extract from cached HTML).
 """
 
@@ -28,11 +28,11 @@ __all__ = ["JdCache"]
 _VERSION = "2.1.0"  # Bump on extractor logic changes to invalidate L2
 
 # TTL classes (seconds)
-TTL_L0_HTML = 3600       # 60 min — raw HTML
-TTL_L2_HIGH = 3600       # 60 min — HIGH confidence result
-TTL_L2_MEDIUM = 1800     # 30 min — MEDIUM confidence result
-TTL_L2_LOW = 600         # 10 min — LOW confidence (re-try soon)
-TTL_L5_ERROR = 300       # 5 min — error state (allow quick retry)
+TTL_L0_HTML = 3600       # 60 min - raw HTML
+TTL_L2_HIGH = 3600       # 60 min - HIGH confidence result
+TTL_L2_MEDIUM = 1800     # 30 min - MEDIUM confidence result
+TTL_L2_LOW = 600         # 10 min - LOW confidence (re-try soon)
+TTL_L5_ERROR = 300       # 5 min - error state (allow quick retry)
 
 
 def _hash(s: str) -> str:
@@ -124,7 +124,7 @@ class JdCache:
             return None
 
     async def register_fingerprint(self, fingerprint: str, canonical_url: str) -> None:
-        """Map a content fingerprint → canonical URL (24h TTL) for near-dup linking."""
+        """Map a content fingerprint -> canonical URL (24h TTL) for near-dup linking."""
         if not fingerprint or not canonical_url:
             return
         try:

@@ -1,7 +1,7 @@
 """Google OAuth 2.0 / OpenID Connect provider (Task 7.1/7.2).
 
 Implements :class:`~app.auth.oauth.base.OAuthProvider` against Google's fixed,
-well-known endpoints (SSRF-safe — no user-supplied URLs ever reach here):
+well-known endpoints (SSRF-safe - no user-supplied URLs ever reach here):
 
 - authorize:  ``https://accounts.google.com/o/oauth2/v2/auth``
 - token:      ``https://oauth2.googleapis.com/token``
@@ -16,7 +16,7 @@ Security decisions (design `§Google OAuth`, `§Security` OAuth rows, ADR-5):
   signature against Google's **rotating** JWKS (refetched once on an unknown
   ``kid``), then ``iss`` ∈ {accounts.google.com, https://accounts.google.com},
   ``aud`` == client id, ``exp``/``iat`` within a bounded **clock-skew leeway**,
-  and ``nonce`` equality — before any claim is trusted (R4.2).
+  and ``nonce`` equality - before any claim is trusted (R4.2).
 - **Testability / no live calls.** The token-exchange HTTP client, the JWKS
   provider, and the clock are all **injected**, so unit tests drive a mock IdP
   and a mock JWKS with a fixed clock and never touch Google (design
@@ -46,7 +46,7 @@ __all__ = [
     "GoogleOAuthProvider",
 ]
 
-# Fixed Google endpoints (never user-supplied — SSRF-safe).
+# Fixed Google endpoints (never user-supplied - SSRF-safe).
 GOOGLE_AUTHORIZE_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
 GOOGLE_JWKS_URI = "https://www.googleapis.com/oauth2/v3/certs"
@@ -85,7 +85,7 @@ class HttpxJwksClient:
 
     Google rotates signing keys, so :meth:`get_jwks` refetches on demand
     (``force_refresh``) when the caller sees an unknown ``kid`` (R4.2 rotation
-    handling). The cache is a plain in-process dict — fine because a JWKS is
+    handling). The cache is a plain in-process dict - fine because a JWKS is
     public and cheap to refetch, and correctness never depends on it.
     """
 
@@ -229,7 +229,7 @@ class GoogleOAuthProvider(OAuthProvider):
             payload = await self._token_client.post_form(self._token_endpoint, data)
         except OAuthError:
             raise
-        except Exception as exc:  # noqa: BLE001 - network/other → normalized
+        except Exception as exc:  # noqa: BLE001 - network/other -> normalized
             raise OAuthError("token_exchange_failed", str(exc)) from exc
 
         if not isinstance(payload, dict) or payload.get("error"):

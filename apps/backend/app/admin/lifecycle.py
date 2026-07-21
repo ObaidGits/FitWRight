@@ -1,22 +1,22 @@
 """User lifecycle: enable/disable, role change, soft-delete, restore (Tasks 4-6).
 
 All mutations funnel through :class:`LifecycleService` so authorization,
-idempotency (no-op → ``changed:false``), the **atomic active-admin guard**,
+idempotency (no-op -> ``changed:false``), the **atomic active-admin guard**,
 session revocation (+ P1 cache eviction), and audit are applied uniformly and in
-one place. The service never touches owned tables — it operates on the
-(non-owned) ``users`` + ``sessions`` rows — so it stays outside the scoping guard.
+one place. The service never touches owned tables - it operates on the
+(non-owned) ``users`` + ``sessions`` rows - so it stays outside the scoping guard.
 
 The active-admin invariant (Property 3, R6.3/7.2/8.1/10.2) is enforced with a
 **single conditional UPDATE**::
 
-    UPDATE users SET … WHERE id = :target
+    UPDATE users SET ... WHERE id = :target
       AND (SELECT count(*) FROM users
              WHERE role='admin' AND status='active'
                AND deleted_at IS NULL AND id <> :target) >= 1
 
 which is atomic on both SQLite and Postgres. Two concurrent demotions/disables/
 deletes of the last two admins therefore serialize: the statement that runs
-second sees zero *other* active admins and affects **0 rows** → the service
+second sees zero *other* active admins and affects **0 rows** -> the service
 raises ``last_active_admin`` (409). There is no check-then-act window.
 """
 
@@ -59,27 +59,27 @@ class LifecycleError(Exception):
 
 
 class UserNotFoundError(LifecycleError):
-    """Target user id is unknown or purged (→ 404)."""
+    """Target user id is unknown or purged (-> 404)."""
 
 
 class LastActiveAdminError(LifecycleError):
-    """The action would leave zero active admins (→ 409 last_active_admin)."""
+    """The action would leave zero active admins (-> 409 last_active_admin)."""
 
 
 class SelfActionError(LifecycleError):
-    """The actor targeted themselves for a forbidden self-action (→ 409 self_action)."""
+    """The actor targeted themselves for a forbidden self-action (-> 409 self_action)."""
 
 
 class InvalidValueError(LifecycleError):
-    """An unknown status/role value (→ 400 invalid_value)."""
+    """An unknown status/role value (-> 400 invalid_value)."""
 
 
 class ConfirmMismatchError(LifecycleError):
-    """Typed delete confirmation did not match the target email (→ 400)."""
+    """Typed delete confirmation did not match the target email (-> 400)."""
 
 
 class DestructiveDisabledError(LifecycleError):
-    """Destructive actions are disabled by the kill-switch (→ 403)."""
+    """Destructive actions are disabled by the kill-switch (-> 403)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -139,7 +139,7 @@ class LifecycleService:
     async def _apply(self, target_id: str, values: dict, *, needs_guard: bool) -> int:
         """Apply ``values`` to the target, guarded when it removes an active admin.
 
-        Returns affected rowcount (0 ⇒ guard failed for a guarded update).
+        Returns affected rowcount (0 => guard failed for a guarded update).
         """
         values = {**values, "updated_at": _now_iso()}
         async with self._session_factory() as session:
@@ -229,7 +229,7 @@ class LifecycleService:
         if row.role == new_role:
             return LifecycleOutcome(changed=False, row=build_user_row_data(row))
 
-        # Demotion of an active admin removes an admin → guarded.
+        # Demotion of an active admin removes an admin -> guarded.
         needs_guard = new_role != "admin" and self._is_active_admin(row)
         affected = await self._apply(target_id, {"role": new_role}, needs_guard=needs_guard)
         if needs_guard and affected == 0:
@@ -264,7 +264,7 @@ class LifecycleService:
         A combined ``PATCH`` must never partially apply (e.g. role committed +
         sessions revoked, then status fails). Both fields are validated up front,
         applied in a **single guarded UPDATE**, and only then are sessions revoked
-        + distinct audit events emitted — so either both changes land or neither
+        + distinct audit events emitted - so either both changes land or neither
         does (the guard is evaluated against the *combined* final state).
         """
         if new_role not in _VALID_ROLE:
@@ -349,7 +349,7 @@ class LifecycleService:
         if row is None:
             raise UserNotFoundError(target_id)
 
-        # Already soft-deleted ⇒ idempotent no-op (re-delete is a 200 no-op, R10.1).
+        # Already soft-deleted => idempotent no-op (re-delete is a 200 no-op, R10.1).
         if row.deleted_at is not None:
             return LifecycleOutcome(changed=False, row=build_user_row_data(row))
 
@@ -401,7 +401,7 @@ class LifecycleService:
         if row is None:
             raise UserNotFoundError(target_id)
         if row.deleted_at is None:
-            # Not deleted ⇒ nothing to restore (idempotent no-op).
+            # Not deleted => nothing to restore (idempotent no-op).
             return LifecycleOutcome(changed=False, row=build_user_row_data(row))
 
         await self._apply(target_id, {"deleted_at": None}, needs_guard=False)
@@ -430,7 +430,7 @@ class LifecycleService:
 
         Each target is disabled through :meth:`set_status`, so the active-admin
         guard, idempotency, session revocation, and per-target audit all apply.
-        Returns a per-target result list (``{id, result}``) — never aborts the
+        Returns a per-target result list (``{id, result}``) - never aborts the
         whole batch on a single failure.
         """
         results: list[dict] = []

@@ -1,6 +1,6 @@
 """Integration tests for the resume upload endpoint guards.
 
-POST /api/v1/resumes/upload validates: file type → size → empty file →
+POST /api/v1/resumes/upload validates: file type -> size -> empty file ->
 extractable text. These guards are deterministic (no LLM needed) and exercise
 the real resumes router (previously ~18% covered). The empty-extracted-text
 guard pins PR #794 (reject image-based / scanned PDFs).
@@ -51,9 +51,9 @@ class TestUploadGuards:
 
     @patch("app.routers.resumes.parse_document", new_callable=AsyncMock)
     async def test_rejects_empty_extracted_text(self, mock_parse, client):
-        """#794: a valid-but-image-based PDF parses to empty text → 422,
+        """#794: a valid-but-image-based PDF parses to empty text -> 422,
         and we must NOT persist anything to the database."""
-        mock_parse.return_value = "   \n  "  # whitespace only → "no extractable text"
+        mock_parse.return_value = "   \n  "  # whitespace only -> "no extractable text"
         with patch("app.routers.resumes.db") as mock_db:
             async with client:
                 resp = await client.post(

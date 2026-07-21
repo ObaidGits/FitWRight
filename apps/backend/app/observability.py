@@ -1,14 +1,14 @@
 """Structured JSON logging + per-request context (Task 9.2, R16.1).
 
 The design (`§Observability & operations`, R16.1) requires structured logs that
-carry a ``request_id`` and — when known — a ``user_id``, and that **never** leak
+carry a ``request_id`` and - when known - a ``user_id``, and that **never** leak
 secrets/tokens/PII beyond the user id. This module provides three cooperating
 pieces:
 
 - **Request context.** Two :class:`contextvars.ContextVar`s hold the current
   ``request_id`` and ``user_id``. They are set once per request by
   :class:`RequestContextMiddleware` and read by the log formatter, so every log
-  line emitted anywhere in the request — service, router, or middleware —
+  line emitted anywhere in the request - service, router, or middleware -
   is correlated without threading an id through every call.
 - **JSON formatter.** :class:`JsonLogFormatter` renders each record as one JSON
   object (``ts``/``level``/``logger``/``msg`` + ``request_id``/``user_id`` when
@@ -18,12 +18,12 @@ pieces:
 - **Middleware.** :class:`RequestContextMiddleware` mints/propagates the
   ``request_id`` (honoring an inbound ``X-Request-ID``), publishes it on
   ``request.state`` + the context var, echoes it back in the ``X-Request-ID``
-  response header, and — after the inner auth middleware has resolved the
-  principal — records the request against :mod:`app.auth.metrics` and emits one
+  response header, and - after the inner auth middleware has resolved the
+  principal - records the request against :mod:`app.auth.metrics` and emits one
   structured access log line (method, path, status, principal's ``user_id``).
 
 Only the ``user_id`` identity is ever logged (R16.1); emails, tokens, cookies,
-and passwords never are — the sanitizer drops secret-bearing keys and the access
+and passwords never are - the sanitizer drops secret-bearing keys and the access
 log deliberately records only ``method``/``path``/``status``/``user_id``.
 """
 
@@ -69,7 +69,7 @@ class JsonLogFormatter(logging.Formatter):
     """Render a log record as a single sanitized JSON object.
 
     Includes the current ``request_id``/``user_id`` (when set), the exception
-    text if any, and any explicit ``extra=`` fields — each passed through the
+    text if any, and any explicit ``extra=`` fields - each passed through the
     audit sanitizer so no secret/PII or log-injection newline survives.
     """
 
@@ -96,8 +96,8 @@ class JsonLogFormatter(logging.Formatter):
 
         # Gather explicit ``extra=`` fields (skipping reserved LogRecord attrs)
         # and route them through the audit sanitizer, which **drops** any
-        # secret-bearing key (password/token/cookie/…) and sanitizes every value
-        # — so a stray secret in a log call never reaches the sink.
+        # secret-bearing key (password/token/cookie/...) and sanitizes every value
+        # - so a stray secret in a log call never reaches the sink.
         extras = {
             key: value
             for key, value in record.__dict__.items()

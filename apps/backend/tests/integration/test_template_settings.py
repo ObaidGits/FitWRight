@@ -1,8 +1,8 @@
 """Per-resume template (appearance) persistence.
 
 Verifies that a resume's chosen template + customization is stored in the DB,
-returned on fetch, survives across requests, and — because it is a rendering
-artifact, not content — does NOT bump the optimistic-concurrency version.
+returned on fetch, survives across requests, and - because it is a rendering
+artifact, not content - does NOT bump the optimistic-concurrency version.
 """
 
 import pytest
@@ -61,7 +61,7 @@ class TestTemplateSettingsPersistence:
                 f"/api/v1/resumes/{rid}/template-settings", json={"settings": SETTINGS}
             )
             after = (await client.get(f"/api/v1/resumes?resume_id={rid}")).json()["data"]["version"]
-        # Appearance is not content — the editor's optimistic lock is untouched.
+        # Appearance is not content - the editor's optimistic lock is untouched.
         assert after == before
 
     async def test_unknown_resume_is_404(self, isolated_db, owner_id, client):
@@ -110,7 +110,7 @@ class TestPdfUsesStoredTemplate:
         await isolated_db.update_resume(owner_id, rid, {"template_settings": SETTINGS})
 
         async with client:
-            # NO query params — must fall back to the stored template (latex/A4).
+            # NO query params - must fall back to the stored template (latex/A4).
             resp = await client.get(f"/api/v1/resumes/{rid}/pdf")
         assert resp.status_code == 200
         assert "template=latex" in captured["url"]
@@ -140,7 +140,7 @@ class TestPdfUsesStoredTemplate:
 
 
 class TestCreateFromData:
-    """POST /resumes/from-data — powers Use-Sample + duplication."""
+    """POST /resumes/from-data - powers Use-Sample + duplication."""
 
     _DATA = {
         "personalInfo": {"name": "Sample User", "title": "Engineer", "email": "s@e.com"},
@@ -211,7 +211,7 @@ class TestTemplateAwareVersioning:
             owner_id, rid, {"template_settings": {**SETTINGS, "template": "modern"}}
         )
 
-        # Restore v1 → content AND template revert to the snapshot's (latex).
+        # Restore v1 -> content AND template revert to the snapshot's (latex).
         await version_service.restore_version(owner_id, rid, snap["id"])
         restored = await isolated_db.get_resume(owner_id, rid)
         assert restored["processed_data"]["summary"] == "v1"

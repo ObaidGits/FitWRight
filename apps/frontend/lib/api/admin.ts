@@ -1,12 +1,12 @@
 /**
- * Admin data client (P2 Admin, Task 8.1) — REAL wiring to `/api/v1/admin/*`.
+ * Admin data client (P2 Admin, Task 8.1) - REAL wiring to `/api/v1/admin/*`.
  *
  * Replaces the former UI-only mock. Access is enforced SERVER-SIDE by the admin
  * capability on every endpoint (hiding UI is never the boundary). Requests go
  * through {@link apiFetch} with `credentials: 'include'`; mutations carry the
  * double-submit CSRF token injected by the client. The backend error envelope
  * `{ error: { code, message } }` is surfaced as {@link AdminApiError} so the UI
- * can branch on machine codes (`last_active_admin`, `confirm_mismatch`, …).
+ * can branch on machine codes (`last_active_admin`, `confirm_mismatch`, ...).
  *
  * Every shape here mirrors a backend Pydantic response model exactly (camelCase,
  * allowlisted). No secrets/content ever cross this boundary.
@@ -95,7 +95,7 @@ export interface MutationResult {
 }
 
 // ---------------------------------------------------------------------------
-// Observability: System Health (Req 3, 8, 17) — mirrors backend `AdminHealth`
+// Observability: System Health (Req 3, 8, 17) - mirrors backend `AdminHealth`
 // ---------------------------------------------------------------------------
 
 /** Traffic-light state of one subsystem tile. */
@@ -134,7 +134,7 @@ export interface JobRow {
   lockState?: 'held' | 'free' | null;
 }
 
-/** `GET /admin/health` — six subsystem tiles + release fields + jobs table. */
+/** `GET /admin/health` - six subsystem tiles + release fields + jobs table. */
 export interface AdminHealth {
   tiles: HealthTile[];
   release: ReleaseInfo;
@@ -144,7 +144,7 @@ export interface AdminHealth {
   stale: boolean;
 }
 
-/** `GET /admin/jobs` — per-job status table + worker-independent gauges (Req 8).
+/** `GET /admin/jobs` - per-job status table + worker-independent gauges (Req 8).
  *
  * Mirrors the backend `JobsPanel`. The queue/purge gauges are optional and each
  * carries an explicit `*Unavailable` flag so the UI can distinguish "zero" from
@@ -166,7 +166,7 @@ export interface BulkDisableResult {
 }
 
 // ---------------------------------------------------------------------------
-// Observability: AI analytics (Req 4) — mirrors backend `AiAnalytics`.
+// Observability: AI analytics (Req 4) - mirrors backend `AiAnalytics`.
 //
 // Allowlisted, secret-free call aggregates + a closed per-provider breakdown +
 // a truncated whole-dollar cost estimate. No prompt/model/temperature/id fields
@@ -174,19 +174,19 @@ export interface BulkDisableResult {
 // / data table; the current day is "live" (folds in not-yet-flushed activity).
 // ---------------------------------------------------------------------------
 
-/** One point in a daily aggregate series (UTC day → integer value). */
+/** One point in a daily aggregate series (UTC day -> integer value). */
 export interface SeriesPoint {
   date: string; // YYYY-MM-DD (UTC day)
   value: number;
 }
 
-/** Per-provider AI call count (closed provider enumeration — Req 20.3). */
+/** Per-provider AI call count (closed provider enumeration - Req 20.3). */
 export interface ProviderCount {
   provider: string;
   calls: number;
 }
 
-/** `GET /admin/ai-analytics?window=` — allowlisted AI aggregates + cost estimate. */
+/** `GET /admin/ai-analytics?window=` - allowlisted AI aggregates + cost estimate. */
 export interface AiAnalytics {
   window: number;
   totalCalls: number;
@@ -207,11 +207,11 @@ export interface AiAnalytics {
 }
 
 // ---------------------------------------------------------------------------
-// Observability: Errors summary (Req 5) — mirrors backend `ErrorsSummary`.
+// Observability: Errors summary (Req 5) - mirrors backend `ErrorsSummary`.
 //
 // Grouped buckets ONLY: aggregate 4xx/5xx counts, a top-route-class failure
 // list (may be empty), by-source failure counts, and a daily error-count
-// trend. Never a raw log line, stack trace, exception, replay or trace — the
+// trend. Never a raw log line, stack trace, exception, replay or trace - the
 // dashboard is an operational summary, not a log/trace explorer (Req 21.2).
 // ---------------------------------------------------------------------------
 
@@ -229,7 +229,7 @@ export interface ErrorsBySource {
   ai: number;
 }
 
-/** `GET /admin/errors?window=` — grouped 4xx/5xx counts + by-source + trend. */
+/** `GET /admin/errors?window=` - grouped 4xx/5xx counts + by-source + trend. */
 export interface ErrorsSummary {
   window: number;
   counts4xx: number;
@@ -238,23 +238,23 @@ export interface ErrorsSummary {
   bySource: ErrorsBySource;
   trend: SeriesPoint[];
   /** Field paths with no durable source (e.g. `topRouteClasses`,
-   *  `bySource.job`, `bySource.storage`) — render "Not instrumented" for these
+   *  `bySource.job`, `bySource.storage`) - render "Not instrumented" for these
    *  instead of a misleading empty list / zero. */
   notInstrumented: string[];
   computedAt: string;
 }
 
 // ---------------------------------------------------------------------------
-// Observability: Performance signals (Req 6) — mirrors backend `PerformanceSignals`.
+// Observability: Performance signals (Req 6) - mirrors backend `PerformanceSignals`.
 //
-// Latency/cache aggregates the backend ALREADY produces — no new instrumentation
+// Latency/cache aggregates the backend ALREADY produces - no new instrumentation
 // (Req 21.4). The optional host metrics (memory/cpu/disk) are a Non-Goal and are
 // omitted server-side via `exclude_none`, so they arrive as `undefined` and are
 // simply not rendered. `dbQueryTimeMs` is likewise omitted when there is no
 // source; its field name then appears in `unavailable` so the client can show an
 // explicit "unavailable" indicator (Req 6.7) rather than a bogus value. `p95Ms`
 // is optional per route-class (only present where the stored aggregate supports
-// it — Req 6.2).
+// it - Req 6.2).
 // ---------------------------------------------------------------------------
 
 /** Average (and optional p95) latency for one route class (Req 6.1/6.2). */
@@ -271,7 +271,7 @@ export interface SlowJob {
   avgMs: number;
 }
 
-/** `GET /admin/performance` — latency/cache aggregates + slow routes/jobs (Req 6).
+/** `GET /admin/performance` - latency/cache aggregates + slow routes/jobs (Req 6).
  *
  * Host metrics (`memoryBytes` / `cpuPercent` / `diskBytes`) are omitted by the
  * backend unless already produced (Non-Goal, Req 21.4), so they are optional and
@@ -294,10 +294,10 @@ export interface PerformanceSignals {
 }
 
 // ---------------------------------------------------------------------------
-// Observability: Storage panel (Req 7) — mirrors backend `StoragePanel`.
+// Observability: Storage panel (Req 7) - mirrors backend `StoragePanel`.
 //
 // A cheap, cached storage snapshot: an approximate DB size + object-storage
-// usage (each optionally stale — read from a periodic sample, never live-queried
+// usage (each optionally stale - read from a periodic sample, never live-queried
 // on request), the resource counts (avatars / resumes / resume versions), a
 // coarse retention status string, and an estimated daily growth. Size and growth
 // fields are optional: when a sample is missing the byte value is `null` and the
@@ -306,7 +306,7 @@ export interface PerformanceSignals {
 // than a misleading zero.
 // ---------------------------------------------------------------------------
 
-/** `GET /admin/storage` — cached DB size + object storage + counts + growth (Req 7). */
+/** `GET /admin/storage` - cached DB size + object storage + counts + growth (Req 7). */
 export interface StoragePanel {
   /** Approximate database size in bytes; `null` when no sample is available. */
   dbSizeBytes?: number | null;
@@ -331,17 +331,17 @@ export interface StoragePanel {
 }
 
 // ---------------------------------------------------------------------------
-// Observability: Security view (Req 9) — mirrors backend `SecurityView`.
+// Observability: Security view (Req 9) - mirrors backend `SecurityView`.
 //
 // A trailing-window (24h) aggregate of security-relevant counts read from the
 // `SEC_*` daily aggregates ONLY: failed logins, admin logins, authorization
 // denials, rate-limited requests and a coarse "suspicious" bucket. Counts are
 // zero (never null) when no data exists for the window, so the UI always renders
-// a real number. Aggregate-only and secret-free — never a raw event, IP, actor
+// a real number. Aggregate-only and secret-free - never a raw event, IP, actor
 // id or log line.
 // ---------------------------------------------------------------------------
 
-/** `GET /admin/security` — trailing-window security aggregate counts (Req 9). */
+/** `GET /admin/security` - trailing-window security aggregate counts (Req 9). */
 export interface SecurityView {
   /** Trailing window the counts cover, in hours (24h). */
   windowHours: number;
@@ -350,20 +350,20 @@ export interface SecurityView {
   authzDenied: number;
   rateLimited: number;
   suspicious: number;
-  /** camelCase field names with no durable source — render "Not instrumented"
+  /** camelCase field names with no durable source - render "Not instrumented"
    *  instead of a misleading 0 for these (never silently show a fake zero). */
   notInstrumented: string[];
   computedAt: string;
 }
 
 // ---------------------------------------------------------------------------
-// Observability: Read-only Configuration Diagnostics (Req 10) — mirrors the
+// Observability: Read-only Configuration Diagnostics (Req 10) - mirrors the
 // backend `ConfigDiagnostics`. Strictly READ-ONLY and secret-free: every
 // configured secret is represented ONLY as a boolean presence indicator
 // (`configured`), never a value. No mutation method exists on this endpoint.
 // ---------------------------------------------------------------------------
 
-/** `GET /admin/config` — secret-free, read-only configuration snapshot (Req 10). */
+/** `GET /admin/config` - secret-free, read-only configuration snapshot (Req 10). */
 export interface ConfigDiagnostics {
   env: string;
   activeAiProviders: string[];
@@ -375,20 +375,20 @@ export interface ConfigDiagnostics {
   gracePeriodDays: number;
   killSwitches: Record<string, boolean>;
   versions: Record<string, string>;
-  /** Presence booleans only — `true` when a non-empty secret is configured. Never a value. */
+  /** Presence booleans only - `true` when a non-empty secret is configured. Never a value. */
   configured: Record<string, boolean>;
   computedAt: string;
 }
 
 // ---------------------------------------------------------------------------
-// Observability: Overview KPIs (Req 13) — mirrors backend `OverviewKpis`.
+// Observability: Overview KPIs (Req 13) - mirrors backend `OverviewKpis`.
 //
 // A handful of headline KPI cards assembled server-side from the existing O(1)
 // snapshots (totals snapshot + durable Metric_Keys + in-process gauges). Each
 // KPI is a `KpiValue`: a numeric `value` plus an explicit `unavailable` marker,
 // so a source that cannot be computed degrades to an explicit "Unavailable"
 // indicator (Req 13.10) instead of a misleading zero. `errorRate24h.value` is a
-// percentage bounded 0.00–100.00; the count KPIs are non-negative integers.
+// percentage bounded 0.00-100.00; the count KPIs are non-negative integers.
 // ---------------------------------------------------------------------------
 
 /** One KPI card value + an explicit unavailability marker (Req 13.7/13.10). */
@@ -399,12 +399,12 @@ export interface KpiValue {
   unavailable: boolean;
 }
 
-/** `GET /admin/kpis` — Overview KPI cards from existing snapshots (Req 13). */
+/** `GET /admin/kpis` - Overview KPI cards from existing snapshots (Req 13). */
 export interface OverviewKpis {
   totalUsers: KpiValue;
   newUsersToday: KpiValue;
   aiCallsToday: KpiValue;
-  /** Percentage bounded 0.00–100.00 (two decimal places). */
+  /** Percentage bounded 0.00-100.00 (two decimal places). */
   errorRate24h: KpiValue;
   purgeBacklog: KpiValue;
   computedAt: string;
@@ -412,7 +412,7 @@ export interface OverviewKpis {
 }
 
 // ---------------------------------------------------------------------------
-// Observability: Maintenance actions (Req 18) — the ONLY writes in the
+// Observability: Maintenance actions (Req 18) - the ONLY writes in the
 // observability context. Each re-invokes an existing single-flighted job under
 // `admin.manage`, audited + rate-limited + CSRF-protected. A held lock yields
 // `already_running`; a disabled action yields `disabled` (Req 18.3/18.4/18.5).
@@ -421,7 +421,7 @@ export interface OverviewKpis {
 /** The fixed, safe, idempotent set of maintenance actions (Req 18.5). */
 export type MaintenanceAction = 'refresh-metrics' | 'run-rollup' | 'run-cleanup' | 'run-retention';
 
-/** `POST /admin/maintenance/{action}` — mirrors the backend `MaintenanceResult`. */
+/** `POST /admin/maintenance/{action}` - mirrors the backend `MaintenanceResult`. */
 export interface MaintenanceResult {
   status: 'started' | 'already_running' | 'disabled';
   action: string;
@@ -487,7 +487,7 @@ async function toError(response: Response): Promise<AdminApiError> {
       code = body.detail;
     }
   } catch {
-    /* non-JSON body — keep the generic message */
+    /* non-JSON body - keep the generic message */
   }
   const retryHeader = response.headers.get('Retry-After');
   const retryAfter = retryHeader ? Number(retryHeader) : undefined;
@@ -535,7 +535,7 @@ export async function getSystemHealth(): Promise<AdminHealth> {
   return json<AdminHealth>(await apiFetch('/admin/health'));
 }
 
-/** Observability: background-jobs panel — per-job state + gauges (Req 8). */
+/** Observability: background-jobs panel - per-job state + gauges (Req 8). */
 export async function getJobs(): Promise<JobsPanel> {
   return json<JobsPanel>(await apiFetch('/admin/jobs'));
 }
@@ -545,7 +545,7 @@ export async function getConfig(): Promise<ConfigDiagnostics> {
   return json<ConfigDiagnostics>(await apiFetch('/admin/config'));
 }
 
-/** Observability: AI analytics for the trailing `window` days (1–365, default 30, Req 4). */
+/** Observability: AI analytics for the trailing `window` days (1-365, default 30, Req 4). */
 export async function getAiAnalytics(window: number = 30): Promise<AiAnalytics> {
   return json<AiAnalytics>(await apiFetch(`/admin/ai-analytics${qs({ window })}`));
 }
@@ -555,22 +555,22 @@ export async function getErrors(window: MetricWindow = 30): Promise<ErrorsSummar
   return json<ErrorsSummary>(await apiFetch(`/admin/errors${qs({ window })}`));
 }
 
-/** Observability: performance signals — latency/cache aggregates, no params (Req 6). */
+/** Observability: performance signals - latency/cache aggregates, no params (Req 6). */
 export async function getPerformance(): Promise<PerformanceSignals> {
   return json<PerformanceSignals>(await apiFetch('/admin/performance'));
 }
 
-/** Observability: storage panel — cached DB/object-storage size + counts + growth (Req 7). */
+/** Observability: storage panel - cached DB/object-storage size + counts + growth (Req 7). */
 export async function getStorage(): Promise<StoragePanel> {
   return json<StoragePanel>(await apiFetch('/admin/storage'));
 }
 
-/** Observability: security view — trailing-24h aggregate counts, no params (Req 9). */
+/** Observability: security view - trailing-24h aggregate counts, no params (Req 9). */
 export async function getSecurity(): Promise<SecurityView> {
   return json<SecurityView>(await apiFetch('/admin/security'));
 }
 
-/** Observability: Overview KPI cards — headline metrics from O(1) snapshots (Req 13). */
+/** Observability: Overview KPI cards - headline metrics from O(1) snapshots (Req 13). */
 export async function getKpis(): Promise<OverviewKpis> {
   return json<OverviewKpis>(await apiFetch('/admin/kpis'));
 }
@@ -644,10 +644,10 @@ export async function bulkDisable(ids: string[]): Promise<BulkDisableResult> {
 }
 
 /**
- * Observability maintenance write (Req 18) — re-invoke one of the fixed, safe,
+ * Observability maintenance write (Req 18) - re-invoke one of the fixed, safe,
  * idempotent jobs. `admin.manage` + CSRF are enforced server-side; the CSRF
  * double-submit token is injected automatically by {@link apiPost}. Returns the
- * dispatch outcome (`started` / `already_running` / `disabled`) — never job
+ * dispatch outcome (`started` / `already_running` / `disabled`) - never job
  * output. The action is path-segment-only from a closed union, so there is no
  * user-supplied string to escape.
  */
@@ -678,17 +678,17 @@ export type AdminApi = typeof adminApi;
 // share mutable state. The typed client mirrors that split so each page/hook
 // imports from the namespace that matches its context:
 //
-//   • `observabilityApi` — operational health of the platform: Health, Errors,
+//   - `observabilityApi` - operational health of the platform: Health, Errors,
 //     Storage, Jobs, AI usage/cost, Security, Performance, Config, Overview KPIs
 //     and the Maintenance writes.
-//   • `analyticsApi` — product analytics: feature usage, resume analytics and
+//   - `analyticsApi` - product analytics: feature usage, resume analytics and
 //     user growth.
 //
 // The individual endpoint methods are added by later frontend tasks (6.4 health,
 // 7.2 jobs, 8.3 config/maintenance, 9.4 ai-analytics, 12.3 storage, 13.3
 // security, 14.2 kpis, 16.3 feature-usage, 17.3 resumes). These groupings reuse
 // the shared helpers already defined above (`apiFetch`, `json`, `qs`,
-// `AdminApiError`, `apiPost`/`apiPatch`) — nothing is duplicated.
+// `AdminApiError`, `apiPost`/`apiPatch`) - nothing is duplicated.
 //
 // Back-compat: the flat `adminApi` export is intentionally left unchanged so the
 // existing user-management/audit/stats hooks keep working.
@@ -698,7 +698,7 @@ export type AdminApi = typeof adminApi;
  * Observability context client.
  *
  * Seeded with the overview reads that are observability in nature and already
- * implemented (`getStats`, `getUsageSeries` — Overview KPIs / usage series,
+ * implemented (`getStats`, `getUsageSeries` - Overview KPIs / usage series,
  * Req 13). These remain on {@link adminApi} for back-compat and are re-exposed
  * here so callers in the observability context have a single, correctly-scoped
  * namespace. `getSystemHealth` (Req 3, task 6.4) is wired below. Later tasks
@@ -739,7 +739,7 @@ export interface FeatureSeries {
   total: number;
 }
 
-/** `GET /admin/analytics/feature-usage?window=` — feature invocations over time. */
+/** `GET /admin/analytics/feature-usage?window=` - feature invocations over time. */
 export interface FeatureUsage {
   window: number;
   series: FeatureSeries[];
@@ -778,7 +778,7 @@ export interface TemplateCount {
   count: number;
 }
 
-/** `GET /admin/analytics/resumes?window=` — source split, top templates, growth. */
+/** `GET /admin/analytics/resumes?window=` - source split, top templates, growth. */
 export interface ResumeAnalytics {
   window: number;
   sourceSplit: ResumeSourceSplit;

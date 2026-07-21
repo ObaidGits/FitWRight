@@ -7,7 +7,7 @@ is one seam to reason about and one place future wiring changes land.
 
 Migration stance (Phase 3 is *additive first*): during this step the container
 **delegates** to the existing builders/service-locators (which carry a test
-contract on their module globals — e.g. ``app.auth.runtime._kvstore``). This
+contract on their module globals - e.g. ``app.auth.runtime._kvstore``). This
 establishes the seam with zero behavior change. A later, separately-gated step
 inverts the cache so the ``get_*()`` functions delegate to the container and
 construction logic lives only here (the plan's Phase 3 exit criteria).
@@ -31,12 +31,12 @@ class Container:
     """Single construction site for infrastructure adapters + the identity provider.
 
     Owns the process-wide instances of the pluggable adapters (KVStore, mailer,
-    captcha, breach check, storage) — built once via the pure ``build_*``
-    functions and cached here — plus profile/capability resolution and the
+    captcha, breach check, storage) - built once via the pure ``build_*``
+    functions and cached here - plus profile/capability resolution and the
     profile-selected identity provider. Composed higher-level services (session,
     rate-limit, audit, token, password) live in their own modules and are reached
     through their own accessors; the container deliberately does not re-expose
-    them (Complexity Budget — no unused indirection).
+    them (Complexity Budget - no unused indirection).
     """
 
     def __init__(self, settings: Any) -> None:
@@ -57,7 +57,7 @@ class Container:
         """
         return self._settings.resolved_profile
 
-    # -- infrastructure ports (constructed + cached here — the single site) --
+    # -- infrastructure ports (constructed + cached here - the single site) --
 
     def _get_or_build(self, name: str, builder):
         """Return the cached adapter for ``name`` or build+cache it via ``builder``."""
@@ -115,12 +115,12 @@ class Container:
         """Select the :class:`~app.auth.identity.IdentityProvider` by profile.
 
         Local profiles get the owner-fallback provider; multi-user profiles get
-        the session provider (no implicit owner → anonymous requests 401). This
+        the session provider (no implicit owner -> anonymous requests 401). This
         is the single place the deployment axis decides identity behavior
         (ARCHITECTURE §9/§18.5); consumers just call ``resolve_owner_fallback``.
 
         Selection is resolved **live** from the (mutable) settings on every call
-        rather than cached, so it always reflects the current profile — the
+        rather than cached, so it always reflects the current profile - the
         container is a process singleton and the former branch read the mode
         live too. The adapters are stateless and trivially cheap to construct.
         """
@@ -136,7 +136,7 @@ class Container:
         Only adapters whose construction performs no I/O are warmed here
         (email/captcha/breach). This surfaces a misconfiguration that yields a
         *construction* error at startup rather than on the first request.
-        KVStore/Storage are intentionally left lazy — their construction may
+        KVStore/Storage are intentionally left lazy - their construction may
         touch the DB engine or network, which belong to their own init paths.
         Returns a secret-free summary of the resolved adapter class names.
         """

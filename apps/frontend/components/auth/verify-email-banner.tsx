@@ -3,8 +3,8 @@
 /**
  * Persistent "please verify your email" banner (Task 8.3 / R5.6, R15.4).
  * Shown across the authenticated app when the signed-in user's email is not yet
- * verified. Basic use is never blocked — only sensitive actions are gated
- * server-side — so this is a gentle prompt with an inline resend.
+ * verified. Basic use is never blocked - only sensitive actions are gated
+ * server-side - so this is a gentle prompt with an inline resend.
  */
 import * as React from 'react';
 import MailWarning from 'lucide-react/dist/esm/icons/mail-warning';
@@ -26,7 +26,7 @@ export function VerifyEmailBanner() {
       await authApi.requestVerification();
       setSent(true);
     } catch {
-      /* uniform, non-leaky: silently ignore — the banner stays */
+      /* uniform, non-leaky: silently ignore - the banner stays */
     } finally {
       setPending(false);
     }
@@ -40,7 +40,7 @@ export function VerifyEmailBanner() {
       <MailWarning className="h-4 w-4 shrink-0" />
       <span>Confirm your email to unlock everything.</span>
       {sent ? (
-        <span className="text-[var(--muted-foreground)]">Link sent — check your inbox.</span>
+        <span className="text-[var(--muted-foreground)]">Link sent - check your inbox.</span>
       ) : (
         <button
           type="button"
@@ -48,7 +48,7 @@ export function VerifyEmailBanner() {
           disabled={pending}
           className="font-medium text-[var(--primary)] underline-offset-2 hover:underline disabled:opacity-50"
         >
-          {pending ? 'Sending…' : 'Resend link'}
+          {pending ? 'Sending...' : 'Resend link'}
         </button>
       )}
     </div>

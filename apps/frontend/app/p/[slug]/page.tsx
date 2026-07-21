@@ -6,7 +6,7 @@
  * 404s. SEO is first-class: title/description/OpenGraph/Twitter come from the
  * projection, `unlisted` profiles are marked `noindex` (link-only), and a
  * schema.org Person JSON-LD block is emitted for rich results. All rendering
- * flows through the Profile projection — no duplicated resume/profile logic.
+ * flows through the Profile projection - no duplicated resume/profile logic.
  */
 import { cache } from 'react';
 import type { Metadata } from 'next';
@@ -22,7 +22,7 @@ export const dynamic = 'force-dynamic';
 type Params = { params: Promise<{ slug: string }> };
 
 // Dedupe the backend call across generateMetadata + the page render within a
-// single request (React request-scoped memoization) — one fetch, not two.
+// single request (React request-scoped memoization) - one fetch, not two.
 const loadPage = cache((slug: string) => getPublicProfilePage(slug).catch(() => null));
 
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
@@ -32,7 +32,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
     return { title: 'Profile not found', robots: { index: false, follow: false } };
   }
   const id = page.profile.identity;
-  const title = id.name ? `${id.name}${id.headline ? ` — ${id.headline}` : ''}` : 'Profile';
+  const title = id.name ? `${id.name}${id.headline ? ` - ${id.headline}` : ''}` : 'Profile';
   const description = page.profile.summary || id.headline || `${id.name}'s professional profile.`;
   const images = id.avatarUrl ? [{ url: id.avatarUrl }] : undefined;
   return {
@@ -72,7 +72,7 @@ export default async function PublicProfilePage({ params }: Params) {
         // authored by the backend projection.
         dangerouslySetInnerHTML={{ __html: JSON.stringify(page.json_ld) }}
       />
-      {/* Breadcrumb trail (Home → profile) for rich results + crawl context. */}
+      {/* Breadcrumb trail (Home -> profile) for rich results + crawl context. */}
       <JsonLd
         data={breadcrumbSchema([
           { name: 'Home', path: '/' },

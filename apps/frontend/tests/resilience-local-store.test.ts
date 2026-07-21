@@ -111,7 +111,7 @@ describe('ResilienceStore outbox', () => {
 });
 
 describe('ResilienceStore namespacing + logout', () => {
-  it('never mixes one user’s data into another’s', async () => {
+  it("never mixes one user's data into another's", async () => {
     const engine = new MemoryEngine();
     const a = new ResilienceStore(engine, 'user-a');
     const b = new ResilienceStore(engine, 'user-b');
@@ -123,7 +123,7 @@ describe('ResilienceStore namespacing + logout', () => {
     expect(lb.status === 'ok' && lb.payload.who).toBe('b');
   });
 
-  it('clearUser wipes only that user’s data', async () => {
+  it("clearUser wipes only that user's data", async () => {
     const engine = new MemoryEngine();
     const a = new ResilienceStore(engine, 'user-a');
     const b = new ResilienceStore(engine, 'user-b');

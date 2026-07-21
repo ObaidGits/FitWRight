@@ -1,4 +1,4 @@
-"""Completion Engine — weighted profile completeness + suggestions.
+"""Completion Engine - weighted profile completeness + suggestions.
 
 Pure, deterministic, and explainable: a single documented weight table maps
 profile aspects to points; the score is the sum of satisfied weights clamped to
@@ -106,7 +106,7 @@ def compute_ats_readiness(profile: ProfileData) -> int:
     if profile.workExperience:
         score += 15
         if all(e.years for e in profile.workExperience):
-            score += 10  # dates present → parseable timeline
+            score += 10  # dates present -> parseable timeline
         if any(len(e.description) >= 2 for e in profile.workExperience):
             score += 15  # substantive bullets
     if profile.education:
@@ -120,7 +120,7 @@ def compute_ai_readiness(profile: ProfileData) -> int:
     """How much signal the AI assists have to work with (0..100).
 
     High when there is existing prose to improve (summary, rich bullets) and AI
-    memory preferences are set — i.e. the AI layer can be genuinely useful
+    memory preferences are set - i.e. the AI layer can be genuinely useful
     without inventing anything.
     """
     score = 0

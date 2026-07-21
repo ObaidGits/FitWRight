@@ -3,33 +3,33 @@
 The System Health page (Req 3.4) and the Background Jobs panel (Req 8) need to
 show, for each background job, *when it last ran*, *whether it succeeded*, *how
 long it took*, *whether it is running right now*, and *how long a run is normally
-expected to take* — all without any per-event storage. This module is the single
+expected to take* - all without any per-event storage. This module is the single
 writer of those **run markers**: a small, secret-free JSON snapshot per job,
 stored via the shared :class:`~app.admin.metric_store.MetricStore` named-snapshot
 KV path (so it lives in the same KVStore and namespace as every other admin
 snapshot and is pruned/TTL-free just like them).
 
-Storage key namespace (stable — the Jobs panel reader, task 7.1, MUST read the
+Storage key namespace (stable - the Jobs panel reader, task 7.1, MUST read the
 same keys):
 
-    MetricStore snapshot name  →  ``job_marker:{job_name}``
-    Underlying KVStore key      →  ``admin:snapshot:job_marker:{job_name}``
+    MetricStore snapshot name  ->  ``job_marker:{job_name}``
+    Underlying KVStore key      ->  ``admin:snapshot:job_marker:{job_name}``
 
 ``job_name`` is one of the stable identifiers used by the tiles/panel:
-``"rollup"``, ``"purge"``, ``"audit_retention"`` — the three jobs
+``"rollup"``, ``"purge"``, ``"audit_retention"`` - the three jobs
 :func:`app.admin.jobs.run_admin_jobs` actually runs. (Req 3.4 also lists
-``reaper``/``outbox``; those are driven from a *separate* path — the session
-reaper loop / outbox worker — and record their own markers there, not here. This
+``reaper``/``outbox``; those are driven from a *separate* path - the session
+reaper loop / outbox worker - and record their own markers there, not here. This
 module only owns markers for the jobs run through ``run_admin_jobs``.)
 
 Marker schema (all timestamps are UTC ISO-8601 strings; every field is a name,
-timestamp, status, or duration — never any secret or row content):
+timestamp, status, or duration - never any secret or row content):
 
     {
       "job":                       str,          # stable job name
-      "last_run":                  str,          # UTC ISO — when the last run STARTED
+      "last_run":                  str,          # UTC ISO - when the last run STARTED
       "last_outcome":              str|null,     # "success" | "failure" | "skipped"
-      "lag_seconds":               float|null,   # scheduled→actual start lag; see below
+      "lag_seconds":               float|null,   # scheduled->actual start lag; see below
       "next_run":                  str|null,     # next scheduled run (UTC ISO) or null
       "last_success":              str|null,     # UTC ISO of the last SUCCESS run's start; preserved across non-success runs
       "running_since":             str|null,     # UTC ISO set at start, cleared (null) on completion
@@ -38,35 +38,35 @@ timestamp, status, or duration — never any secret or row content):
       "updated_at":                str,          # UTC ISO of the last marker write
     }
 
-Derivations (kept honest — we only record what we can actually observe):
+Derivations (kept honest - we only record what we can actually observe):
 
-- **last_run** — the wall-clock instant the run started (captured by
+- **last_run** - the wall-clock instant the run started (captured by
   :func:`mark_job_started`).
-- **last_outcome** — derived from the job's return dict by
-  :func:`outcome_from_result`: ``status == "ok"`` → ``"success"``;
-  ``"locked"``/``"disabled"`` → ``"skipped"`` (the job intentionally did no work);
-  a raised exception or any other/error status → ``"failure"``.
-- **lag_seconds** — the scheduled-to-actual start lag. These jobs are triggered by
-  ``POST /internal/run-jobs`` (external cron under ``SCHEDULER_MODE`` — ADR-15) or
+- **last_outcome** - derived from the job's return dict by
+  :func:`outcome_from_result`: ``status == "ok"`` -> ``"success"``;
+  ``"locked"``/``"disabled"`` -> ``"skipped"`` (the job intentionally did no work);
+  a raised exception or any other/error status -> ``"failure"``.
+- **lag_seconds** - the scheduled-to-actual start lag. These jobs are triggered by
+  ``POST /internal/run-jobs`` (external cron under ``SCHEDULER_MODE`` - ADR-15) or
   the in-process scheduler loop, **neither of which passes a precise "scheduled"
   reference into the job**. With no schedule reference we cannot compute a true
   lag, so we record ``lag_seconds`` as ``null`` (documented gap) rather than
   fabricate a value. If a caller ever learns a scheduled time it can pass
   ``scheduled_iso`` to :func:`mark_job_started` and the lag will be computed.
-- **next_run** — the next scheduled run. Under external-cron ``SCHEDULER_MODE``
+- **next_run** - the next scheduled run. Under external-cron ``SCHEDULER_MODE``
   the schedule lives outside the app (cron/GitHub Actions) and is unknown to the
   process, so ``next_run`` is ``null`` unless a caller supplies ``next_run_iso``.
-- **last_success** — the start timestamp of the most recent run whose outcome was
+- **last_success** - the start timestamp of the most recent run whose outcome was
   ``"success"``; **preserved** across later non-success runs (only advanced on a
   fresh success), so operators can always see when the job last actually worked
   (Req 8.8).
-- **running_since** — set to the run's start when :func:`mark_job_started` fires
+- **running_since** - set to the run's start when :func:`mark_job_started` fires
   and cleared to ``null`` by :func:`record_job_run` on completion. Because
   ``run_admin_jobs`` runs jobs sequentially and synchronously, a marker observed
   with a non-null ``running_since`` (and no matching completion) signals a job
-  that is *currently in progress* — the "currently running" case the panel reads
+  that is *currently in progress* - the "currently running" case the panel reads
   (Req 8.8).
-- **expected_duration_seconds** — a typical run duration derived from prior
+- **expected_duration_seconds** - a typical run duration derived from prior
   markers via an exponentially-weighted moving average (EWMA) of completed-run
   durations. ``null`` until the first completed run establishes a baseline
   (Req 8.9).
@@ -118,9 +118,9 @@ def job_marker_name(job_name: str) -> str:
 def outcome_from_result(result: object) -> str:
     """Derive the run outcome from a job's return value (Req 3.4).
 
-    ``status == "ok"`` → ``"success"``; ``"locked"``/``"disabled"`` → ``"skipped"``
-    (the job intentionally did no work — held single-flight lock or kill-switch
-    off); anything else (including a non-dict result or an error status) →
+    ``status == "ok"`` -> ``"success"``; ``"locked"``/``"disabled"`` -> ``"skipped"``
+    (the job intentionally did no work - held single-flight lock or kill-switch
+    off); anything else (including a non-dict result or an error status) ->
     ``"failure"``. Exceptions are handled by the caller, which records
     ``"failure"`` directly.
     """
@@ -153,7 +153,7 @@ async def mark_job_started(
     scheduled_iso: str | None = None,
     next_run_iso: str | None = None,
 ) -> None:
-    """Record that ``job_name`` has STARTED (sets ``running_since``) — Req 8.8.
+    """Record that ``job_name`` has STARTED (sets ``running_since``) - Req 8.8.
 
     Reads the prior marker (to preserve ``last_success``/``expected_duration`` and
     any known ``next_run``), then writes a marker with ``last_run`` and
@@ -161,7 +161,7 @@ async def mark_job_started(
     later completion is what signals a currently-running job to the panel.
 
     ``scheduled_iso`` (if the caller knows the scheduled start) lets us compute a
-    real ``lag_seconds``; absent it, lag is left ``null`` (documented gap — the
+    real ``lag_seconds``; absent it, lag is left ``null`` (documented gap - the
     external-cron/scheduler triggers pass no schedule reference). ``next_run_iso``
     similarly overrides the persisted ``next_run`` when a schedule is known.
 
@@ -205,7 +205,7 @@ async def record_job_run(
     outcome: str,
     next_run_iso: str | None = None,
 ) -> None:
-    """Record that ``job_name`` COMPLETED, updating its run marker — Req 3.4/8.8/8.9.
+    """Record that ``job_name`` COMPLETED, updating its run marker - Req 3.4/8.8/8.9.
 
     Reads the prior marker, computes ``duration = end - start``, then writes the
     merged marker: ``last_run`` = this run's start, ``last_outcome`` = ``outcome``,
@@ -249,7 +249,7 @@ async def record_job_run(
             "lag_seconds": prior.get("lag_seconds"),
             "next_run": next_run,
             "last_success": last_success,
-            # Cleared on completion — a null running_since means "not running".
+            # Cleared on completion - a null running_since means "not running".
             "running_since": None,
             "last_duration_seconds": duration,
             "expected_duration_seconds": expected,

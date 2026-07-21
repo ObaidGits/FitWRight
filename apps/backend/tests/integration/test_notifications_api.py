@@ -1,8 +1,8 @@
-"""Integration tests for notifications (real isolated DB, P3 §B, R4–R6).
+"""Integration tests for notifications (real isolated DB, P3 §B, R4-R6).
 
 Covers the single-writer service (create/dedupe/unread-counter/prefs/content-
 safety), the REST surface (list/read/read-all/dismiss/dismiss-group/prefs/
-unread-count), the outbox→notification consumer pipeline, and the email worker
+unread-count), the outbox->notification consumer pipeline, and the email worker
 (immediate + kill-switch + digest).
 """
 
@@ -149,7 +149,7 @@ class TestApi:
 
 
 # ---------------------------------------------------------------------------
-# Outbox → notification consumer pipeline
+# Outbox -> notification consumer pipeline
 # ---------------------------------------------------------------------------
 
 
@@ -172,7 +172,7 @@ class TestConsumerPipeline:
         from app.events.jobs import run_productivity_jobs
 
         kv = LocalKVStore()
-        # Same resource emitted twice → dedupe_key collapses to one notification.
+        # Same resource emitted twice -> dedupe_key collapses to one notification.
         await emit(EventType.RESUME_PARSED, {"resume_id": "rX"}, user_id=owner_id)
         await run_productivity_jobs(kvstore=kv)
         await emit(EventType.RESUME_PARSED, {"resume_id": "rX"}, user_id=owner_id)
@@ -190,11 +190,11 @@ class TestConsumerPipeline:
 
 class TestEmailWorker:
     async def test_immediate_email_sent_for_email_on_category(self, svc, owner_id):
-        # security defaults to email-on; digest off → immediate send.
+        # security defaults to email-on; digest off -> immediate send.
         await svc.notify(owner_id, type="t", title="Security alert", category="security")
         result = await svc.process_pending_emails()
         assert result["sent"] == 1
-        # Re-run → nothing pending (emailed_at stamped).
+        # Re-run -> nothing pending (emailed_at stamped).
         assert (await svc.process_pending_emails())["sent"] == 0
 
     async def test_email_off_category_is_skipped(self, svc, owner_id):
@@ -208,7 +208,7 @@ class TestEmailWorker:
         await svc.notify(owner_id, type="t", title="Security alert", category="security")
         result = await svc.process_pending_emails()
         assert result.get("disabled") == 1
-        # Re-enable → now it flushes.
+        # Re-enable -> now it flushes.
         monkeypatch.setattr(app_settings, "notifications_email_enabled", True)
         assert (await svc.process_pending_emails())["sent"] == 1
 

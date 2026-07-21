@@ -1,4 +1,4 @@
-"""Unit tests for verify_diff_result() — local quality checks."""
+"""Unit tests for verify_diff_result() - local quality checks."""
 
 import copy
 import pytest
@@ -114,7 +114,7 @@ class TestVerifyWordCount:
 
     def test_no_warning_on_normal_growth(self, sample_resume, sample_job_keywords):
         result = copy.deepcopy(sample_resume)
-        # Add one bullet — modest growth
+        # Add one bullet - modest growth
         result["workExperience"][0]["description"].append("One extra bullet point here")
         applied = [
             ResumeChange(

@@ -6,7 +6,7 @@ import { Input } from '@/components/atelier/input';
 import { Label } from '@/components/atelier/label';
 import { Button } from '@/components/atelier/button';
 
-// Lazy-load TipTap-based editor — keeps it out of the initial bundle.
+// Lazy-load TipTap-based editor - keeps it out of the initial bundle.
 const RichTextEditor = dynamic(
   () => import('@/components/atelier/rich-text-editor').then((m) => m.RichTextEditor),
   {

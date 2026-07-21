@@ -1,4 +1,4 @@
-"""P3 Productivity — cross-cutting observability (design §Observability, R17.5).
+"""P3 Productivity - cross-cutting observability (design §Observability, R17.5).
 
 In-process counters for the productivity subsystem (search / notifications /
 scheduler / JD-fetch / avatar), exposed via the internal ``/metrics`` endpoint

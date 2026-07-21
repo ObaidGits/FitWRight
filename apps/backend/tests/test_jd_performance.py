@@ -144,7 +144,7 @@ class TestPerformanceSLO:
             return await original_render(url, **kw)
 
         async def mock_fetch(url, **kw):
-            return _JSONLD_HTML  # JSON-LD present → should stop at level 2
+            return _JSONLD_HTML  # JSON-LD present -> should stop at level 2
 
         monkeypatch.setattr(orchestrator, "fetch_url_safely", mock_fetch)
         monkeypatch.setattr(orchestrator, "render_and_extract", spy_render)

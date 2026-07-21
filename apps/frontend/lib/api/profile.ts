@@ -1,8 +1,8 @@
 /**
- * Extended profile + avatar API (P3 §H, Requirements 13–14).
+ * Extended profile + avatar API (P3 §H, Requirements 13-14).
  *
  * Reusable profile fields (headline/location/links) that prefill resumes, plus a
- * hardened avatar upload (server-side magic-byte sniff, re-encode, EXIF strip —
+ * hardened avatar upload (server-side magic-byte sniff, re-encode, EXIF strip -
  * the client just posts the file). All user-scoped + session-authenticated.
  */
 import { apiFetch, apiPatch, API_BASE, readCsrfToken } from './client';
@@ -62,7 +62,7 @@ export interface AvatarResult {
 /**
  * Upload a profile photo (multipart). The backend produces the canonical
  * aspect-ratio-preserving master, strips EXIF, dedups by checksum, and returns
- * the master URL + metadata. Never trusts the client — accepts JPEG/PNG/WebP/
+ * the master URL + metadata. Never trusts the client - accepts JPEG/PNG/WebP/
  * AVIF/HEIC and re-encodes to one canonical WebP master.
  */
 export async function uploadAvatar(file: File): Promise<AvatarResult> {

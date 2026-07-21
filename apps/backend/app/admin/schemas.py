@@ -6,7 +6,7 @@ so a new column on ``users`` can never ride along into an admin response. The
 :data:`FORBIDDEN_SUBSTRINGS` + :func:`assert_no_forbidden_fields` pair is the
 serialization safeguard asserted by the security suite (R14.3, Property 2):
 password hashes, session/CSRF tokens, api-keys (even masked), and OAuth tokens
-never serialize — the api-key state is surfaced only as ``aiConfigured: bool``.
+never serialize - the api-key state is surfaced only as ``aiConfigured: bool``.
 
 All timestamps are the stored UTC ISO strings (the frontend renders local time
 with a UTC tooltip). Field names are camelCase to match the P1 ``SafeUser``
@@ -65,7 +65,7 @@ __all__ = [
 ]
 
 # Substrings that must never appear as a key anywhere in an admin response body
-# (defense-in-depth against a widened model leaking a secret — R14.3).
+# (defense-in-depth against a widened model leaking a secret - R14.3).
 FORBIDDEN_SUBSTRINGS: tuple[str, ...] = (
     "password",
     "passwd",
@@ -92,7 +92,7 @@ def assert_no_forbidden_fields(payload: Any, *, path: str = "") -> Any:
     ``meta`` values are already sanitized by the audit writer; the *keys* are
     what we scan. A legitimate ``ipHash`` / ``tokenHash``-style key would trip
     this, so admin models deliberately avoid such names (ip is exposed as
-    ``ipHash`` — allowed via the explicit exception below).
+    ``ipHash`` - allowed via the explicit exception below).
     """
     allowed_exact = {"ipHash"}  # ip_hash is a salted HMAC, not a secret (R12.5)
     if isinstance(payload, dict):
@@ -113,7 +113,7 @@ def assert_no_forbidden_fields(payload: Any, *, path: str = "") -> Any:
 
 
 class AdminUserRow(BaseModel):
-    """One row in the admin user list — allowlisted user-management metadata."""
+    """One row in the admin user list - allowlisted user-management metadata."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -165,7 +165,7 @@ class AuditList(BaseModel):
 
 
 class AdminUserDetail(BaseModel):
-    """User detail — profile + activity summary + recent audit (content-free)."""
+    """User detail - profile + activity summary + recent audit (content-free)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -232,7 +232,7 @@ class UsageSeries(BaseModel):
 
 
 class PatchUserRequest(BaseModel):
-    """``PATCH /admin/users/{id}`` — set status and/or role (both optional)."""
+    """``PATCH /admin/users/{id}`` - set status and/or role (both optional)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -241,7 +241,7 @@ class PatchUserRequest(BaseModel):
 
 
 class DeleteUserRequest(BaseModel):
-    """``POST /admin/users/{id}/delete`` — typed email confirmation (R8.1/14.1)."""
+    """``POST /admin/users/{id}/delete`` - typed email confirmation (R8.1/14.1)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -249,7 +249,7 @@ class DeleteUserRequest(BaseModel):
 
 
 class BulkDisableRequest(BaseModel):
-    """``POST /admin/users/bulk-disable`` — bounded batch of target ids (R6.4)."""
+    """``POST /admin/users/bulk-disable`` - bounded batch of target ids (R6.4)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -257,7 +257,7 @@ class BulkDisableRequest(BaseModel):
 
 
 class MutationResult(BaseModel):
-    """Standard result of a lifecycle mutation (idempotent no-op → changed:false)."""
+    """Standard result of a lifecycle mutation (idempotent no-op -> changed:false)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -281,10 +281,10 @@ class MaintenanceResult(BaseModel):
     Secret-free by construction: only the echoed ``action`` name (one of the four
     fixed actions) and the ``status`` outcome are returned. ``status`` is one of:
 
-    - ``started`` — the underlying single-flighted job/refresh was (re-)invoked;
-    - ``already_running`` — the job's single-flight lock was already held, so no
+    - ``started`` - the underlying single-flighted job/refresh was (re-)invoked;
+    - ``already_running`` - the job's single-flight lock was already held, so no
       second run was started (Req 18.4);
-    - ``disabled`` — the underlying job is gated off by a kill-switch (the cleanup
+    - ``disabled`` - the underlying job is gated off by a kill-switch (the cleanup
       job when ``ADMIN_DESTRUCTIVE_ACTIONS`` is off).
     """
 
@@ -298,7 +298,7 @@ class MaintenanceResult(BaseModel):
 # Observability + Product-Analytics response models (Task 5.1)
 #
 # Every model below is aggregate-only and secret-free: it exposes only counts,
-# rates, timestamps, and boolean presence indicators — never a secret value,
+# rates, timestamps, and boolean presence indicators - never a secret value,
 # raw log line, per-event row, or per-user surveillance field. Config secrets
 # surface solely as presence booleans (Req 10.4), and release fields are
 # secret-free (Req 17.3); every model passes ``assert_no_forbidden_fields``
@@ -312,7 +312,7 @@ class MaintenanceResult(BaseModel):
 
 
 class SeriesPoint(BaseModel):
-    """One point in a daily aggregate time-series (UTC day → integer value)."""
+    """One point in a daily aggregate time-series (UTC day -> integer value)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -321,7 +321,7 @@ class SeriesPoint(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Health (Req 3, 8, 17) — tiles + release fields + jobs table
+# Health (Req 3, 8, 17) - tiles + release fields + jobs table
 # ---------------------------------------------------------------------------
 
 
@@ -367,7 +367,7 @@ class JobRow(BaseModel):
 
 
 class AdminHealth(BaseModel):
-    """``GET /admin/health`` — six subsystem tiles + release fields + jobs table."""
+    """``GET /admin/health`` - six subsystem tiles + release fields + jobs table."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -380,12 +380,12 @@ class AdminHealth(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# AI analytics (Req 4) — allowlisted call aggregates + cost
+# AI analytics (Req 4) - allowlisted call aggregates + cost
 # ---------------------------------------------------------------------------
 
 
 class ProviderCount(BaseModel):
-    """Per-provider AI call count (closed provider enumeration — Req 20.3)."""
+    """Per-provider AI call count (closed provider enumeration - Req 20.3)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -394,7 +394,7 @@ class ProviderCount(BaseModel):
 
 
 class AiAnalytics(BaseModel):
-    """``GET /admin/ai-analytics`` — allowlisted AI aggregates + cost estimate."""
+    """``GET /admin/ai-analytics`` - allowlisted AI aggregates + cost estimate."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -404,7 +404,7 @@ class AiAnalytics(BaseModel):
     failureRate: float  # 4dp; both 0.0 when totalCalls == 0
     avgLatencyMs: float
     # Average AI tokens per call. Named ``avgUnitsPerCall`` (not ``avgTokens``)
-    # because "token" is a FORBIDDEN_SUBSTRINGS entry — the serialization guard
+    # because "token" is a FORBIDDEN_SUBSTRINGS entry - the serialization guard
     # (Req 15.7) rejects any key containing it, so this avoids a false leak.
     avgUnitsPerCall: float
     timeouts: int
@@ -416,7 +416,7 @@ class AiAnalytics(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Errors summary (Req 5) — grouped buckets only, never raw log/stack lines
+# Errors summary (Req 5) - grouped buckets only, never raw log/stack lines
 # ---------------------------------------------------------------------------
 
 
@@ -441,15 +441,15 @@ class ErrorsBySource(BaseModel):
 
 
 class ErrorsSummary(BaseModel):
-    """``GET /admin/errors`` — grouped 4xx/5xx counts + by-source + trend.
+    """``GET /admin/errors`` - grouped 4xx/5xx counts + by-source + trend.
 
     ``notInstrumented`` lists the field paths that have **no durable source**
-    today (e.g. ``topRouteClasses`` — there is no bounded per-route-class failure
-    bucket; ``bySource.job`` / ``bySource.storage`` — no durable job/storage
+    today (e.g. ``topRouteClasses`` - there is no bounded per-route-class failure
+    bucket; ``bySource.job`` / ``bySource.storage`` - no durable job/storage
     failure counter). The UI shows an explicit "Not instrumented" indicator for
     these instead of a misleading empty list / zero, so an operator can tell
     "no failures" apart from "not tracked". This is metadata, not a raw-log field
-    (the panel remains grouped-buckets-only — Req 21.2).
+    (the panel remains grouped-buckets-only - Req 21.2).
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -465,7 +465,7 @@ class ErrorsSummary(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Performance signals (Req 6) — existing aggregates only; no new instrumentation
+# Performance signals (Req 6) - existing aggregates only; no new instrumentation
 # ---------------------------------------------------------------------------
 
 
@@ -489,9 +489,9 @@ class SlowJob(BaseModel):
 
 
 class PerformanceSignals(BaseModel):
-    """``GET /admin/performance`` — latency/cache aggregates the backend already
+    """``GET /admin/performance`` - latency/cache aggregates the backend already
     produces. Host metrics (cpu/memory/disk) are ``None`` unless already
-    produced and are dropped by ``exclude_none`` (Non-Goal — Req 21.4)."""
+    produced and are dropped by ``exclude_none`` (Non-Goal - Req 21.4)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -508,12 +508,12 @@ class PerformanceSignals(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Storage panel (Req 7) — cached sample + counts + growth, never live-queried
+# Storage panel (Req 7) - cached sample + counts + growth, never live-queried
 # ---------------------------------------------------------------------------
 
 
 class StoragePanel(BaseModel):
-    """``GET /admin/storage`` — cached DB size + object storage + counts + growth."""
+    """``GET /admin/storage`` - cached DB size + object storage + counts + growth."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -532,12 +532,12 @@ class StoragePanel(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Jobs panel (Req 8) — shares JobRow with AdminHealth
+# Jobs panel (Req 8) - shares JobRow with AdminHealth
 # ---------------------------------------------------------------------------
 
 
 class JobsPanel(BaseModel):
-    """``GET /admin/jobs`` — job rows + optional queue/backlog gauges."""
+    """``GET /admin/jobs`` - job rows + optional queue/backlog gauges."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -551,17 +551,17 @@ class JobsPanel(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Security view (Req 9) — 24h aggregate counts, read from SEC_* keys only
+# Security view (Req 9) - 24h aggregate counts, read from SEC_* keys only
 # ---------------------------------------------------------------------------
 
 
 class SecurityView(BaseModel):
-    """``GET /admin/security`` — 24h security aggregate counts (zero when no data).
+    """``GET /admin/security`` - 24h security aggregate counts (zero when no data).
 
     ``notInstrumented`` lists the camelCase field names that have **no durable
     aggregate source** and therefore must NOT be read as a real "0". The UI shows
     an explicit "Not instrumented" indicator for those instead of a misleading
-    zero — honesty over a fabricated count. A field is listed here only when the
+    zero - honesty over a fabricated count. A field is listed here only when the
     backend produces no signal for it without new instrumentation (a Non-Goal,
     Req 21.4); fields with a real source are never listed.
     """
@@ -579,12 +579,12 @@ class SecurityView(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Config diagnostics (Req 10) — read-only, secret-free (presence booleans only)
+# Config diagnostics (Req 10) - read-only, secret-free (presence booleans only)
 # ---------------------------------------------------------------------------
 
 
 class ConfigDiagnostics(BaseModel):
-    """``GET /admin/config`` — read-only diagnostics. Secrets appear ONLY as
+    """``GET /admin/config`` - read-only diagnostics. Secrets appear ONLY as
     boolean presence indicators (Req 10.4/10.5): the ``configured`` map's *keys*
     deliberately avoid every forbidden substring (e.g. ``aiConfigured``,
     ``smtpConfigured``) so no secret name or value ever serializes."""
@@ -606,7 +606,7 @@ class ConfigDiagnostics(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Overview KPIs (Req 13) — each KPI is a value + explicit unavailable marker
+# Overview KPIs (Req 13) - each KPI is a value + explicit unavailable marker
 # ---------------------------------------------------------------------------
 
 
@@ -625,7 +625,7 @@ class KpiValue(BaseModel):
 
 
 class OverviewKpis(BaseModel):
-    """``GET /admin/kpis`` — Overview KPI cards assembled from existing snapshots."""
+    """``GET /admin/kpis`` - Overview KPI cards assembled from existing snapshots."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -639,7 +639,7 @@ class OverviewKpis(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Feature usage (Req 16) — aggregate-only daily feature totals (Product Analytics)
+# Feature usage (Req 16) - aggregate-only daily feature totals (Product Analytics)
 # ---------------------------------------------------------------------------
 
 
@@ -654,7 +654,7 @@ class FeatureSeries(BaseModel):
 
 
 class FeatureUsage(BaseModel):
-    """``GET /admin/analytics/feature-usage`` — daily per-feature totals."""
+    """``GET /admin/analytics/feature-usage`` - daily per-feature totals."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -664,7 +664,7 @@ class FeatureUsage(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Resume analytics (Req 14) — source split + top templates + growth
+# Resume analytics (Req 14) - source split + top templates + growth
 # ---------------------------------------------------------------------------
 
 
@@ -693,12 +693,12 @@ class TemplateCount(BaseModel):
 
 
 class ResumeAnalytics(BaseModel):
-    """``GET /admin/analytics/resumes`` — source split, top templates, growth."""
+    """``GET /admin/analytics/resumes`` - source split, top templates, growth."""
 
     model_config = ConfigDict(extra="forbid")
 
     window: int
     sourceSplit: ResumeSourceSplit
-    topTemplates: list[TemplateCount] = Field(default_factory=list)  # top 10, tie → name
+    topTemplates: list[TemplateCount] = Field(default_factory=list)  # top 10, tie -> name
     growth: list[SeriesPoint] = Field(default_factory=list)
     computedAt: str

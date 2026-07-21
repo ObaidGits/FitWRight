@@ -1,4 +1,4 @@
-"""PDF appearance resolver — query override → stored template → default.
+"""PDF appearance resolver - query override -> stored template -> default.
 
 Guards the WYSIWYG export contract (audit Bug #1): a bare PDF request must
 render the resume's PERSISTED template, an explicit query param overrides it,
@@ -53,9 +53,9 @@ def test_malformed_stored_falls_back_and_clamps():
     r = _resolve_pdf_settings(
         {"template": "not-a-template", "margins": {"top": 999}, "accentColor": "purple"}, {}
     )
-    assert r["template"] == "swiss-single"  # invalid enum → default
+    assert r["template"] == "swiss-single"  # invalid enum -> default
     assert r["marginTop"] == 25  # clamped to max
-    assert r["accentColor"] == "blue"  # invalid enum → default
+    assert r["accentColor"] == "blue"  # invalid enum -> default
 
 
 def test_non_dict_stored_is_safe():

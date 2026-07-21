@@ -1,5 +1,5 @@
 /**
- * Contact page (marketing). A premium, trust-building surface — not a bare form.
+ * Contact page (marketing). A premium, trust-building surface - not a bare form.
  * Left: an invitation, live availability, response SLA, what I work on, and
  * direct channels. Right: the production-wired contact form. SEO + JSON-LD +
  * OpenGraph/Twitter are set here (server component); the form is a client island.
@@ -24,12 +24,12 @@ import { KEYWORDS } from '@/lib/seo/page-keywords';
 import { contactPageSchema, breadcrumbSchema } from '@/lib/seo/structured-data';
 
 export const metadata: Metadata = buildMetadata({
-  title: 'Contact — Let’s build something great',
+  title: "Contact - Let's build something great",
   description:
     'Have an idea, a role, or a collaboration in mind? Reach out about AI engineering, full-stack development, or FitWright. Every message reaches my inbox directly.',
   path: '/contact',
   keywords: KEYWORDS.contact,
-  socialTitle: 'Contact — Let’s build something great · FitWright',
+  socialTitle: "Contact - Let's build something great - FitWright",
 });
 
 const FOCUS = [
@@ -81,7 +81,7 @@ export default function ContactPage() {
       />
 
       <div className="relative mx-auto grid w-full max-w-6xl gap-10 px-4 py-16 md:px-8 md:py-24 lg:grid-cols-[1fr_1.1fr] lg:gap-16">
-        {/* Left — invitation + trust */}
+        {/* Left - invitation + trust */}
         <Reveal className="lg:sticky lg:top-24 lg:self-start">
           <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--at-success)]/40 bg-[var(--at-success)]/10 px-3 py-1 text-xs font-medium text-[var(--at-success)]">
             <span className="relative flex h-2 w-2">
@@ -95,12 +95,12 @@ export default function ContactPage() {
             Have an idea?
             <br />
             <span className="bg-gradient-to-r from-[var(--primary)] to-[var(--at-ai)] bg-clip-text text-transparent">
-              Let’s talk.
+              Let's talk.
             </span>
           </h1>
           <p className="mt-5 max-w-md text-lg text-[var(--muted-foreground)]">
-            I’m always up for a good conversation about software, AI, engineering, or a role worth
-            exploring. Tell me what you’re working on — thoughtful messages get thoughtful replies.
+            I'm always up for a good conversation about software, AI, engineering, or a role worth
+            exploring. Tell me what you're working on - thoughtful messages get thoughtful replies.
           </p>
 
           {/* SLA + reach */}
@@ -109,7 +109,7 @@ export default function ContactPage() {
               <Clock className="h-5 w-5 text-[var(--primary)]" />
               <p className="mt-2 text-sm font-medium">Fast, real replies</p>
               <p className="text-xs text-[var(--muted-foreground)]">
-                Usually within 1–2 business days.
+                Usually within 1-2 business days.
               </p>
             </div>
             <div className="rounded-[var(--radius-at-lg)] border border-[var(--border)] bg-[var(--card)] p-4">
@@ -175,11 +175,11 @@ export default function ContactPage() {
 
           <p className="mt-6 inline-flex items-center gap-1.5 text-xs text-[var(--muted-foreground)]">
             <ShieldCheck className="h-3.5 w-3.5 text-[var(--at-success)]" /> Your details stay
-            private — used only to reply.
+            private - used only to reply.
           </p>
         </Reveal>
 
-        {/* Right — the form */}
+        {/* Right - the form */}
         <Reveal delay={120}>
           <div className="mb-4 flex items-center gap-2 lg:hidden">
             <Sparkles className="h-4 w-4 text-[var(--at-ai)]" />

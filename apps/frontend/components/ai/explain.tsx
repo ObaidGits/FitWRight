@@ -5,7 +5,7 @@
  *
  * A small, consistent "explain" trigger that reveals a plain-language
  * explanation of an AI-derived value (e.g. the ATS score, a proposed change).
- * It is COST-FREE: explanations are static, client-side copy — no AI call
+ * It is COST-FREE: explanations are static, client-side copy - no AI call
  * fires, so nothing is unsolicited or billable. This keeps the AI voice
  * consistent and builds trust without extra spend.
  */

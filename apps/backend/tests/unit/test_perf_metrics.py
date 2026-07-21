@@ -1,12 +1,12 @@
 """Unit tests for the Performance signals read service (Task 11.3, Req 6).
 
 Exercises :class:`app.admin.perf_metrics.PerformanceMetricsService.signals()` in
-isolation — the per-route-class average latency mapping, the always-``None`` p95
-(no stored distribution → cannot compute; Req 6.2), the top-10 slow route-class
+isolation - the per-route-class average latency mapping, the always-``None`` p95
+(no stored distribution -> cannot compute; Req 6.2), the top-10 slow route-class
 ordering, the slow-job durations read from KV run markers (typical/last, seconds
-→ ms; Req 6.3), the ``dbQueryTimeMs`` unavailable handling (Req 6.7), the cache
+-> ms; Req 6.3), the ``dbQueryTimeMs`` unavailable handling (Req 6.7), the cache
 hit ratio pass-through (Req 6.4), the intentionally-omitted host metrics
-(``memory``/``cpu``/``disk`` are a Non-Goal — Req 6.5 / 21.4, NOT unavailable),
+(``memory``/``cpu``/``disk`` are a Non-Goal - Req 6.5 / 21.4, NOT unavailable),
 the "no new instrumentation" guarantee (``signals()`` never mutates
 ``AdminMetrics``; Req 21.4 / 15.8), and the secret-free serialization
 (Property 3 / Req 15.8).
@@ -72,7 +72,7 @@ class _FakeAdminMetrics:
     def _trip(self, name: str):
         self.mutations.append(name)
         raise AssertionError(
-            f"signals() invoked mutator {name!r} — no new instrumentation allowed"
+            f"signals() invoked mutator {name!r} - no new instrumentation allowed"
         )
 
     def incr(self, *a, **k):
@@ -204,11 +204,11 @@ class TestSlowJobs:
 
     async def test_expected_and_last_duration_ordered_desc(self):
         markers = {
-            # typical duration wins → 2.0s → 2000ms
+            # typical duration wins -> 2.0s -> 2000ms
             "rollup": {"expected_duration_seconds": 2.0, "last_duration_seconds": 9.0},
-            # no expected → falls back to last → 5.0s → 5000ms
+            # no expected -> falls back to last -> 5.0s -> 5000ms
             "purge": {"expected_duration_seconds": None, "last_duration_seconds": 5.0},
-            # audit_retention has no marker at all → absent
+            # audit_retention has no marker at all -> absent
         }
         svc, _, store = _service(markers=markers)
         signals = await svc.signals()
@@ -232,7 +232,7 @@ class TestSlowJobs:
         }
         svc, _, _ = _service(markers=markers)
         signals = await svc.signals()
-        # rollup has no usable duration → skipped; only purge remains.
+        # rollup has no usable duration -> skipped; only purge remains.
         assert [j.name for j in signals.topSlowJobs] == ["purge"]
         assert signals.topSlowJobs[0].avgMs == 3000.0
 
@@ -286,7 +286,7 @@ class TestHostMetricsOmitted:
         assert signals.memoryBytes is None
         assert signals.cpuPercent is None
         assert signals.diskBytes is None
-        # Host metrics are an intentional Non-Goal — never listed as unavailable.
+        # Host metrics are an intentional Non-Goal - never listed as unavailable.
         for field in ("memoryBytes", "cpuPercent", "diskBytes"):
             assert field not in signals.unavailable
 

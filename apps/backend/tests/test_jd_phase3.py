@@ -60,7 +60,7 @@ def _jsonld_html(title="Senior Engineer", desc=None, company="Acme", lang="en") 
 
 
 # ============================================================
-# §27 Privacy — canonical token stripping + redact_url
+# §27 Privacy - canonical token stripping + redact_url
 # ============================================================
 
 class TestPrivacyCanonicalization:
@@ -182,7 +182,7 @@ class TestRobotsParsing:
         assert _decide(groups, "/jobs/x").allowed is True
 
     def test_adr13_no_named_rule_proceeds(self):
-        """ADR-13: blanket * Disallow with no named rule → we proceed."""
+        """ADR-13: blanket * Disallow with no named rule -> we proceed."""
         from app.jd.robots import _parse_robots, _decide
         groups = _parse_robots("User-agent: *\nDisallow: /\n")
         assert _decide(groups, "/anything").allowed is True
@@ -233,7 +233,7 @@ class TestRobotsChecker:
         monkeypatch.setattr(rmod, "fetch_url_safely", boom)
         checker = rmod.RobotsChecker(LocalKVStore())
         decision = await checker.check("https://site.com/jobs/1")
-        assert decision.allowed is True  # advisory file unreachable → allow
+        assert decision.allowed is True  # advisory file unreachable -> allow
 
 
 # ============================================================
@@ -325,7 +325,7 @@ class TestPdfExtraction:
 
     def test_scanned_pdf_without_ocr_fails_honestly(self):
         from app.jd.extractors.pdf import extract_pdf
-        # A valid PDF header but no text stream → no extractable text.
+        # A valid PDF header but no text stream -> no extractable text.
         empty_pdf = b"%PDF-1.4\n1 0 obj<< /Type /Catalog >>endobj\ntrailer<< /Root 1 0 R >>\n%%EOF"
         result = extract_pdf(empty_pdf, "https://x.com/scan.pdf", ocr_enabled=False)
         assert result.content == ""
@@ -499,10 +499,10 @@ class TestOrchestratorPhase3:
         kv = LocalKVStore()
         monkeypatch.setattr(orchestrator, "_cache", JdCache(kv))
         monkeypatch.setattr(orchestrator, "_drift", DriftMonitor(kv))
-        # Zero cap → budget always exhausted.
+        # Zero cap -> budget always exhausted.
         monkeypatch.setattr(orchestrator, "_cost", CostMonitor(kv, per_user_daily=0, global_hourly_break=0))
 
-        # HTML with no JSON-LD/hydration and thin DOM → cascade would reach Playwright.
+        # HTML with no JSON-LD/hydration and thin DOM -> cascade would reach Playwright.
         thin_html = "<html><body><div>Apply now</div></body></html>"
 
         async def mock_fetch(url, *a, **k):

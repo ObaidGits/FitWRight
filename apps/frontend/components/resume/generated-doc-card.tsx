@@ -1,13 +1,13 @@
 'use client';
 
 /**
- * GeneratedDocCard — AI-generated companion documents (cover letter, outreach
+ * GeneratedDocCard - AI-generated companion documents (cover letter, outreach
  * message) edited inline in the atelier resume editor. Previously these lived
  * only in the legacy /builder advanced editor; this ports them into the primary
  * editor as one kind-parameterized, single-surface card.
  *
  * Behaviour (shared): edit inline, generate/regenerate with streaming AI
- * (cancel + transparent fallback via {@link useStream}), and save explicitly —
+ * (cancel + transparent fallback via {@link useStream}), and save explicitly -
  * streamed text is a PREVIEW, persisted only on Save (cost-consent, no silent
  * writes). Documents are meaningful only for tailored resumes (the backend
  * generate endpoints need job context), so generation is gated on `isTailored`.
@@ -52,7 +52,7 @@ const CONFIG: Record<DocKind, KindConfig> = {
     save: updateCoverLetter,
     supportsPdf: true,
     supportsCopy: false,
-    placeholder: 'Generate a cover letter, or write your own here…',
+    placeholder: 'Generate a cover letter, or write your own here...',
   },
   outreach: {
     title: 'Outreach message',
@@ -61,7 +61,7 @@ const CONFIG: Record<DocKind, KindConfig> = {
     save: updateOutreachMessage,
     supportsPdf: false,
     supportsCopy: true,
-    placeholder: 'Generate a recruiter outreach message, or write your own here…',
+    placeholder: 'Generate a recruiter outreach message, or write your own here...',
   },
 };
 
@@ -155,7 +155,7 @@ export function GeneratedDocCard({
         <>
           <div role="status" aria-live="polite" className="sr-only">
             {stream.isStreaming
-              ? `Generating your ${cfg.label}…`
+              ? `Generating your ${cfg.label}...`
               : dirty
                 ? `${cfg.title} draft ready to review.`
                 : ''}
@@ -211,7 +211,7 @@ export function GeneratedDocCard({
             )}
           </div>
           <p className="inline-flex items-center gap-1 text-xs text-[var(--muted-foreground)]">
-            <Sparkles className="h-3 w-3" /> AI drafts are a preview — nothing is saved until you
+            <Sparkles className="h-3 w-3" /> AI drafts are a preview - nothing is saved until you
             click Save.
           </p>
         </>

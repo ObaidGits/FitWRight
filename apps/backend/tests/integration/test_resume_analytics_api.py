@@ -4,14 +4,14 @@ Exercises ``GET /api/v1/admin/analytics/resumes`` end-to-end over an ASGI
 transport against an isolated temp database with real sessions (no dependency
 overrides), in **hosted** mode so authN/CSRF/rate-limit/capability all apply:
 
-- authz matrix: anon → 401, non-admin → 403, admin → 200 (Req 14.5 read authz);
-- window validation: admin + ``window=45`` → 400 ``invalid_window``; admin +
-  ``window=30`` → 200 with a secret-free, scope-limited body (Req 14.4/14.7);
+- authz matrix: anon -> 401, non-admin -> 403, admin -> 200 (Req 14.5 read authz);
+- window validation: admin + ``window=45`` -> 400 ``invalid_window``; admin +
+  ``window=30`` -> 200 with a secret-free, scope-limited body (Req 14.4/14.7);
 - the response passes the response-boundary forbidden-field guard (Req 15.8).
 
 The resume-analytics service reads through the process-wide ``MetricStore``
 singleton (``get_metric_store()``), which lazily binds to ``app.database.db``
-the first time it is built — so the ``resume_env`` fixture calls
+the first time it is built - so the ``resume_env`` fixture calls
 :func:`reset_metric_store` after the DB is swapped, forcing the singleton to
 rebuild against the temp DB.
 

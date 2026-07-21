@@ -1,13 +1,13 @@
 """Productivity background jobs (design §Platform, ADR-15).
 
-A single entrypoint the worker triggers invoke — the free tier's external cron
+A single entrypoint the worker triggers invoke - the free tier's external cron
 (``POST /api/v1/internal/run-jobs``) and the premium in-process scheduler both
 call :func:`run_productivity_jobs`. Every step is single-flighted + idempotent so
 overlapping triggers never double-process:
 
-1. drain a bounded outbox batch → notifications/search (at-least-once, idempotent);
+1. drain a bounded outbox batch -> notifications/search (at-least-once, idempotent);
 2. send pending immediate notification emails (honoring prefs);
-3. run scheduler scans for due reminders / upcoming interviews (claim → emit).
+3. run scheduler scans for due reminders / upcoming interviews (claim -> emit).
 
 Digest emails + retention run on their own (slower) cadence via
 :func:`run_productivity_digests` and the retention job.

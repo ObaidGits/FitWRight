@@ -1,14 +1,14 @@
-"""Resume analytics read model (Req 14) — Product Analytics bounded context.
+"""Resume analytics read model (Req 14) - Product Analytics bounded context.
 
 Holds the :class:`ResumeMetricsService` that serves ``GET /admin/analytics/resumes``
 (source split + popular templates + growth).
 
 **Bounded-context purity (Req 19.2/19.3/19.4/19.5).** This Product-Analytics
-service depends ONLY on the shared primitives — the Metric_Store and the
+service depends ONLY on the shared primitives - the Metric_Store and the
 Metric_Registry. It reads the resume source-split / popular-templates snapshot
 that the admin/observability rollup writer
 (:class:`app.admin.resume_rollup.ResumeSnapshotStep`) produced, purely through
-``Metric_Store.snapshot_get`` — the sanctioned cross-context read seam (Req
+``Metric_Store.snapshot_get`` - the sanctioned cross-context read seam (Req
 19.4). It performs **no cross-user DB read** itself (those live only in the
 heavily-reviewed ``AdminRepo``, driven by the rollup writer) and imports no other
 Domain_Metrics_Service, so the import-graph fitness test (Task 5.3) holds.
@@ -43,7 +43,7 @@ class ResumeMetricsService:
 
     Reads the ``"resume_snapshot"`` KV blob (source counts + popular templates)
     persisted by the rollup writer and combines it with the zero-filled daily
-    growth series from the ``RESUMES_*`` durable keys. All reads are O(1) — no
+    growth series from the ``RESUMES_*`` durable keys. All reads are O(1) - no
     live DB queries at request time (Req 14.5).
     """
 

@@ -2,12 +2,12 @@
 
 Beyond a soft failure threshold, auth endpoints can require a CAPTCHA/Turnstile
 challenge. Verification goes through the :class:`CaptchaVerifier` interface so a
-concrete provider (Cloudflare Turnstile, hCaptcha, …) is wired per deployment
+concrete provider (Cloudflare Turnstile, hCaptcha, ...) is wired per deployment
 without touching the auth flows.
 
 The shipped default, :class:`AllowAllCaptchaVerifier`, is the intended local/dev
 behavior: it **allows** every request (no challenge configured) and logs that it
-did so — a deliberate fail-open, consistent with the design's "pluggable hook,
+did so - a deliberate fail-open, consistent with the design's "pluggable hook,
 concrete choice per deploy". It is a real adapter, not a stub.
 """
 
@@ -30,7 +30,7 @@ __all__ = [
     "TURNSTILE_SITEVERIFY_ENDPOINT",
 ]
 
-# Cloudflare Turnstile server-side verification endpoint (fixed — SSRF-safe).
+# Cloudflare Turnstile server-side verification endpoint (fixed - SSRF-safe).
 TURNSTILE_SITEVERIFY_ENDPOINT = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
 
 
@@ -76,7 +76,7 @@ class SiteverifyClient(Protocol):
 
 
 class HttpxSiteverifyClient:
-    """Default httpx-backed siteverify client (fixed endpoint — SSRF-safe).
+    """Default httpx-backed siteverify client (fixed endpoint - SSRF-safe).
 
     Bounded by ``timeout`` so a slow provider can never stall an auth request;
     the caller turns any raised error into a fail-open ``allowed=True`` result.
@@ -104,7 +104,7 @@ class TurnstileCaptchaVerifier(CaptchaVerifier):
     ``siteverify`` endpoint with the deploy's secret and branches on the
     ``success`` field. Consistent with the design's fail-open posture (R13),
     any provider/transport error results in ``allowed=True`` with a logged
-    warning — a CAPTCHA provider outage must never lock users out — while a
+    warning - a CAPTCHA provider outage must never lock users out - while a
     well-formed ``success=false`` response is a real ``allowed=False`` decision.
 
     Selected by ``CAPTCHA_PROVIDER=turnstile``; requires ``CAPTCHA_SECRET``. A
@@ -132,7 +132,7 @@ class TurnstileCaptchaVerifier(CaptchaVerifier):
 
         try:
             payload = await self._client.post_form(self._endpoint, data)
-        except Exception:  # noqa: BLE001 - any transport error → fail open (R13)
+        except Exception:  # noqa: BLE001 - any transport error -> fail open (R13)
             logger.warning(
                 "CAPTCHA verification failed (Turnstile unavailable); allowing (fail-open)",
                 exc_info=True,

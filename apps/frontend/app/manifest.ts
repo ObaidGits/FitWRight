@@ -10,7 +10,7 @@ import { SITE_NAME, SITE_DESCRIPTION } from '@/lib/seo/config';
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: `${SITE_NAME} — AI Resume Builder & Tailor`,
+    name: `${SITE_NAME} - AI Resume Builder & Tailor`,
     short_name: SITE_NAME,
     description: SITE_DESCRIPTION,
     start_url: '/',

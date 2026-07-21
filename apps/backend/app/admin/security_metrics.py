@@ -10,14 +10,14 @@ step with its owning service mirrors ``ai_metrics.py`` (``AiFlushStep`` next to
 the domain it serves, and the pipeline only imports the step *singleton*.
 
 **Bounded-context purity (Req 19.2/19.3/19.5).** As a Domain_Metrics_Service
-module this depends ONLY on shared primitives — the Metric_Store, the
-Metric_Registry (the ``SEC_*`` keys), the ``AdminRepo``, and config — never on
+module this depends ONLY on shared primitives - the Metric_Store, the
+Metric_Registry (the ``SEC_*`` keys), the ``AdminRepo``, and config - never on
 another Domain_Metrics_Service. The import-graph fitness test (Task 5.3) enforces
 this.
 
 **Off the request path (Req 21.5).** The step runs only inside the Rollup_Job. It
 reads cross-user audit aggregates via :class:`~app.admin.repo.AdminRepo` (allowed
-at rollup time — a day-bounded ``audit_log`` scan), never on a request path.
+at rollup time - a day-bounded ``audit_log`` scan), never on a request path.
 
 ``StepResult`` is imported **lazily** inside ``run`` (the cycle-safe pattern used
 by ``AiFlushStep`` / ``DbSizeSampleStep``): ``rollup_pipeline`` imports this module
@@ -79,26 +79,26 @@ class SecurityAggregateStep:
     """Rollup_Step persisting the daily security aggregates (Req 9.1 / 9.2).
 
     For each closed UTC day in a small bounded window it asks
-    :meth:`AdminRepo.security_daily` (Task 5.2) for that day's ``SEC_*`` counts —
+    :meth:`AdminRepo.security_daily` (Task 5.2) for that day's ``SEC_*`` counts -
     ``{SEC_LOGIN_FAILED, SEC_ADMIN_LOGIN, SEC_AUTHZ_DENIED, SEC_RATE_LIMITED,
-    SEC_SUSPICIOUS}`` (rate-limited / suspicious are currently ``0`` — a documented
-    gap in 5.2, but still returned so the row is complete) — and **UPSERTs** each
+    SEC_SUSPICIOUS}`` (rate-limited / suspicious are currently ``0`` - a documented
+    gap in 5.2, but still returned so the row is complete) - and **UPSERTs** each
     key for that day via :meth:`MetricStore.upsert`.
 
-    **UPSERT (absolute), not add — and why it is idempotent (Req 9.1).**
+    **UPSERT (absolute), not add - and why it is idempotent (Req 9.1).**
     ``security_daily`` recomputes the *full* day's count from ``audit_log`` on every
     run, so the correct write is the absolute value (``upsert``), not an increment
     (``add``). Re-running a closed day therefore recomputes the same count and
-    re-UPSERTs the same value — a no-op change (idempotent per closed day). Using
+    re-UPSERTs the same value - a no-op change (idempotent per closed day). Using
     ``add`` would double-count on a re-run; ``upsert`` cannot.
 
     **Which day(s).** The pipeline passes ``day`` = the just-closed day (yesterday,
     per ``run_rollup_job``). The step aggregates that day plus a small bounded
-    lookback of preceding closed days (:attr:`lookback_days`, default 2 → the passed
+    lookback of preceding closed days (:attr:`lookback_days`, default 2 -> the passed
     day and the one before it) so a single missed run self-heals on the next run,
     mirroring how ``MetricsService.run_rollup`` recovers ``lookback_days`` closed
     days. The lookback is fixed and tiny, so the extra work is a couple of
-    day-bounded scans — never a growing cost. Today is never written here (only the
+    day-bounded scans - never a growing cost. Today is never written here (only the
     passed closed day and older), so a closed day is never rewritten with a partial
     count.
 
@@ -114,7 +114,7 @@ class SecurityAggregateStep:
 
     The step returns a failed :class:`StepResult` naming the failed
     ``metric@day`` pairs when anything failed, else success. It never raises out
-    (failure-isolated — R2.5).
+    (failure-isolated - R2.5).
 
     Independent, idempotent per closed UTC day, resumable (a failed day/key retries
     on the next run within the lookback window), and failure-isolated per key.
@@ -125,7 +125,7 @@ class SecurityAggregateStep:
     def __init__(self, *, metric_store=None, repo=None, lookback_days: int = 2) -> None:
         # Optional injected collaborators (tests); otherwise the process-wide
         # singletons are resolved lazily at run time. Depends ONLY on the shared
-        # MetricStore + AdminRepo + Metric_Registry — never on another
+        # MetricStore + AdminRepo + Metric_Registry - never on another
         # Domain_Metrics_Service (import-graph guard, Req 19.2/19.3/19.5).
         self._store = metric_store
         self._repo = repo
@@ -146,7 +146,7 @@ class SecurityAggregateStep:
         return get_admin_repo()
 
     def _closed_days(self, day: str) -> list[str]:
-        """The bounded set of closed days to (re)aggregate, newest→oldest.
+        """The bounded set of closed days to (re)aggregate, newest->oldest.
 
         Starts at the passed just-closed ``day`` and walks back
         ``lookback_days - 1`` further closed days for missed-run recovery. Falls
@@ -186,7 +186,7 @@ class SecurityAggregateStep:
                 failures.append(f"security_daily@{closed_day}")
                 continue
 
-            # -- UPSERT each SEC_* key (absolute value → idempotent per day) ------
+            # -- UPSERT each SEC_* key (absolute value -> idempotent per day) ------
             for key, value in counts.items():
                 try:
                     await store.upsert(closed_day, key, int(value))
@@ -215,7 +215,7 @@ SECURITY_AGGREGATE_STEP = SecurityAggregateStep()
 
 
 # ---------------------------------------------------------------------------
-# Security view read model — the SecurityMetricsService (Req 9.3–9.7)
+# Security view read model - the SecurityMetricsService (Req 9.3-9.7)
 # ---------------------------------------------------------------------------
 
 
@@ -224,17 +224,17 @@ class SecurityMetricsService:
 
     :meth:`view` builds the :class:`~app.admin.schemas.SecurityView` served by
     ``GET /api/v1/admin/security``. It is a cohesive, single-responsibility
-    Domain_Metrics_Service that depends **only** on shared primitives — the
+    Domain_Metrics_Service that depends **only** on shared primitives - the
     shared :class:`~app.admin.metric_store.MetricStore`, the static
     :mod:`app.admin.metric_registry` (the five ``SEC_*`` keys), and the response
-    schema — never on another Domain_Metrics_Service (import-graph guard,
+    schema - never on another Domain_Metrics_Service (import-graph guard,
     Req 19.2/19.3/19.5).
 
-    **NEVER scans ``audit_log`` on the request path (Req 9.6/9.7) — structurally
+    **NEVER scans ``audit_log`` on the request path (Req 9.6/9.7) - structurally
     guaranteed.** The service holds *only* a ``MetricStore`` (no ``AdminRepo``,
     no session factory), so there is no collaborator through which it *could*
     reach ``audit_log``. Every count is read from a durable ``metrics_daily``
-    ``SEC_*`` Metric_Key via ``MetricStore.sum`` — the exact same indexed
+    ``SEC_*`` Metric_Key via ``MetricStore.sum`` - the exact same indexed
     ``(metric, day)`` read the other observability panels use. The day-bounded
     ``audit_log`` scan that *produces* these aggregates lives exclusively in the
     job-time :class:`SecurityAggregateStep`, never here.
@@ -251,30 +251,30 @@ class SecurityMetricsService:
     Req 9.3 asks for the counts "over the trailing 24-hour window measured from
     request time". The only durable source is the ``SEC_*`` ``metrics_daily``
     keys, which are **per-UTC-day** aggregates populated by
-    :class:`SecurityAggregateStep` for **closed** days (yesterday and older —
+    :class:`SecurityAggregateStep` for **closed** days (yesterday and older -
     today is not aggregated until it closes). Daily is the finest durable
     granularity we keep, so a strict, minute-accurate trailing-24h from "now" is
     not directly expressible.
 
     **Resolution (documented approximation).** We sum each ``SEC_*`` key over the
-    **last two UTC days** — today (partial) + yesterday — via
+    **last two UTC days** - today (partial) + yesterday - via
     ``MetricStore.sum([key], day_from=yesterday, day_to=today)``. The real
     trailing-24h window always straddles at most these two calendar days, so
     their combined daily aggregate is the honest closest proxy the daily
     granularity allows. This is an **aggregate-only approximation**: it inherits
-    the design's accepted closed-day eventual consistency — today's events are
+    the design's accepted closed-day eventual consistency - today's events are
     counted only after the rollup aggregates the day (they surface after the next
     rollup), so immediately after UTC midnight the number leans on yesterday's
     closed value until today is rolled up. We deliberately choose the two-day sum
     over "yesterday only" because it better covers the trailing-24h span and
     keeps today's activity visible once rolled up. We never scan ``audit_log`` to
-    make this more precise (Req 9.5/9.6) — daily aggregates are the durable
+    make this more precise (Req 9.5/9.6) - daily aggregates are the durable
     contract.
 
     ## Zero when no data (Req 9.5)
 
     ``MetricStore.sum`` returns ``0`` for a key with no stored rows in the range,
-    so every count is ``0`` when its aggregate has no data — with **no** fallback
+    so every count is ``0`` when its aggregate has no data - with **no** fallback
     to scanning ``audit_log`` rows (Req 9.5/9.6). ``SEC_*`` values are
     non-negative by construction (daily counts), so all counts are non-negative
     ints.
@@ -290,7 +290,7 @@ class SecurityMetricsService:
     def __init__(self, *, metric_store=None) -> None:
         # Optional injected read collaborator (tests); otherwise the process-wide
         # MetricStore singleton is resolved lazily. The service holds ONLY the
-        # shared MetricStore — no AdminRepo / session — which structurally
+        # shared MetricStore - no AdminRepo / session - which structurally
         # guarantees it can never scan ``audit_log`` on the request path
         # (Req 9.6/9.7) and depends on no other Domain_Metrics_Service
         # (import-graph guard, Req 19.2/19.3/19.5).
@@ -304,10 +304,10 @@ class SecurityMetricsService:
         return get_metric_store()
 
     async def view(self) -> "SecurityView":
-        """Return the 24h security counts from the ``SEC_*`` aggregates (Req 9.3–9.7).
+        """Return the 24h security counts from the ``SEC_*`` aggregates (Req 9.3-9.7).
 
         Sums each ``SEC_*`` Metric_Key over the last two UTC days (today +
-        yesterday) via the shared ``MetricStore`` as the trailing-24h proxy — see
+        yesterday) via the shared ``MetricStore`` as the trailing-24h proxy - see
         the class docstring for the approximation rationale and the documented
         closed-day eventual-consistency tradeoff. Reads ONLY the ``MetricStore``;
         never scans ``audit_log`` (Req 9.6), returns ``0`` for empty aggregates
@@ -334,9 +334,9 @@ class SecurityMetricsService:
             rateLimited=rate_limited,
             suspicious=suspicious,
             # Honesty over a fabricated zero (Req 9.3 / audit): these two have no
-            # durable aggregate source today — rate-limit denials are recorded
+            # durable aggregate source today - rate-limit denials are recorded
             # only as an in-process auth counter (never flushed per-day) and there
-            # is no security-level "suspicious/blocked request" audit event — so
+            # is no security-level "suspicious/blocked request" audit event - so
             # they are surfaced as explicitly not-instrumented rather than a
             # misleading 0. Wiring either would require new instrumentation (a
             # Non-Goal, Req 21.4) or cross-context coupling; when a durable source

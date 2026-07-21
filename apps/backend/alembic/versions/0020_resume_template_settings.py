@@ -2,7 +2,7 @@
 
 Adds a nullable ``template_settings`` JSON column to ``resumes`` so a resume
 remembers the template + customization it was created/edited with (engine, page
-size, margins, spacing, fonts, accent, photo behavior — the frontend
+size, margins, spacing, fonts, accent, photo behavior - the frontend
 ``TemplateSettings`` shape). Previously the selection lived only in the
 browser's localStorage, so it did not survive across devices, duplication, or
 server-side PDF export.

@@ -1,13 +1,13 @@
-"""Platform module (ARCHITECTURE §9) — composition, deployment profiles, and
+"""Platform module (ARCHITECTURE §9) - composition, deployment profiles, and
 capability validation.
 
 This package owns the *wiring* concerns of the system, not business logic:
 
-- ``profiles`` — the explicit ``DeploymentProfile`` (ARCHITECTURE §3/§4) that
+- ``profiles`` - the explicit ``DeploymentProfile`` (ARCHITECTURE §3/§4) that
   replaces ``single_user_mode`` as the *deployment axis*. ``single_user_mode``
   remains a backward-compatible derived view during the migration
   (IMPLEMENTATION_PLAN Phase 1).
-- ``capabilities`` — the capability model (ARCHITECTURE §5): what a deployment
+- ``capabilities`` - the capability model (ARCHITECTURE §5): what a deployment
   *provides*, what a profile *requires*, and fail-fast validation of the two.
 
 Nothing in ``app.services`` (the domain) may import this package; only the

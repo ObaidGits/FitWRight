@@ -47,7 +47,7 @@ class TestUploadCsrf:
                 headers={"X-CSRF-Token": csrf},
             )
         # The CSRF gate must be passed: anything but 403/csrf_failed proves it.
-        # (The tiny stub may fail document parsing with 422 — that's fine; it
+        # (The tiny stub may fail document parsing with 422 - that's fine; it
         # means the request got past auth+CSRF into the handler.)
         assert resp.status_code != 403
         if resp.status_code >= 400:

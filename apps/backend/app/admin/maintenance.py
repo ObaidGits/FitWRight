@@ -3,23 +3,23 @@
 ``MaintenanceService`` is a **thin dispatcher** over the existing, single-flighted
 background jobs. It exposes EXACTLY four idempotent ``admin.manage`` actions and
 nothing else (Req 18.1/18.5): each one only re-invokes an existing single-flighted
-job (or the equally single-flighted totals-snapshot refresh) — there is no path
+job (or the equally single-flighted totals-snapshot refresh) - there is no path
 that runs arbitrary SQL, edits configuration/flags, flushes the whole cache,
 controls deployment, or performs database maintenance.
 
-Action → underlying single-flighted work (Req 18.3):
+Action -> underlying single-flighted work (Req 18.3):
 
-- ``refresh-metrics`` → :meth:`MetricsService.refresh_totals_snapshot` guarded by
+- ``refresh-metrics`` -> :meth:`MetricsService.refresh_totals_snapshot` guarded by
   the Rollup_Job's own ``admin:rollup`` lock (acquired non-blocking, mirroring
   :func:`~app.admin.jobs.run_rollup_job`). This recomputes only the O(1) overview
-  totals snapshot — a lighter "refresh cached metrics" than a full rollup — while
+  totals snapshot - a lighter "refresh cached metrics" than a full rollup - while
   still re-using the rollup single-flight lock so it can never race a running
   rollup (and reports ``already_running`` when that lock is held).
-- ``run-rollup``   → :func:`~app.admin.jobs.run_rollup_job` (full rollup pipeline).
-- ``run-cleanup``  → :func:`~app.admin.jobs.run_purge_job` (the grace-elapsed
+- ``run-rollup``   -> :func:`~app.admin.jobs.run_rollup_job` (full rollup pipeline).
+- ``run-cleanup``  -> :func:`~app.admin.jobs.run_purge_job` (the grace-elapsed
   soft-deleted-user purge; the existing ``ADMIN_DESTRUCTIVE_ACTIONS`` kill-switch
-  still gates it — a ``disabled`` result is surfaced through unchanged).
-- ``run-retention``→ :func:`~app.admin.jobs.run_audit_retention_job`.
+  still gates it - a ``disabled`` result is surfaced through unchanged).
+- ``run-retention``-> :func:`~app.admin.jobs.run_audit_retention_job`.
 
 Every underlying job is idempotent + resumable and guarded by its own KVStore
 single-flight lock with a TTL, so a duplicate invocation causes no extra effect
@@ -27,9 +27,9 @@ beyond the single run (Req 18.3), and a held lock yields ``already_running``
 rather than a second run (Req 18.4). The jobs' native ``{"status": ...}`` shapes
 are mapped to the small maintenance vocabulary:
 
-    ``ok``       → ``started``
-    ``locked``   → ``already_running``
-    ``disabled`` → ``disabled``
+    ``ok``       -> ``started``
+    ``locked``   -> ``already_running``
+    ``disabled`` -> ``disabled``
 
 **Structural "no other action exists" (Req 18.5).** The allowed actions live in a
 single frozen mapping (:data:`MaintenanceService.ACTIONS`, a ``MappingProxyType``);
@@ -40,7 +40,7 @@ route per entry and no other maintenance operation.
 **Bounded-context purity (Req 19.2/19.3/19.5).** This Domain_Metrics_Service
 depends only on the existing job entrypoints (``app.admin.jobs``), the shared
 :class:`MetricsService` snapshot refresh (``app.admin.metrics_service``), the
-shared KVStore, and the admin schemas — it imports no *other*
+shared KVStore, and the admin schemas - it imports no *other*
 Domain_Metrics_Service, so the import-graph guard holds.
 
 Rate limiting + audit are enforced at the router boundary: every route depends on
@@ -91,8 +91,8 @@ _REFRESH_LOCK_TTL = 120
 def _map_job_status(result: dict) -> str:
     """Map a job's native ``status`` to the maintenance vocabulary (Req 18.3/18.4).
 
-    ``ok`` → ``started``; ``locked`` → ``already_running`` (single-flight lock was
-    already held); ``disabled`` → ``disabled`` (kill-switch gated). Any other/absent
+    ``ok`` -> ``started``; ``locked`` -> ``already_running`` (single-flight lock was
+    already held); ``disabled`` -> ``disabled`` (kill-switch gated). Any other/absent
     status is treated conservatively as ``started`` (the job ran).
     """
     status = (result or {}).get("status")
@@ -127,7 +127,7 @@ class MaintenanceService:
         :func:`~app.admin.jobs.run_rollup_job`) so it can never race a running
         rollup; if the lock is already held it returns ``already_running`` without
         starting a second refresh (Req 18.4). Recomputes only the O(1) overview
-        totals snapshot — the "refresh cached metrics" action — and is idempotent
+        totals snapshot - the "refresh cached metrics" action - and is idempotent
         (re-running simply recomputes the same snapshot).
         """
         # Imported lazily: ``metrics_service`` is a shared primitive, but keeping
@@ -174,7 +174,7 @@ class MaintenanceService:
     async def run(self, action: str) -> dict:
         """Dispatch ``action`` through the frozen :data:`ACTIONS` map only.
 
-        Raises :class:`KeyError` for any action outside the fixed four — the router
+        Raises :class:`KeyError` for any action outside the fixed four - the router
         only ever passes one of the four constants, so this is a defensive guard
         that keeps the "no other action exists" invariant true even if a caller
         is added later.

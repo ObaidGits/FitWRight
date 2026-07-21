@@ -1,8 +1,8 @@
-"""In-process ``KVStore`` adapter — local dev / single-worker (ADR-6).
+"""In-process ``KVStore`` adapter - local dev / single-worker (ADR-6).
 
 Backed by a plain dict guarded by an ``asyncio.Lock``. Correct and fast for a
 single worker (the default local-dev topology); it does **not** share state
-across processes, so it must not back a multi-worker hosted deployment — that is
+across processes, so it must not back a multi-worker hosted deployment - that is
 what the Redis and DB-backed adapters are for.
 
 Expiry is lazy: entries carry an absolute deadline and are treated as absent

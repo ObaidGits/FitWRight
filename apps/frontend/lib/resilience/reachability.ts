@@ -1,7 +1,7 @@
 /**
  * Backend reachability probe (P4 R2.6, R9.6).
  *
- * `navigator.onLine` is advisory only — it lies on captive portals and when the
+ * `navigator.onLine` is advisory only - it lies on captive portals and when the
  * backend is down but the LAN is up. The source of truth for "can we actually
  * reach the backend" is a short-timeout `GET /api/v1/health` probe. This
  * doubles as the free-tier keep-warm ping (design §Overview, ADR-15).
@@ -39,7 +39,7 @@ export async function probeReachability(opts: ReachabilityOptions = {}): Promise
 /**
  * Probe the backend and return `{ reachable, apiVersion }`. `apiVersion` is the
  * `X-API-Version` header the server advertises (P4 R9.8) so the client can pin a
- * baseline and detect a deploy mid-session (version skew → Safe-Mode).
+ * baseline and detect a deploy mid-session (version skew -> Safe-Mode).
  */
 export async function probeApiVersion(
   opts: ReachabilityOptions = {}
@@ -69,8 +69,8 @@ export type ReachabilityListener = (reachable: boolean) => void;
 
 /**
  * Monitors backend reachability by combining `online`/`offline` browser events
- * with periodic real probes. The probe result — never `navigator.onLine` alone
- * — is the authoritative `isReachable()`.
+ * with periodic real probes. The probe result - never `navigator.onLine` alone
+ * - is the authoritative `isReachable()`.
  */
 export class ReachabilityMonitor {
   private reachable = true;
@@ -116,7 +116,7 @@ export class ReachabilityMonitor {
   }
 
   private onOnline = () => {
-    // Browser says online — verify with a real probe before trusting it (R2.6).
+    // Browser says online - verify with a real probe before trusting it (R2.6).
     void this.check();
   };
   private onOffline = () => {

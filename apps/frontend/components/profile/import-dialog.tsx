@@ -1,11 +1,11 @@
 'use client';
 
 /**
- * Import & Merge dialog (P3) — review before anything touches the profile.
+ * Import & Merge dialog (P3) - review before anything touches the profile.
  *
- * Flow: pick a source resume → preview (the Merge Engine returns a typed plan) →
+ * Flow: pick a source resume -> preview (the Merge Engine returns a typed plan) ->
  * review each operation side-by-side (existing vs. incoming) and choose a
- * resolution → apply. Defaults are non-destructive (conflicts keep existing),
+ * resolution -> apply. Defaults are non-destructive (conflicts keep existing),
  * so hitting "Apply" without touching anything can never clobber manual data.
  * Duplicates are collapsed automatically; only meaningful decisions surface.
  */
@@ -54,10 +54,10 @@ const RESOLUTION_LABELS: Record<string, string> = {
 };
 
 function preview(value: unknown): string {
-  if (value == null) return '—';
-  if (typeof value === 'string') return value || '—';
+  if (value == null) return '-';
+  if (typeof value === 'string') return value || '-';
   if (Array.isArray(value))
-    return value.map((v) => (typeof v === 'string' ? v : JSON.stringify(v))).join(' · ');
+    return value.map((v) => (typeof v === 'string' ? v : JSON.stringify(v))).join(' - ');
   if (typeof value === 'object') {
     const o = value as Record<string, unknown>;
     return (
@@ -161,7 +161,7 @@ export function ImportDialog({ baseVersion }: { baseVersion: number }) {
         <DialogHeader>
           <DialogTitle>Import from a resume</DialogTitle>
           <DialogDescription>
-            Bring content from a parsed resume into your profile. Review each change — nothing is
+            Bring content from a parsed resume into your profile. Review each change - nothing is
             overwritten without your say-so.
           </DialogDescription>
         </DialogHeader>
@@ -193,7 +193,7 @@ export function ImportDialog({ baseVersion }: { baseVersion: number }) {
                     )}
                   </span>
                   {previewMutation.isPending && resumeId === r.resume_id ? (
-                    <span className="text-xs text-[var(--muted-foreground)]">Analyzing…</span>
+                    <span className="text-xs text-[var(--muted-foreground)]">Analyzing...</span>
                   ) : (
                     <ArrowRight className="h-4 w-4 text-[var(--muted-foreground)]" />
                   )}
@@ -209,9 +209,9 @@ export function ImportDialog({ baseVersion }: { baseVersion: number }) {
                   Quality {stats.quality_score}%
                 </Badge>
                 <span>{stats.new_items} new</span>
-                <span>· {stats.updates} updates</span>
-                <span>· {stats.conflicts} conflicts</span>
-                <span>· {stats.duplicates} duplicates</span>
+                <span>- {stats.updates} updates</span>
+                <span>- {stats.conflicts} conflicts</span>
+                <span>- {stats.duplicates} duplicates</span>
               </div>
             )}
             {warnings.map((w) => (

@@ -1,12 +1,12 @@
 """Compose the admin health panel from signals the backend already produces (Task 6.1).
 
 ``HealthService.compose_health()`` assembles the six-tile ``AdminHealth`` payload
-(``GET /admin/health``, wired in Task 6.3) — Backend, Database, KVStore/Queue,
-AI provider, Storage provider, Migrations — plus secret-free release metadata
-(version / build / commit / migration / env — Req 17) and the process uptime.
+(``GET /admin/health``, wired in Task 6.3) - Backend, Database, KVStore/Queue,
+AI provider, Storage provider, Migrations - plus secret-free release metadata
+(version / build / commit / migration / env - Req 17) and the process uptime.
 
 **Bounded (Req 21.3/21.4/21.5):** this service composes ONLY signals the backend
-already emits — the readiness DB/KVStore probes, the cached ``/status`` LLM
+already emits - the readiness DB/KVStore probes, the cached ``/status`` LLM
 health, the storage provider configuration, the Alembic head-vs-applied
 comparison, and the release constants. It NEVER adds a new per-request infra
 probe: no CPU/RAM/disk/thread/container/k8s metrics, and no live object-storage
@@ -15,12 +15,12 @@ Task 12).
 
 **Per-source isolation (Req 3.1/3.6):** every subsystem is probed under its own
 ``asyncio.wait_for(..., 2.0)`` timeout inside its own ``try/except``. A source
-that errors or exceeds 2s degrades ONLY its own tile to ``down`` — the remaining
+that errors or exceeds 2s degrades ONLY its own tile to ``down`` - the remaining
 tiles still compose from their reachable sources. The tiles are gathered
 concurrently so the whole compose is bounded by ~2s rather than the sum.
 
 **Secret-free (Req 17.3 / Property 3):** every tile detail and release field is a
-count, identifier, short status string, or presence-derived label — never a
+count, identifier, short status string, or presence-derived label - never a
 secret, key, URL, or host. ``AdminHealth`` passes ``assert_no_forbidden_fields``.
 
 **Bounded-context purity (Req 19.2/19.3/19.5):** this Domain_Metrics_Service
@@ -59,7 +59,7 @@ _SOURCE_TIMEOUT_SECONDS = 2.0
 _KV_PROBE_KEY = "admin:health:probe"
 
 # Process start reference for the Backend uptime gauge (Req 3.5). Captured at
-# import time — the backend has no other boot timestamp, so this module-level
+# import time - the backend has no other boot timestamp, so this module-level
 # monotonic anchor is the documented uptime source. ``monotonic`` is immune to
 # wall-clock adjustments, which is exactly what an uptime measure wants.
 _PROCESS_START_MONOTONIC = time.monotonic()
@@ -110,7 +110,7 @@ class HealthService:
         The six tiles are probed concurrently, each under its own 2s timeout and
         error boundary (Req 3.6). The Migrations probe additionally yields the
         applied/head revision identifiers, which flow into ``ReleaseInfo`` (Req
-        17.2). ``jobs`` is intentionally empty here — the jobs table is populated
+        17.2). ``jobs`` is intentionally empty here - the jobs table is populated
         from KV run markers by a later task (6.2), a separate concern.
         """
         (
@@ -254,12 +254,12 @@ class HealthService:
         """AI provider health from the CACHED ``/status`` LLM probe (Req 3.2).
 
         Reuses ``app.routers.health._cached_llm_health`` so this never fires a
-        new billable provider round-trip — it returns the recent cached result
+        new billable provider round-trip - it returns the recent cached result
         (or single-flights one probe per TTL window, exactly as ``/status``).
 
-        Mapping: configured + healthy → ``ok``; configured + unhealthy →
-        ``degraded``; not configured → ``degraded`` (documented: the provider is
-        simply unset, not broken). Any error/timeout → ``down`` (Req 3.6).
+        Mapping: configured + healthy -> ``ok``; configured + unhealthy ->
+        ``degraded``; not configured -> ``degraded`` (documented: the provider is
+        simply unset, not broken). Any error/timeout -> ``down`` (Req 3.6).
         """
         try:
             return await asyncio.wait_for(self._probe_ai(), timeout=_SOURCE_TIMEOUT_SECONDS)
@@ -273,7 +273,7 @@ class HealthService:
         from app.llm import get_llm_config
         from app.routers.health import _cached_llm_health
 
-        # No request context here — resolve the owner's effective config (the
+        # No request context here - resolve the owner's effective config (the
         # same key-resolution path ``/status`` uses for an anonymous caller).
         config = get_llm_config(None)
         configured = bool(config.api_key) or config.provider in (
@@ -299,18 +299,18 @@ class HealthService:
     # -- tile: Storage provider ---------------------------------------------
 
     async def _compose_storage(self) -> HealthTile:
-        """Storage provider health from configuration presence — no live query.
+        """Storage provider health from configuration presence - no live query.
 
         Per Non-Goal Req 21.5 this NEVER performs a live object-storage request;
         object-storage usage is sampled off the request path by the storage job
         (Task 12). It reports on the *active* provider's configuration only:
 
-        - ``local``      → ``ok`` (the local filesystem is always available).
-        - ``cloudinary`` → ``ok`` when configured, else ``degraded`` (the
+        - ``local``      -> ``ok`` (the local filesystem is always available).
+        - ``cloudinary`` -> ``ok`` when configured, else ``degraded`` (the
           provider is selected but its credentials are incomplete, so uploads
-          fall back to local — a real degraded state).
-        - ``s3``         → ``ok`` (provider selected; there is no dedicated S3
-          credential-presence signal to check here — documented gap).
+          fall back to local - a real degraded state).
+        - ``s3``         -> ``ok`` (provider selected; there is no dedicated S3
+          credential-presence signal to check here - documented gap).
 
         Secret-free: only the provider name + a short status label are exposed.
         """
@@ -345,12 +345,12 @@ class HealthService:
         identifiers can also populate ``ReleaseInfo`` (Req 17.2).
 
         Mapping:
-        - applied == head        → ``ok``.
-        - applied != head        → ``degraded`` (both identifiers in the detail).
+        - applied == head        -> ``ok``.
+        - applied != head        -> ``degraded`` (both identifiers in the detail).
           This includes the local-SQLite case where the schema is managed via
           ``create_all`` and no ``alembic_version`` row exists (applied is
           ``None``): a documented, honest "not tracked here" degraded signal.
-        - source error / timeout → ``down`` (Req 3.6), e.g. the DB is
+        - source error / timeout -> ``down`` (Req 3.6), e.g. the DB is
           unreachable or the migration scripts cannot be read.
         """
         try:
@@ -384,7 +384,7 @@ class HealthService:
         in a worker thread so it never blocks the event loop). The applied
         revision is read from the ``alembic_version`` table on the async engine;
         when that table is absent (local SQLite ``create_all`` schema) the applied
-        revision is ``None`` — that is not an error, just "not tracked here".
+        revision is ``None`` - that is not an error, just "not tracked here".
         """
         head = await asyncio.to_thread(self._read_alembic_head)
         applied = await self._read_applied_revision()

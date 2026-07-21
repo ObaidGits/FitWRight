@@ -5,10 +5,10 @@
  * bounds) lives in {@link ./local-store}; this file provides the low-level
  * key/value engines it runs on:
  *
- * - {@link MemoryEngine} — in-process map. Used by unit tests and as the
+ * - {@link MemoryEngine} - in-process map. Used by unit tests and as the
  *   graceful-degradation fallback when IndexedDB is unavailable (private mode /
  *   disabled storage, R8.4).
- * - {@link IndexedDbEngine} — the real browser store, opened lazily.
+ * - {@link IndexedDbEngine} - the real browser store, opened lazily.
  *
  * Stores are logical namespaces ("draft", "outbox", "quarantine", "keys").
  * Keys within a store are already user-namespaced by the caller (R8.3).

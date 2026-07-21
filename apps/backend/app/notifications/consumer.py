@@ -1,11 +1,11 @@
-"""Outbox → notification consumers (design §Platform + §B, R5.1).
+"""Outbox -> notification consumers (design §Platform + §B, R5.1).
 
 Registers idempotent handlers that translate domain events into notifications
 via the single-writer :class:`NotificationService`. Every handler sets a
 ``dedupe_key`` so the at-least-once outbox (retries, multi-worker) can never
 deliver a duplicate notification for the same event (R5.2 / Property 3).
 
-Bodies are content-safe — a title + a deep link only, never resume/JD content.
+Bodies are content-safe - a title + a deep link only, never resume/JD content.
 """
 
 from __future__ import annotations

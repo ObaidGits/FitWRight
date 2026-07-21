@@ -3,8 +3,8 @@
 These lock in the runtime DB-portability fix: the async/sync engine builders
 select their dialect from the *resolved database URL* (not a hardcoded SQLite
 path), SQLite keeps its PRAGMAs while Postgres does not, Postgres pooling honors
-``db_pool_size``/``db_use_pooler`` (transaction-pooler-safe), and — the crux of
-audit finding C-1 — ``Database`` actually consumes ``effective_database_url``.
+``db_pool_size``/``db_use_pooler`` (transaction-pooler-safe), and - the crux of
+audit finding C-1 - ``Database`` actually consumes ``effective_database_url``.
 """
 
 from pathlib import Path
@@ -99,7 +99,7 @@ class TestPostgresEngine:
         """Neon/PgBouncer pooling: WARM client pool + server-side prepared
         statements disabled.
 
-        The transaction-safety property (no server-side prepared statements —
+        The transaction-safety property (no server-side prepared statements -
         unsafe when pgbouncer multiplexes a connection across backends) is
         preserved via the connect_args, NOT via NullPool. We now keep a warm
         client-side pool (perf: avoids a full TCP+TLS+startup reconnect per DB
@@ -111,7 +111,7 @@ class TestPostgresEngine:
         async_engine = make_async_engine(self._URL)
         sync_engine = make_sync_engine(self._URL)
 
-        # No longer NullPool — a warm, sized pool is kept.
+        # No longer NullPool - a warm, sized pool is kept.
         assert not isinstance(async_engine.pool, NullPool)
         assert not isinstance(sync_engine.pool, NullPool)
         assert async_engine.pool.size() == 5

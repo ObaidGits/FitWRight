@@ -2,7 +2,7 @@
 
 The gate wraps render_resume_pdf with a semaphore sized by
 settings.pdf_max_concurrency; excess concurrent renders fail fast with
-PDFRenderError (→ 503) instead of piling up. These tests drive the gate with a
+PDFRenderError (-> 503) instead of piling up. These tests drive the gate with a
 fake impl (no real Chromium) so they are fast and deterministic.
 """
 
@@ -35,7 +35,7 @@ async def test_excess_concurrent_render_fails_fast(monkeypatch):
     first = asyncio.create_task(render_resume_pdf("http://x/1"))
     await asyncio.wait_for(started.wait(), timeout=2)  # first holds the only slot
 
-    # Second render can't get a slot within the 1s queue timeout → fails fast.
+    # Second render can't get a slot within the 1s queue timeout -> fails fast.
     with pytest.raises(PDFRenderError, match="busy"):
         await render_resume_pdf("http://x/2")
 

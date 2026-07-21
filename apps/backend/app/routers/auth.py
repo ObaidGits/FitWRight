@@ -2,21 +2,21 @@
 
 Endpoints (all under ``/api/v1``, ADR-7 envelope):
 
-- ``POST /auth/signup`` — create a user (+ session, or ``pending_verification``
+- ``POST /auth/signup`` - create a user (+ session, or ``pending_verification``
   when email verification is on). Enumeration-safe: uniform response + timing
   (dummy Argon2 on the existing-email branch), no account disclosure (R1.*,
   Property 4).
-- ``POST /auth/login`` — session with optional remember-me. Requires the
+- ``POST /auth/login`` - session with optional remember-me. Requires the
   pre-session CSRF token from ``GET /auth/csrf`` (login-CSRF defense), returns a
   single generic ``invalid_credentials`` for both unknown emails and wrong
   passwords (constant-time verify + dummy hash), rotates the session id
   (fixation defense), and applies rate-limit + lockout (R2.*).
-- ``POST /auth/logout`` — revoke the current session + evict its cache and clear
+- ``POST /auth/logout`` - revoke the current session + evict its cache and clear
   cookies. CSRF-protected (per-session double-submit, enforced by
   ``AuthMiddleware`` in hosted mode) (R3.1).
-- ``POST /auth/logout-all`` — revoke every session for the user; requires a
+- ``POST /auth/logout-all`` - revoke every session for the user; requires a
   recent step-up (R3.2, R9.1).
-- ``GET /auth/session`` — the caller's ``SafeUser`` (+ ``aal``) or 401.
+- ``GET /auth/session`` - the caller's ``SafeUser`` (+ ``aal``) or 401.
 
 Only :class:`~app.schemas.auth.SafeUser` is ever returned for a user (R7.5).
 """
@@ -126,7 +126,7 @@ async def _enforce_captcha(
     """Require + verify a CAPTCHA once past the soft threshold (R13.2).
 
     Below the soft failure threshold nothing is required. Past it, the pluggable
-    verifier decides — which, when no provider is configured, **fails open**
+    verifier decides - which, when no provider is configured, **fails open**
     (allows) by design. A configured verifier that rejects (missing/invalid
     token) raises ``403 captcha_required``. The decision depends only on the
     windowed failure count + the submitted token, never on whether the account
@@ -179,7 +179,7 @@ async def _dispatch_verification_email(user_id: str, email: str) -> None:
     verification link, so the two flows can never drift. Issuing invalidates any
     prior unused verification token for the user (single active link), and the
     send goes through the configured :class:`EmailSender` abstraction. Never
-    raises — a provider outage must not surface as a 500 (which, on signup, would
+    raises - a provider outage must not surface as a 500 (which, on signup, would
     leak that the address is new) and the user can always resend; the token is
     persisted regardless so a resend still works.
     """
@@ -221,7 +221,7 @@ async def signup(
     _verify_presession_csrf(request)
 
     # Past a soft threshold of signup attempts from this IP, require a CAPTCHA
-    # (when a provider is configured; fail-open otherwise) — abuse control R13.2.
+    # (when a provider is configured; fail-open otherwise) - abuse control R13.2.
     await _enforce_captcha(limiter, rl.count, payload.captcha_token, remote_ip=ip)
 
     passwords = get_password_service()
@@ -294,7 +294,7 @@ async def signup(
             email_verified_at=datetime.now(timezone.utc).isoformat(),
         )
     except IntegrityError:
-        # Lost the unique-email race with a concurrent signup — surface the same
+        # Lost the unique-email race with a concurrent signup - surface the same
         # 409 the pre-check would have (never a 500).
         raise ApiError(409, "email_unavailable", "That email is unavailable.")
     session_service = get_session_service()
@@ -361,7 +361,7 @@ async def login(request: Request, response: Response, payload: LoginRequest) -> 
 
     # Correct password but the account cannot be used. Only reachable by someone
     # who already knows the password, so surfacing the specific reason is
-    # acceptable (R2.4) — and an unverified account must be told to verify (not
+    # acceptable (R2.4) - and an unverified account must be told to verify (not
     # "disabled"), with a resend path from the login screen.
     if existing is not None and existing.status != "active":
         await audit.record(
@@ -379,7 +379,7 @@ async def login(request: Request, response: Response, payload: LoginRequest) -> 
     assert existing is not None  # verified=True implies a real account + hash
     await limiter.clear_failures(account_key)
 
-    # Session-fixation defense: never reuse an id the client already holds — mint
+    # Session-fixation defense: never reuse an id the client already holds - mint
     # a brand-new session (and revoke any pre-existing one) on every login (R2.1).
     old_token = request.cookies.get(settings.session_cookie_name)
     if old_token:
@@ -451,7 +451,7 @@ async def current_session(request: Request) -> SafeUser:
     """Return the caller's ``SafeUser`` (+ ``aal``), or 401 if unauthenticated.
 
     Loads the account record so the ``avatarUrl`` is included (the ``Principal``
-    from the session cache doesn't carry it) — this is what the top-bar avatar
+    from the session cache doesn't carry it) - this is what the top-bar avatar
     reads, so it must reflect the current profile photo (upload/replace/remove).
     """
     principal = get_optional_principal(request)
@@ -485,7 +485,7 @@ def _set_cookies(response: Response, raw_token: str, info, *, remember_me: bool)
 
 
 # ---------------------------------------------------------------------------
-# POST /auth/verify/request  (email verification — send/resend)
+# POST /auth/verify/request  (email verification - send/resend)
 # ---------------------------------------------------------------------------
 
 
@@ -493,7 +493,7 @@ def _set_cookies(response: Response, raw_token: str, info, *, remember_me: bool)
 async def verify_request(
     request: Request, payload: VerificationRequestRequest
 ) -> UniformAckResponse:
-    """(Re)send an email-verification link — uniform, enumeration-safe (R5.1/5.3/5.5).
+    """(Re)send an email-verification link - uniform, enumeration-safe (R5.1/5.3/5.5).
 
     Resolves the target account from the authenticated session (if any) or the
     submitted email. Rate-limited per IP + per account. When the account exists
@@ -532,7 +532,7 @@ async def verify_request(
 
 
 # ---------------------------------------------------------------------------
-# POST /auth/verify/confirm  (email verification — redeem token)
+# POST /auth/verify/confirm  (email verification - redeem token)
 # ---------------------------------------------------------------------------
 
 
@@ -542,7 +542,7 @@ async def verify_confirm(
 ) -> UniformAckResponse:
     """Redeem a verification token: mark verified + activate (R5.2).
 
-    Single-use — the token is consumed atomically. A missing/used/expired token
+    Single-use - the token is consumed atomically. A missing/used/expired token
     all collapse to one generic ``invalid_token`` error (uniform, R5.5). On
     success the account's ``email_verified_at`` is set and a
     ``pending_verification`` account transitions to ``active``.
@@ -573,7 +573,7 @@ async def verify_confirm(
 async def password_forgot(
     request: Request, payload: ForgotPasswordRequest
 ) -> UniformAckResponse:
-    """Request a password-reset link — uniform, enumeration-safe (R6.1/6.5).
+    """Request a password-reset link - uniform, enumeration-safe (R6.1/6.5).
 
     Always returns the same acknowledgement. Only when the email is registered is
     a hashed single-use short-TTL reset token issued (invalidating prior unused
@@ -594,7 +594,7 @@ async def password_forgot(
             raise _rate_limited(acct_rl.retry_after)
         raw_token = await get_token_service().issue_reset(record.id)
         # Fail-safe: a provider outage must not 500 (which would break the uniform
-        # response and leak that the address is registered) — design §Reliability.
+        # response and leak that the address is registered) - design §Reliability.
         await send_email_safe(
             get_email_sender(),
             build_password_reset_email(
@@ -665,7 +665,7 @@ async def password_reset(
     hashed = passwords.hash_password(payload.password)
     await set_password_hash(record.id, hashed)
 
-    # Revoke ALL of the user's sessions — a reset invalidates every device (R6.2).
+    # Revoke ALL of the user's sessions - a reset invalidates every device (R6.2).
     await session_service.revoke_all_for_user(record.id)
 
     ip_hash = session_service.hash_ip(ip)
@@ -763,13 +763,13 @@ async def password_change(
 ) -> SafeUser:
     """Change the password from within a stepped-up session (R7.3, R9.1).
 
-    Requires a recent step-up (``require_stepped_up_session`` → 401
+    Requires a recent step-up (``require_stepped_up_session`` -> 401
     ``step_up_required`` otherwise, Property 6). Re-verifies the current password
     (constant-time), enforces policy + breach check on the new one, and rehashes.
-    Then, as a **session-fixation defense (design §Session mechanics — "new
-    session id on … password change")**, it revokes *every* session for the user
+    Then, as a **session-fixation defense (design §Session mechanics - "new
+    session id on ... password change")**, it revokes *every* session for the user
     (killing any stolen session on another device, R7.3) and mints a **fresh,
-    rotated** session for the initiating device — so the user stays signed in but
+    rotated** session for the initiating device - so the user stays signed in but
     on a brand-new session id, never one an attacker could have fixed. Audited as
     ``password_changed``. Rate-limited per account.
     """
@@ -806,8 +806,8 @@ async def password_change(
     hashed = passwords.hash_password(payload.new_password)
     await set_password_hash(principal.user_id, hashed)
 
-    # Fixation defense: revoke EVERY session (incl. the current one) — logging out
-    # other devices (R7.3) — then rotate to a brand-new session for the initiating
+    # Fixation defense: revoke EVERY session (incl. the current one) - logging out
+    # other devices (R7.3) - then rotate to a brand-new session for the initiating
     # device so its id changes on this privilege event while it stays signed in.
     revoked = await session_service.revoke_all_for_user(principal.user_id)
     raw_token, info = await session_service.create_session(
@@ -827,7 +827,7 @@ async def password_change(
 
 
 # ---------------------------------------------------------------------------
-# Google OAuth (provider-abstracted) — Task 7
+# Google OAuth (provider-abstracted) - Task 7
 # ---------------------------------------------------------------------------
 
 
@@ -860,9 +860,9 @@ def _frontend_url(path: str) -> str:
 def _oauth_failure(reason: str = "unknown") -> RedirectResponse:
     """Redirect to the frontend login with ``oauth_failed`` + cleared cookies (R4.6).
 
-    Every callback failure — bad/missing state, PKCE/exchange failure, id_token
+    Every callback failure - bad/missing state, PKCE/exchange failure, id_token
     verification failure, unverified provider email, or a refused (anti-hijack)
-    link — collapses to this single generic *user-facing* outcome so nothing
+    link - collapses to this single generic *user-facing* outcome so nothing
     about *why* is disclosed. No session is created. The ``reason`` is recorded
     server-side only, for the ``oauth-failure-by-reason`` metric (R16.1).
     """
@@ -878,7 +878,7 @@ def _oauth_failure(reason: str = "unknown") -> RedirectResponse:
 async def oauth_start(provider: str, request: Request, next: str | None = None):
     """Begin OAuth: generate state/nonce/PKCE, store transient cookie, redirect (R4.1).
 
-    Only allow-listed providers are routable (unknown → 404); a known-but-
+    Only allow-listed providers are routable (unknown -> 404); a known-but-
     unconfigured provider (e.g. Google with no credentials) returns a clean
     ``oauth_not_configured`` error so local zero-config boot is unaffected. The
     ``state``/``nonce``/PKCE ``code_verifier`` (+ validated ``next``) are packed
@@ -925,10 +925,10 @@ async def oauth_callback(
     """Finish OAuth: verify state, exchange, verify id_token, link/create, session.
 
     Server-side only (tokens never reach the browser). The flow: constant-time
-    ``state`` check against the signed transient cookie → PKCE code exchange →
-    full id_token verification (JWKS w/ rotation, iss/aud/exp/iat±skew, nonce) →
-    require ``email_verified`` → apply the safe link/create rules (R4.4) → issue a
-    fresh (fixation-safe) session → clear transient cookies → redirect to the
+    ``state`` check against the signed transient cookie -> PKCE code exchange ->
+    full id_token verification (JWKS w/ rotation, iss/aud/exp/iat±skew, nonce) ->
+    require ``email_verified`` -> apply the safe link/create rules (R4.4) -> issue a
+    fresh (fixation-safe) session -> clear transient cookies -> redirect to the
     validated ``next`` or ``/home``. Any failure clears the transient cookies,
     creates no session, and redirects with ``oauth_failed`` (R4.6).
     """
@@ -984,7 +984,7 @@ async def oauth_callback(
         name=info.name,
     )
     if not result.ok or result.user_id is None:
-        # Refused link (anti-hijack) — require login-first linking (R4.4).
+        # Refused link (anti-hijack) - require login-first linking (R4.4).
         return _oauth_failure("link_refused")
 
     if result.action in (LinkAction.LINKED, LinkAction.CREATED):

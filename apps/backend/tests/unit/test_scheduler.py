@@ -113,7 +113,7 @@ async def test_stop_reaper_idempotent_on_finished_task():
 
     task = asyncio.create_task(_noop())
     await task
-    # Already finished → stop_reaper must not raise.
+    # Already finished -> stop_reaper must not raise.
     await stop_reaper(task)
 
 

@@ -10,9 +10,9 @@ Implements the design's "Metrics & rollup" section:
   than erroring the dashboard (R2.2/2.4).
 - ``GET /usage-series`` support: closed UTC days are read from ``metrics_daily``
   (falling back to a live compute before the first rollup so the chart isn't
-  gappy), and the current partial day is always computed live and appended —
+  gappy), and the current partial day is always computed live and appended -
   never double-counted, since the rollup only ever writes closed days (Property 6).
-- :meth:`run_rollup` — UPSERTs each registry metric for the just-closed day(s)
+- :meth:`run_rollup` - UPSERTs each registry metric for the just-closed day(s)
   (idempotent, safe to re-run); :meth:`backfill` populates a historical range;
   :meth:`reconcile_counters` corrects drift in the denormalized usage counters.
 
@@ -71,7 +71,7 @@ _STATS_CACHE_TTL = 60  # seconds (R2.2)
 # Reserved ``metrics_daily.day_utc`` sentinel under which the overview TOTALS
 # snapshot is stored (one row per stat key). It can never collide with a real
 # ``YYYY-MM-DD`` day, so the daily series queries are unaffected. The RollupJob
-# recomputes these (off the hot path) and ``/stats`` reads them O(1) — the
+# recomputes these (off the hot path) and ``/stats`` reads them O(1) - the
 # dashboard never runs a full-table COUNT on a request path (R2.3, R11.2).
 _TOTALS_DAY = "_totals_"
 
@@ -91,14 +91,14 @@ _TOTALS_KEYS = (
 
 
 class UnknownMetricError(ValueError):
-    """Raised for a metric outside the registry (router → 400 unknown_metric)."""
+    """Raised for a metric outside the registry (router -> 400 unknown_metric)."""
 
 
 async def live_admin_gauges(cutoff_iso: str) -> dict[str, int]:
     """Worker-independent purge/soft-delete gauges (admin-owned read use-case).
 
     Exposed so the machine ``/internal/metrics`` endpoint reads these live from
-    the admin module's own repo *through* the admin module — foreign modules
+    the admin module's own repo *through* the admin module - foreign modules
     never import ``app.admin.repo`` directly (ARCHITECTURE Amendment E).
     """
     repo = get_admin_repo()
@@ -143,11 +143,11 @@ class MetricsService:
     async def stats(self, *, active_window_days: int = 30) -> dict:
         """Return the overview stats dict (+ ``computedAt``/``stale``), O(1).
 
-        Read path (never a full-table scan — R2.3/R11.2):
-        1. KVStore cache (60s) → return.
+        Read path (never a full-table scan - R2.3/R11.2):
+        1. KVStore cache (60s) -> return.
         2. The precomputed **totals snapshot** in ``metrics_daily`` (a handful of
-           PK reads) → return, marking ``stale`` if the snapshot is older than a
-           day (missed rollup — R2.4).
+           PK reads) -> return, marking ``stale`` if the snapshot is older than a
+           day (missed rollup - R2.4).
         3. Only if the snapshot has never been written (first-ever call before
            any rollup) do we compute it live once and persist it (documented
            one-time bootstrap), so steady state is always O(1).
@@ -251,7 +251,7 @@ class MetricsService:
 
         This is the ONE place the expensive cross-table aggregates run, and it is
         only ever invoked by the background rollup (single-flighted) or the
-        one-time hot-path bootstrap — never on a steady-state request.
+        one-time hot-path bootstrap - never on a steady-state request.
         """
         base = await self._repo.overview_stats(active_window_days=active_window_days)
         now_iso = _now().isoformat()
@@ -278,11 +278,11 @@ class MetricsService:
 
         Two metric families are served (admin-panel-upgrade Req 4.9):
 
-        - **Computed** metrics (:data:`METRIC_REGISTRY`) — each day is derived
+        - **Computed** metrics (:data:`METRIC_REGISTRY`) - each day is derived
           live via ``AdminRepo.metric_for_day`` (today + any closed day missing
           from the rollup); closed days present in the rollup are read from
           ``metrics_daily``.
-        - **Durable** metrics (:data:`_DURABLE_USAGE_SERIES`, e.g. ``AI_CALLS``) —
+        - **Durable** metrics (:data:`_DURABLE_USAGE_SERIES`, e.g. ``AI_CALLS``) -
           static ``metrics_daily`` keys written by a Rollup_Step; every closed day
           is read straight from ``metrics_daily`` (never ``metric_for_day``, which
           has no branch for them), and the current partial day is served live from
@@ -324,7 +324,7 @@ class MetricsService:
             elif day in rolled:
                 value = rolled[day]
             else:
-                # Closed day missing from the rollup (pre-first-run) → live fallback.
+                # Closed day missing from the rollup (pre-first-run) -> live fallback.
                 start, end = _day_bounds(day)
                 value = await self._repo.metric_for_day(metric, start, end)
             points.append({"date": day, "value": value})
@@ -376,7 +376,7 @@ class MetricsService:
                 await self._upsert_daily(day, metric, value)
                 written += 1
         # Refresh the O(1) overview totals snapshot (the expensive cross-table
-        # aggregates run here, off the request path — H1/M1 fix).
+        # aggregates run here, off the request path - H1/M1 fix).
         await self.refresh_totals_snapshot()
         # Freshness gauge: days since the most recent rolled-up day.
         from app.admin.metrics import get_admin_metrics
@@ -487,7 +487,7 @@ def reset_metrics_service() -> None:
 
 
 # ---------------------------------------------------------------------------
-# MetricsFlushStep — durable flush of ephemeral in-process AdminMetrics (Req 2)
+# MetricsFlushStep - durable flush of ephemeral in-process AdminMetrics (Req 2)
 # ---------------------------------------------------------------------------
 #
 # The in-process ``AdminMetrics`` counters (``request_2xx`` / ``request_4xx`` /
@@ -497,7 +497,7 @@ def reset_metrics_service() -> None:
 # satisfying Requirement 2 as follows:
 #
 # - **Per-day attribution (Req 2.2).** The step always flushes to the *current*
-#   accumulating UTC day (``today``), computed inside the step — NOT the ``day``
+#   accumulating UTC day (``today``), computed inside the step - NOT the ``day``
 #   argument the pipeline passes (that is the just-closed "yesterday" the
 #   day-scoped aggregate steps roll up). The in-process counters accumulate for
 #   the running process, so their new activity belongs to today.
@@ -506,7 +506,7 @@ def reset_metrics_service() -> None:
 #   worker holds its own cumulative counters and its own per-process
 #   ``last_flushed`` baseline. On each run a worker computes
 #   ``delta = current_cumulative - last_flushed`` and calls
-#   ``MetricStore.add(today, key, delta)`` — an atomic in-UPSERT increment. Every
+#   ``MetricStore.add(today, key, delta)`` - an atomic in-UPSERT increment. Every
 #   worker adds only its *own* new delta, and the UPSERT sums them into the single
 #   ``(day, key)`` row. No per-worker or per-event row is ever written.
 #
@@ -521,7 +521,7 @@ def reset_metrics_service() -> None:
 #   :class:`StepResult` naming the failed key(s).
 #
 # - **Closed-day re-run is a no-op (Req 2.6).** Because the step only ever targets
-#   ``today``, a re-run never re-writes a closed day's row — the deltas for a day
+#   ``today``, a re-run never re-writes a closed day's row - the deltas for a day
 #   were all added while that day was current. A per-day ``flushed_at`` KV marker
 #   records finalization (observability + a guard against re-flushing a day).
 #
@@ -534,8 +534,8 @@ def reset_metrics_service() -> None:
 # documented, consistent approximation for un-partitioned cumulative counters.
 #
 # AI_CALLS ownership: AI-call counts are intentionally NOT flushed here. Per the
-# design (Req 4.2 / Task 9.2) the ``AI_*`` keys — including ``AI_CALLS`` and the
-# five per-provider keys — are owned exclusively by ``AiFlushStep``. Flushing
+# design (Req 4.2 / Task 9.2) the ``AI_*`` keys - including ``AI_CALLS`` and the
+# five per-provider keys - are owned exclusively by ``AiFlushStep``. Flushing
 # ``AI_CALLS`` from two steps would double-count it, so this step keeps single
 # ownership per key and flushes only the request status buckets. Admin-action
 # durable keys were dropped by design (they remain in-process only).
@@ -619,7 +619,7 @@ class MetricsFlushStep:
             self._last_flushed[key] = current
 
         # Per-day ``flushed_at`` marker: idempotency/finalization signal (Req 2.6)
-        # + observability. Best-effort — a marker write failure never fails the
+        # + observability. Best-effort - a marker write failure never fails the
         # step (the durable counter adds are the source of truth).
         try:
             await store.snapshot_put(

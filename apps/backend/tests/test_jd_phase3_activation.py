@@ -80,7 +80,7 @@ class TestCrawlDelayEnforcement:
 
         # Use a real local KV via get_kvstore (hermetic single-user).
         await orchestrator._enforce_crawl_delay("delaytest.com", 2.0)
-        # Immediately again → should schedule a wait close to the delay.
+        # Immediately again -> should schedule a wait close to the delay.
         await orchestrator._enforce_crawl_delay("delaytest.com", 2.0)
         assert slept["total"] > 0
 
@@ -93,7 +93,7 @@ class TestCrawlDelayEnforcement:
             slept["total"] += s
 
         monkeypatch.setattr(orchestrator.asyncio, "sleep", fake_sleep)
-        # Prime the timestamp, then request an absurd delay → capped at _CRAWL_DELAY_MAX.
+        # Prime the timestamp, then request an absurd delay -> capped at _CRAWL_DELAY_MAX.
         await orchestrator._enforce_crawl_delay("cap.com", 9999.0)
         await orchestrator._enforce_crawl_delay("cap.com", 9999.0)
         assert slept["total"] <= orchestrator._CRAWL_DELAY_MAX + 0.01
@@ -150,5 +150,5 @@ class TestUserPurge:
     async def test_purge_is_idempotent(self):
         from app.jd.monitoring.cost import purge_user_jd_data
         kv = LocalKVStore()
-        # Nothing to purge → 0 removed, no error.
+        # Nothing to purge -> 0 removed, no error.
         assert await purge_user_jd_data("ghost", kv) == 0

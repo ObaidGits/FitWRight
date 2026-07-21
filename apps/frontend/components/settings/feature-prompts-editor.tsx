@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Custom feature-prompt templates (Req 19) — lets users tailor the cover-letter
+ * Custom feature-prompt templates (Req 19) - lets users tailor the cover-letter
  * and outreach-message generation prompts. Backend validates required
  * placeholders (e.g. {job_description}); on a 422 it returns the missing tokens,
  * which we surface inline so the user knows exactly what to add. Empty save

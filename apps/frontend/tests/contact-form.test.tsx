@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
 /**
  * Contact form: inline validation, progressive disclosure, honeypot/timing
- * spam fields, successful submission → success card, and error preservation.
+ * spam fields, successful submission -> success card, and error preservation.
  */
 
 const submitContactMock = vi.fn();
@@ -55,7 +55,7 @@ describe('ContactForm', () => {
     submitContactMock.mockResolvedValue({
       message: 'ok',
       reference: 'abc123def456',
-      estimated_response: 'within 1–2 business days',
+      estimated_response: 'within 1-2 business days',
     });
     render(<ContactForm />);
     fill();
@@ -73,7 +73,7 @@ describe('ContactForm', () => {
 
   it('preserves input and shows an error banner when the API fails', async () => {
     const { ContactError } = await import('@/lib/api/contact');
-    submitContactMock.mockRejectedValue(new ContactError(500, 'Server error — please retry.'));
+    submitContactMock.mockRejectedValue(new ContactError(500, 'Server error - please retry.'));
     render(<ContactForm />);
     fill();
     fireEvent.click(screen.getByRole('button', { name: /send message/i }));

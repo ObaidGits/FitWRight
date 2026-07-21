@@ -1,4 +1,4 @@
-"""Idempotency-key dedupe for retriable mutations (autosave) — R4.2, §4.2.
+"""Idempotency-key dedupe for retriable mutations (autosave) - R4.2, §4.2.
 
 Every retriable autosave/offline-replay write carries a client-random
 ``Idempotency-Key``. A network retry (the client couldn't tell whether the first
@@ -9,7 +9,7 @@ applied once is never applied twice (Property 4).
 
 Keys are namespaced per user (a key from one account can never dedupe another's
 write), short-TTL'd (they only need to outlive a client's retry window), and only
-ever dedupe an *identical* operation — the stored fingerprint pins the request so
+ever dedupe an *identical* operation - the stored fingerprint pins the request so
 a key reused for different content is treated as a new write, not a false hit.
 """
 

@@ -84,9 +84,9 @@ def cmd_sweep(_: argparse.Namespace) -> int:
     )
 
     _say("")
-    _say("  e2e-monitor · driving the real app end to end")
-    _say(f"  provider {config.get('provider', '?')}/{config.get('model', '?')}  ·  run {bundle.run_id}")
-    _say("  Captures an evidence bundle for an AI agent to JUDGE — built to run (or via")
+    _say("  e2e-monitor - driving the real app end to end")
+    _say(f"  provider {config.get('provider', '?')}/{config.get('model', '?')}  -  run {bundle.run_id}")
+    _say("  Captures an evidence bundle for an AI agent to JUDGE - built to run (or via")
     _say("  the /monitor-e2e skill) while you work on the app as normal.")
     _say("")
 
@@ -94,7 +94,7 @@ def cmd_sweep(_: argparse.Namespace) -> int:
     # Canonicalize to the exact ResumeData round-trip the app stores, so every
     # optional field is present. Otherwise improve/preview hashes the raw
     # (field-missing) dict while improve/confirm hashes the schema-defaulted
-    # round-trip — a mismatch the app rejects with 400 (its preview/confirm
+    # round-trip - a mismatch the app rejects with 400 (its preview/confirm
     # hash gate). See _hash_improved_data in app/routers/resumes.py.
     from app.schemas import ResumeData
 
@@ -102,19 +102,19 @@ def cmd_sweep(_: argparse.Namespace) -> int:
     master = ResumeData.model_validate(raw_master).model_dump()
     resume_id = seed_master_db(bundle.data_dir, master)
     bundle.write_json(bundle.master_dir / "processed_data.json", master)
-    _say("  ✓ seed-master   canonical master → isolated DB (your real DB is untouched)")
+    _say("  OK seed-master   canonical master -> isolated DB (your real DB is untouched)")
 
     steps: list[dict[str, Any]] = []
-    # seed-master ran above (BEFORE boot) — record it first so flow-trace.json
+    # seed-master ran above (BEFORE boot) - record it first so flow-trace.json
     # ordering matches actual execution.
     steps.append({"stage": "seed-master", "ok": True, "ms": 0, "detail": {"resume_id": resume_id}})
     servers = Servers(bundle=bundle)
     variations: list[dict[str, Any]] = []
     try:
-        _say("  ▶ boot          spawning backend :8000 + frontend :3000 …")
+        _say("  > boot          spawning backend :8000 + frontend :3000 ...")
         boot = servers.boot()
         steps.append({"stage": "boot", "ok": True, "ms": 0, "detail": boot})
-        _say("  ✓ boot          backend up" + (" + frontend up" if boot.get("frontend_up") else " (frontend off — renders degrade to header+size)"))
+        _say("  OK boot          backend up" + (" + frontend up" if boot.get("frontend_up") else " (frontend off - renders degrade to header+size)"))
 
         for jd_key, jd_text in _jds():
             vdir = bundle.variation_dir(jd_key)
@@ -124,12 +124,12 @@ def cmd_sweep(_: argparse.Namespace) -> int:
                 if kw.istitle() and kw.lower() not in _STOPWORDS
             ][:8]
 
-            _say(f"  ▶ {jd_key:<16} tailor → judge → render …")
+            _say(f"  > {jd_key:<16} tailor -> judge -> render ...")
             try:
                 t = tailor(resume_id, jd_text, keywords, master)
             except Exception as exc:  # noqa: BLE001
                 steps.append({"stage": f"tailor:{jd_key}", "ok": False, "ms": 0, "error": str(exc)})
-                _say(f"  ✗ {jd_key:<16} tailor FAILED: {str(exc)[:90]}")
+                _say(f"  FAIL {jd_key:<16} tailor FAILED: {str(exc)[:90]}")
                 continue
             bundle.write_json(vdir / "tailored.json", t["tailored"])
             bundle.write_json(vdir / "scores.json", t["scores"])
@@ -156,11 +156,11 @@ def cmd_sweep(_: argparse.Namespace) -> int:
                     render_status = "FAILED"
             variations.append({"jd_key": jd_key, "scores": t["scores"], "judge": judge, "render": render})
 
-            # ✓ only when the judge produced a score AND the render didn't fail/blank;
-            # otherwise ⚠ — the marker must never claim success over a caught failure.
+            # OK only when the judge produced a score AND the render didn't fail/blank;
+            # otherwise WARN - the marker must never claim success over a caught failure.
             variation_ok = (judge or {}).get("score") is not None and render_status in ("non-blank", "skipped")
             _say(
-                f"  {'✓' if variation_ok else '⚠'} {jd_key:<16} "
+                f"  {'OK' if variation_ok else 'WARN'} {jd_key:<16} "
                 f"judge={(judge or {}).get('score')}  "
                 f"kw={t['scores']['jd_keyword_coverage']}  "
                 f"render={render_status}  "
@@ -186,22 +186,22 @@ def cmd_sweep(_: argparse.Namespace) -> int:
         diff = diff_against_baseline(current, bundle.read_json(_BASELINE))
         bundle.write_json(bundle.dir / "baseline-diff.json", diff)
         baseline_line = (
-            " · no regression vs baseline"
+            " - no regression vs baseline"
             if not diff["regressed"]
-            else f" · REGRESSED ({len(diff['regressions'])} — see baseline-diff.json)"
+            else f" - REGRESSED ({len(diff['regressions'])} - see baseline-diff.json)"
         )
 
     _say("")
-    _say("  ──────────────────────────────────────────────────────────────")
+    _say("  --------------------------------------------------------------")
     _say(
-        f"  sweep complete · {summary['variations']} variations · "
-        f"flow {'all passed' if summary['flow_all_passed'] else 'HAD FAILURES'} · "
+        f"  sweep complete - {summary['variations']} variations - "
+        f"flow {'all passed' if summary['flow_all_passed'] else 'HAD FAILURES'} - "
         f"renders {summary['renders_non_blank']}/{summary['variations']} non-blank"
         + baseline_line
     )
     _say("")
-    _say("  ↳ NEXT — this is captured EVIDENCE, not a verdict. Hand it to an AI agent:")
-    _say("      • In Claude Code, invoke the  /monitor-e2e  skill, or just say")
+    _say("  -> NEXT - this is captured EVIDENCE, not a verdict. Hand it to an AI agent:")
+    _say("      - In Claude Code, invoke the  /monitor-e2e  skill, or just say")
     _say('        "judge the latest e2e-monitor bundle".')
     _say("      The agent reads the logs + artifacts, separates real issues from noise,")
     _say("      and writes report.md. This harness is built to be DRIVEN BY an AI agent")

@@ -1,12 +1,12 @@
 'use client';
 
 /**
- * useRecovery — the coherent recovery surface (P4 R5.2, R5.3, R5.5).
+ * useRecovery - the coherent recovery surface (P4 R5.2, R5.3, R5.5).
  *
  * A read/manage view over the durable {@link ResilienceStore} for a user: lists
  * quarantined records (corrupt/undecryptable drafts, isolated so they never
  * poison the editor) and queued/failed outbox entries. Exposes non-destructive
- * actions — export (diagnostic download), discard, and retry-sync — so nothing
+ * actions - export (diagnostic download), discard, and retry-sync - so nothing
  * is ever dropped silently and the user is always in control.
  */
 import * as React from 'react';
@@ -87,7 +87,7 @@ export function useRecovery(
       const rec = quarantine.find((r) => r.id === id);
       if (!rec || typeof window === 'undefined') return;
       // Diagnostic export: the raw isolated record (its payload may be
-      // encrypted/corrupt — that's why it was quarantined). Lets the user keep a
+      // encrypted/corrupt - that's why it was quarantined). Lets the user keep a
       // copy / hand it to support before discarding, rather than losing it.
       const blob = new Blob([JSON.stringify(rec, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);

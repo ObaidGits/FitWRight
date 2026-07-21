@@ -1,4 +1,4 @@
-"""KVStore abstraction — the pluggable shared-state contract (ADR-6).
+"""KVStore abstraction - the pluggable shared-state contract (ADR-6).
 
 Phase 2 runs behind ≥2 workers, so all shared mutable auth state (session cache,
 rate-limit counters, transient OAuth state, single-flight locks) moves out of
@@ -7,9 +7,9 @@ covers everything the later auth waves need:
 
 - ``get`` / ``set`` / ``delete`` with an optional TTL (session cache, transient
   OAuth ``state``/``nonce``/``code_verifier`` blobs);
-- ``incr`` — atomic increment with a TTL applied on key creation (rate-limit
+- ``incr`` - atomic increment with a TTL applied on key creation (rate-limit
   windows, lockout counters);
-- ``lock`` — a TTL-bound single-flight primitive (session reaper, per-user
+- ``lock`` - a TTL-bound single-flight primitive (session reaper, per-user
   master-resume promotion, "run this batch once").
 
 Concrete adapters (``LocalKVStore``, ``RedisKVStore``, ``DBKVStore``) are chosen
@@ -35,7 +35,7 @@ class KVLock(abc.ABC):
     ``async with store.lock("reaper", ttl_seconds=30) as acquired:`` yields
     ``True`` when the caller holds the lock and ``False`` when it could not be
     acquired (non-blocking mode or timeout). The TTL guarantees a crashed holder
-    cannot wedge the lock forever — it auto-expires.
+    cannot wedge the lock forever - it auto-expires.
     """
 
     @abc.abstractmethod
@@ -85,7 +85,7 @@ class KVStore(abc.ABC):
 
         A missing/expired key starts at 0 before the increment. ``ttl_seconds``
         is applied **only when the key is (re)created**, so a rate-limit window
-        is set once and then counts down independently of later increments —
+        is set once and then counts down independently of later increments -
         matching Redis ``INCR``+``EXPIRE`` semantics.
         """
 

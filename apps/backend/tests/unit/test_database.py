@@ -163,7 +163,7 @@ class TestMasterResume:
         assert second["is_master"] is False
 
     async def test_atomic_recovers_when_master_stuck(self, db, uid):
-        # Master stuck in "failed" → next upload is promoted to master.
+        # Master stuck in "failed" -> next upload is promoted to master.
         first = await db.create_resume_atomic_master(uid, content="first", processing_status="failed")
         assert first["is_master"] is True
         second = await db.create_resume_atomic_master(uid, content="second", processing_status="ready")
@@ -204,7 +204,7 @@ class TestJobs:
         assert await db.update_job(uid, "missing", {"content": "x"}) is None
 
     async def test_dynamic_fields_round_trip_as_top_level(self, db, uid):
-        """Dynamic pipeline fields must survive write→read as top-level keys.
+        """Dynamic pipeline fields must survive write->read as top-level keys.
 
         This is the highest-risk migration detail: ``/improve/confirm`` rejects
         with 400 if ``preview_hash``/``preview_hashes`` don't round-trip.
@@ -266,7 +266,7 @@ class TestApplications:
         a = await db.create_application(uid, job_id="j1", resume_id="r1")
         assert a["status"] == "applied"
         assert a["position"] == 0
-        assert a["applied_at"] is not None  # applied → stamped
+        assert a["applied_at"] is not None  # applied -> stamped
         b = await db.create_application(uid, job_id="j2", resume_id="r2")
         assert b["position"] == 1  # appended to the column
 
@@ -328,7 +328,7 @@ class TestStatsAndReset:
         assert stats["has_master_resume"] is True
 
     async def test_reset_database_truncates(self, db, uid, tmp_path, monkeypatch):
-        # reset_database also clears settings.data_dir/uploads — isolate it to tmp.
+        # reset_database also clears settings.data_dir/uploads - isolate it to tmp.
         monkeypatch.setattr("app.database.settings.data_dir", tmp_path)
         await db.create_resume(uid, content="a")
         await db.create_job(uid, content="jd")
@@ -345,7 +345,7 @@ class TestStatsAndReset:
 class TestCrossUserIsolation:
     """User A can never read or mutate user B's owned rows (Property 1, R10.2/10.3).
 
-    A foreign id resolves to ``None`` (the router turns that into a 404 — no
+    A foreign id resolves to ``None`` (the router turns that into a 404 - no
     existence disclosure), never another user's row.
     """
 

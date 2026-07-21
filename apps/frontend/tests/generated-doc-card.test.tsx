@@ -59,7 +59,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe('GeneratedDocCard — cover letter', () => {
+describe('GeneratedDocCard - cover letter', () => {
   it('shows an explainer and no generate control for a non-tailored resume', () => {
     freshStream();
     render(
@@ -75,7 +75,7 @@ describe('GeneratedDocCard — cover letter', () => {
   });
 
   it('generates a draft, marks it unsaved, and saves via updateCoverLetter', async () => {
-    freshStream({ start: vi.fn().mockResolvedValue('Dear Hiring Manager, I am thrilled…') });
+    freshStream({ start: vi.fn().mockResolvedValue('Dear Hiring Manager, I am thrilled...') });
     updateCoverLetterMock.mockResolvedValue(undefined);
     const onSaved = vi.fn();
     render(
@@ -91,7 +91,7 @@ describe('GeneratedDocCard — cover letter', () => {
     fireEvent.click(screen.getByRole('button', { name: /generate/i }));
     await waitFor(() =>
       expect(screen.getByLabelText('Cover letter content')).toHaveValue(
-        'Dear Hiring Manager, I am thrilled…'
+        'Dear Hiring Manager, I am thrilled...'
       )
     );
     expect(streamState.start).toHaveBeenCalledWith('cover-letter');
@@ -101,7 +101,7 @@ describe('GeneratedDocCard — cover letter', () => {
     await waitFor(() =>
       expect(updateCoverLetterMock).toHaveBeenCalledWith(
         'r1',
-        'Dear Hiring Manager, I am thrilled…'
+        'Dear Hiring Manager, I am thrilled...'
       )
     );
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
@@ -137,7 +137,7 @@ describe('GeneratedDocCard — cover letter', () => {
   });
 });
 
-describe('GeneratedDocCard — outreach', () => {
+describe('GeneratedDocCard - outreach', () => {
   it('saves via updateOutreachMessage and offers copy instead of export', async () => {
     freshStream();
     updateOutreachMessageMock.mockResolvedValue(undefined);
@@ -145,7 +145,7 @@ describe('GeneratedDocCard — outreach', () => {
       <GeneratedDocCard
         kind="outreach"
         resumeId="r1"
-        initialContent={'Hi, I noticed…'}
+        initialContent={'Hi, I noticed...'}
         isTailored
       />
     );
@@ -156,11 +156,11 @@ describe('GeneratedDocCard — outreach', () => {
 
     // Edit then save routes to the outreach update API.
     fireEvent.change(screen.getByLabelText('Outreach message content'), {
-      target: { value: 'Hi, I noticed your opening…' },
+      target: { value: 'Hi, I noticed your opening...' },
     });
     fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
     await waitFor(() =>
-      expect(updateOutreachMessageMock).toHaveBeenCalledWith('r1', 'Hi, I noticed your opening…')
+      expect(updateOutreachMessageMock).toHaveBeenCalledWith('r1', 'Hi, I noticed your opening...')
     );
   });
 });

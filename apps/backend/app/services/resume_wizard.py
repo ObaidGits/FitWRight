@@ -47,7 +47,7 @@ _VALID_SECTIONS = {
 }
 
 _INTRO_QUESTION = (
-    "Hi — I'll help you build your master resume. "
+    "Hi - I'll help you build your master resume. "
     "What's your name, and what kind of role are you going for?"
 )
 
@@ -73,7 +73,7 @@ _SECTION_PROMPTS = {
 }
 
 # The keyword ("my name", "name") may be lower- or upper-cased, but the captured
-# name must start uppercase — so we case the keyword explicitly with [Mm]/[Nn]
+# name must start uppercase - so we case the keyword explicitly with [Mm]/[Nn]
 # instead of re.IGNORECASE (which would let the [A-Z] capture match lowercase
 # words and produce false positives like "domain name facebook is" -> "facebook is").
 _INTRO_NAME_PATTERNS = (
@@ -157,7 +157,7 @@ def build_review_warnings(data: ResumeData) -> list[str]:
     # Name is the one HARD requirement for finalize (the request 422s without it),
     # so surface it at review rather than letting the user hit a generic failure.
     if not info.name.strip():
-        warnings.append("Add your name — it's required to create your resume.")
+        warnings.append("Add your name - it's required to create your resume.")
     contact = [
         info.email,
         info.phone,
@@ -170,9 +170,9 @@ def build_review_warnings(data: ResumeData) -> list[str]:
     if not data.workExperience and not data.personalProjects:
         warnings.append("Add at least one experience, internship, or project.")
     if not data.education:
-        warnings.append("Education is empty — skip only if that's intentional.")
+        warnings.append("Education is empty - skip only if that's intentional.")
     if not data.additional.technicalSkills:
-        warnings.append("Skills are empty — add tools or technologies you've used.")
+        warnings.append("Skills are empty - add tools or technologies you've used.")
     return warnings
 
 
@@ -422,8 +422,8 @@ def _assign_entry_ids(data: ResumeData) -> None:
     """Give every list entry a unique 1-based id (in place).
 
     The LLM omits ``id`` (the wizard prompt's schema doesn't request it), so
-    entries default to ``id=0``. Downstream consumers — the live preview's React
-    keys and the builder's ``Math.max(...ids)+1`` add logic — assume unique ids,
+    entries default to ``id=0``. Downstream consumers - the live preview's React
+    keys and the builder's ``Math.max(...ids)+1`` add logic - assume unique ids,
     so renumber them deterministically by position (order is append-stable).
     """
     for index, item in enumerate(data.workExperience, start=1):
@@ -496,7 +496,7 @@ def _build_turn_state(
     ``_next_gap_section`` (and the model) can resolve the next section to
     ``"review"`` once every content section is filled. Emitting that as a
     ``step="question"`` with ``section="review"`` renders a degenerate question
-    card ("Let's review…") with a free-text box. Instead, transition to the
+    card ("Let's review...") with a free-text box. Instead, transition to the
     review step so the client shows the review/save surface. History is preserved
     so Back from review restores the last real question with data intact.
     """
@@ -554,7 +554,7 @@ async def run_ai_turn(
         "Ask the next most useful question for a different section.)"
         if skip
         # Strip prompt-injection patterns AND redact credential-like tokens
-        # (sk-…/AIza…/Bearer …) before the answer reaches the LLM.
+        # (sk-.../AIza.../Bearer ...) before the answer reaches the LLM.
         else _scrub_secrets(_sanitize_user_input(answer_text))
     )
     prompt = RESUME_WIZARD_TURN_PROMPT.format(
@@ -603,17 +603,17 @@ async def run_ai_turn(
     if missing_name_at_intro:
         next_question = ResumeWizardQuestion(
             text=(
-                "Thanks! One thing first — what's your name? "
+                "Thanks! One thing first - what's your name? "
                 "It goes at the top of your resume."
             ),
             section="intro",
         )
-        warnings = ["Add your name — it's required to create your resume."]
+        warnings = ["Add your name - it's required to create your resume."]
     else:
         next_question = _next_question(result, data)
         warnings = []
 
-    # `is_complete` is a SUGGESTION to surface "Review & finish" — the step stays
+    # `is_complete` is a SUGGESTION to surface "Review & finish" - the step stays
     # "question" and never auto-finalizes. The client decides when to call /review.
     is_complete = (
         not missing_name_at_intro
@@ -723,7 +723,7 @@ def apply_back(state: ResumeWizardState) -> ResumeWizardState:
     last = history.pop()
     asked_count = max(0, state.asked_count - 1)
     # Keep the current merged draft rather than rewinding to the pre-answer
-    # snapshot — this is the core of the non-destructive fix.
+    # snapshot - this is the core of the non-destructive fix.
     kept_data = state.resume_data.model_copy(deep=True)
     # Derive step from the restored question itself, not just the count, so a
     # restored non-intro question never renders under the intro step (which hides
@@ -746,7 +746,7 @@ def apply_skip(state: ResumeWizardState) -> ResumeWizardState:
     """Advance to the next gap section deterministically, with NO LLM call (W-P0.4).
 
     Skipping never modifies ``resume_data`` and never needs the model to choose
-    the next question — ``_next_gap_section`` already does that on the server. The
+    the next question - ``_next_gap_section`` already does that on the server. The
     turn is recorded in history (so Back still works after a skip) but costs zero
     tokens and no latency.
     """
@@ -774,7 +774,7 @@ def apply_skip(state: ResumeWizardState) -> ResumeWizardState:
 
 
 _INTRO_NAME_REASK = (
-    "Thanks! One thing first — what's your name? It goes at the top of your resume."
+    "Thanks! One thing first - what's your name? It goes at the top of your resume."
 )
 
 
@@ -799,7 +799,7 @@ def apply_structured(
         data.additional.technicalSkills = merge_unique_skills([], update.technical_skills)
 
     # A structured Education entry is appended/replaced by signature (W-P2.1),
-    # never clobbering earlier entries — same rule as the AI merge path.
+    # never clobbering earlier entries - same rule as the AI merge path.
     if update.education is not None and (
         update.education.institution.strip() or update.education.degree.strip()
     ):
@@ -841,7 +841,7 @@ def apply_structured(
     # Identity must yield a name; if it didn't, re-ask intro (mirrors W-P0.5).
     if section == "intro" and not data.personalInfo.name.strip():
         next_question = ResumeWizardQuestion(text=_INTRO_NAME_REASK, section="intro")
-        warnings = ["Add your name — it's required to create your resume."]
+        warnings = ["Add your name - it's required to create your resume."]
     elif update.next_section:
         next_question = ResumeWizardQuestion(
             text=section_prompt(update.next_section), section=update.next_section

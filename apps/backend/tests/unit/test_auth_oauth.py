@@ -193,7 +193,7 @@ class TestRegistry:
 
 
 # ---------------------------------------------------------------------------
-# Google id_token verification (mock JWKS + fixed clock — no live calls)
+# Google id_token verification (mock JWKS + fixed clock - no live calls)
 # ---------------------------------------------------------------------------
 
 _CLIENT_ID = "test-client-id.apps.googleusercontent.com"

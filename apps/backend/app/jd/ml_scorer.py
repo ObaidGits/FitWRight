@@ -3,13 +3,13 @@
 A lightweight, dependency-free logistic-regression classifier that estimates the
 probability a block of text is a genuine job description (vs navigation, cookie
 banners, marketing boilerplate, or an error page). It is used as an ADDITIONAL
-confidence signal for the ambiguous DOM/headless extraction paths — never for
+confidence signal for the ambiguous DOM/headless extraction paths - never for
 the authoritative API/JSON-LD paths, and never to fabricate content.
 
 Design choices (honesty + latency):
-- Pure Python, no numpy/sklearn — keeps the dependency graph and cold-start light.
+- Pure Python, no numpy/sklearn - keeps the dependency graph and cold-start light.
 - Trained lazily on a small COMMITTED labeled corpus (``_TRAINING_DATA``) with
-  deterministic gradient descent (fixed init, fixed data → reproducible weights).
+  deterministic gradient descent (fixed init, fixed data -> reproducible weights).
 - Feature extraction is O(n) over the text and runs in well under 1ms for typical
   JD lengths.
 
@@ -155,7 +155,7 @@ def train(dataset: list[tuple[str, int]] | None = None, *, iterations: int = 400
     """Fit logistic-regression weights on ``dataset`` (deterministic).
 
     Defaults to the committed corpus. Returns a LogisticModel. Pure batch
-    gradient descent with zero-init weights — reproducible across runs.
+    gradient descent with zero-init weights - reproducible across runs.
     """
     if dataset is None:
         dataset = [(t, 1) for t in _POSITIVE] + [(t, 0) for t in _NEGATIVE]

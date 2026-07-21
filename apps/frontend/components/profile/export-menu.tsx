@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Export menu (P6) — download the profile in portable formats.
+ * Export menu (P6) - download the profile in portable formats.
  *
  * Each format is a pure server-side projection of the single profile document
  * (JSON Resume export round-trips with import; public/portfolio are safe,

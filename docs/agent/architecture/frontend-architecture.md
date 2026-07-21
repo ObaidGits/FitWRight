@@ -6,25 +6,25 @@
 
 ```
 apps/frontend/
-├── app/
-│   ├── (default)/           # Main app routes
-│   │   ├── page.tsx         # Landing (/)
-│   │   ├── dashboard/       # /dashboard
-│   │   ├── builder/         # /builder
-│   │   ├── tailor/          # /tailor
-│   │   ├── settings/        # /settings
-│   │   └── resumes/[id]/    # /resumes/[id]
-│   └── print/               # Print routes for PDF
-├── components/
-│   ├── ui/                  # Button, Input, Dialog, etc.
-│   ├── builder/             # ResumeBuilder, forms/
-│   ├── preview/             # PaginatedPreview, usePagination
-│   └── resume/              # Templates (single, two-column)
-├── lib/
-│   ├── api/                 # client.ts, resume.ts, config.ts
-│   ├── context/             # status-cache.tsx, language-context.tsx
-│   └── constants/           # page-dimensions.ts
-└── messages/                # i18n translations
++-- app/
+|   +-- (default)/           # Main app routes
+|   |   +-- page.tsx         # Landing (/)
+|   |   +-- dashboard/       # /dashboard
+|   |   +-- builder/         # /builder
+|   |   +-- tailor/          # /tailor
+|   |   +-- settings/        # /settings
+|   |   +-- resumes/[id]/    # /resumes/[id]
+|   +-- print/               # Print routes for PDF
++-- components/
+|   +-- ui/                  # Button, Input, Dialog, etc.
+|   +-- builder/             # ResumeBuilder, forms/
+|   +-- preview/             # PaginatedPreview, usePagination
+|   +-- resume/              # Templates (single, two-column)
++-- lib/
+|   +-- api/                 # client.ts, resume.ts, config.ts
+|   +-- context/             # status-cache.tsx, language-context.tsx
+|   +-- constants/           # page-dimensions.ts
++-- messages/                # i18n translations
 ```
 
 ## Pages
@@ -43,7 +43,7 @@ apps/frontend/
 
 ### Tailor (`/tailor`)
 - Job description textarea
-- Calls: `POST /jobs/upload` → `POST /resumes/improve`
+- Calls: `POST /jobs/upload` -> `POST /resumes/improve`
 - Redirects to `/resumes/[new_id]`
 
 ### Settings (`/settings`)

@@ -15,8 +15,8 @@ describe('ContactCta', () => {
 
   it('has an accessible heading and section label', () => {
     render(<ContactCta />);
-    expect(screen.getByRole('heading', { name: /i’d love to hear it/i })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: /i’d love to hear it/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /i'd love to hear it/i })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: /i'd love to hear it/i })).toBeInTheDocument();
   });
 
   it('surfaces trust signals and secondary channels', () => {

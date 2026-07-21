@@ -52,7 +52,7 @@ function renderExperience() {
   };
 }
 
-describe('ExperienceCard — manual structured entry', () => {
+describe('ExperienceCard - manual structured entry', () => {
   it('submits discrete company/title/dates as one structured experience', async () => {
     const ctx = renderExperience();
     fireEvent.change(screen.getByLabelText(/^title$/i), {
@@ -68,7 +68,7 @@ describe('ExperienceCard — manual structured entry', () => {
       expect(exp?.company).toBe('TechStax');
       expect(exp?.title).toBe('Full Stack Engineer Intern');
       expect(exp?.location).toBe('Remote');
-      expect(exp?.years).toBe('Jul 2025 – Jan 2026');
+      expect(exp?.years).toBe('Jul 2025 - Jan 2026');
     });
   });
 
@@ -99,16 +99,16 @@ describe('ExperienceCard — manual structured entry', () => {
         {
           title: 'FS Eng Intern',
           company: 'TechStax',
-          years: 'Jul 2025 – Jan 2026',
+          years: 'Jul 2025 - Jan 2026',
           description: ['A'],
         },
-        { title: 'FS Dev', company: 'Outbro', years: 'Nov 2023 – Jun 2025', description: ['B'] },
+        { title: 'FS Dev', company: 'Outbro', years: 'Nov 2023 - Jun 2025', description: ['B'] },
       ],
     });
     const ctx = renderExperience();
     fireEvent.click(screen.getByRole('button', { name: /paste & auto-fill/i }));
     fireEvent.change(screen.getByLabelText(/paste your experience/i), {
-      target: { value: 'TechStax\nRemote\nFS Eng Intern\nJul 2025 – Jan 2026' },
+      target: { value: 'TechStax\nRemote\nFS Eng Intern\nJul 2025 - Jan 2026' },
     });
     fireEvent.click(screen.getByRole('button', { name: /extract fields/i }));
 
@@ -136,8 +136,8 @@ describe('ProjectCard', () => {
 
 describe('experience helpers', () => {
   it('composeYears handles ranges and current', () => {
-    expect(composeYears('Jul 2025', 'Jan 2026')).toBe('Jul 2025 – Jan 2026');
-    expect(composeYears('Jul 2025', '', true)).toBe('Jul 2025 – Present');
+    expect(composeYears('Jul 2025', 'Jan 2026')).toBe('Jul 2025 - Jan 2026');
+    expect(composeYears('Jul 2025', '', true)).toBe('Jul 2025 - Present');
     expect(composeYears('2020')).toBe('2020');
   });
 

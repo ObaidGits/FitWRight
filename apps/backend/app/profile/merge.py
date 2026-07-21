@@ -1,13 +1,13 @@
-"""Merge Engine — the production subsystem behind resume import (P3).
+"""Merge Engine - the production subsystem behind resume import (P3).
 
 Given the **existing** profile and an **incoming** candidate (derived from an
 imported resume by ``app/profile/backfill.py``), the engine produces a reviewable
-:class:`MergePlan` — a list of typed operations (add / update / duplicate /
-conflict) — and, on apply, folds the user-resolved plan back into a new
+:class:`MergePlan` - a list of typed operations (add / update / duplicate /
+conflict) - and, on apply, folds the user-resolved plan back into a new
 ``ProfileData``. It is **pure and deterministic** (no I/O), so:
 
 - the *same* (existing, incoming) always yields the *same* plan with the *same*
-  operation ids, which is what makes apply **stateless** — the client echoes
+  operation ids, which is what makes apply **stateless** - the client echoes
   ``incoming`` + per-operation resolutions and the server re-derives the plan;
 - it is trivially unit-testable and safe to run on the write path.
 
@@ -16,7 +16,7 @@ Guarantees (design §P3):
   to existing data (``keep_existing`` for conflicts/duplicates; ``merge`` only
   fills empty fields and unions lists). The user can escalate to ``replace``.
 - **Stable ids preserved.** An update/replace keeps the existing item's ``uid``
-  so provenance and cross-references (skill evidence, project→experience) survive.
+  so provenance and cross-references (skill evidence, project->experience) survive.
 - **Provenance stamped.** Added/replaced items and filled fields record
   ``{source, confidence, at}`` in ``meta.provenance`` (ADR-9).
 """
@@ -77,9 +77,9 @@ _IDENTITY_FIELDS = ("name", "headline", "email", "phone", "location", "linkedin"
 
 def _label_for(section: str, item: dict[str, Any]) -> str:
     if section == "workExperience":
-        return " · ".join(x for x in [item.get("title"), item.get("company")] if x) or "Experience"
+        return " - ".join(x for x in [item.get("title"), item.get("company")] if x) or "Experience"
     if section == "education":
-        return " · ".join(x for x in [item.get("degree"), item.get("institution")] if x) or "Education"
+        return " - ".join(x for x in [item.get("degree"), item.get("institution")] if x) or "Education"
     if section == "personalProjects":
         return item.get("name") or "Project"
     if section == "certifications":
@@ -126,10 +126,10 @@ def _list_operations(
     text_fields: list[str],
     list_fields: list[str],
 ) -> list[MergeOperation]:
-    """Plan operations for one list section (experience/education/…).
+    """Plan operations for one list section (experience/education/...).
 
     Scoring is delegated to the configured :class:`SimilarityProvider` (default
-    deterministic — identical to the raw scorer), so a semantic/hybrid backend
+    deterministic - identical to the raw scorer), so a semantic/hybrid backend
     can be swapped in without touching this planner (dependency inversion).
     """
     from app.profile.similarity_provider import get_similarity_provider
@@ -176,7 +176,7 @@ def _list_operations(
             else:
                 op, default, allowed = "duplicate", "keep_existing", ["keep_existing", "replace", "accept"]
         else:
-            # Uncertain match band: never touch existing by default — add as new.
+            # Uncertain match band: never touch existing by default - add as new.
             op, default, allowed = "conflict", "accept", ["accept", "merge", "replace", "keep_existing"]
 
         ops.append(
@@ -283,7 +283,7 @@ def _scalar_operations(existing: dict, incoming: dict) -> list[MergeOperation]:
                     id=f"{section}:$",
                     section=section,
                     op="conflict",
-                    label=f"Contact · {f}",
+                    label=f"Contact - {f}",
                     existing=ev,
                     incoming=iv,
                     default_resolution="keep_existing",
@@ -296,7 +296,7 @@ def _scalar_operations(existing: dict, incoming: dict) -> list[MergeOperation]:
                     id=f"{section}:$",
                     section=section,
                     op="add",
-                    label=f"Contact · {f}",
+                    label=f"Contact - {f}",
                     incoming=iv,
                     default_resolution="accept",
                     allowed_resolutions=["accept", "reject"],
@@ -413,7 +413,7 @@ def apply_merge_plan(
         # update/duplicate/conflict against a matched existing item.
         idx = next((i for i, it in enumerate(target_list) if it.get("uid") == op.existing_uid), None)
         if idx is None:
-            # Existing item vanished (shouldn't happen with a fresh plan) → add.
+            # Existing item vanished (shouldn't happen with a fresh plan) -> add.
             item = dict(inc)
             item["uid"] = item.get("uid") or new_uid()
             target_list.append(item)

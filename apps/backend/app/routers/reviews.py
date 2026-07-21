@@ -3,7 +3,7 @@
 Unauthenticated, sharing the same production defenses as the contact endpoint
 via :mod:`app.services.intake` (per-IP rate limiting, honeypot + submit-timing,
 de-duplication, durable persistence). Reviews are stored with a ``pending``
-status — they are moderated before ever appearing publicly, so nothing
+status - they are moderated before ever appearing publicly, so nothing
 user-submitted is rendered without review (XSS / abuse safe by construction).
 """
 
@@ -52,7 +52,7 @@ async def submit_review(request: Request, payload: ReviewRequest) -> ReviewRespo
 
     existing = await check_and_reserve_dedup("reviews", _fingerprint(payload), reference)
     if existing:
-        return ReviewResponse(message="Thanks — we already have this review.", reference=existing)
+        return ReviewResponse(message="Thanks - we already have this review.", reference=existing)
 
     await persist_record(
         "reviews",
@@ -88,6 +88,6 @@ async def submit_review(request: Request, payload: ReviewRequest) -> ReviewRespo
         logger.warning("No review recipient configured; review ref=%s persisted + logged only.", reference)
 
     return ReviewResponse(
-        message="Thank you for the review — it means a lot and helps shape what comes next.",
+        message="Thank you for the review - it means a lot and helps shape what comes next.",
         reference=reference,
     )

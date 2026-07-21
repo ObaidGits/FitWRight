@@ -1,10 +1,10 @@
-"""Similarity Engine — pure, deterministic entity matching for the Merge Engine.
+"""Similarity Engine - pure, deterministic entity matching for the Merge Engine.
 
 Given an incoming entity (from an imported resume) and the existing profile
 entities of the same kind, the engine scores how likely they refer to the *same*
-real-world thing (the same job, degree, project, skill…). The Merge Engine
+real-world thing (the same job, degree, project, skill...). The Merge Engine
 (``app/profile/merge.py``) uses these scores to decide add vs. update vs.
-duplicate — it never guesses on its own.
+duplicate - it never guesses on its own.
 
 Design choices:
 - **Pure + deterministic** (stdlib ``difflib`` only): no I/O, trivially testable,
@@ -37,9 +37,9 @@ __all__ = [
     "MATCH_THRESHOLD",
 ]
 
-# Score >= this ⇒ the incoming item is (almost) certainly the same entity → a
-# duplicate/update candidate. Between MATCH and DUPLICATE ⇒ a likely match the
-# user should confirm. Below MATCH ⇒ treated as a new item.
+# Score >= this => the incoming item is (almost) certainly the same entity -> a
+# duplicate/update candidate. Between MATCH and DUPLICATE => a likely match the
+# user should confirm. Below MATCH => treated as a new item.
 DUPLICATE_THRESHOLD = 0.82
 MATCH_THRESHOLD = 0.55
 
@@ -180,7 +180,7 @@ def best_match(
     """Return ``(index, score)`` of the best candidate above ``threshold``.
 
     Ties resolve to the earliest candidate (stable). ``None`` when nothing clears
-    the threshold (⇒ the incoming item is new).
+    the threshold (=> the incoming item is new).
     """
     best_idx = -1
     best_score = 0.0

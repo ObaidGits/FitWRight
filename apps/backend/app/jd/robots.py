@@ -1,10 +1,10 @@
 """robots.txt policy checker for JD extraction (§26 of enhancement plan).
 
-This service is NOT a crawler — it performs user-initiated single-page fetches —
+This service is NOT a crawler - it performs user-initiated single-page fetches -
 but we still respect robots.txt as a good citizen.
 
 Policy (ADR-13, specificity rule):
-- If robots.txt has a group for our named UA (``FitWrightBot``) → apply it
+- If robots.txt has a group for our named UA (``FitWrightBot``) -> apply it
   (longest-match Allow/Disallow wins).
 - If there is NO group for our named UA, we PROCEED even if ``*`` is Disallow'd.
   Rationale: a blanket ``*`` block targets anonymous crawlers, not a named bot
@@ -12,7 +12,7 @@ Policy (ADR-13, specificity rule):
   a ``FitWrightBot`` group.
 
 robots.txt is fetched through the SSRF-safe fetcher and cached per-domain for
-24h. Failures to fetch robots.txt are fail-OPEN (allow) — robots.txt is
+24h. Failures to fetch robots.txt are fail-OPEN (allow) - robots.txt is
 advisory, and a fetch error must never block a legitimate user request.
 """
 
@@ -108,7 +108,7 @@ def _decide(groups: dict, path: str) -> RobotsDecision:
     """Apply ADR-13 specificity rule to reach a decision for our UA."""
     group = groups.get(OUR_UA_TOKEN)
     if group is None:
-        # No named group for us → proceed (ADR-13), inherit crawl-delay from * if any.
+        # No named group for us -> proceed (ADR-13), inherit crawl-delay from * if any.
         star = groups.get("*", {})
         return RobotsDecision(allowed=True, crawl_delay=star.get("delay", 0.0), reason="no_named_rule")
 
@@ -179,7 +179,7 @@ class RobotsChecker:
 
         groups = await self._load_groups(scheme, host)
         if groups is None:
-            # Fetch error → advisory file unavailable → allow.
+            # Fetch error -> advisory file unavailable -> allow.
             return RobotsDecision(allowed=True, reason="robots_unavailable")
         if not groups:
             return RobotsDecision(allowed=True, reason="empty_robots")

@@ -2,7 +2,7 @@
  * Integration tests for the useAutosave linchpin (P4 R2/R3/R4/R5/R7/R8),
  * driving the real controllers + ResilienceStore (MemoryEngine) with a mocked
  * network. Verifies online autosave, conflict surfacing with the correct base
- * (disjoint-merge safety), and offline → outbox → reconnect replay.
+ * (disjoint-merge safety), and offline -> outbox -> reconnect replay.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
@@ -28,7 +28,7 @@ let reachable = true;
 beforeEach(() => {
   reachable = true;
   updateResumeMock.mockReset();
-  // Reachability probe → controllable ok/fail.
+  // Reachability probe -> controllable ok/fail.
   vi.stubGlobal(
     'fetch',
     vi.fn(async () => ({ ok: reachable, headers: { get: () => null } }) as unknown as Response)
@@ -52,11 +52,11 @@ function setup(overrides: Partial<Parameters<typeof useAutosave>[0]> = {}) {
   );
 }
 
-describe('useAutosave — online autosave', () => {
+describe('useAutosave - online autosave', () => {
   it('saves a debounced edit via version CAS and reports saved', async () => {
     updateResumeMock.mockResolvedValue({ version: 2, processed_resume: { summary: 'x' } });
     const { result } = setup();
-    await waitFor(() => expect(result.current.isLeader).toBe(true)); // no Web Locks → leader
+    await waitFor(() => expect(result.current.isLeader).toBe(true)); // no Web Locks -> leader
 
     act(() => result.current.setBaseVersion(1, { summary: 'base' }));
     act(() => result.current.update({ summary: 'x' }));
@@ -69,7 +69,7 @@ describe('useAutosave — online autosave', () => {
   });
 });
 
-describe('useAutosave — conflict with correct base', () => {
+describe('useAutosave - conflict with correct base', () => {
   it('surfaces a 409 with conflictBase = last synced content (enables safe disjoint merge)', async () => {
     updateResumeMock.mockRejectedValue(new ResumeConflictError(1, 5, { summary: 'server' }));
     const { result } = setup();
@@ -87,7 +87,7 @@ describe('useAutosave — conflict with correct base', () => {
   });
 });
 
-describe('useAutosave — offline outbox → reconnect replay', () => {
+describe('useAutosave - offline outbox -> reconnect replay', () => {
   it('queues an edit offline and replays it on reconnect (ordered, CAS)', async () => {
     // Start offline: reachability probe fails.
     reachable = false;
@@ -105,7 +105,7 @@ describe('useAutosave — offline outbox → reconnect replay', () => {
     await waitFor(() => expect(result.current.pendingOutbox).toBeGreaterThan(0));
     expect(updateResumeMock).not.toHaveBeenCalled();
 
-    // Reconnect: probe succeeds → drain the outbox via CAS replay.
+    // Reconnect: probe succeeds -> drain the outbox via CAS replay.
     updateResumeMock.mockResolvedValue({
       version: 2,
       processed_resume: { summary: 'offline edit' },

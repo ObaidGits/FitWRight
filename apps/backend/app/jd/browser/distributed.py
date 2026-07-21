@@ -2,15 +2,15 @@
 
 Two capabilities that let browser rendering scale beyond a single worker:
 
-1. **DistributedRenderGate** — a KV-backed global concurrency limiter. The
+1. **DistributedRenderGate** - a KV-backed global concurrency limiter. The
    per-process ``asyncio.Semaphore`` in ``pool.py`` bounds renders *within* one
    worker; this bounds the TOTAL concurrent renders across ALL workers/instances
    sharing the KV store (Redis in production). Prevents N workers × 3 contexts
    from overwhelming memory/CPU or a shared render budget. Degrades to a no-op
    when ``max_concurrent <= 0`` (per-process limiting only) or when the KV op
-   fails (fail-open — never block a render on a bookkeeping error).
+   fails (fail-open - never block a render on a bookkeeping error).
 
-2. **render_via_edge** — delegate rendering to an external/edge renderer
+2. **render_via_edge** - delegate rendering to an external/edge renderer
    (e.g. a browserless.io / self-hosted Chromium farm) via ``jd_edge_render_url``.
    Returns the rendered HTML so the normal extractors run on it. This offloads
    the heavy browser process off the API workers entirely (edge rendering).
@@ -55,7 +55,7 @@ class DistributedRenderGate:
             logger.debug("JD render gate: KV incr failed, allowing render", exc_info=True)
             return True
         if n > self._max:
-            # Over capacity — give the slot back and refuse.
+            # Over capacity - give the slot back and refuse.
             try:
                 await self._kv.incr(self._key, amount=-1, ttl_seconds=_SLOT_TTL)
             except Exception:
@@ -71,7 +71,7 @@ class DistributedRenderGate:
         try:
             n = await self._kv.incr(self._key, amount=-1, ttl_seconds=_SLOT_TTL)
             if n < 0:
-                # Counter underflow (e.g. after a TTL reset) — clamp to 0.
+                # Counter underflow (e.g. after a TTL reset) - clamp to 0.
                 await self._kv.set(self._key, "0", ttl_seconds=_SLOT_TTL)
         except Exception:
             logger.debug("JD render gate: KV release failed", exc_info=True)

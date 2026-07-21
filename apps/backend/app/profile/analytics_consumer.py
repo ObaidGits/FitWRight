@@ -1,7 +1,7 @@
-"""Outbox → profile-analytics consumers (event-driven, decoupled).
+"""Outbox -> profile-analytics consumers (event-driven, decoupled).
 
 Maps profile domain events to per-user analytics counters via
-:class:`AnalyticsService`. This is the *only* place event→metric logic lives, so
+:class:`AnalyticsService`. This is the *only* place event->metric logic lives, so
 business services stay free of analytics concerns (they just emit events). Idempotency
 is not required for counters (at-least-once slightly over-counts at most, which
 is acceptable for usage analytics and never corrupts state).

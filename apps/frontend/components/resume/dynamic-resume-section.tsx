@@ -113,7 +113,7 @@ const ItemListSectionContent: React.FC<{ items: CustomSectionItem[] }> = ({ item
             <ul className={`ml-4 ${baseStyles['resume-list']} ${baseStyles['resume-text-sm']}`}>
               {item.description.map((desc, index) => (
                 <li key={index} className="flex">
-                  <span className="mr-1.5 flex-shrink-0">•&nbsp;</span>
+                  <span className="mr-1.5 flex-shrink-0">-&nbsp;</span>
                   <span>
                     <SafeHtml html={desc} />
                   </span>

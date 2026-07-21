@@ -102,8 +102,8 @@ class NotificationRepo:
                 await session.flush()
             except IntegrityError:
                 await session.rollback()
-                # dedupe_key collision → idempotent no-op (duplicate delivery
-                # *prevented* — the exactly-once signal, counterpart of
+                # dedupe_key collision -> idempotent no-op (duplicate delivery
+                # *prevented* - the exactly-once signal, counterpart of
                 # double_fire=0).
                 from app.productivity.metrics import get_productivity_metrics
 

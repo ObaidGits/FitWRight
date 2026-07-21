@@ -34,7 +34,7 @@ function SubScoreRow({ label, value }: { label: string; value: number }) {
       <div className="mb-1 flex items-center justify-between">
         <span className="text-sm text-[var(--muted-foreground)]">{label}</span>
         <span className={`text-sm font-semibold tabular-nums ${scoreColor(value)}`}>
-          {Number.isFinite(value) ? value.toFixed(1) : '—'}%
+          {Number.isFinite(value) ? value.toFixed(1) : '-'}%
         </span>
       </div>
       <div className="h-1.5 w-full rounded-full bg-[var(--secondary)]">
@@ -129,7 +129,7 @@ export function ATSScoreCard({ atsScore }: ATSScoreCardProps) {
                 key={`rec-${i}-${tip.slice(0, 30)}`}
                 className="flex gap-2 text-sm text-[var(--muted-foreground)]"
               >
-                <span className="mt-0.5 shrink-0 text-[var(--primary)]">•</span>
+                <span className="mt-0.5 shrink-0 text-[var(--primary)]">-</span>
                 <span>{tip}</span>
               </li>
             ))}

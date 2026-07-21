@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * InterviewPrepCard — AI interview preparation ported into the atelier resume
+ * InterviewPrepCard - AI interview preparation ported into the atelier resume
  * editor (previously only in the legacy /builder advanced editor). Self-contained
  * (no dependency on components/builder) so the legacy tree can be retired without
  * touching the atelier editor.

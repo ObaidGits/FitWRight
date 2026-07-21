@@ -31,7 +31,7 @@ def validate_prompt_placeholders(prompt: str) -> list[str]:
     """Return required placeholders missing from ``prompt``.
 
     Empty or whitespace-only prompts are treated as "use default" and return
-    an empty list (valid — the router treats them as clearing the override).
+    an empty list (valid - the router treats them as clearing the override).
     Non-empty prompts must include every entry from
     ``REQUIRED_FEATURE_PROMPT_PLACEHOLDERS``.
     """

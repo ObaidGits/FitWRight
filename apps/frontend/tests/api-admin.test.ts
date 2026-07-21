@@ -12,7 +12,7 @@ import {
 import { setUnauthorizedHandler } from '@/lib/api/client';
 
 /**
- * Admin API client (Task 8.1) — request shaping (paths, query params, methods)
+ * Admin API client (Task 8.1) - request shaping (paths, query params, methods)
  * and error-envelope parsing into {@link AdminApiError}. Network is stubbed.
  */
 

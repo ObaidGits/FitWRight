@@ -9,24 +9,24 @@ proven **structurally** instead, which is the stronger and more stable claim:
 
 - The new reads are served from ``metrics_daily`` **daily aggregates** (via the
   shared :class:`~app.admin.metric_store.MetricStore`) and small **KV
-  snapshots** — never from a per-user scan of the ``users`` table. If a read
+  snapshots** - never from a per-user scan of the ``users`` table. If a read
   were O(N) in the user count, the number of SQL statements it issues would
   grow with the number of seeded users. So we **count the SQL statements** each
   endpoint issues at a SMALL user count vs a MUCH LARGER one and assert the
-  count does **not grow** — a deterministic, wall-clock-free proof of O(1).
+  count does **not grow** - a deterministic, wall-clock-free proof of O(1).
 
 - A best-effort wall-clock ratio is also recorded and checked against a very
   generous bound. Timing in CI is noisy, so this is a documented sanity guard,
   **not** the primary assertion (the query-count equality above is).
 
-The endpoints under test (every *new* dashboard read — Req 15.4):
+The endpoints under test (every *new* dashboard read - Req 15.4):
 ``/kpis``, ``/errors``, ``/storage``, ``/security``, ``/performance``,
 ``/ai-analytics``, ``/analytics/feature-usage``, ``/analytics/resumes``.
 
 Harness: the ``_admin_client`` / ``hosted`` / ``_seed`` pattern from
 ``tests/integration/test_feature_usage_api.py`` plus a ``reset_metric_store()``
 fixture (the ``MetricStore`` singleton lazily binds to ``app.database.db``, so it
-must be rebound to the isolated temp DB — see ``test_resume_analytics_api.py``).
+must be rebound to the isolated temp DB - see ``test_resume_analytics_api.py``).
 
 Requirements: 15.4, 21.1 (bounded per-day keys), 21.3/21.4/21.5 (no scans).
 """
@@ -127,8 +127,8 @@ class _QueryCounter:
 
     Attaches a ``before_cursor_execute`` listener to the sync engine backing the
     app's async engine (SQLAlchemy fires engine events on ``sync_engine``). Every
-    admin request path — auth session/status lookups, the AdminRepo day-bounded
-    counts, and every MetricStore ``metrics_daily`` read — flows through this one
+    admin request path - auth session/status lookups, the AdminRepo day-bounded
+    counts, and every MetricStore ``metrics_daily`` read - flows through this one
     engine, so the counts here are the *complete* per-request SQL footprint.
     """
 
@@ -211,7 +211,7 @@ class TestDashboardReadsAreConstantCost:
             for url in _ENDPOINTS:
                 large_counts[url], _ = await _measure(client, url)
 
-        # O(1): the statement count must be identical — it must not grow with N.
+        # O(1): the statement count must be identical - it must not grow with N.
         grew = {
             url: (small_counts[url], large_counts[url])
             for url in _ENDPOINTS
@@ -239,7 +239,7 @@ class TestDashboardReadsAreConstantCost:
                 await _measure(client, url)  # warm
                 selects, _ = await _measure(client, url)
                 assert selects <= 25, (
-                    f"{url} issued {selects} SELECTs at {_LARGE_USERS} users — an "
+                    f"{url} issued {selects} SELECTs at {_LARGE_USERS} users - an "
                     "aggregate/snapshot-backed dashboard read should need only a "
                     "small bounded number (Req 15.4)."
                 )
@@ -247,7 +247,7 @@ class TestDashboardReadsAreConstantCost:
     async def test_wall_clock_ratio_within_generous_bound_best_effort(self, scale_env, hosted):
         """Best-effort timing sanity check (documented gap: NOT the primary proof).
 
-        Wall-clock timing is noisy in CI, so this is intentionally lenient — the
+        Wall-clock timing is noisy in CI, so this is intentionally lenient - the
         deterministic query-count equality above is the real O(1) proof. We take
         a small median of each endpoint's latency at the small vs large user
         count and assert the large-N median stays within a very generous multiple

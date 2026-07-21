@@ -1,4 +1,4 @@
-"""Unit tests for apply_diffs() — path resolution, verification gates, and actions."""
+"""Unit tests for apply_diffs() - path resolution, verification gates, and actions."""
 
 import copy
 import pytest
@@ -205,7 +205,7 @@ class TestApplyDiffsReorder:
         assert result["additional"]["technicalSkills"] == reordered
 
     def test_reorder_with_unverified_items_drops_them_keeps_originals(self, sample_resume):
-        """Issue #736: a reorder mixing in new items is salvaged, not dropped —
+        """Issue #736: a reorder mixing in new items is salvaged, not dropped -
         new items without a verified target are removed, originals preserved."""
         original = sample_resume["additional"]["technicalSkills"]
         changes = [
@@ -241,9 +241,9 @@ class TestApplyDiffsReorder:
 
     def test_reorder_accepts_list_original_and_applies(self, sample_resume):
         # The live LLM ignores the prompt's `original: null` for reorder and sends
-        # the current skills LIST as `original`. The schema must accept that — a
+        # the current skills LIST as `original`. The schema must accept that - a
         # `str | None`-only `original` dropped the whole change at parse time with a
-        # `string_type` error ("Skipping malformed change") — and a pure reorder
+        # `string_type` error ("Skipping malformed change") - and a pure reorder
         # (same items, new order) must still apply.
         original_skills = sample_resume["additional"]["technicalSkills"]
         reordered = list(reversed(original_skills))
@@ -269,7 +269,7 @@ class TestApplyDiffsReorder:
             ResumeChange(
                 path="summary",
                 action="replace",
-                original=["a", "b"],  # list original on a text action — invalid
+                original=["a", "b"],  # list original on a text action - invalid
                 value="new summary",
                 reason="test",
             )
@@ -532,7 +532,7 @@ class TestApplyDiffsEdgeCases:
         assert len(rejected) == 1
 
     def test_reorder_with_duplicates_is_deduped_and_preserves_originals(self, sample_resume):
-        """Issue #736: a reorder with a duplicate and missing items is salvaged —
+        """Issue #736: a reorder with a duplicate and missing items is salvaged -
         the duplicate is collapsed and every original is preserved (no loss)."""
         original = sample_resume["additional"]["technicalSkills"]
         changes = [
@@ -721,7 +721,7 @@ class TestApplyDiffsNewPaths:
 
 class TestReorderSalvage:
     """Issue #736: a reorder whose items don't exactly match the original must be
-    SALVAGED, not dropped wholesale — reorder existing items, never lose an
+    SALVAGED, not dropped wholesale - reorder existing items, never lose an
     original, and (skills only) add new items that pass the verified gate."""
 
     def test_reorder_with_verified_new_skill_is_salvaged(self, sample_resume):
@@ -789,7 +789,7 @@ class TestReorderSalvage:
                 action="reorder",
                 original=None,
                 value=["Spanish (Conversational)", "English (Native)", "French (Fluent)"],
-                reason="no verified-target gate for languages — must not fabricate",
+                reason="no verified-target gate for languages - must not fabricate",
             )
         ]
         result, applied, rejected = apply_diffs(sample_resume, changes)

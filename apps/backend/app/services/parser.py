@@ -51,7 +51,7 @@ def restore_dates_from_markdown(
     if not md_dates:
         return parsed_data
 
-    # Build a lookup: "2020 - 2021" → "Jun 2020 - Aug 2021"
+    # Build a lookup: "2020 - 2021" -> "Jun 2020 - Aug 2021"
     year_to_full: dict[str, str] = {}
     year_only_re = re.compile(r"\d{4}")
     for md_date in md_dates:

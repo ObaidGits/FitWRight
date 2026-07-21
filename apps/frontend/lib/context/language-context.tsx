@@ -114,7 +114,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
 
 /**
  * Safe fallback used when a legacy i18n component (e.g. confirm-dialog) is
- * rendered outside a LanguageProvider — which happens in the new (app)/(auth)/
+ * rendered outside a LanguageProvider - which happens in the new (app)/(auth)/
  * admin route groups that don't mount the provider. Instead of throwing (a
  * latent crash, M5), we degrade to English defaults with no-op setters.
  */

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
 /**
- * ProfileSearch (final vertical): debounced query → highlighted results;
+ * ProfileSearch (final vertical): debounced query -> highlighted results;
  * choosing a result navigates to its section.
  */
 

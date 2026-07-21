@@ -2,7 +2,7 @@
  * Real IndexedDB integration for the durable store (P4 R8) using fake-indexeddb
  * (a spec-compliant in-memory IDB), so the actual IndexedDbEngine transactions,
  * cursor iteration, prefix delete, and the ResilienceStore running over it are
- * exercised — not just the MemoryEngine.
+ * exercised - not just the MemoryEngine.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import 'fake-indexeddb/auto';
@@ -78,7 +78,7 @@ describe('ResilienceStore over real IDB', () => {
     expect(opened.ok && opened.payload.v).toBe(1);
   });
 
-  it('clearUser wipes all of that user’s stores in real IDB', async () => {
+  it("clearUser wipes all of that user's stores in real IDB", async () => {
     const engine = new IndexedDbEngine();
     const a = new ResilienceStore(engine, 'user-a');
     const b = new ResilienceStore(engine, 'user-b');

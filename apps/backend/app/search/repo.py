@@ -1,4 +1,4 @@
-"""Search-document data access — dialect-aware FTS, scoped in SQL (design §C).
+"""Search-document data access - dialect-aware FTS, scoped in SQL (design §C).
 
 Centralizes every ``search_documents`` query (allow-listed in the scoping guard).
 Reads are **parameterized** and **scoped by ``user_id`` in SQL**, so a crafted
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 __all__ = ["SearchRepo", "get_search_repo"]
 
-# Alphanumeric (+unicode word) tokens only — everything else is dropped so a
+# Alphanumeric (+unicode word) tokens only - everything else is dropped so a
 # user's query can never inject FTS5/tsquery operators (defensive; params are
 # bound regardless).
 _TOKEN_RE = re.compile(r"\w+", re.UNICODE)

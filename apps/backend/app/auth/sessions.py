@@ -7,13 +7,13 @@ front of it (design `§Session mechanics`, ADR-1/2, R2.1/3.1/3.3/3.4/3.6/12.4/
 - **Opaque token, hashed at rest.** ``create_session`` mints a 32-byte
   base64url token; only ``sha256(token)`` is stored (``token_hash``). The raw
   token is returned once to the caller for the ``__Host-`` cookie and never
-  persisted — a DB leak cannot mint or resume sessions (Property 3).
+  persisted - a DB leak cannot mint or resume sessions (Property 3).
 - **Fixation defense via rotation.** ``rotate_session`` revokes the old row and
   issues a brand-new id/token for the same user (used on login, password change,
   role change).
 - **Sliding expiry, write-behind.** Resolution extends ``expires_at`` from the
   idle timeout, bounded by the absolute cap (larger when ``remember_me``), but
-  only writes when the last write is older than a refresh window — so there is
+  only writes when the last write is older than a refresh window - so there is
   no DB write on every request (R17.1). A crash loses at most one window.
 - **Prompt revocation via write-through eviction.** logout / revoke / logout-all
   / role-change / disable / password-change delete the KVStore key(s), so a
@@ -67,7 +67,7 @@ __all__ = [
     "reset_session_service",
 ]
 
-# Raw token size (bytes) before base64url encoding — 256 bits of entropy.
+# Raw token size (bytes) before base64url encoding - 256 bits of entropy.
 _TOKEN_BYTES = 32
 
 # Cache TTL (seconds) for a resolved-session snapshot. Short by design: the DB is
@@ -81,7 +81,7 @@ _REVOKED_GRACE_SECONDS = 60 * 60 * 24  # 24h
 
 
 def hash_token(raw_token: str) -> str:
-    """Return ``sha256(raw_token)`` hex — the value stored in ``token_hash``."""
+    """Return ``sha256(raw_token)`` hex - the value stored in ``token_hash``."""
     return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
 
 
@@ -259,14 +259,14 @@ class SessionService:
         """Create a session for ``user_id``; return ``(raw_token, SessionInfo)``.
 
         The raw token is returned exactly once (for the cookie) and is not
-        recoverable afterwards — only its ``sha256`` is stored.
+        recoverable afterwards - only its ``sha256`` is stored.
         """
         raw_token = _generate_raw_token()
         token_hash = hash_token(raw_token)
         now = self._now()
         now_iso = now.isoformat()
         # Initial expiry must use the same policy as sliding renewal. Before this
-        # fix every session—including remember-me/OAuth—started with ordinary
+        # fix every session-including remember-me/OAuth-started with ordinary
         # ``idle_ttl``, so a 30-day cookie pointed at a DB row that died in 2h.
         expires_at = (
             now
@@ -424,7 +424,7 @@ class SessionService:
     async def resolve(self, raw_token: str | None) -> ResolvedSession | None:
         """Resolve a raw cookie token to a live session, or ``None``.
 
-        Path: token → ``sha256`` → KVStore cache → DB fallback → assert
+        Path: token -> ``sha256`` -> KVStore cache -> DB fallback -> assert
         ``revoked_at IS NULL`` AND ``now < expires_at`` AND ``user.status ==
         active``. On the DB path a valid session is cached (short TTL) and its
         sliding expiry is extended write-behind. Any invalid state evicts the
@@ -450,9 +450,9 @@ class SessionService:
             if resolved is not None and self._snapshot_valid(resolved, now):
                 metrics.record_session_cache(hit=True)
                 return resolved
-            # Stale/invalid snapshot — drop it and re-check the DB.
+            # Stale/invalid snapshot - drop it and re-check the DB.
             await self._evict(token_hash)
-        # A missing or stale/invalid cache entry is a cache miss → DB fallback.
+        # A missing or stale/invalid cache entry is a cache miss -> DB fallback.
         metrics.record_session_cache(hit=False)
 
         # 2) DB fallback
@@ -463,7 +463,7 @@ class SessionService:
             row = result.scalars().first()
             if row is None:
                 return None
-            # Revoked or past its absolute/idle expiry ⇒ dead (R3.4).
+            # Revoked or past its absolute/idle expiry => dead (R3.4).
             if row.revoked_at is not None or not _now_lt_iso(now, row.expires_at):
                 return None
             user = await session.get(User, row.user_id)
@@ -477,7 +477,7 @@ class SessionService:
                 row.last_seen_at = now.isoformat()
                 row.expires_at = expires_at
                 # Keep the admin "last active" watermark fresh on the same
-                # write-behind cadence (P2 Admin — no extra query/write per
+                # write-behind cadence (P2 Admin - no extra query/write per
                 # request). The active-users *stat* reads sessions.last_seen_at
                 # directly; this column powers the per-user display only.
                 user.last_active_at = now.isoformat()
@@ -690,7 +690,7 @@ def _parse_iso(value: str) -> datetime:
 
 
 def _now_lt_iso(now: datetime, iso_value: str) -> bool:
-    """True if ``now < iso_value`` (i.e. not yet expired). Malformed → expired."""
+    """True if ``now < iso_value`` (i.e. not yet expired). Malformed -> expired."""
     try:
         return now < _parse_iso(iso_value)
     except (ValueError, TypeError):

@@ -143,7 +143,7 @@ export const ResumeSingleColumn: React.FC<ResumeSingleColumnProps> = ({
                     >
                       {exp.description.map((desc, index) => (
                         <li key={index} className="flex">
-                          <span className="mr-1.5 flex-shrink-0">•&nbsp;</span>
+                          <span className="mr-1.5 flex-shrink-0">-&nbsp;</span>
                           <span>
                             <SafeHtml html={desc} />
                           </span>
@@ -230,7 +230,7 @@ export const ResumeSingleColumn: React.FC<ResumeSingleColumnProps> = ({
                     >
                       {project.description.map((desc, index) => (
                         <li key={index} className="flex">
-                          <span className="mr-1.5 flex-shrink-0">•&nbsp;</span>
+                          <span className="mr-1.5 flex-shrink-0">-&nbsp;</span>
                           <span>
                             <SafeHtml html={desc} />
                           </span>

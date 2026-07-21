@@ -4,7 +4,7 @@ Ensures only one extraction runs per canonical URL, even across multiple
 workers. Followers wait for the leader's result via polling.
 
 Degradation: When KVStore is not Redis (local/DB), falls back to per-process
-asyncio.Lock (v1.0 behavior — no distributed dedup but no crashes either).
+asyncio.Lock (v1.0 behavior - no distributed dedup but no crashes either).
 """
 
 from __future__ import annotations
@@ -71,7 +71,7 @@ async def _distributed_flight(kv, canonical_url: str, pipeline_fn) -> dict:
         await kv.set(lock_key, leader_id, ttl_seconds=_LOCK_TTL)
         check = await kv.get(lock_key)
         if check == leader_id:
-            # We are the leader — run the pipeline
+            # We are the leader - run the pipeline
             try:
                 result = await _run_with_heartbeat(kv, lock_key, leader_id, pipeline_fn)
                 # Publish result for followers
@@ -80,7 +80,7 @@ async def _distributed_flight(kv, canonical_url: str, pipeline_fn) -> dict:
             finally:
                 await kv.delete(lock_key)
 
-    # We are a follower — poll for leader's result
+    # We are a follower - poll for leader's result
     return await _poll_for_result(kv, result_key, canonical_url, pipeline_fn)
 
 
@@ -119,7 +119,7 @@ async def _poll_for_result(kv, result_key: str, canonical_url: str, pipeline_fn)
                 break
         await asyncio.sleep(_POLL_INTERVAL)
 
-    # Leader died or timed out — promote self (run pipeline)
+    # Leader died or timed out - promote self (run pipeline)
     logger.info("JD SingleFlight: follower promoting to leader for %s", canonical_url)
     return await pipeline_fn()
 
@@ -143,7 +143,7 @@ async def _local_flight(canonical_url: str, pipeline_fn) -> dict:
             except (json.JSONDecodeError, TypeError):
                 pass
 
-        # We are the leader — run pipeline
+        # We are the leader - run pipeline
         result = await pipeline_fn()
 
         # Cache for other waiters (short-lived, cleared after 60s)

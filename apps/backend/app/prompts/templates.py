@@ -170,7 +170,7 @@ Rules:
 - Format dates preserving the original precision. Keep months when present: "Jan 2020 - Dec 2023", "May 2021 - Present". Use "YYYY - YYYY" only when the source has no months.
 - Use snake_case for custom section keys (e.g., "volunteer_work", "publications")
 - Preserve the original section name as a descriptive key
-- Normalize date separators: "2020-2021" → "2020 - 2021", "Current"/"Ongoing" → "Present". Do NOT discard months.
+- Normalize date separators: "2020-2021" -> "2020 - 2021", "Current"/"Ongoing" -> "Present". Do NOT discard months.
 - For ambiguous dates like "3 years experience", infer approximate years from context or use "~YYYY"
 - Flag overlapping dates (concurrent roles) by preserving both, don't merge
 
@@ -193,7 +193,7 @@ Example format:
   "seniority_level": "senior"
 }}
 
-Extract numeric years (e.g., "5+ years" → 5) and infer seniority level.
+Extract numeric years (e.g., "5+ years" -> 5) and infer seniority level.
 Set "company" to the hiring company name and "role" to the job title exactly as
 written in the posting; use an empty string for either if it is not stated.
 
@@ -248,7 +248,7 @@ Rules:
 - For customSections: preserve exact structure, item count, titles, subtitles, and years. If an item's description is an empty array [] in the original, keep it empty []. Do NOT generate descriptions for items that had none.
 - Copy the "years" field values EXACTLY as they appear in the original resume (including any month prefixes like "Jan 2020 - Present"). Do not shorten, reformat, or drop months.
 - If the resume is non-technical, do NOT add technical jargon
-- Do NOT use em dash ("—") anywhere in the writing/output, even if it exists, remove it
+- Do NOT use em dash ("-") anywhere in the writing/output, even if it exists, remove it
 
 Job Description:
 {job_description}
@@ -277,7 +277,7 @@ Rules:
 - For customSections: preserve exact structure, item count, titles, subtitles, and years. If an item's description is an empty array [] in the original, keep it empty []. Do NOT generate descriptions for items that had none.
 - Copy the "years" field values EXACTLY as they appear in the original resume (including any month prefixes like "Jan 2020 - Present"). Do not shorten, reformat, or drop months.
 - If resume is non-technical, keep language non-technical while still aligning keywords
-- Do NOT use em dash ("—") anywhere in the writing/output, even if it exists, remove it
+- Do NOT use em dash ("-") anywhere in the writing/output, even if it exists, remove it
 
 Job Description:
 {job_description}
@@ -308,7 +308,7 @@ Rules:
 - Improve custom section content the same way as standard sections
 - Copy the "years" field values EXACTLY as they appear in the original resume (including any month prefixes like "Jan 2020 - Present"). Do not shorten, reformat, or drop months.
 - Calculate and emphasize total relevant experience duration when it matches requirements
-- Do NOT use em dash ("—") anywhere in the writing/output, even if it exists, remove it
+- Do NOT use em dash ("-") anywhere in the writing/output, even if it exists, remove it
 
 Job Description:
 {job_description}
@@ -371,7 +371,7 @@ Requirements:
 - Extract company name from job description - do not use placeholders
 - Do NOT invent information not in the resume
 - Tone: Confident peer, not eager applicant
-- Do NOT use em dash ("—") anywhere in the writing/output, even if it exists, remove it
+- Do NOT use em dash ("-") anywhere in the writing/output, even if it exists, remove it
 
 Output plain text only. No JSON, no markdown formatting."""
 
@@ -393,7 +393,7 @@ Guidelines:
 - Tone: How you'd message a former colleague, not a stranger
 - Do NOT include placeholder brackets
 - Do NOT use phrases like "excited about" or "passionate about"
-- Do NOT use em dash ("—") anywhere in the writing/output, even if it exists, remove it
+- Do NOT use em dash ("-") anywhere in the writing/output, even if it exists, remove it
 
 Output plain text only. No JSON, no markdown formatting."""
 
@@ -463,7 +463,7 @@ Rules:
 - If the company name is not found, return just the role (e.g., "Senior Frontend Engineer")
 - Maximum 60 characters
 - Use the most specific role title mentioned
-- Never output a sentence, description, or paragraph — only the role (and company)
+- Never output a sentence, description, or paragraph - only the role (and company)
 - Do not add any other text, quotes, or formatting
 
 Output the title only, nothing else."""
@@ -531,16 +531,16 @@ RULES:
 12. Preserve original capitalization, especially for proper nouns, technical terms (e.g., REST, API, AWS), and acronyms. Do not change the casing of words that were capitalized in the original.
 
 PATHS you can target:
-- "summary" — the resume summary text
-- "workExperience[i].description[j]" — a specific bullet (i = entry index, j = bullet index)
-- "workExperience[i].description" — append a new bullet (action: "append")
-- "personalProjects[i].description[j]" — a specific project bullet
-- "personalProjects[i].description" — append a new project bullet (action: "append")
-- "education[i].description" — the education entry's description text (replace only; it is a single string, not a list)
-- "additional.technicalSkills" — reorder the skills list (action: "reorder") or add one verified skill (action: "add_skill")
-- "additional.languages" — reorder the languages list (action: "reorder")
-- "additional.certificationsTraining" — reorder the certifications list (action: "reorder")
-- "additional.awards" — reorder the awards list (action: "reorder")
+- "summary" - the resume summary text
+- "workExperience[i].description[j]" - a specific bullet (i = entry index, j = bullet index)
+- "workExperience[i].description" - append a new bullet (action: "append")
+- "personalProjects[i].description[j]" - a specific project bullet
+- "personalProjects[i].description" - append a new project bullet (action: "append")
+- "education[i].description" - the education entry's description text (replace only; it is a single string, not a list)
+- "additional.technicalSkills" - reorder the skills list (action: "reorder") or add one verified skill (action: "add_skill")
+- "additional.languages" - reorder the languages list (action: "reorder")
+- "additional.certificationsTraining" - reorder the certifications list (action: "reorder")
+- "additional.awards" - reorder the awards list (action: "reorder")
 
 Do NOT target: personalInfo, dates/years, company names, education degree/institution/years, customSections.
 

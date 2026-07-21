@@ -3,7 +3,7 @@ import { API_BASE, apiFetch, apiPost, getUploadUrl } from '@/lib/api/client';
 
 /**
  * The single backend client. Tests cover URL resolution, JSON POST shape, and
- * the timeout → friendly-message behavior (240s matches the backend wait_for).
+ * the timeout -> friendly-message behavior (240s matches the backend wait_for).
  * `fetch` is stubbed so nothing hits the network.
  */
 

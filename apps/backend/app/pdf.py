@@ -164,14 +164,14 @@ async def _render_page_to_pdf(
 ) -> bytes:
     # NOTE: do NOT use wait_until="networkidle" here. The Next.js dev server
     # (HMR/Turbopack + RSC streaming) keeps the network busy, so "idle" may
-    # never arrive and goto silently hangs until timeout → 503 (issues
+    # never arrive and goto silently hangs until timeout -> 503 (issues
     # #799/#808), with the failure depending on environment/network noise.
-    # Wait on the real readiness condition instead — document "load", the
-    # resume content selector, and fonts — all bounded by an explicit timeout
+    # Wait on the real readiness condition instead - document "load", the
+    # resume content selector, and fonts - all bounded by an explicit timeout
     # so the outcome is deterministic.
     await page.goto(url, wait_until="load", timeout=_NAV_TIMEOUT_MS)
     await page.wait_for_selector(selector, timeout=_NAV_TIMEOUT_MS)
-    # Bound the fonts wait too — plain page.evaluate has no timeout, so a stuck
+    # Bound the fonts wait too - plain page.evaluate has no timeout, so a stuck
     # font load could otherwise hang the render past _NAV_TIMEOUT_MS.
     await page.wait_for_function(
         "() => document.fonts.ready.then(() => true)", timeout=_NAV_TIMEOUT_MS
@@ -275,7 +275,7 @@ def _raise_playwright_error(error: PlaywrightError, url: str) -> NoReturn:
         ) from error
     # Catch-all: the raw Playwright message can carry internal navigation URLs
     # and a full call log. Log it server-side; return a generic message to the
-    # client (detailed errors stay server-side — and this stops the verbose
+    # client (detailed errors stay server-side - and this stops the verbose
     # trace from overflowing the client error modal, #811).
     logger.error("PDF rendering failed for %s: %s", url, error_msg)
     raise PDFRenderError(
@@ -315,7 +315,7 @@ async def render_resume_pdf(
 
     Acquires one of ``settings.pdf_max_concurrency`` render slots, waiting at most
     ``settings.pdf_render_queue_timeout_seconds`` for a slot before failing fast
-    with :class:`PDFRenderError` (→ 503) so a burst of exports applies
+    with :class:`PDFRenderError` (-> 503) so a burst of exports applies
     backpressure instead of exhausting host memory/CPU.
     """
     from app.config import settings

@@ -60,7 +60,7 @@ async def render_and_extract(url: str, *, timeout_ms: int = _RENDER_TIMEOUT_MS) 
         edge_result = await _render_via_edge_and_extract(url)
         if edge_result is not None:
             return edge_result
-        # Edge failed → fall through to the local browser pool.
+        # Edge failed -> fall through to the local browser pool.
 
     # --- Distributed render gate (Phase 4): cross-worker global concurrency cap ---
     gate = _make_render_gate()
@@ -75,7 +75,7 @@ async def render_and_extract(url: str, *, timeout_ms: int = _RENDER_TIMEOUT_MS) 
         await gate.release()
         return None
 
-    # Acquire semaphore (blocks if pool is full — backpressure)
+    # Acquire semaphore (blocks if pool is full - backpressure)
     try:
         async with asyncio.timeout(timeout_ms / 1000 + 5):
             await semaphore.acquire()
@@ -101,7 +101,7 @@ async def render_and_extract(url: str, *, timeout_ms: int = _RENDER_TIMEOUT_MS) 
         try:
             await page.wait_for_load_state("networkidle", timeout=5000)
         except Exception:
-            pass  # networkidle timeout is non-fatal — content may already be there
+            pass  # networkidle timeout is non-fatal - content may already be there
 
         # Scroll to bottom to trigger lazy-loaded sections
         try:
@@ -139,7 +139,7 @@ async def render_and_extract(url: str, *, timeout_ms: int = _RENDER_TIMEOUT_MS) 
         # DOM extraction from rendered content
         dom_result = extract_dom_scored(rendered_html)
         if dom_result and len(dom_result.content) >= 300:  # Lower threshold for browser (already expensive)
-            # Boost confidence slightly — browser-rendered is more complete than static
+            # Boost confidence slightly - browser-rendered is more complete than static
             dom_result.source = "headless_dom"
             return dom_result
 

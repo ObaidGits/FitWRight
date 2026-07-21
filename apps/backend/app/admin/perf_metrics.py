@@ -1,4 +1,4 @@
-"""Performance signals read model — the ``PerformanceMetricsService`` (Req 6).
+"""Performance signals read model - the ``PerformanceMetricsService`` (Req 6).
 
 ``PerformanceMetricsService.signals()`` assembles the
 :class:`~app.admin.schemas.PerformanceSignals` served by
@@ -6,12 +6,12 @@
 latency, the top-10 slowest route-classes and background jobs, DB query time,
 and the dashboard cache hit ratio. It is a cohesive, single-responsibility
 Domain_Metrics_Service (design §Bounded Contexts) that depends **only** on shared
-primitives — the in-process :class:`~app.admin.metrics.AdminMetrics`, the shared
+primitives - the in-process :class:`~app.admin.metrics.AdminMetrics`, the shared
 :class:`~app.admin.metric_store.MetricStore` (for KV job-run markers), the job
-marker key helper, config, and the response schemas — never on another
+marker key helper, config, and the response schemas - never on another
 Domain_Metrics_Service (import-graph guard, Req 19.2/19.3/19.5; Property 9).
 
-**Existing signals only — NO new instrumentation (Req 21.4 / Req 6).** Every
+**Existing signals only - NO new instrumentation (Req 21.4 / Req 6).** Every
 number here is read from an aggregate the backend *already* produces. This module
 adds no histogram, no timer, no counter, and no probe. Where an existing
 aggregate cannot answer a field, the field is omitted (``None``) or surfaced as
@@ -20,74 +20,74 @@ aggregate cannot answer a field, the field is omitted (``None``) or surfaced as
 **O(1) read (Req 6.6, delivered in Task 11.2; built O(1) here).** The route-class
 and cache figures are single in-process reads of ``AdminMetrics`` (a dict copy,
 independent of user/row count). The job figures are a fixed handful of KV point
-reads — one ``MetricStore.snapshot_get`` per known job (3), never a scan.
+reads - one ``MetricStore.snapshot_get`` per known job (3), never a scan.
 
 ---
 
 ## Exact source mapping (and every documented gap)
 
-``routeClasses`` — avg latency per route-class (Req 6.1)
+``routeClasses`` - avg latency per route-class (Req 6.1)
     From ``AdminMetrics.snapshot()["latency"]``, which exposes each route-class's
     ``[sum_ms, count]`` bucket as ``{route_class: {count, avg_ms}}``. ``avgMs`` =
-    the already-computed ``avg_ms = sum_ms / count`` — the existing aggregate. One
+    the already-computed ``avg_ms = sum_ms / count`` - the existing aggregate. One
     :class:`~app.admin.schemas.RouteClassLatency` per bucketed route-class.
 
-``p95Ms`` — omitted everywhere (``None``) — **documented (Req 6.2)**
+``p95Ms`` - omitted everywhere (``None``) - **documented (Req 6.2)**
     Req 6.2 asks for p95 *where the per-route-class aggregates support computing
     it from stored aggregates*. The ``AdminMetrics`` latency bucket stores only
-    ``[sum_ms, count]`` — a running sum and a count, **not** a distribution or
-    histogram — so a percentile **cannot** be derived from the stored aggregate.
+    ``[sum_ms, count]`` - a running sum and a count, **not** a distribution or
+    histogram - so a percentile **cannot** be derived from the stored aggregate.
     Per Req 6.2 the p95 field is therefore **omitted** (``p95Ms = None``) for every
     route-class. Adding a histogram to enable p95 would be *new instrumentation*,
     which Req 21.4 / Req 6 forbid, so it is intentionally not added. If a durable
     latency histogram is introduced later, ``p95Ms`` can be populated without any
     schema change.
 
-``topSlowRoutes`` — top-10 slow route-classes (Req 6.3)
+``topSlowRoutes`` - top-10 slow route-classes (Req 6.3)
     The same route-class latency aggregates, ordered by ``avgMs`` descending and
     truncated to 10. Fewer than 10 are returned when fewer route-classes have been
     bucketed (Req 6.3 permits this). Each entry carries the same ``p95Ms = None``
     for the reason above.
 
-``topSlowJobs`` — top-10 slow background jobs (Req 6.3)
+``topSlowJobs`` - top-10 slow background jobs (Req 6.3)
     From the per-job KV **run markers** written by
-    :mod:`app.admin.job_markers` (read via ``MetricStore.snapshot_get`` — the same
+    :mod:`app.admin.job_markers` (read via ``MetricStore.snapshot_get`` - the same
     pattern :class:`~app.admin.jobs_panel.JobsPanelService` uses). Each marker
-    carries ``expected_duration_seconds`` (an EWMA of completed-run durations —
+    carries ``expected_duration_seconds`` (an EWMA of completed-run durations -
     the *typical* duration) and ``last_duration_seconds``. ``avgMs`` uses the
     typical ``expected_duration_seconds`` when present, else the observed
-    ``last_duration_seconds``, converted seconds→milliseconds. Only the three jobs
+    ``last_duration_seconds``, converted seconds->milliseconds. Only the three jobs
     run through :func:`app.admin.jobs.run_admin_jobs` (``rollup``, ``purge``,
     ``audit_retention``) publish markers, so at most three jobs appear (well under
     the top-10 cap). A job whose marker is absent, or whose marker has no usable
     duration yet, is **skipped** (no fabricated 0). The list is ordered by
     ``avgMs`` descending.
 
-``dbQueryTimeMs`` — ``None`` + listed *unavailable* — **documented gap (Req 6.4/6.7)**
+``dbQueryTimeMs`` - ``None`` + listed *unavailable* - **documented gap (Req 6.4/6.7)**
     Req 6.4 wants DB query time from an existing computed aggregate. There is **no**
-    DB-query-time aggregate anywhere in the admin surface today — ``AdminMetrics``
+    DB-query-time aggregate anywhere in the admin surface today - ``AdminMetrics``
     tracks request latency per route-class (which includes, but does not isolate,
-    DB time), cache hits, and a few gauges, but no DB-query-time metric — and
+    DB time), cache hits, and a few gauges, but no DB-query-time metric - and
     adding one would be new instrumentation (Req 21.4). ``dbQueryTimeMs`` is
     therefore ``None`` **and** the field name is added to ``unavailable`` (Req 6.7):
     it is a signal we *expose* but for which no data source exists yet.
 
-``cacheHitRatio`` — dashboard cache hit ratio (Req 6.4)
-    ``AdminMetrics.dashboard_cache_hit_ratio`` — ``hits / (hits + misses)`` in
+``cacheHitRatio`` - dashboard cache hit ratio (Req 6.4)
+    ``AdminMetrics.dashboard_cache_hit_ratio`` - ``hits / (hits + misses)`` in
     ``[0.0, 1.0]``, from the existing ``dashboard_cache_hit`` / ``_miss`` counters.
     Returned directly. With no cache activity yet the property returns ``0.0``,
     which is a valid ratio (a real "0% of 0 observations" reading), so it is
-    reported as ``0.0`` — **not** listed as unavailable.
+    reported as ``0.0`` - **not** listed as unavailable.
 
-``memoryBytes`` / ``cpuPercent`` / ``diskBytes`` — omitted (``None``) — Req 6.5 / Non-Goal 21.4
+``memoryBytes`` / ``cpuPercent`` / ``diskBytes`` - omitted (``None``) - Req 6.5 / Non-Goal 21.4
     Optional host metrics. The backend produces **no** host CPU/memory/disk
     aggregate (explicit Non-Goal, Req 21.4), so all three are left ``None`` and are
     dropped from the response by the endpoint's ``exclude_none`` serialization
-    (Req 6.5 — "omit each such field WHEN its value is not already present").
+    (Req 6.5 - "omit each such field WHEN its value is not already present").
 
     **``unavailable`` vs omitted host metrics (deliberate distinction).**
     ``unavailable`` lists fields we *do* expose as signals but have **no data for
-    right now** (e.g. ``dbQueryTimeMs``) — an operator should read that as "this
+    right now** (e.g. ``dbQueryTimeMs``) - an operator should read that as "this
     should have a value; the source isn't wired up". The host metrics are a
     different case: we *never* expose them (they are a Non-Goal), so they are
     simply ``None``/omitted and are **not** placed in ``unavailable``. Conflating
@@ -120,7 +120,7 @@ __all__ = [
     "reset_perf_metrics_service",
 ]
 
-# Jobs that publish KV run markers via ``app.admin.job_markers`` — the only ones
+# Jobs that publish KV run markers via ``app.admin.job_markers`` - the only ones
 # with a measurable typical/last duration to surface as a slow job (Req 6.3).
 # Matches the marker names written by ``run_admin_jobs`` (see ``jobs_panel``).
 _JOB_NAMES: tuple[str, ...] = ("rollup", "purge", "audit_retention")
@@ -159,7 +159,7 @@ class PerformanceMetricsService:
         return get_metric_store()
 
     async def signals(self) -> PerformanceSignals:
-        """Return the performance signals (existing aggregates only — Req 6.1–6.7).
+        """Return the performance signals (existing aggregates only - Req 6.1-6.7).
 
         Assembles per-route-class latency, the top-10 slow route-classes and jobs,
         DB query time, and the cache hit ratio. Async because slow-job durations
@@ -179,7 +179,7 @@ class PerformanceMetricsService:
         # -- per-route-class avg latency (Req 6.1); p95 omitted (Req 6.2) ------
         # ``avg_ms`` is the existing aggregate (sum_ms / count). p95 cannot be
         # derived from the stored [sum_ms, count] bucket (no distribution), so
-        # ``p95Ms`` is None for every class — no histogram is added (Req 21.4).
+        # ``p95Ms`` is None for every class - no histogram is added (Req 21.4).
         route_classes: list[RouteClassLatency] = [
             RouteClassLatency(
                 routeClass=str(route_class),
@@ -200,7 +200,7 @@ class PerformanceMetricsService:
         # -- cache hit ratio (Req 6.4); 0.0 is a valid reading, not unavailable
         cache_hit_ratio = float(metrics.dashboard_cache_hit_ratio)
 
-        # -- DB query time (Req 6.4/6.7): no existing aggregate → None + listed
+        # -- DB query time (Req 6.4/6.7): no existing aggregate -> None + listed
         # unavailable (a signal we expose but have no source for yet).
         unavailable = ["dbQueryTimeMs"]
 
@@ -210,7 +210,7 @@ class PerformanceMetricsService:
             topSlowJobs=top_slow_jobs,
             dbQueryTimeMs=None,
             cacheHitRatio=cache_hit_ratio,
-            # Host metrics are a Non-Goal (Req 21.4): never produced → None (the
+            # Host metrics are a Non-Goal (Req 21.4): never produced -> None (the
             # endpoint drops them via exclude_none) and NOT listed in unavailable.
             memoryBytes=None,
             cpuPercent=None,
@@ -224,7 +224,7 @@ class PerformanceMetricsService:
 
         One ``snapshot_get`` per known job. ``avgMs`` prefers the typical
         ``expected_duration_seconds`` (EWMA of completed runs), falling back to the
-        last observed ``last_duration_seconds``, converted seconds→ms. Jobs with no
+        last observed ``last_duration_seconds``, converted seconds->ms. Jobs with no
         marker or no usable duration yet are skipped; the result is ordered by
         ``avgMs`` descending and capped at the top 10.
         """

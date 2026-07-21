@@ -331,7 +331,7 @@ class TestOrchestrator:
 
     @pytest.mark.asyncio
     async def test_unknown_site_falls_through_to_dom(self, monkeypatch):
-        """Unknown sites cascade through API (skip) → JSON-LD (miss) → DOM."""
+        """Unknown sites cascade through API (skip) -> JSON-LD (miss) -> DOM."""
         from app.jd import orchestrator
 
         fake_html = '''
@@ -628,7 +628,7 @@ class TestPlaywrightRendering:
         except (asyncio.TimeoutError, Exception) as exc:  # noqa: BLE001
             pytest.skip(f"browser render unavailable or timed out: {exc}")
 
-        # example.com has minimal content — may or may not pass the char
+        # example.com has minimal content - may or may not pass the char
         # threshold. The important thing is that it does not crash.
         assert result is None or hasattr(result, "content")
 

@@ -2,20 +2,20 @@
 
 Creates the bootstrap owner user (role=admin, status=active, email verified;
 email from ``OWNER_EMAIL``, password hashed with Argon2id only if
-``OWNER_PASSWORD`` is set — otherwise NULL, i.e. OAuth-only) and assigns every
+``OWNER_PASSWORD`` is set - otherwise NULL, i.e. OAuth-only) and assigns every
 pre-existing owned row (resumes, jobs, improvements, applications, api_keys)
 that has no owner yet to that user (ADR-4/9, R10.5, R14.1).
 
 The migration is:
-- **Idempotent** — the owner is created only if an account with that normalized
+- **Idempotent** - the owner is created only if an account with that normalized
   email does not already exist, and rows are assigned only ``WHERE user_id IS
   NULL``. Re-running is a no-op.
-- **Chunked** — assignment updates run in bounded batches so a very large table
+- **Chunked** - assignment updates run in bounded batches so a very large table
   never builds one enormous transaction.
-- **Data-preserving** — it only sets ``user_id``; no owned row is created,
+- **Data-preserving** - it only sets ``user_id``; no owned row is created,
   deleted, or otherwise mutated.
 
-Reverse (downgrade) un-assigns the rows it claimed (``user_id`` → NULL) and
+Reverse (downgrade) un-assigns the rows it claimed (``user_id`` -> NULL) and
 removes the bootstrap owner, restoring the exact pre-0004 state.
 
 Revision ID: 0004

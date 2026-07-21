@@ -1,8 +1,8 @@
 """Unit tests for pure parsing helpers in app.services.parser.
 
 The LLM frequently drops months when parsing resume dates ("Jun 2020 - Aug 2021"
-→ "2020 - 2021"). restore_dates_from_markdown() patches that back from the raw
-markdown. This is pure, deterministic logic — the parser module was at ~20%
+-> "2020 - 2021"). restore_dates_from_markdown() patches that back from the raw
+markdown. This is pure, deterministic logic - the parser module was at ~20%
 coverage with none of it exercised.
 """
 
@@ -20,7 +20,7 @@ class TestExtractMarkdownDates:
         assert _extract_markdown_dates("Graduated Jun 2023") == ["Jun 2023"]
 
     def test_ignores_year_only(self):
-        # Year-only "2020 - 2021" has no month token → not captured.
+        # Year-only "2020 - 2021" has no month token -> not captured.
         assert _extract_markdown_dates("2020 - 2021") == []
 
 
@@ -41,7 +41,7 @@ class TestRestoreDatesFromMarkdown:
         parsed = {"workExperience": [{"years": "Jan 2020 - Mar 2021"}]}
         markdown = "Jun 2020 - Aug 2021"  # same years, different months
         result = restore_dates_from_markdown(parsed, markdown)
-        # Already month-precise → must NOT be overwritten.
+        # Already month-precise -> must NOT be overwritten.
         assert result["workExperience"][0]["years"] == "Jan 2020 - Mar 2021"
 
     def test_no_markdown_dates_is_noop(self):
@@ -51,7 +51,7 @@ class TestRestoreDatesFromMarkdown:
 
     def test_no_matching_year_key_is_noop(self):
         parsed = {"workExperience": [{"years": "2019 - 2020"}]}
-        markdown = "Jun 2021 - Aug 2022"  # different years → no match
+        markdown = "Jun 2021 - Aug 2022"  # different years -> no match
         result = restore_dates_from_markdown(parsed, markdown)
         assert result["workExperience"][0]["years"] == "2019 - 2020"
 

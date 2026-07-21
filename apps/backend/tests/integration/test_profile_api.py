@@ -44,7 +44,7 @@ class TestGetOrCreate:
         assert resp.status_code == 200
         body = resp.json()
         assert body["version"] == 1
-        # No master resume → the document is empty apart from any identity
+        # No master resume -> the document is empty apart from any identity
         # fallbacks carried from the user account (e.g. a bootstrap name).
         assert body["data"]["workExperience"] == []
         assert body["data"]["summary"] == ""
@@ -105,7 +105,7 @@ class TestUpdate:
             data = current["data"]
             data["summary"] = "first"
             await c.patch(BASE, json={"data": data, "base_version": current["version"]})
-            # Second write with the now-stale original base_version → 409.
+            # Second write with the now-stale original base_version -> 409.
             data["summary"] = "second"
             resp = await c.patch(
                 BASE, json={"data": data, "base_version": current["version"]}

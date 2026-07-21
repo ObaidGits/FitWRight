@@ -61,10 +61,10 @@ class TestNextOccurrence:
 
     def test_dst_preserves_wall_clock(self):
         # US DST 2026 starts Sun Mar 8. A daily 9am America/New_York reminder on
-        # Mar 7 must still be 9am local on Mar 8 — i.e. the UTC hour shifts by 1.
+        # Mar 7 must still be 9am local on Mar 8 - i.e. the UTC hour shifts by 1.
         before = "2026-03-07T14:00:00+00:00"  # 09:00 EST (UTC-5)
         nxt = next_occurrence(before, "daily", "America/New_York")
-        # Next day 09:00 EDT (UTC-4) → 13:00Z, not 14:00Z.
+        # Next day 09:00 EDT (UTC-4) -> 13:00Z, not 14:00Z.
         assert nxt == "2026-03-08T13:00:00+00:00"
 
     def test_invalid_tz_falls_back_utc(self):

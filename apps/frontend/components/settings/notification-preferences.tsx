@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * NotificationPreferences (P3 §B / Requirement 6.1) — per-category delivery.
+ * NotificationPreferences (P3 §B / Requirement 6.1) - per-category delivery.
  *
  * Toggle in-app / email per category and pick a digest cadence. Wired to
  * `GET/PUT /notifications/prefs`; saves are debounced-free (explicit per toggle)

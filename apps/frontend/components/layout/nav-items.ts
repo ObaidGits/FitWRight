@@ -1,4 +1,4 @@
-/** Shared workflow-first navigation definition (Home · Resumes · Applications). */
+/** Shared workflow-first navigation definition (Home - Resumes - Applications). */
 import Home from 'lucide-react/dist/esm/icons/house';
 import FileText from 'lucide-react/dist/esm/icons/file-text';
 import Layers from 'lucide-react/dist/esm/icons/layers';

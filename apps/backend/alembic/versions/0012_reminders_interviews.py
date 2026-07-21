@@ -2,11 +2,11 @@
 
 Adds the two scheduled-entity tables (design §E/§F):
 
-- ``reminders`` — follow-up reminders on an application (UTC ``due_at`` + IANA
+- ``reminders`` - follow-up reminders on an application (UTC ``due_at`` + IANA
   ``tz`` + bounded ``recurrence``), driven by the claim-based scheduler
-  (``status`` pending→firing→fired, ``claimed_at`` lease). Index
+  (``status`` pending->firing->fired, ``claimed_at`` lease). Index
   ``(status, due_at)`` is the scanner cursor.
-- ``interviews`` — scheduled interviews (UTC ``starts_at`` + IANA ``tz`` +
+- ``interviews`` - scheduled interviews (UTC ``starts_at`` + IANA ``tz`` +
   ``lead_times``/``fired_leads`` JSON), scanned for lead-time notifications.
   Index ``(status, starts_at)`` is the scanner cursor.
 

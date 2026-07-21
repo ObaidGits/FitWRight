@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * Tailor flow (Task 8 / Req 9,15,27) — AI-native core.
- * Internal state machine (input → generating → review → saved) rendered as ONE
+ * Tailor flow (Task 8 / Req 9,15,27) - AI-native core.
+ * Internal state machine (input -> generating -> review -> saved) rendered as ONE
  * continuous surface (not a wizard). Analysis + score + diff are surfaced from
  * the pipeline result; generation is cost-aware and cancellable; input is
  * preserved across failures.
@@ -62,7 +62,7 @@ type Phase = 'input' | 'generating' | 'review' | 'error';
 
 type StageStatus = 'pending' | 'active' | 'done';
 
-// The real backend pipeline stages, in order — each maps 1:1 to a boundary the
+// The real backend pipeline stages, in order - each maps 1:1 to a boundary the
 // server emits, so progress is honest (never a fabricated timer).
 const TAILOR_STAGES: { key: TailorStageName; label: string }[] = [
   { key: 'keywords', label: 'Analyzing the role' },
@@ -99,7 +99,7 @@ function ConfidenceBadge({
         ? { bg: 'var(--at-warning)', label: 'Medium confidence' }
         : { bg: 'var(--destructive)', label: 'Low confidence' };
   const title = `Extracted from ${jdSourceLabel(source)}${
-    typeof score === 'number' ? ` · score ${score}/100` : ''
+    typeof score === 'number' ? ` - score ${score}/100` : ''
   }. ${level === 'HIGH' ? 'Looks reliable.' : 'Please verify the text before tailoring.'}`;
   return (
     <span
@@ -152,7 +152,7 @@ export default function TailorPage() {
   const [result, setResult] = React.useState<ImprovedResult['data'] | null>(null);
   const [jobId, setJobId] = React.useState('');
   // Default the change diff to EXPANDED: the list of edits is the core trust
-  // artifact ("grounded in your resume — nothing invented"), so it should be
+  // artifact ("grounded in your resume - nothing invented"), so it should be
   // visible on arrival, not hidden behind a disclosure.
   const [showDetail, setShowDetail] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
@@ -164,7 +164,7 @@ export default function TailorPage() {
     retryable: boolean;
   } | null>(null);
 
-  // Optional pre-generation fit analysis (Req 15 — explicit, cost-aware AI).
+  // Optional pre-generation fit analysis (Req 15 - explicit, cost-aware AI).
   // Never fires automatically: the user must click "Analyze fit" to spend a
   // keyword-extraction call before committing to a full tailor pass.
   const [analysis, setAnalysis] = React.useState<JobAnalyzeResult | null>(null);
@@ -225,7 +225,7 @@ export default function TailorPage() {
         });
         toast({
           title: res.lowConfidence
-            ? 'Imported — please verify the text below'
+            ? 'Imported - please verify the text below'
             : `Job description imported${res.source ? ` (via ${jdSourceLabel(res.source)})` : ''}`,
           variant: res.lowConfidence ? 'info' : 'success',
         });
@@ -240,13 +240,13 @@ export default function TailorPage() {
     }
   }
 
-  // Draft persistence for the JD (Task 18 / Req 30.1) — never lose a long paste.
+  // Draft persistence for the JD (Task 18 / Req 30.1) - never lose a long paste.
   const draft = useDraft<string>('tailor-jd');
 
   // ARIA live announcement for async AI results (Task 16 / Req 21.6).
   const activeStageLabel = TAILOR_STAGES.find((s) => stages[s.key] === 'active')?.label;
 
-  // Map the streamed stage record → the shared AiProgress live-mode props.
+  // Map the streamed stage record -> the shared AiProgress live-mode props.
   const liveDoneKeys = TAILOR_STAGES.filter((s) => stages[s.key] === 'done').map((s) => s.key);
   const liveActiveKey =
     TAILOR_STAGES.find((s) => stages[s.key] === 'active')?.key ??
@@ -262,7 +262,7 @@ export default function TailorPage() {
         : '';
 
   // A prior fit analysis becomes stale the moment the JD or source resume
-  // changes — clear it so we never show a result that no longer matches inputs.
+  // changes - clear it so we never show a result that no longer matches inputs.
   React.useEffect(() => {
     setAnalysis(null);
   }, [jd, resumeId]);
@@ -323,11 +323,11 @@ export default function TailorPage() {
         data = res.data;
       } catch (streamErr) {
         if (streamErr instanceof TailorStreamCancelled) {
-          // User cancelled — preserve input, no error toast.
+          // User cancelled - preserve input, no error toast.
           setPhase('input');
           return;
         }
-        // Stream unusable (flag off / unsupported / network) → transparent
+        // Stream unusable (flag off / unsupported / network) -> transparent
         // fallback to the non-stream path so the user still gets a result.
         const res = await previewImproveResume(resumeId, jid, promptId || undefined);
         data = res.data;
@@ -337,7 +337,7 @@ export default function TailorPage() {
       setPhase('review');
     } catch (e) {
       // Preserve input (jd/resume stay in state) and show a graceful, structured
-      // failure surface. NEVER render raw error text — a 5xx from the Heroku
+      // failure surface. NEVER render raw error text - a 5xx from the Heroku
       // router is an HTML page, and `toUserMessage` guarantees a clean message.
       const isApiErr = e instanceof ApiError;
       // Retryable: network/timeout/5xx/429 could plausibly succeed on retry.
@@ -379,7 +379,7 @@ export default function TailorPage() {
       });
       draft.clear();
       // A confirmed tailor creates a NEW resume variant AND a new application
-      // card — refresh both list surfaces so they're visible immediately.
+      // card - refresh both list surfaces so they're visible immediately.
       invalidateResumeLists(qc);
       invalidateApplicationLists(qc);
       toast({ title: 'Tailored resume saved', variant: 'success' });
@@ -421,7 +421,7 @@ export default function TailorPage() {
       <div>
         <h1 className="text-2xl font-semibold">Tailor to a job</h1>
         <p className="text-sm text-[var(--muted-foreground)]">
-          Paste a job description and get a tailored resume — grounded in your real experience.
+          Paste a job description and get a tailored resume - grounded in your real experience.
         </p>
       </div>
 
@@ -464,7 +464,7 @@ export default function TailorPage() {
             <SelectContent>
               {resumesQuery.data!.map((r) => (
                 <SelectItem key={r.resume_id} value={r.resume_id}>
-                  {r.title || r.filename || 'Untitled'} {r.is_master ? '· Master' : ''}
+                  {r.title || r.filename || 'Untitled'} {r.is_master ? '- Master' : ''}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -520,7 +520,7 @@ export default function TailorPage() {
               role="alert"
               className="rounded-[var(--radius-at-md)] border border-[var(--at-warning)]/40 bg-[var(--at-warning)]/10 px-3 py-2 text-xs text-[var(--foreground)]"
             >
-              We couldn&apos;t confidently extract this posting — please check and edit the text
+              We couldn&apos;t confidently extract this posting - please check and edit the text
               below before tailoring.
             </div>
           )}
@@ -529,7 +529,7 @@ export default function TailorPage() {
               role="status"
               className="rounded-[var(--radius-at-md)] border border-[var(--at-warning)]/40 bg-[var(--at-warning)]/10 px-3 py-2 text-xs text-[var(--foreground)]"
             >
-              Some sections may be missing — please verify the full description below.
+              Some sections may be missing - please verify the full description below.
             </div>
           )}
           {jdMeta?.warnings && jdMeta.warnings.length > 0 && (
@@ -554,7 +554,7 @@ export default function TailorPage() {
               draft.save(e.target.value);
             }}
             onKeyDown={(e) => {
-              // Cmd/Ctrl+Enter generates without reaching for the mouse — the
+              // Cmd/Ctrl+Enter generates without reaching for the mouse - the
               // same shortcut the wizard uses, so muscle memory carries over.
               if (
                 (e.metaKey || e.ctrlKey) &&
@@ -568,14 +568,14 @@ export default function TailorPage() {
                 void onGenerate();
               }
             }}
-            placeholder="Paste the full job description here…"
+            placeholder="Paste the full job description here..."
             className="min-h-40"
             disabled={phase === 'generating'}
           />
           <p className="text-xs text-[var(--muted-foreground)]">
             {jd.trim().length < MIN_JD
               ? `Add at least ${MIN_JD} characters (${jd.trim().length}/${MIN_JD}).`
-              : 'Looks good — press ⌘/Ctrl+Enter to generate.'}
+              : 'Looks good - press ⌘/Ctrl+Enter to generate.'}
           </p>
         </div>
 
@@ -653,7 +653,7 @@ export default function TailorPage() {
                 Fit analysis
                 <Explain label="What is fit analysis?">
                   A quick, pre-generation estimate of how many keywords from this job already appear
-                  in your selected resume. Use it to decide whether to tailor — it does not change
+                  in your selected resume. Use it to decide whether to tailor - it does not change
                   your resume.
                 </Explain>
               </p>
@@ -697,11 +697,11 @@ export default function TailorPage() {
         </Card>
       )}
 
-      {/* Generating — honest, per-stage progress streamed from the backend
+      {/* Generating - honest, per-stage progress streamed from the backend
           (shared AiProgress in LIVE mode). */}
       {phase === 'generating' && (
         <Card className="space-y-4 p-5">
-          <p className="text-sm font-medium">Tailoring your resume…</p>
+          <p className="text-sm font-medium">Tailoring your resume...</p>
           <AiProgress
             stages={TAILOR_STAGES}
             activeKey={liveActiveKey}
@@ -711,7 +711,7 @@ export default function TailorPage() {
           />
           <div className="flex items-center justify-between gap-3 pt-1">
             <span className="text-xs text-[var(--muted-foreground)]">
-              You can cancel anytime — nothing is saved until you accept.
+              You can cancel anytime - nothing is saved until you accept.
             </span>
             <Button variant="outline" size="sm" onClick={onCancelGenerate}>
               Cancel
@@ -720,7 +720,7 @@ export default function TailorPage() {
         </Card>
       )}
 
-      {/* Failure — graceful, structured surface. Never raw HTML/stack traces.
+      {/* Failure - graceful, structured surface. Never raw HTML/stack traces.
           Input is preserved so Retry re-runs with the same JD + resume. */}
       {phase === 'error' && failure && (
         <Card
@@ -730,10 +730,10 @@ export default function TailorPage() {
           <div className="flex items-start gap-3">
             <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0 text-[var(--destructive)]" />
             <div className="flex-1 space-y-1">
-              <p className="text-sm font-medium">Resume tailoring didn’t complete</p>
+              <p className="text-sm font-medium">Resume tailoring didn't complete</p>
               <p className="text-sm text-[var(--muted-foreground)]">{failure.message}</p>
               <p className="text-xs text-[var(--muted-foreground)]">
-                Your job description and resume selection are saved — nothing was lost.
+                Your job description and resume selection are saved - nothing was lost.
               </p>
               {failure.requestId && (
                 <p className="pt-1 font-mono text-[11px] text-[var(--muted-foreground)]">
@@ -765,7 +765,7 @@ export default function TailorPage() {
         </Card>
       )}
 
-      {/* Review — results render inline below */}
+      {/* Review - results render inline below */}
       {phase === 'review' && result && (
         <div className="space-y-4">
           {ats && (
@@ -777,7 +777,7 @@ export default function TailorPage() {
                   <Explain label="What is the match score?">
                     An estimate of how well this tailored resume aligns with the job description,
                     combining keyword match, skills coverage, and section completeness. Higher is
-                    better — aim for 75+. It is guidance, not a guarantee of how a specific ATS will
+                    better - aim for 75+. It is guidance, not a guarantee of how a specific ATS will
                     parse your resume.
                   </Explain>
                 </p>
@@ -810,7 +810,7 @@ export default function TailorPage() {
                   {diff.total_changes} change{diff.total_changes === 1 ? '' : 's'} proposed
                   <Explain label="What are these changes?">
                     Each change rewrites or reorders content you already have to better match the
-                    role — emphasising relevant skills and keywords. Nothing is invented; expand the
+                    role - emphasising relevant skills and keywords. Nothing is invented; expand the
                     details to review every edit before you accept.
                   </Explain>
                 </p>
@@ -822,7 +822,7 @@ export default function TailorPage() {
                 </button>
               </div>
               <p className="mt-1 flex items-center gap-1.5 text-xs text-[var(--at-success)]">
-                <ShieldCheck className="h-3.5 w-3.5" /> Grounded in your resume — no invented
+                <ShieldCheck className="h-3.5 w-3.5" /> Grounded in your resume - no invented
                 experience.
               </p>
               {showDetail && result.detailed_changes && (

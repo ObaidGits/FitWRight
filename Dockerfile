@@ -11,7 +11,7 @@ FROM node:24-bookworm AS frontend-builder
 ARG NEXT_PUBLIC_API_URL=/
 # Baked at build time (NEXT_PUBLIC_* are inlined into the client bundle).
 ARG NEXT_PUBLIC_SINGLE_USER_MODE=false
-# Canonical host — must match backend FRONTEND_BASE_URL / OAUTH_REDIRECT_URI (www).
+# Canonical host - must match backend FRONTEND_BASE_URL / OAUTH_REDIRECT_URI (www).
 ARG NEXT_PUBLIC_SITE_URL=https://www.fitwright.tech
 ENV NEXT_TELEMETRY_DISABLED=1 \
     NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL} \

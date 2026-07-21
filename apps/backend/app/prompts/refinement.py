@@ -142,7 +142,7 @@ CRITICAL RULES:
 2. Do NOT add skills, technologies, or certifications not in the master resume
 3. Rephrase existing bullet points and content to include keywords - do not invent new content, metrics, or work history
 4. Maintain the exact same JSON structure
-5. Do not use em-dashes (—) or their variants (---, --)
+5. Do not use em-dashes (-) or their variants (---, --)
 6. Make keyword incorporation the DEFAULT across all content sections, not an optional enhancement
 
 Keywords to inject (only if supported by master resume):

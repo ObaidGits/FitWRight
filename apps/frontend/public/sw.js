@@ -1,14 +1,14 @@
 /*
- * FitWright service worker (P4 Resilience — R2, R8.5, R9.8, R9.12).
+ * FitWright service worker (P4 Resilience - R2, R8.5, R9.8, R9.12).
  *
  * Versioned, offline-capable, and safe:
  * - App-shell navigations: network-first, falling back to the cached shell so
- *   offline reloads still render (masks free-tier cold starts too — ADR-15).
+ *   offline reloads still render (masks free-tier cold starts too - ADR-15).
  * - Static assets (_next/static, fonts): cache-first (immutable, hashed).
  * - Safe GET API responses: stale-while-revalidate, restricted to an allowlist.
  * - NEVER cache auth / OAuth / CSRF / api-key / mutation / AI responses (R8.5).
  * - Versioned cache; old caches pruned on activate (R9.12).
- * - Safe update: installs but WAITS — no destructive skipWaiting mid-edit; the
+ * - Safe update: installs but WAITS - no destructive skipWaiting mid-edit; the
  *   app posts SKIP_WAITING at a safe point (R9.8).
  * - Kill-switch: CLEAR_CACHES + UNREGISTER messages for OFFLINE_SUPPORT=off and
  *   logout / different-user detection.
@@ -60,7 +60,7 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(SHELL_CACHE).then((cache) => cache.add(SHELL_URL).catch(() => undefined))
   );
-  // Do NOT skipWaiting here — a new SW waits until the app confirms a safe point.
+  // Do NOT skipWaiting here - a new SW waits until the app confirms a safe point.
 });
 
 self.addEventListener('activate', (event) => {

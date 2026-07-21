@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Profile completeness card — a weighted score ring + prioritized next actions.
+ * Profile completeness card - a weighted score ring + prioritized next actions.
  *
  * The score and suggestions come from the backend Completion Engine (single
  * source of truth), so the nudge list and the number never disagree. Unmet,
@@ -64,7 +64,7 @@ export function CompletenessCard({
         <div className="min-w-0">
           <h2 className="text-sm font-semibold text-[var(--foreground)]">Profile strength</h2>
           <p className="text-xs text-[var(--muted-foreground)]">
-            {bandLabel(clamped)} · {clamped}% complete
+            {bandLabel(clamped)} - {clamped}% complete
           </p>
         </div>
       </div>
