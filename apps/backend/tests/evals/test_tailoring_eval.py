@@ -80,12 +80,17 @@ async def test_llm_judge_scores_good_tailoring_highly():
     case = GOLDEN_CASES[0]
     prompt = _build_judge_prompt(case["job_description"], case["tailored_good"])
 
-    # One cheap call. schema_type="enrichment" keeps truncation heuristics
-    # lenient for this small free-form JSON (not a full resume payload).
+    # One call. schema_type="enrichment" keeps truncation heuristics lenient for
+    # this small free-form JSON (not a full resume payload). The budget is sized
+    # for *reasoning* models (e.g. DeepSeek-R1 style), which emit a chain of
+    # thought before the JSON verdict; 512 tokens can be fully consumed by that
+    # reasoning and truncate before the `{...}` is reached. 2048 leaves room for
+    # the reasoning AND the compact verdict so the judge is usable across both
+    # reasoning and non-reasoning providers. The rubric/assertion are unchanged.
     result = await complete_json(
         prompt,
         system_prompt="You are an impartial resume-tailoring evaluator.",
-        max_tokens=512,
+        max_tokens=2048,
         schema_type="enrichment",
     )
 
