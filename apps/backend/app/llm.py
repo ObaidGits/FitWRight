@@ -1367,13 +1367,18 @@ async def complete_json(
     use_json_mode = _supports_json_mode(model_name)
     json_mode_failed = False
 
+    # Output budget for this call. A truncation-triggered retry raises this
+    # (clamped to the model's real limit) rather than re-issuing an identically
+    # capped request that would truncate again - fewer wasted, doomed retries.
+    effective_max_tokens = max_tokens
+
     for attempt in range(retries + 1):
         try:
             kwargs: dict[str, Any] = {
                 "model": "primary",
                 "messages": messages,
-                "max_tokens": max_tokens,
-                "timeout": _calculate_timeout("json", max_tokens, config.provider),
+                "max_tokens": effective_max_tokens,
+                "timeout": _calculate_timeout("json", effective_max_tokens, config.provider),
             }
             # LLM-002: Increase temperature on retry for variation
             retry_temp = _get_retry_temperature(model_name, attempt)
@@ -1451,6 +1456,12 @@ async def complete_json(
                             "\n\nIMPORTANT: Output ONLY a valid JSON object. Start with { and end with }."
                         )
                     messages[-1]["content"] = prompt + hint
+                    # Truncation usually means the output hit the token cap.
+                    # Give the retry more room (clamped to the model's limit) so
+                    # it can actually complete instead of truncating identically.
+                    bumped = get_safe_max_tokens(model_name, effective_max_tokens + 2048)
+                    if bumped > effective_max_tokens:
+                        effective_max_tokens = bumped
                     continue
                 logging.warning(
                     "Parsed JSON appears truncated on final attempt, proceeding with result"

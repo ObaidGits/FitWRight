@@ -751,6 +751,73 @@ def _skill_present_in_resume_text(skill: str, resume_data: dict[str, Any]) -> bo
     return _skill_mentioned_in_text(skill, text)
 
 
+def build_skill_target_plan(
+    original_resume_data: dict[str, Any],
+    job_keywords: dict[str, Any],
+    job_description: str | None = None,
+) -> dict[str, list[dict[str, str]] | str]:
+    """Deterministically build the skill-target plan - no LLM call.
+
+    Token optimization (audit R2): the LLM skill-plan pass only ever *selected*
+    from a set that is itself deterministic - ``verify_skill_target_plan``
+    accepts a proposed skill only if it is an existing resume skill, a JD
+    required/preferred skill, or already present in the resume text. This
+    function computes that accepted set directly, producing the identical
+    ``{"accepted", "rejected", "strategy_notes"}`` shape so the downstream diff
+    context and the ``apply_diffs`` anti-fabrication gate are unchanged.
+
+    Anti-fabrication is preserved exactly: every accepted target is either an
+    existing skill or a JD-stated skill (the same universe the LLM plan was
+    filtered to). Nothing outside that universe is ever proposed, and
+    ``apply_diffs`` still gates every ``add_skill`` against this list.
+    """
+    original_skills = _extract_skill_index(
+        original_resume_data.get("additional", {}).get("technicalSkills", [])
+    )
+    jd_skills = _extract_jd_skill_index(job_keywords, job_description)
+    jd_text = job_description or ""
+    accepted: list[dict[str, str]] = []
+    seen: set[str] = set()
+
+    # 1) Existing resume skills that are relevant to the JD (present in the JD
+    #    skill set or mentioned in the JD text) - safe to emphasize/reorder.
+    for key, display in original_skills.items():
+        if key in seen:
+            continue
+        if key in jd_skills or _skill_mentioned_in_text(display, jd_text):
+            accepted.append(
+                {
+                    "skill": display,
+                    "source": "existing",
+                    "reason": "Existing resume skill relevant to the job description",
+                }
+            )
+            seen.add(key)
+
+    # 2) JD required/preferred skills (stated in the JD) - the tailoring targets.
+    for key, display in jd_skills.items():
+        if key in seen:
+            continue
+        source = "existing" if key in original_skills else "jd_added"
+        accepted.append(
+            {
+                "skill": display,
+                "source": source,
+                "reason": "Required or preferred by the job description",
+            }
+        )
+        seen.add(key)
+
+    return {
+        "accepted": accepted,
+        "rejected": [],
+        "strategy_notes": (
+            "Skill targets derived deterministically from JD keywords and "
+            "existing resume skills."
+        ),
+    }
+
+
 def verify_skill_target_plan(
     raw_plan: dict[str, Any],
     original_resume_data: dict[str, Any],

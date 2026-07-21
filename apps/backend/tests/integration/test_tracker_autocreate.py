@@ -114,9 +114,11 @@ class TestTrackerAutoCreate:
         assert card["resume_id"] == tailored_id
         assert card["master_resume_id"] == resume_id
         assert card["job_id"] == job_id
-        # Company comes from the cached job; role falls back to the resume title.
+        # Company comes from the cached job; role falls back to the resume title,
+        # which is now composed deterministically from the cached role/company
+        # (no LLM call on confirm) as "<Name> - <Role @ Company>".
         assert card["company"] == "Acme Corp"
-        assert card["role"] == "Senior Backend Engineer - Acme Corp"
+        assert card["role"] == "Jane Doe - Senior Backend Engineer @ Acme Corp"
         assert card["applied_at"] is not None
 
     async def test_autocreate_is_idempotent_on_double_confirm(self, isolated_db, sample_resume):
