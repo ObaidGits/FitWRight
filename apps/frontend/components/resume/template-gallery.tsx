@@ -28,7 +28,7 @@ import {
 import { cn } from '@/lib/utils';
 import type { ResumeData } from '@/components/dashboard/resume-component';
 import { ResumeDocument } from '@/components/resume/resume-document';
-import { SAMPLE_RESUME } from '@/lib/resume/sample-resume';
+import { SAMPLE_RESUME, SAMPLE_RESUME_WITH_PHOTO } from '@/lib/resume/sample-resume';
 import {
   type ResumeTemplate,
   type TemplateCategory,
@@ -137,6 +137,12 @@ export interface TemplateGalleryProps {
   selectedId?: string;
   recommendSignal?: RecommendSignal;
   sampleData?: ResumeData;
+  /**
+   * Sample data used for photo-capable templates so their photo slot is
+   * demonstrated in the preview. Defaults to the photo-enabled sample; a caller
+   * rendering a real resume can pass their own data here to keep the two in sync.
+   */
+  samplePhotoData?: ResumeData;
   ctaLabel?: string;
 }
 
@@ -145,8 +151,16 @@ export function TemplateGallery({
   selectedId,
   recommendSignal,
   sampleData = SAMPLE_RESUME,
+  samplePhotoData = SAMPLE_RESUME_WITH_PHOTO,
   ctaLabel = 'Use template',
 }: TemplateGalleryProps) {
+  // Photo-capable templates preview with a sample headshot so the photo slot is
+  // visible; photo-incapable templates (e.g. latex) stay photo-less.
+  const dataForTemplate = React.useCallback(
+    (t: ResumeTemplate): ResumeData =>
+      t.photoSupport !== 'none' ? samplePhotoData : sampleData,
+    [sampleData, samplePhotoData]
+  );
   const { favorites, toggle } = useFavorites();
   const [query, setQuery] = React.useState('');
   const [category, setCategory] = React.useState<TemplateCategory | 'all'>('all');
@@ -258,7 +272,7 @@ export function TemplateGallery({
             <li key={t.id}>
               <TemplateCard
                 template={t}
-                data={sampleData}
+                data={dataForTemplate(t)}
                 selected={selectedId === t.id}
                 favorite={favorites.includes(t.id)}
                 recommended={recommendedIds.has(t.id)}
@@ -291,7 +305,7 @@ export function TemplateGallery({
               <p className="text-xs text-[var(--muted-foreground)]">{preview.atsNote}</p>
               <div className="max-h-[60vh] overflow-y-auto rounded-[var(--radius-at-lg)] border border-[var(--border)] bg-[var(--at-surface-2)] p-4">
                 <ResumeDocument
-                  data={sampleData}
+                  data={dataForTemplate(preview)}
                   settings={templateToSettings(preview)}
                   maxPages={2}
                 />

@@ -6,6 +6,14 @@
  * evaluates in the gallery. Pure data; rendered through the shared renderer.
  */
 import type { ResumeData } from '@/components/dashboard/resume-component';
+import { DEFAULT_PHOTO_CONFIG } from '@/lib/types/photo';
+
+/**
+ * Bundled, neutral placeholder headshot (a silhouette, not a real person) served
+ * from `public/`. Used only to visualize photo-capable templates in the gallery
+ * so a user can see WHERE and HOW a profile photo renders before choosing one.
+ */
+export const SAMPLE_AVATAR_URL = '/sample-avatar.svg';
 
 export const SAMPLE_RESUME: ResumeData = {
   personalInfo: {
@@ -72,4 +80,26 @@ export const SAMPLE_RESUME: ResumeData = {
   },
   customSections: {},
   sectionMeta: [],
+};
+
+/**
+ * The same sample resume, but with the profile photo enabled and pointed at the
+ * bundled placeholder headshot. The gallery renders THIS variant for
+ * photo-capable templates (photoSupport !== 'none') so their photo slot is
+ * actually demonstrated, while photo-incapable templates keep using the
+ * photo-less {@link SAMPLE_RESUME}. `position: 'template-default'` lets each
+ * template place the photo in its own default slot (header/sidebar).
+ */
+export const SAMPLE_RESUME_WITH_PHOTO: ResumeData = {
+  ...SAMPLE_RESUME,
+  personalInfo: {
+    ...SAMPLE_RESUME.personalInfo,
+    avatarUrl: SAMPLE_AVATAR_URL,
+    photo: {
+      ...DEFAULT_PHOTO_CONFIG,
+      show: true,
+      shape: 'circle',
+      size: 'lg',
+    },
+  },
 };
