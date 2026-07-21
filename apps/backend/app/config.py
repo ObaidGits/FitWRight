@@ -422,6 +422,16 @@ class Settings(BaseSettings):
     # required-in-hosted / ephemeral-in-local rules as ``session_secret``.
     ip_hash_secret: str = ""
 
+    # Symmetric secret used to encrypt provider API keys at rest (``app/crypto``).
+    # MUST be stable across restarts/redeploys, otherwise stored ciphertext can no
+    # longer be decrypted and users' saved keys appear wiped. On a platform with an
+    # ephemeral filesystem (e.g. Heroku) the on-disk ``data/.secret_key`` fallback
+    # is regenerated on every release, so this env var is REQUIRED in hosted mode.
+    # Locally (single-user) it is optional: the persistent on-disk secret is used.
+    # Accepts either a Fernet key (``Fernet.generate_key()``) or any strong string
+    # (a stable key is derived from it). Rotating this value orphans existing keys.
+    app_encryption_key: str = ""
+
     # Google OAuth (provider-abstracted, R4). All optional - OAuth is only wired
     # when both client id and secret are present. A partial pair is rejected.
     google_client_id: str = ""
@@ -1165,6 +1175,23 @@ class Settings(BaseSettings):
         if self.session_secret_prev and len(self.session_secret_prev) < _MIN_SECRET_LENGTH:
             errors.append(
                 f"SESSION_SECRET_PREV must be at least {_MIN_SECRET_LENGTH} characters"
+            )
+
+        # -- API-key encryption secret: required in hosted so users' provider
+        # keys survive restarts/redeploys. Without a stable secret the encrypted
+        # keys in the DB become undecryptable after every release on an ephemeral
+        # filesystem. Local (single-user) mode uses the persistent on-disk
+        # ``data/.secret_key`` fallback, so the env var is optional there.
+        if self.app_encryption_key:
+            if len(self.app_encryption_key) < _MIN_SECRET_LENGTH:
+                errors.append(
+                    f"APP_ENCRYPTION_KEY must be at least {_MIN_SECRET_LENGTH} characters"
+                )
+        elif not self.single_user_mode:
+            errors.append(
+                "APP_ENCRYPTION_KEY is required when SINGLE_USER_MODE is off "
+                "(without it, stored provider API keys cannot be decrypted after a "
+                "restart/redeploy on an ephemeral filesystem)"
             )
 
         # -- internal job token: if set, must be long enough to be a real secret.

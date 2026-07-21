@@ -22,6 +22,7 @@ def _hosted(**overrides) -> dict:
         single_user_mode=False,
         session_secret="x" * 32,
         ip_hash_secret="y" * 32,
+        app_encryption_key="k" * 32,
         database_url="postgresql+asyncpg://user:pass@host:5432/db",
         # external_cron (the default) now requires a job token in hosted mode so
         # the scheduler endpoint is actually reachable; provide one for a valid base.
@@ -75,6 +76,12 @@ class TestHostedRequiredSecrets:
     def test_missing_ip_hash_secret_fails(self):
         with pytest.raises(ValidationError, match="IP_HASH_SECRET"):
             Settings(**_hosted(ip_hash_secret=""))
+
+    def test_missing_app_encryption_key_fails(self):
+        # Without a stable encryption secret, stored provider API keys become
+        # undecryptable after every redeploy on an ephemeral filesystem.
+        with pytest.raises(ValidationError, match="APP_ENCRYPTION_KEY"):
+            Settings(**_hosted(app_encryption_key=""))
 
     def test_hosted_never_generates_ephemeral(self):
         # The error proves no ephemeral fallback happened in hosted mode.

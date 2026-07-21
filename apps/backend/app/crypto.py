@@ -1,15 +1,28 @@
 """Fernet encryption for API keys at rest.
 
-The symmetric secret lives at ``data/.secret_key`` (auto-generated, ``chmod
-600``, gitignored). It is loaded once and used to encrypt/decrypt provider keys
-so plaintext exists in memory only at call time.
+The symmetric secret is resolved with the following precedence:
 
-Resilience: a missing secret is generated on demand; a key that fails to
+1. The ``APP_ENCRYPTION_KEY`` environment variable (``settings.app_encryption_key``).
+   This is the source used in any hosted/containerized deployment, because it is
+   stable across restarts and redeploys. It accepts either a Fernet key
+   (``Fernet.generate_key()``) or any sufficiently strong string, from which a
+   stable Fernet key is derived. It is **required** in hosted mode.
+2. Otherwise, an on-disk secret at ``data/.secret_key`` (auto-generated, ``chmod
+   600``, gitignored). This is the local/self-hosted path, where the filesystem
+   is persistent. On an ephemeral filesystem (e.g. Heroku) this file is wiped on
+   every release, which is why option 1 is mandatory there.
+
+The secret is loaded once and used to encrypt/decrypt provider keys so plaintext
+exists in memory only at call time.
+
+Resilience: a missing on-disk secret is generated on demand; a key that fails to
 decrypt (e.g. the secret was rotated/lost) is treated as empty rather than
 crashing - the user is prompted to re-enter, and stored ciphertext is never
 recoverable without the original secret.
 """
 
+import base64
+import hashlib
 import logging
 import os
 import tempfile
@@ -21,8 +34,12 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+# Sentinel recorded in ``_loaded_from`` when the secret came from the env var,
+# so the cache invalidates correctly if the source switches (e.g. in tests).
+_ENV_SOURCE = "env:APP_ENCRYPTION_KEY"
+
 _fernet: Fernet | None = None
-_loaded_from: Path | None = None
+_loaded_from: Path | str | None = None
 
 
 def _secret_path() -> Path:
@@ -65,9 +82,39 @@ def _write_secret(path: Path, key: bytes, *, exclusive: bool = False) -> None:
         tmp.unlink(missing_ok=True)
 
 
+def _coerce_fernet_key(raw: str) -> bytes:
+    """Turn an arbitrary configured secret into a valid Fernet key.
+
+    If ``raw`` already is a valid Fernet key (32-byte urlsafe-base64), use it
+    verbatim so operators can supply ``Fernet.generate_key()`` output directly.
+    Otherwise derive a stable key deterministically via SHA-256, so any strong
+    string works and always maps to the same key across restarts.
+    """
+    raw_bytes = raw.encode("utf-8")
+    try:
+        Fernet(raw_bytes)  # validates length/format
+        return raw_bytes
+    except (ValueError, TypeError):
+        return base64.urlsafe_b64encode(hashlib.sha256(raw_bytes).digest())
+
+
 def _load_fernet() -> Fernet:
-    """Load (or generate) the Fernet instance, cached per secret path."""
+    """Load (or generate) the Fernet instance, cached per secret source.
+
+    Prefers the ``APP_ENCRYPTION_KEY`` env var (stable across redeploys); falls
+    back to the on-disk secret for local/self-hosted use.
+    """
     global _fernet, _loaded_from
+
+    env_secret = (settings.app_encryption_key or "").strip()
+    if env_secret:
+        if _fernet is not None and _loaded_from == _ENV_SOURCE:
+            return _fernet
+        _fernet = Fernet(_coerce_fernet_key(env_secret))
+        _loaded_from = _ENV_SOURCE
+        logger.debug("Loaded API-key encryption secret from APP_ENCRYPTION_KEY.")
+        return _fernet
+
     path = _secret_path()
     if _fernet is not None and _loaded_from == path:
         return _fernet

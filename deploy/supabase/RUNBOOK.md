@@ -47,7 +47,10 @@ locally and runs the full migration chain + the runtime harness.
    - `SINGLE_USER_MODE=false`, `DATABASE_URL=<pooled 6543>`, `DB_USE_POOLER=true`
    - `MIGRATION_DATABASE_URL=<direct 5432>` (so startup migration avoids the pooler)
    - `DB_SSL=require`, `DB_AUTO_MIGRATE=true`
-   - `SESSION_SECRET`, `IP_HASH_SECRET` (generate; required in hosted mode)
+   - `SESSION_SECRET`, `IP_HASH_SECRET`, `APP_ENCRYPTION_KEY` (generate; required
+     in hosted mode). `APP_ENCRYPTION_KEY` must stay constant for the life of the
+     deployment - changing/losing it makes every stored provider API key
+     undecryptable (users would have to re-enter them).
    - `OWNER_EMAIL` (+ optional `OWNER_PASSWORD`), `FRONTEND_BASE_URL`, CORS
    - `STORAGE_PROVIDER=cloudinary` (+ creds) so files don't grow the DB
 3. **Boot the app.** With `DB_AUTO_MIGRATE=true` the schema is migrated to head

@@ -233,6 +233,7 @@ def _hosted_settings() -> Settings:
         single_user_mode=False,
         session_secret="session-secret-value-1234",
         ip_hash_secret="ip-hash-secret-value-1234",
+        app_encryption_key="app-encryption-key-value-1234",
         database_url="postgresql+asyncpg://user:pass@localhost/db",
         cookie_secure=False,  # allow TestClient over http
         # external_cron hosted mode now requires a job token; and keep hermetic
