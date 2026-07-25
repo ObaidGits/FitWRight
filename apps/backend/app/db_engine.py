@@ -21,15 +21,27 @@ isolated-temp-file test ergonomics); passing a URL string selects the dialect;
 passing ``None`` resolves ``settings.effective_database_url``.
 """
 
+import logging
+import threading
+from contextlib import contextmanager
+from functools import wraps
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
-from sqlalchemy import create_engine, event
-from sqlalchemy.engine import Engine
+try:  # Linux production/local target; fallback still serializes threads.
+    import fcntl
+except ImportError:  # pragma: no cover - non-POSIX developer platform
+    fcntl = None  # type: ignore[assignment]
+
+from sqlalchemy import Column, UniqueConstraint, create_engine, event
+from sqlalchemy.engine import Connection, Engine
+from sqlalchemy.schema import CreateIndex
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from app.config import settings
 from app.models import Base
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "Base",
@@ -277,17 +289,23 @@ def _pg_sync_options() -> dict[str, Any]:
     seconds to every LLM-touching request. ``pool_pre_ping`` + ``pool_recycle``
     keep the warm connections safe against the pooler's idle timeout.
     """
+    # The sync engine is a cold path (audit B1/D1): the decrypted-key cache
+    # serves the LLM hot path, so this engine only sees cache-miss reads and rare
+    # writes. Keep a small idle pool (``db_sync_pool_size``) but let overflow
+    # absorb a cold-cache burst up to the async engine's size.
+    sync_pool_size = max(1, settings.db_sync_pool_size)
+    overflow = max(sync_pool_size, settings.db_pool_size)
     if settings.db_use_pooler:
         return {
-            "pool_size": settings.db_pool_size,
-            "max_overflow": settings.db_pool_size,
+            "pool_size": sync_pool_size,
+            "max_overflow": overflow,
             "pool_pre_ping": True,
             "pool_recycle": 1800,
             "connect_args": {"prepare_threshold": None},
         }
     return {
-        "pool_size": settings.db_pool_size,
-        "max_overflow": settings.db_pool_size,
+        "pool_size": sync_pool_size,
+        "max_overflow": overflow,
         "pool_pre_ping": True,
     }
 
@@ -335,18 +353,219 @@ def make_sync_engine(source: Path | str | None = None) -> Engine:
     return create_engine(clean_url, future=True, **options)
 
 
-# Owned tables that must carry a ``user_id`` scope column locally (ADR-4). This
-# mirrors the owned-table set enforced by ``app.repository.Repo`` and Alembic
-# migration 0003 on hosted.
-_OWNED_TABLES_LOCAL: tuple[str, ...] = (
-    "resumes",
-    "jobs",
-    "improvements",
-    "applications",
-    "api_keys",
-)
+# -- additive local SQLite schema reconciliation -----------------------------
 
 
+def _column_default_literal(col: Column) -> str | None:
+    """Return a SQL literal for a column's constant default, or ``None``.
+
+    Only *constant* defaults are usable in a SQLite ``ALTER TABLE ADD COLUMN``
+    (callables like ``_utcnow_iso`` are applied by the ORM at insert time, not by
+    the DB). Handles Python-side scalar defaults and simple ``server_default``
+    text (e.g. ``"1"``). Booleans map to ``0``/``1`` (SQLite has no bool type).
+    """
+    default = col.default
+    if default is not None and getattr(default, "is_scalar", False):
+        val = default.arg
+        if isinstance(val, bool):
+            return "1" if val else "0"
+        if isinstance(val, (int, float)):
+            return repr(val)
+        if isinstance(val, str):
+            return "'" + val.replace("'", "''") + "'"
+    server_default = col.server_default
+    if server_default is not None:
+        arg = getattr(server_default, "arg", None)
+        text = getattr(arg, "text", None) if arg is not None else None
+        if text is None and arg is not None:
+            text = str(arg)
+        if text:
+            return text
+    return None
+
+
+def _sqlite_add_column_ddl(engine: Engine, col: Column) -> str:
+    """Build the ``"name" TYPE [NOT NULL] [DEFAULT x]`` clause for an ADD COLUMN.
+
+    The column is added as **nullable** unless a constant default is available -
+    SQLite requires a default to add a NOT NULL column to a populated table, so
+    when none exists we drop the NOT NULL locally (the additive back-fill can
+    then never fail; hosted Postgres still enforces the real constraint via
+    Alembic). The type is compiled for the SQLite dialect from the model column.
+    """
+    type_sql = col.type.compile(dialect=engine.dialect)
+    default_sql = _column_default_literal(col)
+    clause = f'"{col.name}" {type_sql}'
+    if not col.nullable and default_sql is not None:
+        clause += f" NOT NULL DEFAULT {default_sql}"
+    elif default_sql is not None:
+        clause += f" DEFAULT {default_sql}"
+    return clause
+
+
+def _sqlite_type_affinity(declared_type: str) -> str:
+    """Return SQLite's storage affinity for a declared type."""
+    normalized = declared_type.upper()
+    if "INT" in normalized:
+        return "INTEGER"
+    if any(token in normalized for token in ("CHAR", "CLOB", "TEXT")):
+        return "TEXT"
+    if "BLOB" in normalized or not normalized:
+        return "BLOB"
+    if any(token in normalized for token in ("REAL", "FLOA", "DOUB")):
+        return "REAL"
+    return "NUMERIC"
+
+
+def _diagnose_sqlite_schema_drift(conn: Connection, engine: Engine) -> None:
+    """Warn about model drift that additive startup healing cannot repair.
+
+    This is deliberately read-only. Rebuilding a table to change primary keys,
+    types, nullability, uniqueness, or foreign keys can lose data and therefore
+    remains an explicit migration/operator action.
+    """
+    for table in Base.metadata.sorted_tables:
+        info = conn.exec_driver_sql(
+            f'PRAGMA table_info("{table.name}")'
+        ).mappings().all()
+        if not info:
+            continue
+        actual = {row["name"]: row for row in info}
+        problems: list[str] = []
+
+        expected_pk = [column.name for column in table.primary_key.columns]
+        actual_pk = [
+            row["name"]
+            for row in sorted(info, key=lambda item: int(item["pk"] or 0))
+            if int(row["pk"] or 0) > 0
+        ]
+        if actual_pk != expected_pk:
+            problems.append(f"primary_key expected={expected_pk} actual={actual_pk}")
+
+        for column in table.columns:
+            live = actual.get(column.name)
+            if live is None:
+                problems.append(f"missing_column={column.name}")
+                continue
+            expected_type = column.type.compile(dialect=engine.dialect)
+            if _sqlite_type_affinity(str(live["type"] or "")) != _sqlite_type_affinity(
+                expected_type
+            ):
+                problems.append(
+                    f"type {column.name} expected={expected_type} actual={live['type']}"
+                )
+            if (
+                not column.nullable
+                and not column.primary_key
+                and int(live["notnull"] or 0) != 1
+            ):
+                problems.append(f"nullable={column.name}")
+
+        index_rows = conn.exec_driver_sql(
+            f'PRAGMA index_list("{table.name}")'
+        ).mappings().all()
+        actual_index_names = {row["name"] for row in index_rows if row["name"]}
+        for index in table.indexes:
+            if index.unique and index.name and index.name not in actual_index_names:
+                problems.append(f"missing_unique_index={index.name}")
+
+        actual_unique_columns: set[tuple[str, ...]] = set()
+        for index_row in index_rows:
+            if not int(index_row["unique"] or 0) or not index_row["name"]:
+                continue
+            columns = conn.exec_driver_sql(
+                f'PRAGMA index_info("{index_row["name"]}")'
+            ).mappings().all()
+            names = tuple(row["name"] for row in columns if row["name"] is not None)
+            if names:
+                actual_unique_columns.add(names)
+        for constraint in table.constraints:
+            if isinstance(constraint, UniqueConstraint):
+                expected = tuple(column.name for column in constraint.columns)
+                if expected not in actual_unique_columns:
+                    problems.append(
+                        f"missing_unique_constraint={constraint.name or expected}"
+                    )
+
+        actual_foreign_keys = {
+            (
+                row["from"],
+                row["table"],
+                row["to"],
+                str(row["on_delete"] or "").upper(),
+            )
+            for row in conn.exec_driver_sql(
+                f'PRAGMA foreign_key_list("{table.name}")'
+            ).mappings()
+        }
+        for column in table.columns:
+            for foreign_key in column.foreign_keys:
+                target = foreign_key.column
+                expected_fk = (
+                    column.name,
+                    target.table.name,
+                    target.name,
+                    str(foreign_key.ondelete or "").upper(),
+                )
+                if expected_fk not in actual_foreign_keys:
+                    problems.append(
+                        "missing_foreign_key="
+                        f"{column.name}->{target.table.name}.{target.name}"
+                    )
+
+        if problems:
+            logger.warning(
+                "Local SQLite non-repairable schema drift on %s: %s. "
+                "Preserving data; run an explicit migration or rebuild from a backup.",
+                table.name,
+                "; ".join(problems),
+            )
+
+
+_SQLITE_SCHEMA_THREAD_LOCK = threading.Lock()
+
+
+@contextmanager
+def _sqlite_schema_init_lock(engine: Engine) -> Iterator[None]:
+    """Serialize SQLite schema initialization across threads and workers.
+
+    ``MetaData.create_all(checkfirst=True)`` performs a check followed by DDL;
+    two Uvicorn workers can both pass the check and race on CREATE/ALTER. A
+    stable sibling lock file protects the entire additive reconciliation phase.
+    The file is intentionally retained so a late process never locks a replaced
+    inode. In-memory databases only need the in-process lock.
+    """
+    with _SQLITE_SCHEMA_THREAD_LOCK:
+        database = engine.url.database
+        if fcntl is None or not database or database == ":memory:":
+            yield
+            return
+        db_path = Path(database).expanduser().resolve()
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        lock_path = db_path.with_name(f"{db_path.name}.schema.lock")
+        with lock_path.open("a+b") as lock_file:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
+def _serialize_sqlite_schema_init(func: Any) -> Any:
+    """Decorate SQLite initialization without indenting the reconciliation."""
+
+    @wraps(func)
+    def wrapped(engine: Engine) -> None:
+        if engine.dialect.name != "sqlite":
+            func(engine)
+            return
+        with _sqlite_schema_init_lock(engine):
+            func(engine)
+
+    return wrapped
+
+
+@_serialize_sqlite_schema_init
 def init_models_sync(engine: Engine) -> None:
     """Create/evolve the schema locally (SQLite only); no-op on Postgres.
 
@@ -371,19 +590,63 @@ def init_models_sync(engine: Engine) -> None:
 
     Base.metadata.create_all(engine)
 
+    # General additive reconciler: ``create_all`` creates *missing tables* with
+    # their full current schema, but SQLite never ALTERs an EXISTING table to add
+    # columns introduced later. So an older local DB keeps a table's original
+    # column set and the first query selecting a newer column 500s with
+    # "no such column" (seen on users.avatar_key, resumes.template_settings,
+    # resumes.version, ...). Here we compare every model table to the live table
+    # and additively ADD any missing column, derived from the model itself, so
+    # ALL past *and future* local schema drift self-heals on boot with zero data
+    # loss. This is the SQLite equivalent of the hosted Alembic chain; Postgres
+    # returns above and is untouched.
     with engine.begin() as conn:
-        columns = conn.exec_driver_sql("PRAGMA table_info(resumes)").mappings().all()
-        if columns and "interview_prep" not in {column["name"] for column in columns}:
-            conn.exec_driver_sql("ALTER TABLE resumes ADD COLUMN interview_prep TEXT")
+        for table in Base.metadata.sorted_tables:
+            info = conn.exec_driver_sql(
+                f'PRAGMA table_info("{table.name}")'
+            ).mappings().all()
+            if not info:
+                # Table absent (shouldn't happen post create_all) - skip; a later
+                # create_all covers it. Never ALTER a table we didn't confirm.
+                continue
+            existing = {column["name"] for column in info}
+            for col in table.columns:
+                if col.name in existing or col.primary_key:
+                    # PKs can't be added via ALTER; fresh tables already have them.
+                    continue
+                ddl = _sqlite_add_column_ddl(engine, col)
+                conn.exec_driver_sql(f'ALTER TABLE "{table.name}" ADD COLUMN {ddl}')
+                logger.info("Local SQLite schema heal: added %s.%s", table.name, col.name)
 
-        # Add a nullable ``user_id`` to any owned table missing it (older DBs).
-        # Kept nullable + index-only here (a PK/NOT NULL change on an existing
-        # SQLite table needs a rebuild - hosted does that via migration 0005).
-        for table in _OWNED_TABLES_LOCAL:
-            info = conn.exec_driver_sql(f"PRAGMA table_info({table})").mappings().all()
-            if info and "user_id" not in {column["name"] for column in info}:
-                conn.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN user_id TEXT")
-                conn.exec_driver_sql(
-                    f"CREATE INDEX IF NOT EXISTS ix_{table}_user_id "
-                    f"ON {table} (user_id)"
+        # ``create_all`` also creates indexes only when it creates the table;
+        # it does not repair indexes missing from an existing local table. Walk
+        # model metadata so every current and future ordinary lookup index is
+        # restored, including composite and expression indexes. Unique indexes
+        # are deliberately excluded: a stale local database may contain legacy
+        # duplicates, and attempting to enforce a newly introduced uniqueness
+        # invariant during startup would make the whole application unbootable.
+        # Those changes require an explicit, data-aware migration instead.
+        for table in Base.metadata.sorted_tables:
+            if not conn.exec_driver_sql(
+                f'PRAGMA table_info("{table.name}")'
+            ).first():
+                continue
+            existing_indexes = {
+                row["name"]
+                for row in conn.exec_driver_sql(
+                    f'PRAGMA index_list("{table.name}")'
+                ).mappings()
+                if row["name"]
+            }
+            for index in sorted(table.indexes, key=lambda item: item.name or ""):
+                if index.unique or not index.name or index.name in existing_indexes:
+                    continue
+                conn.execute(CreateIndex(index, if_not_exists=True))
+                existing_indexes.add(index.name)
+                logger.info(
+                    "Local SQLite schema heal: added index %s on %s",
+                    index.name,
+                    table.name,
                 )
+
+        _diagnose_sqlite_schema_drift(conn, engine)

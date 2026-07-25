@@ -25,6 +25,8 @@ import { fetchSession, logout as apiLogout, type SafeUser, type UserRole } from 
 import { setUnauthorizedHandler } from '@/lib/api/client';
 import { SINGLE_USER_MODE } from '@/lib/config/auth';
 import { OWNER_USER } from '@/lib/api/session-owner';
+import { getProfile } from '@/lib/api/profile';
+import { queryKeys } from '@/lib/query/client';
 
 export type { UserRole };
 /** Back-compat alias - the session user is the backend `SafeUser`. */
@@ -74,19 +76,38 @@ export function SessionProvider({
   );
 }
 
-/** Local/zero-config: the owner is always signed in (admin). No hydration. */
+/**
+ * Local/zero-config: the owner is always signed in (admin) - there is never a
+ * login wall and `signOut` is a no-op. We BEST-EFFORT hydrate the owner's real
+ * profile PHOTO from the backend (`/users/me/profile`, which resolves the
+ * implicit owner in single-user mode) so the account menu shows the actual
+ * avatar instead of only initials. `/auth/session` is deliberately NOT used
+ * here: it requires a session cookie and 401s for the cookieless local owner.
+ * Any failure falls back cleanly to {@link OWNER_USER}; access is never gated
+ * on it (`status` is always `authenticated`).
+ */
 function SingleUserSessionProvider({ children }: { children: React.ReactNode }) {
-  const value = React.useMemo<SessionContextValue>(
-    () => ({
-      user: OWNER_USER,
+  const profileQuery = useQuery({
+    queryKey: queryKeys.profile,
+    queryFn: getProfile,
+    staleTime: 60_000,
+    gcTime: 5 * 60_000,
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+
+  const value = React.useMemo<SessionContextValue>(() => {
+    const avatarUrl = profileQuery.data?.avatar_url ?? OWNER_USER.avatarUrl ?? null;
+    return {
+      user: { ...OWNER_USER, avatarUrl },
       status: 'authenticated',
-      isAdmin: OWNER_USER.role === 'admin',
+      isAdmin: true,
       refresh: async () => {},
       establish: () => {},
       signOut: async () => {},
-    }),
-    []
-  );
+    };
+  }, [profileQuery.data?.avatar_url]);
+
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }
 

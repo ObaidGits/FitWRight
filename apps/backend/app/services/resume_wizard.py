@@ -19,6 +19,11 @@ from app.schemas.models import (
     _coerce_string_list,
     normalize_resume_data,
 )
+from app.schemas.llm_outputs import (
+    WizardBulletsOutput,
+    WizardParsedEntriesOutput,
+    WizardTurnOutput,
+)
 from app.schemas.resume_wizard import (
     STRUCTURED_PERSONAL_INFO_FIELDS,
     ResumeWizardHistoryEntry,
@@ -564,7 +569,10 @@ async def run_ai_turn(
         answer_text=prompt_answer,
     )
     result = await complete_json(
-        prompt, max_tokens=max_tokens_for_section(section), schema_type="resume"
+        prompt,
+        max_tokens=max_tokens_for_section(section),
+        schema_type="resume",
+        response_model=WizardTurnOutput,
     )
     if not isinstance(result, dict):
         raise ValueError("Resume wizard LLM response must be a JSON object.")
@@ -665,7 +673,12 @@ async def draft_bullets(*, section: str, title: str, company: str, description: 
         facts=_sanitize(facts),
         description=_sanitize(description),
     )
-    result = await complete_json(prompt, max_tokens=600, schema_type="resume")
+    result = await complete_json(
+        prompt,
+        max_tokens=600,
+        schema_type="resume",
+        response_model=WizardBulletsOutput,
+    )
     if not isinstance(result, dict):
         return []
     # Reuse the resume schema's bullet coercion so numbered/΄dashed lines normalize.
@@ -684,7 +697,12 @@ async def parse_entries(*, section: str, text: str) -> list[dict[str, Any]]:
         entry_kind=_entry_kind(section),
         pasted_text=_sanitize(text),
     )
-    result = await complete_json(prompt, max_tokens=2000, schema_type="resume")
+    result = await complete_json(
+        prompt,
+        max_tokens=2000,
+        schema_type="resume",
+        response_model=WizardParsedEntriesOutput,
+    )
     if not isinstance(result, dict):
         return []
     raw_entries = result.get("entries")

@@ -29,7 +29,12 @@ import logging
 from fastapi import Request
 
 from app.admin.metrics import get_admin_metrics
-from app.auth import Capabilities, Principal, get_optional_principal
+from app.auth import (
+    Capabilities,
+    Principal,
+    capabilities_for,
+    get_optional_principal,
+)
 from app.auth.audit import AuditEvent, get_audit_service
 from app.auth.ratelimit import RateLimitRule, get_rate_limiter
 from app.auth.sessions import get_session_service
@@ -66,14 +71,54 @@ async def _audit_denied(request: Request, actor_user_id: str | None, *, capabili
     get_admin_metrics().record_authz_denied()
 
 
+async def _resolve_principal(request: Request) -> Principal | None:
+    """Resolve a session principal or the implicit local bootstrap owner.
+
+    Single-user mode deliberately has no session cookie, but its bootstrap owner
+    is an active admin. Rehydrate that durable account on admin requests so the
+    local admin console follows the same status/role/capability checks as hosted
+    sessions instead of bypassing authorization or returning a false 401.
+    """
+    principal = get_optional_principal(request)
+    if principal is not None:
+        return principal
+
+    from app.auth.accounts import get_by_id
+    from app.auth.context import set_current_user_id
+    from app.platform import get_container
+
+    owner_id = await get_container().identity_provider().resolve_owner_fallback()
+    if owner_id is None:
+        return None
+    set_current_user_id(owner_id)
+    account = await get_by_id(owner_id)
+    if account is None:
+        return None
+    principal = Principal(
+        user_id=account.id,
+        session_id="single-user-owner",
+        role=account.role,
+        capabilities=capabilities_for(account.role),
+        aal="aal1",
+        step_up_at=None,
+        email=account.email,
+        name=account.name,
+        status=account.status,
+        email_verified=account.email_verified,
+    )
+    request.state.principal = principal
+    return principal
+
+
 def _guard(capability: str, *, write: bool):
     async def _dep(request: Request) -> Principal:
         # 1) kill-switch
         if not settings.admin_enabled:
             raise ApiError(404, "admin_disabled", "The admin surface is disabled.")
 
-        # 2) authN
-        principal = get_optional_principal(request)
+        # 2) authN. Hosted requests require a resolved session; local
+        # single-user requests resolve the durable bootstrap owner as admin.
+        principal = await _resolve_principal(request)
         if principal is None:
             await _audit_denied(request, None, capability=None)
             raise ApiError(401, "unauthorized", "Authentication required.")

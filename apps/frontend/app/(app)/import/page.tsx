@@ -15,6 +15,7 @@ import { Button } from '@/components/atelier/button';
 import { Card } from '@/components/atelier/card';
 import { useToast } from '@/components/atelier/toast';
 import { useSystemStatus } from '@/features/home/hooks';
+import { deriveAiAvailability } from '@/lib/ai-availability';
 import { invalidateResumeLists } from '@/lib/query/client';
 import {
   uploadResumeFile,
@@ -50,26 +51,26 @@ export default function ImportPage() {
     done: [],
   });
   const statusQuery = useSystemStatus();
-  const aiUnconfigured = statusQuery.data && !statusQuery.data.llm_configured;
-  // Key present but the live health probe failed (invalid key, wrong model, or
-  // rate-limited). Import will read the file but fail to structure it, so warn
-  // up front instead of letting the user discover it via a failed upload.
-  const aiUnhealthy =
-    statusQuery.data && statusQuery.data.llm_configured && !statusQuery.data.llm_healthy;
+  const aiAvailability = deriveAiAvailability(statusQuery);
+  const aiUnconfigured = aiAvailability.state === 'unconfigured';
+  const aiBlocked = !aiAvailability.canUseAi;
+  const aiUnhealthy = aiAvailability.health === 'unhealthy';
 
   const finishUpload = React.useCallback(
     (res: ResumeUploadResponse): boolean => {
       invalidateResumeLists(qc);
       if (res.processing_status === 'failed') {
-        // The file read fine (a genuinely unreadable/scanned file is rejected
-        // upstream with its own message) - this state means AI *structuring*
-        // failed. That is almost always a provider issue (missing/invalid key
-        // or hit rate limit), so point the user there instead of wrongly
-        // blaming the file.
+        // The upload itself is durable; direct the user to retry processing the
+        // existing resume rather than uploading again and creating a duplicate.
+        const reason =
+          res.processing_error?.message ??
+          'The AI could not turn the extracted text into a structured resume.';
+        const nextStep =
+          res.processing_error?.code === 'llm_authentication_failed'
+            ? ' Check your provider key in Settings, then retry processing from Resume Library.'
+            : ' Retry processing from Resume Library; you do not need to upload the file again.';
         setError(
-          'Your file was uploaded and its text was read, but the AI could not turn it into a structured resume. ' +
-            'This usually means your AI provider key is missing, invalid, or has hit its rate limit - ' +
-            'check your key in Settings and try again.'
+          `Your file was uploaded and its text was read, but processing did not finish. ${reason}${nextStep}`
         );
         setPhase('error');
         return false;
@@ -83,6 +84,17 @@ export default function ImportPage() {
 
   const handleFile = React.useCallback(
     async (file: File) => {
+      if (aiBlocked) {
+        setError(
+          aiAvailability.state === 'loading'
+            ? 'Checking AI availability. Please wait a moment and try again.'
+            : aiAvailability.state === 'status-error'
+              ? 'AI availability could not be verified. Refresh the page before uploading.'
+              : 'Add an AI provider key in Settings before uploading.'
+        );
+        setPhase('error');
+        return;
+      }
       const validation = validateResumeFile(file);
       if (validation) {
         setError(validation);
@@ -133,7 +145,7 @@ export default function ImportPage() {
         setPhase('error');
       }
     },
-    [finishUpload]
+    [aiAvailability.state, aiBlocked, finishUpload]
   );
 
   function onDrop(e: React.DragEvent) {
@@ -217,9 +229,12 @@ export default function ImportPage() {
           role="button"
           tabIndex={0}
           aria-label="Upload a resume file"
-          onClick={() => inputRef.current?.click()}
+          aria-disabled={aiBlocked}
+          onClick={() => {
+            if (!aiBlocked) inputRef.current?.click();
+          }}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') inputRef.current?.click();
+            if (!aiBlocked && (e.key === 'Enter' || e.key === ' ')) inputRef.current?.click();
           }}
           onDragOver={(e) => {
             e.preventDefault();
@@ -239,6 +254,7 @@ export default function ImportPage() {
           <input
             ref={inputRef}
             type="file"
+            disabled={aiBlocked}
             accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             className="hidden"
             onChange={(e) => {
@@ -257,7 +273,12 @@ export default function ImportPage() {
             <p className="text-sm font-medium">Could not import that file</p>
             <p className="text-sm text-[var(--muted-foreground)]">{error}</p>
           </div>
-          <Button variant="outline" size="sm" onClick={() => inputRef.current?.click()}>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={aiBlocked}
+            onClick={() => inputRef.current?.click()}
+          >
             Try again
           </Button>
         </Card>
@@ -276,9 +297,13 @@ export default function ImportPage() {
             Answer a few questions and let AI draft it.
           </p>
         </div>
-        {aiUnconfigured ? (
-          <Button variant="outline" disabled title="Add an AI key first">
-            Add an AI key
+        {aiBlocked ? (
+          <Button
+            variant="outline"
+            disabled
+            title={aiUnconfigured ? 'Add an AI key first' : 'Checking AI availability'}
+          >
+            {aiUnconfigured ? 'Add an AI key' : 'Checking AI…'}
           </Button>
         ) : (
           <Button asChild variant="outline">

@@ -1,99 +1,20 @@
 """Health check and status endpoints."""
 
 import asyncio
-import hashlib
 import logging
-import time
-from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from app.auth import get_optional_principal, require_verified_user_id
-from app.config import settings
 from app.database import db
-from app.llm import LLMConfig, check_llm_health, get_llm_config
+from app.llm import get_llm_config
 from app.schemas import HealthResponse, SetupStatusResponse, StatusResponse
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Health"])
-
-# --- /status LLM-health probe cache -----------------------------------------
-# GET /status is PUBLIC (optional principal; anonymous callers reach it in
-# hosted mode) and is polled by the client status cache. A naive implementation
-# fires a live LLM provider round-trip (litellm.acompletion, up to a 30s
-# timeout) on EVERY call - which (a) collapses /status throughput under
-# concurrency and (b) lets any unauthenticated caller trigger outbound, billable
-# provider requests on the server's key (cost/abuse vector at scale). We cache
-# the probe result briefly and single-flight concurrent probes so repeated
-# /status hits reuse one recent result. The client already treats LLM health as
-# slow-changing (it re-checks every 30 min), so a short server TTL is safe.
-# The explicit "test this key" path (routers/config.py) stays UNCACHED.
-_LLM_HEALTH_TTL_SECONDS = 60.0
-_llm_health_cache: dict[str, Any] = {"key": None, "result": None, "at": 0.0}
-_llm_health_lock = asyncio.Lock()
-
-
-def _llm_config_fingerprint(config: LLMConfig) -> str:
-    """Stable cache key for an effective LLM config.
-
-    Includes a salted hash of the API key so rotating the key (or switching
-    provider/model/base) invalidates the cached health result. The raw key is
-    never stored in the cache dict.
-    """
-    api_key = getattr(config, "api_key", "") or ""
-    key_hash = hashlib.sha256(api_key.encode("utf-8")).hexdigest()[:16]
-    return "|".join(
-        [
-            getattr(config, "provider", "") or "",
-            getattr(config, "model", "") or "",
-            getattr(config, "api_base", "") or "",
-            key_hash,
-        ]
-    )
-
-
-def reset_status_llm_health_cache() -> None:
-    """Clear the cached /status LLM-health probe result.
-
-    Used by tests for isolation, and available operationally if a config change
-    must take effect before the TTL expires.
-    """
-    _llm_health_cache.update({"key": None, "result": None, "at": 0.0})
-
-
-async def _cached_llm_health(config: LLMConfig) -> dict[str, Any]:
-    """Return a recent LLM health result, probing at most once per TTL window.
-
-    Single-flighted: concurrent /status requests that miss the cache wait on one
-    in-flight probe instead of each firing their own provider round-trip.
-    """
-    fingerprint = _llm_config_fingerprint(config)
-    now = time.monotonic()
-    cached = _llm_health_cache
-    if (
-        cached["key"] == fingerprint
-        and cached["result"] is not None
-        and (now - cached["at"]) < _LLM_HEALTH_TTL_SECONDS
-    ):
-        return cached["result"]
-
-    async with _llm_health_lock:
-        # Re-check inside the lock: another coroutine may have just refreshed it.
-        now = time.monotonic()
-        if (
-            cached["key"] == fingerprint
-            and cached["result"] is not None
-            and (now - cached["at"]) < _LLM_HEALTH_TTL_SECONDS
-        ):
-            return cached["result"]
-        result = await check_llm_health(config)
-        cached["key"] = fingerprint
-        cached["result"] = result
-        cached["at"] = time.monotonic()
-        return result
 
 # Returned for database_stats when the stats query itself fails, so /status can
 # still respond (degraded) instead of 500-ing.
@@ -111,8 +32,8 @@ async def health_check() -> HealthResponse:
 
     Intentionally dependency-free: it must NOT fail on a transient DB/Redis blip
     (that would trigger container restart loops). It only proves the process is
-    up and serving. Use GET /health/ready for dependency readiness and GET
-    /status for full LLM health.
+    up and serving. Use GET /health/ready for dependency readiness and the
+    authenticated config test endpoint for an explicit provider check.
     """
     return HealthResponse(status="healthy")
 
@@ -206,38 +127,55 @@ async def get_setup_status(
 
 @router.get("/status", response_model=StatusResponse)
 async def get_status(request: Request) -> StatusResponse:
-    """Get comprehensive application status.
+    """Return persisted setup status without probing the AI provider.
 
-    Each subsystem check is isolated: a failure in the LLM health probe or the
-    database stats query degrades only its own field instead of 500-ing the
-    whole endpoint, so the status page can still report partial/degraded state.
+    This public endpoint is safe to poll: it never performs an outbound LLM
+    request. Authenticated users (and the implicit owner in local single-user
+    mode) receive their persisted configuration and resume facts. Anonymous
+    hosted callers do not resolve an owner and therefore cannot read or use an
+    owner's provider key.
+
+    ``llm_healthy`` is always ``None`` because health was not checked. Provider
+    connectivity is tested only by the explicit authenticated configuration
+    test endpoint.
     """
     user_id = await _resolve_status_user_id(request)
 
     llm_configured = False
-    llm_healthy = False
-    try:
-        config = get_llm_config(user_id)
-        # ollama / openai_compatible run without a key, matching check_llm_health.
-        llm_configured = bool(config.api_key) or config.provider in ("ollama", "openai_compatible")
-        llm_status = await _cached_llm_health(config)
-        llm_healthy = bool(llm_status.get("healthy"))
-    except Exception:
-        logger.exception("Status: LLM health check failed")
-
     db_stats: dict = dict(_EMPTY_DB_STATS)
+
+    # Crucially, do not call get_llm_config(None): that resolver can fall back to
+    # a bootstrap owner. Hosted anonymous status requests have no setup facts.
     if user_id is not None:
+        try:
+            config = get_llm_config(user_id)
+            llm_configured = bool(config.api_key) or config.provider in (
+                "ollama",
+                "openai_compatible",
+            )
+        except Exception:
+            logger.exception("Status: persisted LLM configuration lookup failed")
+
         try:
             db_stats = await db.get_stats(user_id)
         except Exception:
             logger.exception("Status: database stats failed")
 
     has_master_resume = bool(db_stats.get("has_master_resume"))
+    setup_complete = llm_configured and has_master_resume
+
+    # Deployment mode via the composition seam (never a direct settings read -
+    # ARCHITECTURE §18.5 keeps the deployment axis contained). ``is_local`` is
+    # the local (single-user) profile.
+    from app.platform import get_container
+
+    is_local = get_container().profile().is_local
 
     return StatusResponse(
-        status="ready" if llm_healthy and has_master_resume else "setup_required",
+        status="ready" if setup_complete else "setup_required",
         llm_configured=llm_configured,
-        llm_healthy=llm_healthy,
+        llm_healthy=None,
         has_master_resume=has_master_resume,
         database_stats=db_stats,
+        single_user=is_local,
     )

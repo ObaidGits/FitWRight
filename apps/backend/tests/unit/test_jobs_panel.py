@@ -3,9 +3,9 @@
 Exercises :class:`app.admin.jobs_panel.JobsPanelService` in isolation - the
 per-job field mapping from KV run markers, the ``currentDurationSeconds`` /
 running-since derivation, the potentially-stuck detection math, lock-state
-probing across KVStore adapters, the queue/purge-backlog gauges, graceful
-degradation on marker-read failure, the documented no-``retryCount`` gap, and
-the O(1) (one KV read per job) bound.
+probing across KVStore adapters, authoritative outbox backlog/dead-letter fields,
+the purge-backlog gauge, graceful degradation on marker-read failure, the
+documented no-``retryCount`` gap, and the O(1) (one KV read per job) bound.
 
 Dependencies are injected (an isolated ``MetricStore`` + a real
 ``LocalKVStore``) so nothing here touches the process-wide singletons or the
@@ -65,6 +65,16 @@ class _FakeStore:
 
 
 _RAISE = object()
+
+
+@pytest.fixture(autouse=True)
+def _deterministic_outbox_stats(monkeypatch):
+    """Keep every panel read independent of the application database."""
+
+    async def _stats() -> dict[str, int]:
+        return {"backlog": 7, "dead": 2}
+
+    monkeypatch.setattr("app.events.outbox.outbox_stats", _stats)
 
 
 def _iso(dt: datetime) -> str:
@@ -289,11 +299,24 @@ class TestGauges:
     def teardown_method(self):
         reset_admin_metrics()
 
-    async def test_queue_length_always_unavailable(self):
+    async def test_outbox_backlog_and_dead_letter_count(self):
         svc = _service({"rollup": _marker()})
         panel = await svc.panel()
+        assert panel.queueLength == 7
+        assert panel.queueLengthUnavailable is False
+        assert panel.deadLetterCount == 2
+        assert panel.deadLetterCountUnavailable is False
+
+    async def test_outbox_stats_unavailable_marks_both_fields(self, monkeypatch):
+        async def _raise():
+            raise RuntimeError("simulated outbox stats failure")
+
+        monkeypatch.setattr("app.events.outbox.outbox_stats", _raise)
+        panel = await _service({"rollup": _marker()}).panel()
         assert panel.queueLength is None
         assert panel.queueLengthUnavailable is True
+        assert panel.deadLetterCount is None
+        assert panel.deadLetterCountUnavailable is True
 
     async def test_purge_backlog_from_admin_metrics_gauge(self):
         get_admin_metrics().set_purge_backlog(5)

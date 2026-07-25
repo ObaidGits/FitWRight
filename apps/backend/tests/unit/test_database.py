@@ -11,6 +11,9 @@ add cross-user isolation coverage (Property 1), the per-user single-master
 invariant (R10.4/Property 2), and per-user api-key isolation (R10.6).
 """
 
+from __future__ import annotations
+
+import asyncio
 from uuid import uuid4
 
 import pytest
@@ -72,6 +75,22 @@ class TestResumeCrud:
         await db.create_resume(uid, content="a")
         await db.create_resume(uid, content="b")
         assert len(await db.list_resumes(uid)) == 2
+
+    async def test_list_resume_summaries_omits_document_payloads(self, db, uid):
+        await db.create_resume(
+            uid,
+            content="large content",
+            processed_data={"summary": "large structured payload"},
+            cover_letter="letter",
+            title="Projected",
+        )
+        summaries = await db.list_resume_summaries(uid, include_master=True)
+        assert len(summaries) == 1
+        assert summaries[0]["title"] == "Projected"
+        assert "content" not in summaries[0]
+        assert "processed_data" not in summaries[0]
+        assert "cover_letter" not in summaries[0]
+        assert await db.list_resume_ids(uid) == [summaries[0]["resume_id"]]
 
     async def test_update_resume_changes_field_and_timestamp(self, db, uid):
         created = await db.create_resume(uid, content="x")
@@ -162,6 +181,26 @@ class TestMasterResume:
         second = await db.create_resume_atomic_master(uid, content="second", processing_status="ready")
         assert second["is_master"] is False
 
+    async def test_atomic_master_is_safe_across_database_instances(self, db, uid):
+        """Separate facades model independent workers sharing one SQLite DB."""
+        second_worker = Database(db_path=db.db_path)
+        try:
+            created = await asyncio.gather(
+                db.create_resume_atomic_master(
+                    uid, content="worker-a", processing_status="ready"
+                ),
+                second_worker.create_resume_atomic_master(
+                    uid, content="worker-b", processing_status="ready"
+                ),
+            )
+            assert len(created) == 2
+            assert sum(1 for row in created if row["is_master"]) == 1
+            stored = await db.list_resumes(uid)
+            assert len(stored) == 2
+            assert sum(1 for row in stored if row["is_master"]) == 1
+        finally:
+            await second_worker.close()
+
     async def test_atomic_recovers_when_master_stuck(self, db, uid):
         # Master stuck in "failed" -> next upload is promoted to master.
         first = await db.create_resume_atomic_master(uid, content="first", processing_status="failed")
@@ -184,6 +223,26 @@ class TestMasterResume:
         assert (await db.get_master_resume(uid))["resume_id"] == a["resume_id"]
         assert (await db.get_master_resume(other_uid))["resume_id"] == b["resume_id"]
 
+    async def test_concurrent_first_uploads_across_database_instances(self, db, uid):
+        """Storage locking, not a process-local lock, chooses one master."""
+        second = Database(db_path=db.db_path)
+        try:
+            created = await asyncio.gather(
+                db.create_resume_atomic_master(
+                    uid, content="worker-a", processing_status="ready"
+                ),
+                second.create_resume_atomic_master(
+                    uid, content="worker-b", processing_status="ready"
+                ),
+            )
+            assert len(created) == 2
+            assert sum(1 for item in created if item["is_master"]) == 1
+            stored = await db.list_resumes(uid)
+            assert len(stored) == 2
+            assert sum(1 for item in stored if item["is_master"]) == 1
+        finally:
+            await second.close()
+
 
 class TestJobs:
     async def test_create_and_get_job(self, db, uid):
@@ -204,11 +263,7 @@ class TestJobs:
         assert await db.update_job(uid, "missing", {"content": "x"}) is None
 
     async def test_dynamic_fields_round_trip_as_top_level(self, db, uid):
-        """Dynamic pipeline fields must survive write->read as top-level keys.
-
-        This is the highest-risk migration detail: ``/improve/confirm`` rejects
-        with 400 if ``preview_hash``/``preview_hashes`` don't round-trip.
-        """
+        """Dynamic analysis fields survive write->read as top-level keys."""
         created = await db.create_job(uid, content="jd")
         await db.update_job(
             uid,
@@ -216,9 +271,7 @@ class TestJobs:
             {
                 "job_keywords": {"required_skills": ["Python", "AWS"]},
                 "job_keywords_hash": "deadbeef",
-                "preview_hash": "abc123",
-                "preview_hashes": {"keywords": "abc123", "nudge": "def456"},
-                "preview_prompt_id": "keywords",
+                "analysis_version": "v2",
                 "company": "Acme Corp",
                 "role": "Staff Engineer",
             },
@@ -227,8 +280,7 @@ class TestJobs:
         # Core fields preserved.
         assert fetched["content"] == "jd"
         # Dynamic fields flattened to the top level.
-        assert fetched["preview_hash"] == "abc123"
-        assert fetched["preview_hashes"] == {"keywords": "abc123", "nudge": "def456"}
+        assert fetched["analysis_version"] == "v2"
         assert fetched["job_keywords_hash"] == "deadbeef"
         assert fetched["job_keywords"]["required_skills"] == ["Python", "AWS"]
         assert fetched["company"] == "Acme Corp"
@@ -236,11 +288,11 @@ class TestJobs:
 
     async def test_update_job_merges_metadata(self, db, uid):
         created = await db.create_job(uid, content="jd")
-        await db.update_job(uid, created["job_id"], {"preview_hash": "h1"})
+        await db.update_job(uid, created["job_id"], {"job_keywords_hash": "h1"})
         await db.update_job(uid, created["job_id"], {"company": "Acme"})
         fetched = await db.get_job(uid, created["job_id"])
         # The second update must not wipe the first dynamic field.
-        assert fetched["preview_hash"] == "h1"
+        assert fetched["job_keywords_hash"] == "h1"
         assert fetched["company"] == "Acme"
 
 

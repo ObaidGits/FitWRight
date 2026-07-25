@@ -49,6 +49,7 @@ export const queryKeys = {
   professionalProfilePublication: ['professional-profile', 'publication'] as const,
   professionalProfileAnalytics: ['professional-profile', 'analytics'] as const,
   notificationsUnread: ['notifications', 'unread'] as const,
+  notificationsList: ['notifications', 'list'] as const,
 } as const;
 
 // ---------------------------------------------------------------------------

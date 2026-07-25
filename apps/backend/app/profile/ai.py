@@ -20,6 +20,7 @@ from typing import Any
 
 from app.profile.schemas import ProfileData
 from app.profile.skills import canonicalize
+from app.schemas.llm_outputs import ProfileBulletsOutput, ProfileSummaryOutput
 
 logger = logging.getLogger(__name__)
 
@@ -213,12 +214,13 @@ async def suggest_summary(profile: ProfileData, *, user_id: str | None = None) -
         f"Current summary: {existing or '(none - draft one from the roles above)'}\n\n"
         'Return JSON: {"summary": "<improved summary>"}'
     )
-    try:
-        result = await complete_json(prompt=prompt, system_prompt=_TRUTHFULNESS, max_tokens=512)
-        suggestion = (result.get("summary") or "").strip() if isinstance(result, dict) else ""
-    except Exception:
-        logger.exception("AI summary suggestion failed")
-        return {"kind": "summary", "suggestion": None, "note": "AI is temporarily unavailable. Try again shortly."}
+    result = await complete_json(
+        prompt=prompt,
+        system_prompt=_TRUTHFULNESS,
+        max_tokens=512,
+        response_model=ProfileSummaryOutput,
+    )
+    suggestion = (result.get("summary") or "").strip()
     return {"kind": "summary", "suggestion": suggestion or None, "note": None}
 
 
@@ -252,11 +254,12 @@ async def suggest_experience_bullets(
         f"Bullets:\n- " + "\n- ".join(exp.description) + "\n\n"
         'Return JSON: {"bullets": ["...", "..."]}'
     )
-    try:
-        result = await complete_json(prompt=prompt, system_prompt=_TRUTHFULNESS, max_tokens=1024)
-        bullets = result.get("bullets") if isinstance(result, dict) else None
-        bullets = [b.strip() for b in bullets if isinstance(b, str) and b.strip()] if isinstance(bullets, list) else []
-    except Exception:
-        logger.exception("AI bullet suggestion failed")
-        return {"kind": "experience_bullets", "suggestion": None, "note": "AI is temporarily unavailable. Try again shortly."}
+    result = await complete_json(
+        prompt=prompt,
+        system_prompt=_TRUTHFULNESS,
+        max_tokens=1024,
+        response_model=ProfileBulletsOutput,
+    )
+    bullets = result.get("bullets")
+    bullets = [b.strip() for b in bullets if isinstance(b, str) and b.strip()]
     return {"kind": "experience_bullets", "suggestion": bullets or None, "note": None}

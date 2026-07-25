@@ -10,6 +10,7 @@ import { Button } from '@/components/atelier/button';
 import { ThemeToggle } from '@/components/theme/theme-toggle';
 import { AccountMenu } from '@/components/layout/account-menu';
 import { useSession } from '@/lib/context/session';
+import { SINGLE_USER_MODE } from '@/lib/config/auth';
 
 /**
  * Anchor links use absolute `/#id` so they scroll correctly even from other
@@ -32,7 +33,10 @@ export function PublicTopBar() {
   // visibility is not a security boundary and backend authorization remains
   // authoritative.
   const { status } = useSession();
-  const authed = status === 'authenticated';
+  // Mode-driven, not merely session-driven: in single-user mode there is no
+  // login wall, so we must NEVER render Sign in / Sign up (the owner is always
+  // "signed in"), regardless of any transient session status.
+  const authed = SINGLE_USER_MODE || status === 'authenticated';
 
   return (
     <header className="sticky top-0 z-40 border-b border-[var(--border)] bg-[var(--background)]/80 backdrop-blur">

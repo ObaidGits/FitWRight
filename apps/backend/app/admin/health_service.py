@@ -6,18 +6,19 @@ AI provider, Storage provider, Migrations - plus secret-free release metadata
 (version / build / commit / migration / env - Req 17) and the process uptime.
 
 **Bounded (Req 21.3/21.4/21.5):** this service composes ONLY signals the backend
-already emits - the readiness DB/KVStore probes, the cached ``/status`` LLM
-health, the storage provider configuration, the Alembic head-vs-applied
-comparison, and the release constants. It NEVER adds a new per-request infra
-probe: no CPU/RAM/disk/thread/container/k8s metrics, and no live object-storage
-query (object-storage usage is sampled off the request path by the storage job,
-Task 12).
+already emits - the readiness DB/KVStore probes, an authenticated admin-only
+provider-health probe cache, the storage provider configuration, the Alembic
+head-vs-applied comparison, and the release constants. It NEVER adds an
+unbounded per-request infra probe: no CPU/RAM/disk/thread/container/k8s metrics,
+and no live object-storage query (object-storage usage is sampled off the
+request path by the storage job, Task 12).
 
-**Per-source isolation (Req 3.1/3.6):** every subsystem is probed under its own
-``asyncio.wait_for(..., 2.0)`` timeout inside its own ``try/except``. A source
-that errors or exceeds 2s degrades ONLY its own tile to ``down`` - the remaining
-tiles still compose from their reachable sources. The tiles are gathered
-concurrently so the whole compose is bounded by ~2s rather than the sum.
+**Per-source isolation (Req 3.1/3.6):** every subsystem is bounded by its own
+``asyncio.wait_for(..., 2.0)`` timeout and error boundary. Most source failures
+mark only their tile ``down``; the combined KVStore/Queue tile is more precise:
+KV failure is ``down``, while unavailable outbox stats are ``degraded``. The
+tiles and the two KV/queue probes run concurrently, keeping composition bounded
+by ~2s rather than the sum.
 
 **Secret-free (Req 17.3 / Property 3):** every tile detail and release field is a
 count, identifier, short status string, or presence-derived label - never a
@@ -25,19 +26,21 @@ secret, key, URL, or host. ``AdminHealth`` passes ``assert_no_forbidden_fields``
 
 **Bounded-context purity (Req 19.2/19.3/19.5):** this Domain_Metrics_Service
 depends only on shared primitives and existing app modules (config, database
-engine, KVStore, ``app.llm``, the readiness/status helpers in
-``app.routers.health``, Alembic). It imports no other Domain_Metrics_Service, so
-the import-graph guard (``tests/architecture/test_admin_import_graph.py``) holds.
+engine, KVStore, ``app.llm``, readiness primitives, and Alembic). It imports no
+other Domain_Metrics_Service, so the import-graph guard
+(``tests/architecture/test_admin_import_graph.py``) holds.
 """
 
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import os
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from sqlalchemy import text
 
@@ -47,7 +50,12 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["HealthService", "get_health_service", "reset_health_service"]
+__all__ = [
+    "HealthService",
+    "get_health_service",
+    "reset_admin_llm_health_cache",
+    "reset_health_service",
+]
 
 # Per-source probe budget (Req 3.1). Each subsystem must compose within this or
 # its tile degrades to ``down`` (Req 3.6); tiles run concurrently so the whole
@@ -57,6 +65,60 @@ _SOURCE_TIMEOUT_SECONDS = 2.0
 # KVStore round-trip probe key (mirrors the readiness_check probe; short TTL so a
 # stale value never lingers). Deliberately secret-free.
 _KV_PROBE_KEY = "admin:health:probe"
+
+# Admin-only provider probe cache. Public ``/status`` intentionally has no
+# provider probe or cache; this cache is retained solely for the authenticated
+# admin health tile so repeated dashboard refreshes do not create billable
+# provider calls.
+_LLM_HEALTH_TTL_SECONDS = 60.0
+_llm_health_cache: dict[str, Any] = {"key": None, "result": None, "at": 0.0}
+_llm_health_lock = asyncio.Lock()
+
+
+def _llm_config_fingerprint(config: Any) -> str:
+    raw_key = (getattr(config, "api_key", "") or "").encode()
+    key_hash = hashlib.sha256(raw_key).hexdigest()[:16]
+    return "|".join(
+        (
+            getattr(config, "provider", "") or "",
+            getattr(config, "model", "") or "",
+            getattr(config, "api_base", "") or "",
+            key_hash,
+        )
+    )
+
+
+def reset_admin_llm_health_cache() -> None:
+    """Reset the authenticated admin health probe cache (test isolation)."""
+    _llm_health_cache.update({"key": None, "result": None, "at": 0.0})
+
+
+async def _cached_admin_llm_health(config: Any) -> dict[str, Any]:
+    """Single-flight the authenticated admin provider probe for a short TTL."""
+    fingerprint = _llm_config_fingerprint(config)
+    now = time.monotonic()
+    if (
+        _llm_health_cache["key"] == fingerprint
+        and _llm_health_cache["result"] is not None
+        and now - _llm_health_cache["at"] < _LLM_HEALTH_TTL_SECONDS
+    ):
+        return _llm_health_cache["result"]
+
+    async with _llm_health_lock:
+        now = time.monotonic()
+        if (
+            _llm_health_cache["key"] == fingerprint
+            and _llm_health_cache["result"] is not None
+            and now - _llm_health_cache["at"] < _LLM_HEALTH_TTL_SECONDS
+        ):
+            return _llm_health_cache["result"]
+        from app.llm import check_llm_health
+
+        result = await check_llm_health(config)
+        _llm_health_cache.update(
+            {"key": fingerprint, "result": result, "at": time.monotonic()}
+        )
+        return result
 
 # Process start reference for the Backend uptime gauge (Req 3.5). Captured at
 # import time - the backend has no other boot timestamp, so this module-level
@@ -229,37 +291,79 @@ class HealthService:
     # -- tile: KVStore / Queue ----------------------------------------------
 
     async def _compose_kvstore(self) -> HealthTile:
-        """KVStore reachability via a set/get round-trip under 2s (Req 3.6).
+        """Probe KV and indexed outbox gauges concurrently under bounded timeouts.
 
-        Mirrors the readiness_check KVStore probe. ``ok`` on a successful
-        round-trip, ``down`` on error/timeout. (Queue/outbox backlog may
-        influence a future ``degraded`` state; for now this tile reports KV
-        reachability only.)
+        KV failure is the only ``down`` condition. Once KV succeeds, an
+        unavailable queue or any dead letters degrades the combined tile; a
+        reachable queue with no dead letters is healthy.
         """
+
+        async def bounded(probe):
+            try:
+                return await asyncio.wait_for(probe(), timeout=_SOURCE_TIMEOUT_SECONDS)
+            except Exception as exc:  # noqa: BLE001 - classified below
+                return exc
+
+        kv_result, queue_result = await asyncio.gather(
+            bounded(self._probe_kvstore),
+            bounded(self._probe_outbox),
+        )
+        if isinstance(kv_result, BaseException):
+            logger.warning("Health: KVStore probe failed: %s", kv_result)
+            return HealthTile(name="KVStore/Queue", status="down", detail="KV unavailable")
+
+        if isinstance(queue_result, BaseException):
+            logger.warning("Health: queue stats probe failed: %s", queue_result)
+            return HealthTile(
+                name="KVStore/Queue",
+                status="degraded",
+                detail="queue unavailable",
+            )
+
         try:
-            await asyncio.wait_for(self._probe_kvstore(), timeout=_SOURCE_TIMEOUT_SECONDS)
-            return HealthTile(name="KVStore/Queue", status="ok", detail=None)
-        except Exception as exc:  # noqa: BLE001 - isolate to this tile
-            logger.warning("Health: KVStore probe failed: %s", exc)
-            return HealthTile(name="KVStore/Queue", status="down", detail="unavailable")
+            backlog = max(0, int(queue_result["backlog"]))
+            dead = max(0, int(queue_result["dead"]))
+        except (KeyError, TypeError, ValueError) as exc:
+            logger.warning("Health: queue stats result invalid: %s", exc)
+            return HealthTile(
+                name="KVStore/Queue",
+                status="degraded",
+                detail="queue unavailable",
+            )
+
+        if dead > 0:
+            return HealthTile(
+                name="KVStore/Queue",
+                status="degraded",
+                detail=f"queue backlog {backlog}; dead {dead}",
+            )
+        return HealthTile(name="KVStore/Queue", status="ok", detail=None)
 
     async def _probe_kvstore(self) -> None:
         kv = self._kvstore()
         await kv.set(_KV_PROBE_KEY, "1", ttl_seconds=5)
-        await kv.get(_KV_PROBE_KEY)
+        value = await kv.get(_KV_PROBE_KEY)
+        if value != "1":
+            raise RuntimeError("KV round-trip mismatch")
+
+    @staticmethod
+    async def _probe_outbox() -> dict[str, int]:
+        from app.events.outbox import outbox_stats
+
+        return await outbox_stats()
 
     # -- tile: AI provider ---------------------------------------------------
 
     async def _compose_ai(self) -> HealthTile:
-        """AI provider health from the CACHED ``/status`` LLM probe (Req 3.2).
+        """AI provider health from the authenticated admin-only probe cache.
 
-        Reuses ``app.routers.health._cached_llm_health`` so this never fires a
-        new billable provider round-trip - it returns the recent cached result
-        (or single-flights one probe per TTL window, exactly as ``/status``).
+        Public ``/status`` never reaches this path. Admin dashboard refreshes
+        reuse a short-lived, single-flighted result to avoid one billable
+        provider request per refresh.
 
         Mapping: configured + healthy -> ``ok``; configured + unhealthy ->
-        ``degraded``; not configured -> ``degraded`` (documented: the provider is
-        simply unset, not broken). Any error/timeout -> ``down`` (Req 3.6).
+        ``degraded``; not configured -> ``degraded``. Any error/timeout ->
+        ``down`` (Req 3.6).
         """
         try:
             return await asyncio.wait_for(self._probe_ai(), timeout=_SOURCE_TIMEOUT_SECONDS)
@@ -268,13 +372,10 @@ class HealthService:
             return HealthTile(name="AI provider", status="down", detail="unavailable")
 
     async def _probe_ai(self) -> HealthTile:
-        # Lazy imports: keep litellm / the health router off this module's import
-        # path and avoid any import cycle at load time.
+        # Lazy import keeps LiteLLM off this module's import path.
         from app.llm import get_llm_config
-        from app.routers.health import _cached_llm_health
 
-        # No request context here - resolve the owner's effective config (the
-        # same key-resolution path ``/status`` uses for an anonymous caller).
+        # This path is reachable only through the authenticated admin endpoint.
         config = get_llm_config(None)
         configured = bool(config.api_key) or config.provider in (
             "ollama",
@@ -286,7 +387,7 @@ class HealthService:
                 status="degraded",
                 detail="not configured",
             )
-        result = await _cached_llm_health(config)
+        result = await _cached_admin_llm_health(config)
         healthy = bool(result.get("healthy"))
         if healthy:
             return HealthTile(name="AI provider", status="ok", detail=f"provider {config.provider}")
@@ -299,20 +400,12 @@ class HealthService:
     # -- tile: Storage provider ---------------------------------------------
 
     async def _compose_storage(self) -> HealthTile:
-        """Storage provider health from configuration presence - no live query.
+        """Probe local storage only; never claim an unverified remote is healthy.
 
-        Per Non-Goal Req 21.5 this NEVER performs a live object-storage request;
-        object-storage usage is sampled off the request path by the storage job
-        (Task 12). It reports on the *active* provider's configuration only:
-
-        - ``local``      -> ``ok`` (the local filesystem is always available).
-        - ``cloudinary`` -> ``ok`` when configured, else ``degraded`` (the
-          provider is selected but its credentials are incomplete, so uploads
-          fall back to local - a real degraded state).
-        - ``s3``         -> ``ok`` (provider selected; there is no dedicated S3
-          credential-presence signal to check here - documented gap).
-
-        Secret-free: only the provider name + a short status label are exposed.
+        Local storage performs a bounded, non-destructive temporary
+        write/read/delete round trip. Cloudinary is configuration-only and
+        therefore degraded/unverified without a network or billable call. S3 is
+        explicitly unavailable because this build does not implement it.
         """
         try:
             return await asyncio.wait_for(
@@ -323,18 +416,63 @@ class HealthService:
             return HealthTile(name="Storage provider", status="down", detail="unavailable")
 
     async def _probe_storage(self) -> HealthTile:
-        provider = settings.storage_provider
-        if provider == "cloudinary" and not settings.cloudinary_configured:
+        provider_name = settings.storage_provider
+        if provider_name == "cloudinary":
+            if settings.cloudinary_configured:
+                return HealthTile(
+                    name="Storage provider",
+                    status="degraded",
+                    detail="cloudinary configured; connectivity unverified",
+                )
             return HealthTile(
                 name="Storage provider",
                 status="degraded",
-                detail="cloudinary selected but not fully configured",
+                detail="cloudinary configuration incomplete; connectivity unverified",
             )
-        return HealthTile(
-            name="Storage provider",
-            status="ok",
-            detail=f"provider {provider}",
-        )
+        if provider_name == "s3":
+            return HealthTile(
+                name="Storage provider",
+                status="down",
+                detail="s3 not implemented",
+            )
+        if provider_name != "local":
+            return HealthTile(
+                name="Storage provider",
+                status="down",
+                detail="provider unsupported",
+            )
+
+        from app.storage.provider import LocalStorageProvider, get_storage_provider
+
+        provider = get_storage_provider()
+        if not isinstance(provider, LocalStorageProvider):
+            raise RuntimeError("local provider unavailable")
+        await asyncio.to_thread(self._probe_local_storage, provider._root)
+        return HealthTile(name="Storage provider", status="ok", detail="local verified")
+
+    @staticmethod
+    def _probe_local_storage(root: Path) -> None:
+        """Perform a safe temporary write/read/delete probe within ``root``."""
+        import tempfile
+
+        probe_path: Path | None = None
+        fd: int | None = None
+        payload = b"fitwright-storage-health"
+        try:
+            fd, raw_path = tempfile.mkstemp(prefix=".health-", dir=root)
+            probe_path = Path(raw_path)
+            with os.fdopen(fd, "w+b") as probe:
+                fd = None
+                probe.write(payload)
+                probe.flush()
+                probe.seek(0)
+                if probe.read() != payload:
+                    raise OSError("local storage read-back mismatch")
+        finally:
+            if fd is not None:
+                os.close(fd)
+            if probe_path is not None:
+                probe_path.unlink(missing_ok=True)
 
     # -- tile: Migrations ----------------------------------------------------
 

@@ -1,16 +1,21 @@
 # FitWright Docker Image
 # Multi-stage build for optimized image size
 
+# Auth mode is compiled into the Next.js client and must match the backend's
+# runtime SINGLE_USER_MODE. Default to the backend's zero-config local mode;
+# hosted builds explicitly pass false (see CI/deployment workflows).
+ARG NEXT_PUBLIC_SINGLE_USER_MODE=true
+
 # ============================================
 # Stage 1: Build Frontend
 # ============================================
 FROM node:24-bookworm AS frontend-builder
+ARG NEXT_PUBLIC_SINGLE_USER_MODE
 
 # Build argument for API URL (allows customization at build time)
 # Default routes requests through Next.js rewrites on the same origin.
 ARG NEXT_PUBLIC_API_URL=/
 # Baked at build time (NEXT_PUBLIC_* are inlined into the client bundle).
-ARG NEXT_PUBLIC_SINGLE_USER_MODE=false
 # Canonical host - must match backend FRONTEND_BASE_URL / OAUTH_REDIRECT_URI (www).
 ARG NEXT_PUBLIC_SITE_URL=https://www.fitwright.tech
 ENV NEXT_TELEMETRY_DISABLED=1 \
@@ -23,11 +28,8 @@ WORKDIR /app/frontend
 # Copy package files first for better caching
 COPY apps/frontend/package*.json ./
 
-# Install dependencies.
-# Use `npm install` (not `npm ci`) so platform-specific optional deps (e.g.
-# sharp's @emnapi/* on the Linux build host) resolve correctly even if the
-# committed lockfile was generated on a different OS/arch.
-RUN npm install --no-audit --no-fund
+# Install exactly the dependency graph committed in package-lock.json.
+RUN npm ci --no-audit --no-fund
 
 # Copy frontend source
 COPY apps/frontend/ ./
@@ -39,14 +41,19 @@ RUN npm run build
 # Stage 2: Final Image
 # ============================================
 FROM python:3.13-slim-bookworm
+ARG NEXT_PUBLIC_SINGLE_USER_MODE
 
-# Set environment variables
+# Set environment variables. BUILT_NEXT_PUBLIC_SINGLE_USER_MODE records the
+# immutable mode compiled into Next.js so start.sh can reject a mismatched
+# backend SINGLE_USER_MODE instead of serving a redirect loop/broken auth UI.
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     NODE_ENV=production \
-    NEXT_TELEMETRY_DISABLED=1
+    NEXT_TELEMETRY_DISABLED=1 \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+    BUILT_NEXT_PUBLIC_SINGLE_USER_MODE=${NEXT_PUBLIC_SINGLE_USER_MODE}
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -85,7 +92,7 @@ COPY --from=frontend-builder /usr/local/bin/node /usr/local/bin/node
 # ============================================
 # Backend Setup
 # ============================================
-COPY apps/backend/pyproject.toml /app/backend/
+COPY apps/backend/pyproject.toml apps/backend/uv.lock /app/backend/
 COPY apps/backend/app /app/backend/app
 # Alembic config + migration scripts are REQUIRED at runtime: the app runs
 # `alembic upgrade head` at startup on hosted Postgres (see app.migrations_runtime).
@@ -95,8 +102,14 @@ COPY apps/backend/alembic /app/backend/alembic
 
 WORKDIR /app/backend
 
-# Install Python dependencies
-RUN pip install .
+# Install the exact Python graph from uv.lock into an isolated environment, then
+# bake Chromium into the image so startup never requires outbound network access.
+RUN pip install "uv==0.11.27" \
+    && uv sync --frozen --no-dev --no-editable \
+    && .venv/bin/python -m playwright install chromium \
+    && chmod -R a+rX "${PLAYWRIGHT_BROWSERS_PATH}"
+ENV VIRTUAL_ENV=/app/backend/.venv \
+    PATH="/app/backend/.venv/bin:${PATH}"
 
 # ============================================
 # Frontend Setup
@@ -125,9 +138,6 @@ RUN useradd -m -u 1000 appuser \
     && chown -R appuser:appuser /app
 
 USER appuser
-
-# Install Playwright Chromium as appuser (so browsers are in correct location)
-RUN python -m playwright install chromium
 
 # Expose the public port (backend remains internal on 8000)
 EXPOSE 3000

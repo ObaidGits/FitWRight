@@ -56,7 +56,21 @@ export async function fetchJdFromUrl(url: string, useAi = false): Promise<JdFrom
     throw new Error('Too many imports right now. Please wait a moment and try again.');
   }
   if (!res.ok) {
-    // Opaque backend failure - show a friendly, non-leaky message.
+    // Typed extraction failures preserve actionable guidance without exposing
+    // upstream status/body or SSRF diagnostics.
+    const payload = (await res.json().catch(() => null)) as {
+      error?: { code?: string; message?: string };
+    } | null;
+    const code = payload?.error?.code;
+    if (code === 'waf_blocked' || code === 'captcha_blocked') {
+      throw new Error('That site blocked automated access. Paste the job description instead.');
+    }
+    if (code === 'login_required') {
+      throw new Error('That job page requires sign-in. Sign in there, then paste the description.');
+    }
+    if (code === 'job_expired') {
+      throw new Error('That job posting is no longer available.');
+    }
     throw new Error("We couldn't read that job posting. Paste the description instead.");
   }
   const body = (await res.json()) as RawJd;

@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 
 import { ProfileAvatar } from '@/components/common/profile-avatar';
 import { PhotoFrame, resolveResumePhoto } from '@/components/resume/photo-frame';
@@ -44,13 +44,39 @@ describe('ProfileAvatar (public/SEO)', () => {
     expect(img.getAttribute('loading')).toBe('lazy');
   });
 
-  it('falls back to initials when the image fails to load', () => {
-    render(<ProfileAvatar url={CLOUD} name="Ada Lovelace" />);
-    const img = screen.getByAltText('Ada Lovelace - profile photo');
-    fireEvent.error(img);
-    // The broken image is replaced by the initials fallback.
-    expect(screen.queryByAltText('Ada Lovelace - profile photo')).toBeNull();
-    expect(screen.getByText('AL')).toBeInTheDocument();
+  it('retries a transient failure before falling back (does not hide on first error)', () => {
+    vi.useFakeTimers();
+    try {
+      render(<ProfileAvatar url={CLOUD} name="Ada Lovelace" />);
+      // First error -> schedules a retry, image is NOT hidden yet.
+      fireEvent.error(screen.getByAltText('Ada Lovelace - profile photo'));
+      act(() => vi.advanceTimersByTime(400));
+      expect(screen.getByAltText('Ada Lovelace - profile photo')).toBeInTheDocument();
+      // The retry uses a cache-busted src (single request, no stale srcset).
+      const retried = screen.getByAltText('Ada Lovelace - profile photo') as HTMLImageElement;
+      expect(retried.getAttribute('src')).toContain('__r=1');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('falls back to initials after retries are exhausted', () => {
+    vi.useFakeTimers();
+    try {
+      render(<ProfileAvatar url={CLOUD} name="Ada Lovelace" />);
+      // 1st error -> retry 1
+      fireEvent.error(screen.getByAltText('Ada Lovelace - profile photo'));
+      act(() => vi.advanceTimersByTime(400));
+      // 2nd error -> retry 2
+      fireEvent.error(screen.getByAltText('Ada Lovelace - profile photo'));
+      act(() => vi.advanceTimersByTime(700));
+      // 3rd error -> retries exhausted -> initials fallback
+      fireEvent.error(screen.getByAltText('Ada Lovelace - profile photo'));
+      expect(screen.queryByAltText('Ada Lovelace - profile photo')).toBeNull();
+      expect(screen.getByText('AL')).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

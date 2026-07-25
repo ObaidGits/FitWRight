@@ -93,16 +93,20 @@ describe('useAutosave - offline outbox -> reconnect replay', () => {
     reachable = false;
     const { result } = setup();
     await waitFor(() => expect(result.current.isLeader).toBe(true));
-    // Force the monitor to observe offline.
+    // Offline is now debounced: one failed probe won't flip it. Wait for the
+    // confirming re-probe (retryDelayMs=1000) to establish offline before
+    // editing, so the edit routes to the durable outbox.
     await act(async () => {
-      await result.current.flushNow().catch(() => {});
+      await new Promise((r) => setTimeout(r, 1300));
     });
 
     act(() => result.current.setBaseVersion(1, { summary: 'base' }));
     act(() => result.current.update({ summary: 'offline edit' }));
 
     // The edit is durably queued to the outbox; no network save yet.
-    await waitFor(() => expect(result.current.pendingOutbox).toBeGreaterThan(0));
+    await waitFor(() => expect(result.current.pendingOutbox).toBeGreaterThan(0), {
+      timeout: 2000,
+    });
     expect(updateResumeMock).not.toHaveBeenCalled();
 
     // Reconnect: probe succeeds -> drain the outbox via CAS replay.

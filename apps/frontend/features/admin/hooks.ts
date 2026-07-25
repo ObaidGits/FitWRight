@@ -175,8 +175,8 @@ export function useErrors(window: MetricWindow = 30) {
  * A standalone observability query so the Performance card on the Health page
  * loads, errors and refreshes independently of the health tiles/jobs/errors.
  * Mirrors {@link useErrors}: surfaces `isLoading` / `isError` / `refetch` for the
- * card's loading/error/retry states. Takes no window - the endpoint reads only
- * from aggregates the backend already produces (O(1), no new instrumentation).
+ * card's loading/error/retry states. Takes no window; the endpoint reads one
+ * bounded current-process latency/cache snapshot plus fixed job markers.
  */
 export function usePerformance() {
   return useQuery({
@@ -210,10 +210,9 @@ export function useStorage() {
  * page loads, errors and refreshes independently of the audit list. Mirrors
  * {@link useStorage}: surfaces `isLoading` / `isError` / `refetch` so the strip
  * renders its own loading/error/retry states without blocking the audit list.
- * Takes no params - the endpoint returns a cheap, trailing-24h aggregate of
- * security counts (failed logins, admin logins, authz denials, rate-limited,
- * suspicious) read from the `SEC_*` aggregates; counts are zero (never null)
- * when there is no data for the window.
+ * Takes no params: the endpoint reads exact counts from indexed audit rows over
+ * `[now - 24h, now)`. The response discloses exact boundaries, aggregation
+ * semantics, and current-role admin-login classification.
  */
 export function useSecurity() {
   return useQuery({

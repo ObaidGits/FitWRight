@@ -14,9 +14,7 @@ from app.schemas import (
     JobUploadRequest,
     JobUploadResponse,
 )
-from app.llm import get_llm_config, get_model_name
-from app import analysis_cache
-from app.services.improver import extract_job_keywords
+from app.services.improver import extract_job_keywords_cached
 from app.services.refiner import (
     _extract_all_text,
     _keyword_in_text,
@@ -102,19 +100,7 @@ async def analyze_job(
     # calling the LLM again. The matched/missing/fit below are cheap,
     # deterministic re-computations against the *current* resume, so they never
     # go stale even when reusing cached keywords.
-    try:
-        model_name = get_model_name(get_llm_config())
-    except Exception:  # noqa: BLE001 - only used to key the cache
-        model_name = None
-    jd_checksum = analysis_cache.checksum_text(jd)
-    keywords, _from_cache = await analysis_cache.get_or_compute(
-        user_id=user_id,
-        artifact_type=analysis_cache.ARTIFACT_JOB_ANALYSIS,
-        source_id=jd_checksum,
-        checksum=jd_checksum,
-        version=analysis_cache.version_key(analysis_cache.ARTIFACT_JOB_ANALYSIS, model_name),
-        compute=lambda: extract_job_keywords(jd),
-    )
+    keywords = await extract_job_keywords_cached(user_id, jd)
 
     response = JobAnalyzeResponse(
         keywords=JobAnalyzeKeywords(

@@ -62,7 +62,24 @@ def error_envelope(
     return {"error": error}
 
 
-async def _handle_api_error(_request: Request, exc: ApiError) -> JSONResponse:
+async def _handle_api_error(request: Request, exc: ApiError) -> JSONResponse:
+    # One centralized durable audit event per rendered rate-limit denial. The
+    # writer is fail-soft, and only non-PII request correlation / actor ID (when
+    # already resolved by auth middleware) is stored; no route input or secret is
+    # copied into the audit trail. Exact counts begin at deployment of this code.
+    if exc.status_code == 429 and exc.code == "rate_limited":
+        try:
+            from app.auth.audit import AuditEvent, get_audit_service
+
+            principal = getattr(request.state, "principal", None)
+            await get_audit_service().record(
+                AuditEvent.RATE_LIMITED,
+                actor_user_id=getattr(principal, "user_id", None),
+                request_id=getattr(request.state, "request_id", None),
+            )
+        except Exception:  # pragma: no cover - auth response must never fail on audit
+            logger.exception("Failed to audit a rate-limit denial")
+
     return JSONResponse(
         status_code=exc.status_code,
         content=error_envelope(exc.code, exc.message, details=exc.details),

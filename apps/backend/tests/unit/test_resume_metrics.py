@@ -6,23 +6,24 @@ Covers the Requirement-14 guarantees of the resume-analytics read model
 zero-filled daily growth series from the ``RESUMES_*`` durable keys, all via an
 injected :class:`~app.admin.metric_store.MetricStore`-shaped store:
 
-- **Split math (Req 14.1).** ``sourceSplit`` echoes the snapshot counts and adds
-  percentages = ``count / total * 100`` rounded to 1 decimal (total =
-  generated + imported + tailored + deleted).
-- **Empty state (Req 14.1).** No snapshot -> all counts 0, all percentages 0.0,
-  empty ``topTemplates``, and a zero-filled growth series.
+- **Split math (Req 14.1).** ``sourceSplit`` is current inventory containing
+  only generated / imported / tailored counts and percentages; deletion activity
+  is reported separately as ``deletedInWindow``.
+- **Empty state (Req 14.1).** No snapshot -> inventory counts and percentages 0,
+  empty ``topTemplates``, zero deletion/net totals, and zero-filled net growth.
 - **top-N ordering (Req 14.2).** ``topTemplates`` is the snapshot's popular
   templates capped at 10, sorted descending by count with ties broken by name
   ascending.
 - **Window validation (Req 14.4).** ``analytics(45)`` raises ``ValueError``;
   7 / 30 / 90 are accepted.
 - **Scope-limited fields (Req 14.7).** The serialized ``ResumeAnalytics`` exposes
-  ONLY window / sourceSplit / topTemplates / growth / computedAt - no
-  funnel / cohort / retention keys - and passes the forbidden-field guard.
+  only the enumerated inventory snapshots, deletion/net activity, growth, and
+  computation metadata - no funnel / cohort / retention keys - and passes the
+  forbidden-field guard.
 - **O(1) read (Req 14.6).** ``analytics`` issues a fixed, bounded number of store
-  reads (1 ``snapshot_get`` + 3 ``series``) regardless of data volume.
-- **Growth (Req 14.3).** The growth series sums generated + imported + tailored
-  per day, excludes deleted, and is zero-filled across the window.
+  reads (1 ``snapshot_get`` + 4 ``series``) regardless of data volume.
+- **Growth (Req 14.3).** The growth series is true net inventory change:
+  generated + imported + tailored - deleted, including negative daily values.
 
 Requirements: 14.1, 14.4, 14.7, 15.8 (also exercises 14.2, 14.3, 14.6).
 """
@@ -112,52 +113,51 @@ def _snapshot(*, source_counts=None, templates=None) -> dict:
 class TestSplitMath:
     """Validates: Requirements 14.1"""
 
-    async def test_counts_and_percentages(self):
-        # total = 40 + 30 + 20 + 10 = 100 -> percentages are exact tenths.
+    async def test_inventory_counts_and_percentages_exclude_deletions(self):
         snap = _snapshot(
             source_counts={
-                "generated": 40,
+                "generated": 50,
                 "imported": 30,
                 "tailored": 20,
-                "deleted": 10,
+                # A legacy snapshot key must not widen the inventory contract.
+                "deleted": 999,
             }
         )
         result = await _service(_FakeStore(snapshot=snap)).analytics(30)
         split = result.sourceSplit
 
-        # Counts echoed verbatim.
-        assert split.generated == 40
+        assert split.generated == 50
         assert split.imported == 30
         assert split.tailored == 20
-        assert split.deleted == 10
-
-        # Percentages = count / total * 100, rounded to 1 decimal.
-        assert split.generatedPct == 40.0
+        assert split.generatedPct == 50.0
         assert split.importedPct == 30.0
         assert split.tailoredPct == 20.0
-        assert split.deletedPct == 10.0
+        assert set(split.model_dump()) == {
+            "generated",
+            "imported",
+            "tailored",
+            "generatedPct",
+            "importedPct",
+            "tailoredPct",
+        }
+        assert result.deletedInWindow == 0
 
-        # Percentages are within [0.0, 100.0] and sum sensibly to ~100.
-        for p in (split.generatedPct, split.importedPct, split.tailoredPct, split.deletedPct):
-            assert 0.0 <= p <= 100.0
-        assert round(
-            split.generatedPct + split.importedPct + split.tailoredPct + split.deletedPct, 1
-        ) == 100.0
+        percentages = (split.generatedPct, split.importedPct, split.tailoredPct)
+        assert all(0.0 <= percentage <= 100.0 for percentage in percentages)
+        assert round(sum(percentages), 1) == 100.0
 
     async def test_percentages_rounded_to_one_decimal(self):
         # total = 3 -> 1/3 = 33.333.. rounds to 33.3 (one decimal place).
         snap = _snapshot(
-            source_counts={"generated": 1, "imported": 1, "tailored": 1, "deleted": 0}
+            source_counts={"generated": 1, "imported": 1, "tailored": 1}
         )
         split = (await _service(_FakeStore(snapshot=snap)).analytics(30)).sourceSplit
 
         assert split.generatedPct == 33.3
         assert split.importedPct == 33.3
         assert split.tailoredPct == 33.3
-        assert split.deletedPct == 0.0
-        # Each percentage carries at most one decimal place.
-        for p in (split.generatedPct, split.importedPct, split.tailoredPct):
-            assert round(p, 1) == p
+        for percentage in (split.generatedPct, split.importedPct, split.tailoredPct):
+            assert round(percentage, 1) == percentage
 
 
 # ===========================================================================
@@ -175,14 +175,15 @@ class TestEmptyState:
         assert split.generated == 0
         assert split.imported == 0
         assert split.tailored == 0
-        assert split.deleted == 0
-        # Percentages are 0.0 (not NaN / division-by-zero) when the total is 0.
+        # Percentages are 0.0 (not NaN / division-by-zero) when inventory is 0.
         assert split.generatedPct == 0.0
         assert split.importedPct == 0.0
         assert split.tailoredPct == 0.0
-        assert split.deletedPct == 0.0
 
         assert result.topTemplates == []
+        assert result.deletedInWindow == 0
+        assert result.netChange == 0
+        assert result.inventoryAsOf == result.templatesAsOf
 
         # Growth is still a full zero-filled window (one point per day).
         assert len(result.growth) == 30
@@ -275,7 +276,7 @@ class TestScopeLimitedFields:
 
     async def test_only_enumerated_fields_and_secret_free(self):
         snap = _snapshot(
-            source_counts={"generated": 2, "imported": 1, "tailored": 1, "deleted": 0},
+            source_counts={"generated": 2, "imported": 1, "tailored": 1},
             templates=[{"template": "modern", "count": 3}],
         )
         result = await _service(_FakeStore(snapshot=snap)).analytics(30)
@@ -288,6 +289,10 @@ class TestScopeLimitedFields:
             "window",
             "sourceSplit",
             "topTemplates",
+            "deletedInWindow",
+            "netChange",
+            "inventoryAsOf",
+            "templatesAsOf",
             "growth",
             "computedAt",
         }
@@ -310,9 +315,14 @@ class TestO1Read:
     """Validates: Requirements 14.6"""
 
     def _series_for(self, n_days: int) -> dict:
-        """Seed all three growth keys with a value on each of ``n_days`` days."""
+        """Seed all four activity keys with a value on each of ``n_days`` days."""
         data: dict = {}
-        for key in (RESUMES_GENERATED, RESUMES_IMPORTED, RESUMES_TAILORED):
+        for key in (
+            RESUMES_GENERATED,
+            RESUMES_IMPORTED,
+            RESUMES_TAILORED,
+            RESUMES_DELETED,
+        ):
             data[key] = {_day(offset): offset + 1 for offset in range(n_days)}
         return data
 
@@ -329,47 +339,44 @@ class TestO1Read:
         )
         await _service(big).analytics(90)
 
-        # Fixed shape: 1 snapshot read + 3 series reads (generated/imported/tailored).
+        # Fixed shape: one inventory snapshot + four activity series.
         assert small.snapshot_get_calls == 1
-        assert small.series_calls == 3
-        # Identical regardless of how much data was seeded - O(1) w.r.t. volume.
+        assert small.series_calls == 4
         assert big.snapshot_get_calls == small.snapshot_get_calls
         assert big.series_calls == small.series_calls
 
 
 # ===========================================================================
-# 7. Growth (Req 14.3) - sum generated+imported+tailored, exclude deleted, zero-fill
+# 7. Growth (Req 14.3) - true net inventory change, including negative days
 # ===========================================================================
 
 
 class TestGrowth:
     """Validates: Requirements 14.3"""
 
-    async def test_growth_sums_creation_keys_excludes_deleted_and_zero_fills(self):
+    async def test_growth_subtracts_deletions_and_reports_window_totals(self):
         series_data = {
             RESUMES_GENERATED: {_day(0): 5, _day(2): 1},
             RESUMES_IMPORTED: {_day(0): 2, _day(2): 3},
             RESUMES_TAILORED: {_day(0): 1},
-            # Deletions must NOT count toward growth - seed a big value to prove it.
-            RESUMES_DELETED: {_day(0): 999, _day(2): 999},
+            RESUMES_DELETED: {_day(0): 10, _day(2): 1},
         }
         result = await _service(
             _FakeStore(snapshot=_snapshot(), series_data=series_data)
         ).analytics(7)
 
-        # One point per day, oldest->newest.
         assert len(result.growth) == 7
-        dates = [p.date for p in result.growth]
+        dates = [point.date for point in result.growth]
         assert dates == sorted(dates)
 
-        by_day = {p.date: p.value for p in result.growth}
-        # today: 5 + 2 + 1 = 8 (deleted 999 excluded).
-        assert by_day[_day(0)] == 8
-        # two days ago: 1 + 3 + 0 = 4.
-        assert by_day[_day(2)] == 4
-        # empty days zero-filled.
+        by_day = {point.date: point.value for point in result.growth}
+        # today: 5 + 2 + 1 - 10 = -2; net growth may be negative.
+        assert by_day[_day(0)] == -2
+        # two days ago: 1 + 3 + 0 - 1 = 3.
+        assert by_day[_day(2)] == 3
         assert by_day[_day(1)] == 0
         assert by_day[_day(3)] == 0
 
-        # Total growth = sum of creation keys only (never deletions).
-        assert sum(p.value for p in result.growth) == 8 + 4
+        assert result.deletedInWindow == 11
+        assert result.netChange == 1
+        assert result.netChange == sum(point.value for point in result.growth)

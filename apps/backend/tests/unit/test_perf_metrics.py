@@ -1,11 +1,11 @@
 """Unit tests for the Performance signals read service (Task 11.3, Req 6).
 
 Exercises :class:`app.admin.perf_metrics.PerformanceMetricsService.signals()` in
-isolation - the per-route-class average latency mapping, the always-``None`` p95
-(no stored distribution -> cannot compute; Req 6.2), the top-10 slow route-class
-ordering, the slow-job durations read from KV run markers (typical/last, seconds
--> ms; Req 6.3), the ``dbQueryTimeMs`` unavailable handling (Req 6.7), the cache
-hit ratio pass-through (Req 6.4), the intentionally-omitted host metrics
+isolation - the per-route-class average latency and bounded-sample p95 mapping,
+the top-10 slow route-class ordering, the slow-job durations read from KV run
+markers (typical/last, seconds -> ms; Req 6.3), the ``dbQueryTimeMs`` unavailable
+handling (Req 6.7), cache hit ratio and observation-count forwarding (Req 6.4),
+the explicit current-process data scope, the intentionally-omitted host metrics
 (``memory``/``cpu``/``disk`` are a Non-Goal - Req 6.5 / 21.4, NOT unavailable),
 the "no new instrumentation" guarantee (``signals()`` never mutates
 ``AdminMetrics``; Req 21.4 / 15.8), and the secret-free serialization
@@ -46,18 +46,30 @@ class _FakeAdminMetrics:
     mutator that fired (should stay empty).
     """
 
-    def __init__(self, *, latency=None, cache_hit_ratio=0.0) -> None:
+    def __init__(
+        self,
+        *,
+        latency=None,
+        cache_hit_ratio=0.0,
+        cache_hits=0,
+        cache_misses=0,
+    ) -> None:
         # latency shaped like AdminMetrics.snapshot()["latency"]:
-        # {route_class: {"count": int, "avg_ms": float}}
+        # {route_class: {"count": int, "avg_ms": float, "p95_ms": float}}
         self._latency = latency or {}
         self._cache_hit_ratio = float(cache_hit_ratio)
+        self._cache_hits = int(cache_hits)
+        self._cache_misses = int(cache_misses)
         self.mutations: list[str] = []
 
     # -- reads (the only surface signals() is allowed to touch) --------------
 
     def snapshot(self) -> dict[str, object]:
         return {
-            "counters": {},
+            "counters": {
+                "dashboard_cache_hit": self._cache_hits,
+                "dashboard_cache_miss": self._cache_misses,
+            },
             "admin_action_total": {},
             "latency": {rc: dict(stats) for rc, stats in self._latency.items()},
             "gauges": {},
@@ -112,8 +124,20 @@ class _FakeStore:
         return self._markers.get(job)
 
 
-def _service(*, latency=None, cache_hit_ratio=0.0, markers=None):
-    metrics = _FakeAdminMetrics(latency=latency, cache_hit_ratio=cache_hit_ratio)
+def _service(
+    *,
+    latency=None,
+    cache_hit_ratio=0.0,
+    cache_hits=0,
+    cache_misses=0,
+    markers=None,
+):
+    metrics = _FakeAdminMetrics(
+        latency=latency,
+        cache_hit_ratio=cache_hit_ratio,
+        cache_hits=cache_hits,
+        cache_misses=cache_misses,
+    )
     store = _FakeStore(markers or {})
     svc = PerformanceMetricsService(admin_metrics=metrics, metric_store=store)
     return svc, metrics, store
@@ -130,8 +154,8 @@ class TestRouteClassAverages:
     async def test_avg_ms_maps_per_route_class(self):
         svc, _, _ = _service(
             latency={
-                "a": {"count": 10, "avg_ms": 50.0},
-                "b": {"count": 5, "avg_ms": 200.0},
+                "a": {"count": 10, "avg_ms": 50.0, "p95_ms": 75.0},
+                "b": {"count": 5, "avg_ms": 200.0, "p95_ms": 250.0},
             }
         )
         signals = await svc.signals()
@@ -141,24 +165,28 @@ class TestRouteClassAverages:
 
 
 # ===========================================================================
-# 2. p95 omitted everywhere (Req 6.2)
+# 2. p95 forwarding from the bounded snapshot (Req 6.2)
 # ===========================================================================
 
 
-class TestP95Omitted:
+class TestP95Forwarding:
     """Validates: Requirements 6.2"""
 
-    async def test_p95_is_none_for_all_route_classes(self):
+    async def test_p95_is_forwarded_to_route_and_top_slow_rows(self):
         svc, _, _ = _service(
             latency={
-                "a": {"count": 10, "avg_ms": 50.0},
-                "b": {"count": 5, "avg_ms": 200.0},
-                "c": {"count": 1, "avg_ms": 5.0},
+                "a": {"count": 10, "avg_ms": 50.0, "p95_ms": 75.0},
+                "b": {"count": 5, "avg_ms": 200.0, "p95_ms": 275.0},
+                "c": {"count": 1, "avg_ms": 5.0, "p95_ms": 5.0},
             }
         )
         signals = await svc.signals()
-        assert all(r.p95Ms is None for r in signals.routeClasses)
-        assert all(r.p95Ms is None for r in signals.topSlowRoutes)
+        assert {r.routeClass: r.p95Ms for r in signals.routeClasses} == {
+            "a": 75.0,
+            "b": 275.0,
+            "c": 5.0,
+        }
+        assert [r.p95Ms for r in signals.topSlowRoutes] == [275.0, 75.0, 5.0]
 
 
 # ===========================================================================
@@ -172,7 +200,12 @@ class TestTopSlowRoutes:
     async def test_top_10_when_more_than_ten_classes_desc(self):
         # 12 route classes with distinct averages 10, 20, ..., 120.
         latency = {
-            f"rc{i}": {"count": 1, "avg_ms": float(i * 10)} for i in range(1, 13)
+            f"rc{i}": {
+                "count": 1,
+                "avg_ms": float(i * 10),
+                "p95_ms": float(i * 12),
+            }
+            for i in range(1, 13)
         }
         svc, _, _ = _service(latency=latency)
         signals = await svc.signals()
@@ -185,9 +218,9 @@ class TestTopSlowRoutes:
     async def test_fewer_than_ten_returns_all_sorted(self):
         svc, _, _ = _service(
             latency={
-                "a": {"count": 1, "avg_ms": 50.0},
-                "b": {"count": 1, "avg_ms": 200.0},
-                "c": {"count": 1, "avg_ms": 10.0},
+                "a": {"count": 1, "avg_ms": 50.0, "p95_ms": 60.0},
+                "b": {"count": 1, "avg_ms": 200.0, "p95_ms": 240.0},
+                "c": {"count": 1, "avg_ms": 10.0, "p95_ms": 12.0},
             }
         )
         signals = await svc.signals()
@@ -253,22 +286,26 @@ class TestDbQueryTimeUnavailable:
 
 
 # ===========================================================================
-# 6. Cache hit ratio pass-through (Req 6.4)
+# 6. Cache hit ratio, observation count, and data scope (Req 6.4)
 # ===========================================================================
 
 
-class TestCacheHitRatio:
+class TestCacheSignals:
     """Validates: Requirements 6.4"""
 
-    async def test_ratio_passed_through(self):
-        svc, _, _ = _service(cache_hit_ratio=0.9)
+    async def test_ratio_and_observation_count_come_from_snapshot_counters(self):
+        svc, _, _ = _service(cache_hits=9, cache_misses=1)
         signals = await svc.signals()
         assert signals.cacheHitRatio == 0.9
+        assert signals.cacheObservationCount == 10
+        assert signals.dataScope == "current_process"
 
-    async def test_zero_ratio_is_valid_not_unavailable(self):
-        svc, _, _ = _service(cache_hit_ratio=0.0)
+    async def test_zero_ratio_with_observations_is_valid_not_unavailable(self):
+        svc, _, _ = _service(cache_hits=0, cache_misses=4)
         signals = await svc.signals()
         assert signals.cacheHitRatio == 0.0
+        assert signals.cacheObservationCount == 4
+        assert signals.dataScope == "current_process"
         assert "cacheHitRatio" not in signals.unavailable
 
 
@@ -301,8 +338,9 @@ class TestNoNewInstrumentation:
 
     async def test_signals_never_mutates_admin_metrics(self):
         svc, metrics, _ = _service(
-            latency={"a": {"count": 3, "avg_ms": 12.0}},
-            cache_hit_ratio=0.5,
+            latency={"a": {"count": 3, "avg_ms": 12.0, "p95_ms": 18.0}},
+            cache_hits=1,
+            cache_misses=1,
         )
         # signals() must complete without tripping any mutator guard.
         await svc.signals()
@@ -330,8 +368,9 @@ class TestSecretFree:
 
     async def test_no_forbidden_fields(self):
         svc, _, _ = _service(
-            latency={"a": {"count": 1, "avg_ms": 5.0}},
-            cache_hit_ratio=0.75,
+            latency={"a": {"count": 1, "avg_ms": 5.0, "p95_ms": 7.0}},
+            cache_hits=3,
+            cache_misses=1,
             markers={"rollup": {"expected_duration_seconds": 1.0}},
         )
         signals = await svc.signals()
@@ -354,6 +393,8 @@ class TestEmptyMetrics:
         assert signals.topSlowRoutes == []
         assert signals.topSlowJobs == []
         assert signals.cacheHitRatio == 0.0
+        assert signals.cacheObservationCount == 0
+        assert signals.dataScope == "current_process"
 
 
 # ===========================================================================

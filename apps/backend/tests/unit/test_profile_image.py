@@ -252,6 +252,53 @@ class TestCanonicalReresolution:
         await resumes._reresolve_canonical_photo(resume, "u1")
         assert "avatarUrl" not in resume["processed_data"]["personalInfo"]
 
+    def test_apply_photo_intent_shows_canonical(self):
+        from app.routers import resumes
+
+        data = {"personalInfo": {"name": "Ada", "photo": {"show": False, "shape": "circle"}}}
+        resumes._apply_photo_intent(data, True)
+        photo = data["personalInfo"]["photo"]
+        assert photo["show"] is True
+        assert photo["ref"] == "canonical"
+        # Presentation hints preserved.
+        assert photo["shape"] == "circle"
+
+    def test_apply_photo_intent_hides(self):
+        from app.routers import resumes
+
+        data = {"personalInfo": {"name": "Ada", "photo": {"show": True, "ref": "canonical"}}}
+        resumes._apply_photo_intent(data, False)
+        assert data["personalInfo"]["photo"]["show"] is False
+
+    def test_apply_photo_intent_creates_config_when_missing(self):
+        from app.routers import resumes
+
+        data = {"personalInfo": {"name": "Ada"}}
+        resumes._apply_photo_intent(data, True)
+        assert data["personalInfo"]["photo"]["show"] is True
+        assert data["personalInfo"]["photo"]["ref"] == "canonical"
+
+    async def test_data_level_helper_reresolves_canonical(self, monkeypatch):
+        """The data-level helper (used by the tailor pipeline output) re-points a
+        canonical photo at the live avatar - so a tailored resume no longer
+        inherits a frozen/stale avatarUrl."""
+        from app.routers import resumes
+        from types import SimpleNamespace
+
+        async def fake_get_by_id(uid):
+            return SimpleNamespace(avatar_url="http://live/new.webp")
+
+        monkeypatch.setattr("app.auth.accounts.get_by_id", fake_get_by_id)
+        data = {
+            "personalInfo": {
+                "name": "Ada",
+                "avatarUrl": "http://stale/old.webp",
+                "photo": {"show": True, "ref": "canonical"},
+            }
+        }
+        await resumes._reresolve_canonical_photo_in_data(data, "u1")
+        assert data["personalInfo"]["avatarUrl"] == "http://live/new.webp"
+
 
 class TestProjectionPhoto:
     def _profile(self, avatar="http://cdn/a.webp"):

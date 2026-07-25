@@ -11,8 +11,8 @@ server connection can change between statements, so server-side prepared
 statements are unsafe. ``app/db_engine.py`` already disables them when
 ``DB_USE_POOLER=true`` (``statement_cache_size=0`` +
 ``prepared_statement_cache_size=0`` for asyncpg; ``prepare_threshold=None`` for
-psycopg, both behind ``NullPool``). If that config is wrong, the repeated-query
-stress loop below fails with ``prepared statement "__asyncpg_stmt_..." already
+psycopg) while retaining small, pre-pinged client pools to avoid reconnect/TLS
+cost. If that config is wrong, the repeated-query stress loop below fails with ``prepared statement "__asyncpg_stmt_..." already
 exists``. A clean run proves the pooler-safe path works.
 
 Prerequisites (the harness does NOT migrate - keep migration on the DIRECT
@@ -109,10 +109,181 @@ async def _run() -> int:
     listed = await db.list_resumes(owner_id)
     check.ok("list_resumes returns the new resume", any(r["resume_id"] == resume_id for r in listed), f"{len(listed)} row(s)")
 
+    # Independent facades model separate Uvicorn workers. They share no local
+    # asyncio lock, so exactly-one master proves the owner-row FOR UPDATE lock +
+    # partial unique index are authoritative through transaction-mode PgBouncer.
+    from sqlalchemy import delete
+    from app.models import User
+
+    race_owner_id = str(uuid.uuid4())
+    async with db.session_factory() as session:
+        async with session.begin():
+            session.add(
+                User(
+                    id=race_owner_id,
+                    email=f"pg-master-race-{marker}@example.invalid",
+                    name="Postgres Master Race",
+                    role="user",
+                    status="active",
+                )
+            )
+    worker_dbs = [database.Database() for _ in range(5)]
+    try:
+        race_results = await asyncio.gather(
+            *[
+                worker.create_resume_atomic_master(
+                    race_owner_id,
+                    content=f"worker-{index}",
+                    processing_status="ready",
+                )
+                for index, worker in enumerate(worker_dbs)
+            ]
+        )
+        stored_race = await db.list_resumes(race_owner_id)
+        check.ok(
+            "cross-worker first uploads produce exactly one master",
+            len(race_results) == 5
+            and len(stored_race) == 5
+            and sum(bool(row["is_master"]) for row in stored_race) == 1,
+            f"returned={len(race_results)} stored={len(stored_race)} "
+            f"masters={sum(bool(row['is_master']) for row in stored_race)}",
+        )
+    finally:
+        await asyncio.gather(*(worker.close() for worker in worker_dbs))
+        async with db.session_factory() as session:
+            async with session.begin():
+                await session.execute(delete(User).where(User.id == race_owner_id))
+
     # -- job row (a second owned table) ----------------------------------------
     job = await db.create_job(owner_id, content=f"JD looking for a backend engineer {marker}", resume_id=resume_id)
     job_id = job["job_id"]
     check.ok("create_job persisted", bool(job_id), job_id)
+
+    # -- durable tailor preview recovery + atomic single-use confirmation ------
+    request_id = f"pg-recovery-{marker}"
+    result_payload = {"request_id": request_id, "data": {"marker": marker}}
+    preview = await db.create_tailor_preview(
+        owner_id,
+        resume_id=resume_id,
+        job_id=job_id,
+        prompt_id="keywords",
+        payload_hash=f"payload-{marker}",
+        request_id=request_id,
+        result_payload=result_payload,
+    )
+    recovered = await db.get_tailor_preview_result(owner_id, request_id)
+    check.ok("tailor preview result recovers by owner/request", recovered == result_payload)
+
+    confirm_args = {
+        "preview_id": preview["preview_id"],
+        "resume_id": resume_id,
+        "job_id": job_id,
+        "payload_hash": f"payload-{marker}",
+        "improved_data": {"personalInfo": {"name": "Postgres Verify"}, "summary": marker},
+        "improved_text": "{}",
+        "improvements": [{"suggestion": "Target PostgreSQL"}],
+        "cover_letter": None,
+        "outreach_message": None,
+        "interview_prep": None,
+        "title": f"Tailored {marker}",
+    }
+    confirmations = await asyncio.gather(
+        *[db.confirm_tailor_preview(owner_id, **confirm_args) for _ in range(5)]
+    )
+    statuses = [status for status, _ in confirmations]
+    check.ok(
+        "concurrent tailor confirmation has exactly one winner",
+        statuses.count("created") == 1 and statuses.count("invalid_preview") == 4,
+        repr(statuses),
+    )
+    check.ok(
+        "consumed preview result is no longer recoverable",
+        await db.get_tailor_preview_result(owner_id, request_id) is None,
+    )
+
+    _expired = [
+        await db.create_tailor_preview(
+            owner_id,
+            resume_id=resume_id,
+            job_id=job_id,
+            prompt_id="keywords",
+            payload_hash=f"expired-{marker}-{index}",
+            ttl_seconds=-1,
+        )
+        for index in range(3)
+    ]
+    live = await db.create_tailor_preview(
+        owner_id,
+        resume_id=resume_id,
+        job_id=job_id,
+        prompt_id="keywords",
+        payload_hash=f"live-{marker}",
+        ttl_seconds=3600,
+    )
+    first_prune = await db.prune_expired_tailor_previews(batch_size=2)
+    second_prune = await db.prune_expired_tailor_previews(batch_size=2)
+    check.ok(
+        "tailor preview cleanup is bounded and eventually drains",
+        (first_prune, second_prune) == (2, 1),
+        repr((first_prune, second_prune)),
+    )
+    check.ok(
+        "tailor preview cleanup preserves live capabilities",
+        await db.get_tailor_preview(owner_id, live["preview_id"]) is not None,
+    )
+
+    # Seed enough same-owner rows for PostgreSQL statistics to distinguish the
+    # exact owner/request lookup from the broader owner/resume scope index.
+    await asyncio.gather(
+        *[
+            db.create_tailor_preview(
+                owner_id,
+                resume_id=resume_id,
+                job_id=job_id,
+                prompt_id="keywords",
+                payload_hash=f"plan-{marker}-{index}",
+                request_id=f"plan-{marker}-{index}",
+            )
+            for index in range(32)
+        ]
+    )
+
+    # Force index consideration on the small harness table, then prove both hot
+    # access paths have usable indexes. This checks schema/query compatibility,
+    # not production cardinality-based planner preference.
+    from sqlalchemy import text
+
+    async with db.session_factory() as session:
+        async with session.begin():
+            await session.execute(text("ANALYZE tailor_previews"))
+            await session.execute(text("SET LOCAL enable_seqscan = off"))
+            recovery_plan_rows = await session.execute(
+                text(
+                    "EXPLAIN SELECT result_payload FROM tailor_previews "
+                    "WHERE user_id = CAST(:uid AS VARCHAR) "
+                    "AND request_id = CAST(:rid AS VARCHAR) "
+                    "AND consumed_at IS NULL AND result_payload IS NOT NULL"
+                ),
+                {"uid": owner_id, "rid": live["request_id"]},
+            )
+            cleanup_plan_rows = await session.execute(
+                text(
+                    "EXPLAIN SELECT preview_id FROM tailor_previews "
+                    "WHERE expires_at <= :cutoff ORDER BY expires_at, preview_id LIMIT 100"
+                ),
+                {"cutoff": "9999-12-31T23:59:59+00:00"},
+            )
+            recovery_plan = "\n".join(row[0] for row in recovery_plan_rows)
+            cleanup_plan = "\n".join(row[0] for row in cleanup_plan_rows)
+    check.ok(
+        "preview recovery query has a usable owner/request index",
+        "uq_tailor_preview_user_request" in recovery_plan,
+        recovery_plan,
+    )
+    check.ok(
+        "preview cleanup query has a usable expiry index",
+        "ix_tailor_preview_expires_at" in cleanup_plan,
+    )
 
     # -- Postgres GIN full-text search path (0011: to_tsvector @@ plainto_tsquery)
     repo = SearchRepo()

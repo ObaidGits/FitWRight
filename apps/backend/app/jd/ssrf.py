@@ -26,19 +26,40 @@ import httpx
 logger = logging.getLogger(__name__)
 
 __all__ = [
-    "SsrfError", "validate_fetch_url", "is_ip_blocked",
-    "fetch_url_safely", "fetch_raw_safely",
+    "FetchedText", "SsrfError", "UpstreamHttpError", "validate_fetch_url",
+    "is_ip_blocked", "fetch_url_safely", "fetch_raw_safely",
 ]
 
 _ALLOWED_SCHEMES = {"http", "https"}
 _ALLOWED_PORTS = {80, 443}
 _MAX_REDIRECTS = 3
 _MAX_BYTES = 3 * 1024 * 1024  # 3 MiB decompressed cap
+_MAX_ERROR_BODY_BYTES = 64 * 1024  # enough for WAF/login signals; never surfaced
 _MAX_BYTES_BINARY = 10 * 1024 * 1024  # 10 MiB cap for binary (PDF) fetches (§20)
 _TIMEOUT_SECONDS = 10.0
 _BINARY_TIMEOUT_SECONDS = 30.0  # PDFs/OCR sources may be larger/slower (§20)
 _CGNAT = ipaddress.ip_network("100.64.0.0/10")
 _USER_AGENT = "FitWrightBot/1.0 (+job-description-import)"
+
+
+class FetchedText(str):
+    """Decoded fetch result retaining its authoritative bytes and MIME type.
+
+    It behaves exactly like ``str`` for existing HTML/API consumers. The JD
+    orchestrator can reuse ``raw_bytes`` when an extensionless response is a
+    PDF, avoiding a second network download and lossy decode/re-encode cycle.
+    """
+
+    raw_bytes: bytes
+    content_type: str
+
+    def __new__(
+        cls, value: str, *, raw_bytes: bytes, content_type: str
+    ) -> "FetchedText":
+        instance = super().__new__(cls, value)
+        instance.raw_bytes = raw_bytes
+        instance.content_type = content_type
+        return instance
 
 
 class SsrfError(Exception):
@@ -52,6 +73,20 @@ class SsrfError(Exception):
     def __init__(self, reason: str) -> None:
         super().__init__(reason)
         self.reason = reason
+
+
+class UpstreamHttpError(SsrfError):
+    """Public upstream returned an HTTP error with bounded classification data.
+
+    The status and body are internal-only and must never be copied into an API
+    response or logs. They let the JD pipeline distinguish a bot challenge,
+    login page, and expired posting without weakening SSRF error opacity.
+    """
+
+    def __init__(self, status_code: int, body: str) -> None:
+        super().__init__(f"http_{status_code}")
+        self.status_code = status_code
+        self.body = body
 
 
 def is_ip_blocked(ip_str: str) -> bool:
@@ -81,7 +116,13 @@ def validate_fetch_url(url: str) -> tuple[str, str, int]:
     host = parsed.hostname
     if not host:
         raise SsrfError("no_host")
-    port = parsed.port or (443 if scheme == "https" else 80)
+    try:
+        port = parsed.port or (443 if scheme == "https" else 80)
+    except ValueError as exc:
+        # urllib raises for malformed/out-of-range ports. Normalize that parser
+        # detail into the fetcher's opaque error contract instead of leaking a
+        # ValueError as a 500 from either the initial URL or a redirect hop.
+        raise SsrfError("invalid_port") from exc
     if port not in _ALLOWED_PORTS:
         raise SsrfError(f"port_not_allowed:{port}")
     return scheme, host, port
@@ -219,16 +260,47 @@ async def _fetch(url: str) -> str:
                             raise SsrfError("redirect_no_location")
                         current = urljoin(current, location)
                         continue
+                    if resp.status_code in (401, 403, 404):
+                        chunks: list[bytes] = []
+                        total = 0
+                        async for chunk in resp.aiter_bytes():
+                            remaining = _MAX_ERROR_BODY_BYTES - total
+                            if remaining <= 0:
+                                break
+                            piece = chunk[:remaining]
+                            chunks.append(piece)
+                            total += len(piece)
+                        body = b"".join(chunks).decode("utf-8", errors="replace")
+                        raise UpstreamHttpError(resp.status_code, body)
                     if resp.status_code >= 400:
                         raise SsrfError(f"http_{resp.status_code}")
-                    chunks: list[bytes] = []
+                    content_type = (
+                        resp.headers.get("content-type", "")
+                        .split(";", 1)[0]
+                        .strip()
+                        .lower()
+                    )
+                    chunks = []
                     total = 0
+                    pdf_payload = content_type == "application/pdf"
+                    for_pdf_probe = bytearray()
                     async for chunk in resp.aiter_bytes():
+                        if len(for_pdf_probe) < 5:
+                            for_pdf_probe.extend(chunk[: 5 - len(for_pdf_probe)])
+                            pdf_payload = pdf_payload or bytes(for_pdf_probe).startswith(
+                                b"%PDF-"
+                            )
                         total += len(chunk)
-                        if total > _MAX_BYTES:
+                        max_bytes = _MAX_BYTES_BINARY if pdf_payload else _MAX_BYTES
+                        if total > max_bytes:
                             raise SsrfError("too_large")
                         chunks.append(chunk)
-                    return b"".join(chunks).decode("utf-8", errors="replace")
+                    raw = b"".join(chunks)
+                    return FetchedText(
+                        raw.decode("utf-8", errors="replace"),
+                        raw_bytes=raw,
+                        content_type=content_type,
+                    )
         except httpx.HTTPError as exc:
             raise SsrfError("transport_error") from exc
         finally:

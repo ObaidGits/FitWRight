@@ -1,25 +1,9 @@
-"""Unit tests for the ``ErrorsMetricsService`` (Task 10.3).
+"""Unit tests for durable error totals plus live route-class failures.
 
-Covers the Requirement-5 guarantees of the grouped errors-summary read model
-(see :mod:`app.admin.errors_metrics`), all served from durable ``metrics_daily``
-Metric_Keys via an injected :class:`~app.admin.metric_store.MetricStore`:
-
-- **Bucket math (Req 5.1/5.3).** ``counts4xx`` / ``counts5xx`` are the windowed
-  sums of ``REQUEST_4XX`` / ``REQUEST_5XX``; ``bySource.api`` is their total;
-  ``bySource.ai`` is the windowed ``AI_FAILURE`` sum; ``job`` / ``storage`` are
-  0 (documented gaps); a day older than the window is excluded.
-- **Trend (Req 5.4).** Exactly ``window`` daily points, oldest->newest, each equal
-  to ``REQUEST_4XX + REQUEST_5XX`` for that day (0 for empty days); last is today.
-- **top-N ordering (Req 5.2).** ``topRouteClasses`` is ``[]`` by design (no
-  durable per-route-class failure key) - which satisfies "fewer than 10".
-- **Zero/empty (Req 5.1/5.3/5.4).** An empty store yields all-zero counts, an
-  all-zero by-source, an all-zero trend, and an empty route-class list.
-- **Secret-free (Req 15.8).** The serialized summary passes the response-boundary
-  forbidden-field guard.
-- **O(1) read (Req 5.7).** ``summary`` issues a fixed, bounded number of store
-  reads (3 ``sum`` + 2 ``series``) regardless of how many days/rows are seeded.
-
-Requirements: 5.2, 5.5, 5.6, 5.7, 15.8.
+Selected-window 4xx/5xx, AI failures, and trend values come only from durable
+UTC-day buckets. An injected ``AdminMetrics`` snapshot supplies bounded
+current-process route ``failure_count`` values without changing those totals.
+Job and storage source counts remain explicitly not instrumented.
 """
 
 from __future__ import annotations
@@ -50,9 +34,29 @@ def _store(isolated_db) -> MetricStore:
     return MetricStore(isolated_db.session_factory)
 
 
-def _service(store) -> ErrorsMetricsService:
-    """An ``ErrorsMetricsService`` reading from the injected store."""
-    return ErrorsMetricsService(metric_store=store)
+class _FakeAdminMetrics:
+    """Current-process route buckets returned by ``AdminMetrics.snapshot``."""
+
+    def __init__(self, failures: dict[str, int] | None = None) -> None:
+        self._failures = failures or {}
+        self.snapshot_calls = 0
+
+    def snapshot(self) -> dict[str, object]:
+        self.snapshot_calls += 1
+        return {
+            "latency": {
+                route_class: {"failure_count": failure_count}
+                for route_class, failure_count in self._failures.items()
+            }
+        }
+
+
+def _service(store, admin_metrics=None) -> ErrorsMetricsService:
+    """Inject durable storage and an isolated current-process route source."""
+    return ErrorsMetricsService(
+        metric_store=store,
+        admin_metrics=admin_metrics or _FakeAdminMetrics(),
+    )
 
 
 def _day(offset: int = 0) -> str:
@@ -118,14 +122,15 @@ class TestBucketMath:
         assert summary.bySource.ai == 4  # 1 + 2 + 1 (AI_FAILURE, windowed)
         assert summary.bySource.job == 0  # documented gap
         assert summary.bySource.storage == 0  # documented gap
-        # Honesty (audit fix): the un-sourced fields are flagged not-instrumented
-        # so the UI shows that instead of implying "zero failures".
-        assert set(summary.notInstrumented) == {
-            "topRouteClasses",
-            "bySource.job",
-            "bySource.storage",
-        }
+        assert summary.notInstrumented == ["bySource.job", "bySource.storage"]
         assert summary.window == 30
+        assert summary.windowStartDate == _day(29)
+        assert summary.windowEndDate == _day(0)
+        assert summary.granularity == "utc_day"
+        assert (
+            summary.dataScope
+            == "durable_utc_day_buckets_plus_current_process_route_classes"
+        )
 
     async def test_counts_are_non_negative_and_window_echoed(self, isolated_db):
         store = _store(isolated_db)
@@ -171,24 +176,34 @@ class TestTrend:
 
 
 # ===========================================================================
-# 3. top-N ordering (Req 5.2) - empty by design, satisfies "fewer than 10"
+# 3. Current-process route failures (Req 5.2)
 # ===========================================================================
 
 
 class TestTopRouteClasses:
-    """Validates: Requirements 5.2"""
+    """Route failures are bounded current-process data, not durable totals."""
 
-    async def test_top_route_classes_is_empty_documented_contract(self, isolated_db):
+    async def test_route_failures_do_not_alter_durable_totals(self, isolated_db):
         store = _store(isolated_db)
-        # Even with request failures recorded, there is no durable per-route-class
-        # FAILURE key, so the list is empty (Req 5.2 permits < 10 entries).
         await store.upsert(_day(0), REQUEST_4XX, 9)
-        await store.upsert(_day(0), REQUEST_5XX, 9)
+        await store.upsert(_day(0), REQUEST_5XX, 4)
+        admin_metrics = _FakeAdminMetrics(
+            {"users_item": 3, "root": 7, "healthy": 0}
+        )
 
-        summary = await _service(store).summary(30)
+        summary = await _service(store, admin_metrics).summary(30)
 
-        assert summary.topRouteClasses == []
-        assert len(summary.topRouteClasses) < 10  # satisfies the "fewer than 10" clause
+        assert admin_metrics.snapshot_calls == 1
+        assert [route.model_dump() for route in summary.topRouteClasses] == [
+            {"routeClass": "root", "failures": 7},
+            {"routeClass": "users_item", "failures": 3},
+        ]
+        # Current-process route failures remain separate from durable day totals.
+        assert summary.counts4xx == 9
+        assert summary.counts5xx == 4
+        assert summary.bySource.api == 13
+        assert sum(point.value for point in summary.trend) == 13
+        assert summary.notInstrumented == ["bySource.job", "bySource.storage"]
 
 
 # ===========================================================================

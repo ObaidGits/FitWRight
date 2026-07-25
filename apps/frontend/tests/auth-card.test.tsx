@@ -154,4 +154,31 @@ describe('AuthCard', () => {
       )
     );
   });
+
+  it('redeems an admin invite: locks the email, sends the token, lands in /admin', async () => {
+    signupMock.mockResolvedValue({ user: { id: 'a1', role: 'admin' }, pendingVerification: false });
+    render(
+      <AuthCard mode="signup" initialInvite="invite-tok-123" initialInviteEmail="new@admin.com" />
+    );
+
+    // Invite context is shown and the email is bound (read-only, prefilled).
+    expect(screen.getByText(/accept your admin invitation/i)).toBeInTheDocument();
+    const emailInput = screen.getByLabelText('Email') as HTMLInputElement;
+    expect(emailInput.value).toBe('new@admin.com');
+    expect(emailInput).toHaveAttribute('readonly');
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'New Admin' } });
+    fireEvent.change(screen.getByLabelText('Password'), {
+      target: { value: 'a-long-enough-passphrase' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /create account/i }));
+
+    await waitFor(() =>
+      expect(signupMock).toHaveBeenCalledWith(
+        expect.objectContaining({ email: 'new@admin.com', inviteToken: 'invite-tok-123' })
+      )
+    );
+    expect(establishMock).toHaveBeenCalledWith({ id: 'a1', role: 'admin' });
+    await waitFor(() => expect(replaceMock).toHaveBeenCalledWith('/admin'));
+  });
 });

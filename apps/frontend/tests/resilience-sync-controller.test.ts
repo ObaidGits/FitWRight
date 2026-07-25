@@ -24,7 +24,7 @@ describe('SyncController', () => {
       { resumeId: 'r1', v: 3, key: 'k3' },
     ]);
     const order: string[] = [];
-    const replay = vi.fn(async (entry, _p): Promise<ReplayOutcome> => {
+    const replay = vi.fn(async (entry): Promise<ReplayOutcome> => {
       order.push(entry.idempotencyKey);
       return { type: 'ok', version: entry.baseVersion! + 1 };
     });

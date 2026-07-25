@@ -36,6 +36,7 @@ from app.models import (
     Application,
     AuditLog,
     Improvement,
+    OAuthIdentity,
     Resume,
     ResumeVersion,
     Session as SessionRow,
@@ -188,13 +189,51 @@ class AdminRepo:
 
         async with self._session_factory() as session:
             rows = (await session.execute(stmt)).scalars().all()
+            has_more = len(rows) > limit
+            page = rows[:limit]
+            page_ids = [row.id for row in page]
 
-        has_more = len(rows) > limit
-        page = rows[:limit]
+            # Exactly two grouped queries replace the denormalized counters for
+            # this page. Both run in the same session as the page fetch; query
+            # count stays constant (no per-user/N+1 reads), including empty pages.
+            resume_rows = (
+                await session.execute(
+                    select(Resume.user_id, func.count())
+                    .where(Resume.user_id.in_(page_ids))
+                    .group_by(Resume.user_id)
+                )
+            ).all()
+            application_rows = (
+                await session.execute(
+                    select(Application.user_id, func.count())
+                    .where(Application.user_id.in_(page_ids))
+                    .group_by(Application.user_id)
+                )
+            ).all()
+
+        resume_counts = {user_id: int(count) for user_id, count in resume_rows}
+        application_counts = {
+            user_id: int(count) for user_id, count in application_rows
+        }
         next_cursor = (
             encode_cursor(page[-1].created_at, page[-1].id) if has_more and page else None
         )
-        return [self._row_data(r) for r in page], next_cursor
+        return [
+            AdminUserRowData(
+                id=row.id,
+                name=row.name,
+                email=row.email,
+                role=row.role,
+                status=row.status,
+                email_verified=row.email_verified_at is not None,
+                created_at=row.created_at,
+                deleted_at=row.deleted_at,
+                resume_count=resume_counts.get(row.id, 0),
+                application_count=application_counts.get(row.id, 0),
+                last_active_at=row.last_active_at,
+            )
+            for row in page
+        ], next_cursor
 
     @staticmethod
     def _row_data(row: User) -> AdminUserRowData:
@@ -240,21 +279,62 @@ class AdminRepo:
                     )
                 ).first()
             )
-            last_active_at = (
-                await session.execute(select(User.last_active_at).where(User.id == user_id))
-            ).scalar()
-            # signup method: OAuth-only accounts (no password hash) are "oauth".
-            pw_hash = (
-                await session.execute(select(User.password_hash).where(User.id == user_id))
-            ).scalar()
+            user_row = (
+                await session.execute(
+                    select(User.last_active_at, User.password_hash).where(User.id == user_id)
+                )
+            ).one_or_none()
+            providers = sorted(
+                {
+                    str(provider).strip().lower()
+                    for provider in (
+                        await session.execute(
+                            select(OAuthIdentity.provider).where(
+                                OAuthIdentity.user_id == user_id
+                            )
+                        )
+                    ).scalars()
+                    if provider and str(provider).strip()
+                }
+            )
+
+        last_active_at = user_row.last_active_at if user_row is not None else None
+        has_password = bool(user_row and user_row.password_hash)
+        provider_suffix = ",".join(providers)
+        if has_password and providers:
+            account_method = f"password+oauth:{provider_suffix}"
+        elif has_password:
+            account_method = "password"
+        elif providers:
+            account_method = f"oauth:{provider_suffix}"
+        else:
+            account_method = "unknown"
+
         return UserActivity(
             resume_count=resume_count,
             tailored_count=tailored_count,
             application_count=application_count,
             last_active_at=last_active_at,
             ai_configured=ai_configured,
-            signup_method="password" if pw_hash else "oauth",
+            signup_method=account_method,
         )
+
+    async def distinct_configured_ai_providers(self) -> list[str]:
+        """Return sorted distinct nonblank saved credential provider names.
+
+        Provider names are configuration metadata only; ciphertext is never
+        selected or returned, and no connectivity/credential validity check is
+        implied.
+        """
+        async with self._session_factory() as session:
+            providers = (
+                await session.execute(
+                    select(ApiKey.provider)
+                    .where(func.trim(ApiKey.provider) != "")
+                    .distinct()
+                )
+            ).scalars().all()
+        return sorted({str(provider).strip() for provider in providers if provider})
 
     # -- overview stats (indexed aggregates) ---------------------------------
 
@@ -354,49 +434,35 @@ class AdminRepo:
     # secrets, tokens, or hashes (Property 2).
 
     async def security_daily(self, day_start: str, day_end: str) -> dict[str, int]:
-        """Count Security_Critical_Event ``audit_log`` rows for the UTC day
-        ``[day_start, day_end)``, keyed by the ``SEC_*`` Metric_Keys (Req 9.1).
+        """Return exact audit counts for the closed UTC day ``[start, end)``."""
+        return await self.security_window(day_start, day_end)
 
-        Mapping (audit event -> SEC_* key):
-        - ``SEC_LOGIN_FAILED`` <- ``AuditEvent.LOGIN_FAILED`` (``auth.login_failed``).
-        - ``SEC_ADMIN_LOGIN``  <- ``AuditEvent.LOGIN`` (``login``) rows whose actor is
-          currently an ``admin``. There is no dedicated "admin login" event, so the
-          cleanest correct signal is a ``login`` row joined to ``users`` on
-          ``actor_user_id`` filtered to ``role == 'admin'``. Role is evaluated at
-          rollup time (current role), which is acceptable for a daily aggregate.
-        - ``SEC_AUTHZ_DENIED`` <- ``AuditEvent.AUTHZ_DENIED`` (``authz.denied``).
-        - ``SEC_RATE_LIMITED`` <- **0 (documented gap).** Rate-limit denials are
-          emitted only as an in-process metric (``AuthMetrics.record_rate_limited``),
-          never as an ``audit_log`` row, so there is no event to count here. The key
-          is still returned (as 0) so the rollup writes a stable, complete row; it
-          can be sourced from the flushed auth metric in a later wave.
-        - ``SEC_SUSPICIOUS``   <- **0 (documented gap).** No suspicious/blocked audit
-          event exists in the ``AuditEvent`` catalog today (WAF/SSRF/bot signals live
-          in productivity metrics, not the audit trail), so this is returned as 0.
+    async def security_window(self, start_iso: str, end_iso: str) -> dict[str, int]:
+        """Count indexed security audit events in exact ``[start_iso, end_iso)``.
 
-        The main event counts use a single day-bounded ``GROUP BY event`` served by
-        ``ix_audit_log_event_ts``; admin logins use one small indexed join. Off the
-        request path (rollup-time), a day-bounded scan is acceptable (Req 9.1).
+        The event query is served by ``ix_audit_log_event_ts``. Admin logins use
+        the same timestamp/event bounds and join ``users`` only to classify the
+        actor's role at query time; callers disclose that role basis explicitly.
         """
         counted_events = (
             AuditEvent.LOGIN_FAILED,
             AuditEvent.AUTHZ_DENIED,
+            AuditEvent.RATE_LIMITED,
+            AuditEvent.CAPTCHA_DENIED,
         )
         async with self._session_factory() as session:
             rows = (
                 await session.execute(
                     select(AuditLog.event, func.count())
                     .where(
-                        AuditLog.ts >= day_start,
-                        AuditLog.ts < day_end,
                         AuditLog.event.in_(counted_events),
+                        AuditLog.ts >= start_iso,
+                        AuditLog.ts < end_iso,
                     )
                     .group_by(AuditLog.event)
                 )
             ).all()
-            by_event = {event: int(n) for event, n in rows}
-
-            # Admin logins: `login` audit rows whose actor is currently an admin.
+            by_event = {event: int(count) for event, count in rows}
             admin_login = int(
                 (
                     await session.execute(
@@ -404,9 +470,9 @@ class AdminRepo:
                         .select_from(AuditLog)
                         .join(User, User.id == AuditLog.actor_user_id)
                         .where(
-                            AuditLog.ts >= day_start,
-                            AuditLog.ts < day_end,
                             AuditLog.event == AuditEvent.LOGIN,
+                            AuditLog.ts >= start_iso,
+                            AuditLog.ts < end_iso,
                             User.role == "admin",
                         )
                     )
@@ -418,31 +484,33 @@ class AdminRepo:
             SEC_LOGIN_FAILED: by_event.get(AuditEvent.LOGIN_FAILED, 0),
             SEC_ADMIN_LOGIN: admin_login,
             SEC_AUTHZ_DENIED: by_event.get(AuditEvent.AUTHZ_DENIED, 0),
-            # Documented gaps - no audit-log signal exists for these today.
-            SEC_RATE_LIMITED: 0,
-            SEC_SUSPICIOUS: 0,
+            SEC_RATE_LIMITED: by_event.get(AuditEvent.RATE_LIMITED, 0),
+            SEC_SUSPICIOUS: by_event.get(AuditEvent.CAPTCHA_DENIED, 0),
         }
 
     async def resume_source_counts(self) -> dict[str, int]:
-        """Point-in-time resume source split - generated / imported / tailored /
-        deleted (Req 14.1/14.2).
+        """Point-in-time counts for the three persisted resume origins (Req 14.1).
 
         ``resumes`` has no explicit ``source``/``origin`` column, so the split uses
-        the best available structural proxies:
-        - ``tailored``  = ``COUNT(improvements)`` - a tailoring result row per
-          tailored resume (matches the existing ``resumes_tailored`` overview stat).
-        - ``imported``  = non-tailored resumes (``parent_id IS NULL``) that carry a
-          persisted ``original_markdown`` - that column is set only on the
-          upload/parse path, so its presence marks a file-imported resume.
-        - ``generated`` = the remaining non-tailored resumes (``parent_id IS NULL``
-          AND ``original_markdown IS NULL``) - builder/profile-generated resumes.
-        - ``deleted``   = **0 (documented gap).** Resumes are hard-deleted (purge
-          cascade); there is no soft-delete column on ``resumes``, so a point-in-time
-          snapshot cannot recover deleted rows. ``RESUMES_DELETED`` is instead an
-          event-time daily counter (product analytics) incremented at deletion.
+        the strongest mutually exclusive partition available in persisted data:
+        - ``tailored``  = resume rows with ``parent_id IS NOT NULL``;
+        - ``imported``  = root rows (``parent_id IS NULL``) with a persisted
+          ``original_markdown``, which is set by the upload/parse path;
+        - ``generated`` = all other root rows. With no persisted provenance
+          column, absence of upload-only ``original_markdown`` is the strongest
+          available proxy required by the fixed ``generated`` response field.
+
+        These predicates are disjoint and exhaustive over current ``resumes``
+        rows. In particular, counting tailored *resume rows* instead of
+        ``improvements`` avoids mixing two different persisted entity types.
+        Deletions are activity events, not current inventory, and are therefore
+        reported separately by the analytics reader from ``RESUMES_DELETED``.
         """
         async with self._session_factory() as session:
-            tailored = await self._count(session, select(func.count()).select_from(Improvement))
+            tailored = await self._count(
+                session,
+                select(func.count()).select_from(Resume).where(Resume.parent_id.is_not(None)),
+            )
             imported = await self._count(
                 session,
                 select(func.count()).select_from(Resume).where(
@@ -459,7 +527,6 @@ class AdminRepo:
             "generated": generated,
             "imported": imported,
             "tailored": tailored,
-            "deleted": 0,
         }
 
     async def popular_templates(self) -> list[tuple[str, int]]:

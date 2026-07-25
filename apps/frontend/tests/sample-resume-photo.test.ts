@@ -30,7 +30,12 @@ describe('gallery sample resume photo variants', () => {
     // Only the photo/avatar differ; the rest of the resume is the same fixture.
     expect(SAMPLE_RESUME_WITH_PHOTO.summary).toBe(SAMPLE_RESUME.summary);
     expect(SAMPLE_RESUME_WITH_PHOTO.workExperience).toEqual(SAMPLE_RESUME.workExperience);
-    expect(SAMPLE_RESUME_WITH_PHOTO.personalInfo.name).toBe(SAMPLE_RESUME.personalInfo.name);
+    const photoPersonalInfo = SAMPLE_RESUME_WITH_PHOTO.personalInfo;
+    const plainPersonalInfo = SAMPLE_RESUME.personalInfo;
+    if (!photoPersonalInfo || !plainPersonalInfo) {
+      throw new Error('Sample resumes must include personal information');
+    }
+    expect(photoPersonalInfo.name).toBe(plainPersonalInfo.name);
   });
 
   it('the catalog has both photo-capable and photo-less templates to exercise both paths', () => {

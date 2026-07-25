@@ -15,6 +15,7 @@ import { AccountMenu } from '@/components/layout/account-menu';
 import { NotificationCenter } from '@/components/notifications/notification-center';
 import { OfflineIndicator } from '@/components/resilience/offline-indicator';
 import { VerifyEmailBanner } from '@/components/auth/verify-email-banner';
+import { ModeMismatchBanner } from '@/components/dev/mode-mismatch-banner';
 import { Button } from '@/components/atelier/button';
 import { useCommandPalette } from '@/components/command/command-palette';
 
@@ -43,6 +44,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {/* Pinned above the scroll region (never scroll away). */}
         <div className="shrink-0">
+          <ModeMismatchBanner />
           <OfflineIndicator />
           <VerifyEmailBanner />
           {/* Mobile top bar */}

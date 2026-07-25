@@ -15,9 +15,12 @@ that is already pre-computed off the request path:
   rollup/purge jobs), falling back to the worker-independent
   :func:`~app.admin.metrics_service.live_admin_gauges` bounded count when the
   gauge has not been populated in this worker yet.
+- Queue backlog and dead-letter counts come from the worker-independent,
+  indexed :func:`app.events.outbox.outbox_stats` aggregate.
 - Lock state is a single best-effort KV point read per job.
 
-No path here scans ``audit_log``/``users``/``metrics_daily`` rows.
+No path here performs an unbounded scan of
+``audit_log``/``users``/``metrics_daily``/``outbox`` rows.
 
 **Job set.** Only the three jobs run through
 :func:`app.admin.jobs.run_admin_jobs` - ``rollup``, ``purge``,
@@ -26,9 +29,9 @@ the rows surfaced. ``reaper``/``outbox`` are driven from a *separate* path (the
 session reaper loop / the productivity outbox worker in the Product bounded
 context) and do not publish admin run markers or an ``AdminMetrics`` gauge, so
 they are intentionally **not** fabricated here (surfacing them would require
-cross-context coupling and a live query, violating Req 8.4/21). The outbox/queue
-length is likewise surfaced as *unavailable* (Req 8.7) until a worker-independent
-admin gauge for it exists.
+new cross-context run-marker coupling). Queue health is still authoritative:
+``app.events.outbox.outbox_stats()`` supplies indexed, worker-independent backlog
+and dead-letter counts; one failed read marks both values unavailable.
 
 **Requirement -> field mapping (documented derivations).**
 
@@ -97,11 +100,6 @@ _JOBS: tuple[tuple[str, str], ...] = (
     ("audit_retention", AUDIT_RETENTION_LOCK_KEY),
 )
 
-# Candidate ``AdminMetrics`` gauge names for a worker-independent queue/outbox
-# length. None exist today (the outbox backlog lives in the Product bounded
-# context), so queueLength is surfaced as unavailable until one is added.
-_QUEUE_GAUGE_NAMES: tuple[str, ...] = ("queue_length", "outbox_length", "queue_backlog")
-
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
@@ -169,11 +167,11 @@ async def _lock_state(kvstore, lock_key: str) -> str | None:
 
 
 class JobsPanelService:
-    """Compose the :class:`JobsPanel` from KV run markers + live gauges (Req 8).
+    """Compose the :class:`JobsPanel` from run markers and indexed gauges.
 
     Dependencies are optionally injected (tests); otherwise the process-wide
-    Metric_Store + KVStore are resolved lazily so importing this module never
-    forces DB/engine initialization.
+    Metric_Store + KVStore are resolved lazily. Queue/dead-letter counts use the
+    indexed outbox source directly, so they remain worker-independent.
     """
 
     def __init__(self, *, metric_store=None, kvstore=None) -> None:
@@ -215,7 +213,12 @@ class JobsPanelService:
             jobs.append(self._build_row(job_name, marker, lock_state, now))
 
         purge_backlog, purge_unavailable = await self._purge_backlog(now)
-        queue_length, queue_unavailable = self._queue_length()
+        (
+            queue_length,
+            queue_unavailable,
+            dead_letter_count,
+            dead_letter_unavailable,
+        ) = await self._queue_stats()
 
         return JobsPanel(
             jobs=jobs,
@@ -223,6 +226,8 @@ class JobsPanelService:
             queueLengthUnavailable=queue_unavailable,
             purgeBacklog=purge_backlog,
             purgeBacklogUnavailable=purge_unavailable,
+            deadLetterCount=dead_letter_count,
+            deadLetterCountUnavailable=dead_letter_unavailable,
             computedAt=now.isoformat(),
             stale=stale,
         )
@@ -306,22 +311,27 @@ class JobsPanelService:
             logger.debug("Live purge-backlog read failed", exc_info=True)
             return None, True
 
-    def _queue_length(self) -> tuple[int | None, bool]:
-        """Queue/outbox length from an ``AdminMetrics`` gauge, else unavailable.
+    @staticmethod
+    async def _queue_stats() -> tuple[int | None, bool, int | None, bool]:
+        """Read indexed outbox backlog/dead counts independently of workers.
 
-        No worker-independent admin gauge for the outbox/queue length exists - the
-        outbox backlog is owned by the Product bounded context and reading it here
-        would require a cross-context live query (a Non-Goal + not O(1)). Until an
-        admin gauge is published, this is surfaced as unavailable (Req 8.7).
+        Both values come from one authoritative ``outbox_stats`` snapshot. If
+        that read fails, both are unavailable rather than partially reporting a
+        stale or fabricated zero.
         """
         try:
-            gauges = get_admin_metrics().snapshot().get("gauges", {})
-            for key in _QUEUE_GAUGE_NAMES:
-                if key in gauges:
-                    return int(gauges[key]), False
-        except Exception:  # pragma: no cover - gauge read is best-effort
-            logger.debug("Queue-length gauge read failed", exc_info=True)
-        return None, True
+            from app.events.outbox import outbox_stats
+
+            stats = await outbox_stats()
+            return (
+                max(0, int(stats["backlog"])),
+                False,
+                max(0, int(stats["dead"])),
+                False,
+            )
+        except Exception:
+            logger.debug("Outbox stats read failed", exc_info=True)
+            return None, True, None, True
 
 
 # ---------------------------------------------------------------------------

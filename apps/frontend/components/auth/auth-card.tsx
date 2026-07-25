@@ -58,12 +58,28 @@ export interface AuthCardProps {
   initialNext?: string | null;
   /** Server-resolved OAuth callback failure flag. */
   oauthFailed?: boolean;
+  /** Admin-invite token from `?invite=` (signup only). Redemption creates an
+   *  admin account server-side; the role is never chosen by the client. */
+  initialInvite?: string | null;
+  /** Email the invite is bound to (`?email=`); shown read-only when present. */
+  initialInviteEmail?: string | null;
 }
 
-export function AuthCard({ mode, initialNext, oauthFailed = false }: AuthCardProps) {
+export function AuthCard({
+  mode,
+  initialNext,
+  oauthFailed = false,
+  initialInvite,
+  initialInviteEmail,
+}: AuthCardProps) {
   const isSignup = mode === 'signup';
   const router = useRouter();
   const { refresh, establish } = useSession();
+
+  // An admin invitation turns signup into a redemption flow: the email is bound
+  // to the invite and the account is created as an admin server-side.
+  const inviteToken = isSignup ? initialInvite?.trim() || undefined : undefined;
+  const hasInvite = Boolean(inviteToken);
 
   // Query parameters are resolved by the server page and passed as primitive
   // props. This removes useSearchParams/Suspense from the whole auth card, so
@@ -71,7 +87,7 @@ export function AuthCard({ mode, initialNext, oauthFailed = false }: AuthCardPro
   // null fallback that only appears after client hydration.
   const next = safeNext(initialNext);
 
-  const [email, setEmail] = React.useState('');
+  const [email, setEmail] = React.useState(hasInvite ? (initialInviteEmail ?? '') : '');
   const [password, setPassword] = React.useState('');
   const [name, setName] = React.useState('');
   const [rememberMe, setRememberMe] = React.useState(false);
@@ -103,14 +119,15 @@ export function AuthCard({ mode, initialNext, oauthFailed = false }: AuthCardPro
     setPending(true);
     try {
       if (isSignup) {
-        const res = await authApi.signup({ email, password, name });
+        const res = await authApi.signup({ email, password, name, inviteToken });
         if (res.pendingVerification) {
           router.replace(`/verify?email=${encodeURIComponent(email)}&sent=1`);
           return;
         }
         if (res.user) establish(res.user);
         else await refresh();
-        router.replace(next);
+        // A redeemed admin invite lands the new admin in the console.
+        router.replace(hasInvite ? '/admin' : next);
       } else {
         const user = await authApi.login({ email, password, rememberMe });
         establish(user);
@@ -141,12 +158,30 @@ export function AuthCard({ mode, initialNext, oauthFailed = false }: AuthCardPro
     <Card className="p-6">
       <div className="mb-6 text-center">
         <h1 className="text-xl font-semibold">
-          {isSignup ? 'Create your account' : 'Welcome back'}
+          {hasInvite
+            ? 'Accept your admin invitation'
+            : isSignup
+              ? 'Create your account'
+              : 'Welcome back'}
         </h1>
         <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-          {isSignup ? 'Start tailoring resumes with FitWright.' : 'Sign in to continue.'}
+          {hasInvite
+            ? 'Set a password to activate your admin account.'
+            : isSignup
+              ? 'Start tailoring resumes with FitWright.'
+              : 'Sign in to continue.'}
         </p>
       </div>
+
+      {hasInvite && (
+        <div
+          role="status"
+          className="mb-4 rounded-[var(--radius-at-md)] border border-[var(--primary)]/30 bg-[var(--primary)]/8 px-3 py-2 text-xs text-[var(--foreground)]"
+        >
+          You&apos;ve been invited as an <span className="font-medium">administrator</span>. This
+          invite is single-use and tied to your email.
+        </div>
+      )}
 
       <Button type="button" variant="outline" className="w-full" onClick={onGoogle}>
         <GoogleMark /> Continue with Google
@@ -178,6 +213,9 @@ export function AuthCard({ mode, initialNext, oauthFailed = false }: AuthCardPro
             onChange={(e) => setEmail(e.target.value)}
             autoComplete="email"
             aria-invalid={!!error && !email.includes('@')}
+            // An invite is bound to a specific address - lock it so the token
+            // can't be redeemed for a different email.
+            readOnly={hasInvite}
           />
         </div>
         <div className="space-y-1.5">

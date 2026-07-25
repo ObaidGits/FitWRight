@@ -54,14 +54,19 @@ class TestErrorsAuthz:
         assert body["counts4xx"] >= 0
         assert body["counts5xx"] >= 0
         assert set(body["bySource"]) == {"api", "job", "storage", "ai"}
-        assert body["topRouteClasses"] == []
-        # Un-sourced fields are flagged not-instrumented (rendered as such by the
-        # UI) rather than silently implying zero failures / no route-classes.
+        # Route failures are bounded current-process observations; an empty list
+        # is measured empty, not an instrumentation gap.
+        assert isinstance(body["topRouteClasses"], list)
         assert set(body["notInstrumented"]) == {
-            "topRouteClasses",
             "bySource.job",
             "bySource.storage",
         }
+        assert body["granularity"] == "utc_day"
+        assert body["windowStartDate"] <= body["windowEndDate"]
+        assert (
+            body["dataScope"]
+            == "durable_utc_day_buckets_plus_current_process_route_classes"
+        )
         assert len(body["trend"]) == 30
 
 

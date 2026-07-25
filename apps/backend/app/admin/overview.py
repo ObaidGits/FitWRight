@@ -25,7 +25,8 @@ sources every KPI from shared primitives only:
   day-bounded, index-served count).
 - **aiCallsToday** <- the durable ``AI_CALLS`` Metric_Key summed over today via
   ``MetricStore.sum`` (see the eventual-consistency note on :meth:`_ai_calls_today`).
-- **errorRate24h** <- the durable ``REQUEST_*`` Metric_Keys via ``MetricStore.sum``.
+- **errorRate24h** <- the durable ``REQUEST_*`` Metric_Keys over the current and
+  previous UTC calendar-day buckets (not an exact rolling 24-hour interval).
 - **purgeBacklog** <- the in-process ``AdminMetrics`` ``purge_backlog`` gauge.
 
 Every read is O(1) (Req 13.6): a fixed, bounded number of snapshot / summed-key
@@ -119,15 +120,15 @@ class OverviewService:
         we source the durable key only and document the eventual consistency).
 
     ``errorRate24h`` (Req 13.2/13.3)
-        The server-error rate over the **trailing 24h** as a percentage bounded
-        ``0.00``-``100.00`` (2dp). Computed from the durable ``REQUEST_*`` keys via
-        ``MetricStore.sum`` over the last two UTC days (today + yesterday) - the
-        same two-day trailing-24h proxy the security view uses, since daily is the
-        finest durable granularity. ``errors`` = ``REQUEST_5XX`` (server errors);
-        ``total`` = ``REQUEST_2XX + REQUEST_4XX + REQUEST_5XX``. When ``total == 0``
-        the rate is ``0.00`` (0 requests => 0% error, a computable value - not
+        The server-error rate across the **current and previous UTC calendar-day
+        buckets** as a percentage bounded ``0.00``-``100.00`` (2dp). This is not
+        an exact rolling 24-hour interval: daily buckets are the finest durable
+        granularity. ``errors`` = ``REQUEST_5XX`` (server errors); ``total`` =
+        ``REQUEST_2XX + REQUEST_4XX + REQUEST_5XX``. When ``total == 0`` the rate
+        is ``0.00`` (0 requests => 0% error, a computable value - not
         "unavailable", which is reserved for a source that *cannot* be computed,
-        Req 13.7).
+        Req 13.7). ``errorRateWindowLabel`` exposes these bucket semantics to the
+        client so it does not describe the value as a rolling 24-hour rate.
 
     ``purgeBacklog`` (Req 13.2)
         The count of purge-due soft-deleted users, read from the in-process
@@ -150,8 +151,8 @@ class OverviewService:
     returns its value - the request never fails as a whole.
     """
 
-    # Trailing-24h proxy spans at most two UTC calendar days (today + yesterday),
-    # matching SecurityMetricsService's documented daily-granularity approximation.
+    # The error-rate read spans exactly two UTC calendar-day buckets: today and
+    # yesterday. It is intentionally not described as a rolling 24-hour window.
     _WINDOW_DAYS = 2
 
     def __init__(
@@ -224,6 +225,7 @@ class OverviewService:
             newUsersToday=new_users_today,
             aiCallsToday=ai_calls_today,
             errorRate24h=error_rate_24h,
+            errorRateWindowLabel="Today + yesterday (UTC daily buckets)",
             purgeBacklog=purge_backlog,
             computedAt=now.isoformat(),
             stale=stale,
@@ -295,15 +297,15 @@ class OverviewService:
             return KpiValue(value=None, unavailable=True)
 
     async def _error_rate_24h(self, now: datetime) -> "KpiValue":
-        """``errorRate24h`` - server-error rate (0.00-100.00) over trailing 24h.
+        """``errorRate24h`` - server-error rate over two UTC daily buckets.
 
-        Trailing-24h proxy = the last two UTC days (today + yesterday), the finest
-        durable granularity (mirrors the security view). ``errors`` = ``REQUEST_5XX``
-        (server errors); ``total`` = ``REQUEST_2XX + REQUEST_4XX + REQUEST_5XX``, both
-        summed from the durable Metric_Keys via ``MetricStore.sum`` (Req 13.2/13.3).
-        ``total == 0`` => ``0.00`` (0 requests is 0% error - a computable value, not
-        "unavailable"). The result is rounded to 2dp and clamped to ``0.00``-``100.00``
-        (Req 13.2 bound).
+        The calculation covers the current and previous UTC calendar days, not an
+        exact rolling 24-hour interval, because daily is the finest durable
+        granularity. ``errors`` = ``REQUEST_5XX``; ``total`` = ``REQUEST_2XX +
+        REQUEST_4XX + REQUEST_5XX``, both summed from durable Metric_Keys (Req
+        13.2/13.3). ``total == 0`` => ``0.00`` (a computable value, not
+        "unavailable"). The result is rounded to 2dp and clamped to
+        ``0.00``-``100.00`` (Req 13.2 bound).
         """
         from app.admin.schemas import KpiValue
 

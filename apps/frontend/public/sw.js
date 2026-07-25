@@ -84,10 +84,13 @@ self.addEventListener('message', (event) => {
   } else if (type === 'CLEAR_CACHES') {
     event.waitUntil(Promise.all(ALL_CACHES.map((n) => caches.delete(n))));
   } else if (type === 'GET_VERSION') {
-    event.ports[0] && event.ports[0].postMessage({ version: SW_VERSION });
+    if (event.ports[0]) {
+      event.ports[0].postMessage({ version: SW_VERSION });
+    }
   } else if (type === 'GET_STATS') {
-    event.ports[0] &&
+    if (event.ports[0]) {
       event.ports[0].postMessage({ version: SW_VERSION, stats: STATS, hitRatio: hitRatio() });
+    }
   }
 });
 

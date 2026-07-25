@@ -394,6 +394,14 @@ class ResumeData(BaseModel):
 
 
 # API Response Models
+class ResumeProcessingError(BaseModel):
+    """Secret-safe reason structured AI parsing did not complete."""
+
+    code: str
+    message: str
+    retryable: bool
+
+
 class ResumeUploadResponse(BaseModel):
     """Response for resume upload."""
 
@@ -402,6 +410,7 @@ class ResumeUploadResponse(BaseModel):
     resume_id: str
     processing_status: Literal["pending", "processing", "ready", "failed"] = "pending"
     is_master: bool = False
+    processing_error: ResumeProcessingError | None = None
 
 
 class RawResume(BaseModel):
@@ -522,6 +531,26 @@ class JobAnalyzeKeywords(BaseModel):
     seniority_level: str | None = None
     experience_years: str | None = None
 
+    @field_validator("experience_years", "seniority_level", mode="before")
+    @classmethod
+    def _coerce_scalar_to_str(cls, value: Any) -> Any:
+        """Accept a numeric ``experience_years`` from the model.
+
+        The extraction prompt's own example is ``"experience_years": 5`` (an
+        integer, "5+ years" -> 5), so a well-behaved model returns a number
+        here. The previous ``str``-only type rejected that valid output and
+        failed the whole keyword-extraction step (and every tailoring step that
+        depends on it). Coerce ints/floats to their string form so the prompt
+        contract and the schema agree.
+        """
+        if value is None or isinstance(value, str):
+            return value
+        if isinstance(value, bool):
+            return str(value)
+        if isinstance(value, (int, float)):
+            return str(value)
+        return value
+
 
 class JobAnalyzeResponse(BaseModel):
     """Response for pre-generation job fit analysis.
@@ -544,6 +573,11 @@ class ImproveResumeRequest(BaseModel):
     resume_id: str
     job_id: str
     prompt_id: str | None = None
+    # Optional free-text steering for THIS run (emphasis, ordering, tone, or
+    # real content the user attests to). Length-capped to bound tokens/abuse;
+    # sanitized and injected as a lower-priority block that can never override
+    # the anti-fabrication rules downstream.
+    custom_instructions: str | None = Field(default=None, max_length=2000)
 
 
 class ImprovementSuggestion(BaseModel):
@@ -654,6 +688,10 @@ class ImproveResumeData(BaseModel):
     """Data payload for improve response."""
 
     request_id: str
+    preview_id: str | None = Field(
+        default=None,
+        description="Single-use preview capability returned by preview and echoed on confirm.",
+    )
     resume_id: str | None = Field(
         default=None,
         description="Null for preview responses; populated when the tailored resume is persisted.",
@@ -679,6 +717,11 @@ class ImproveResumeData(BaseModel):
 
     # Warning and status fields for transparency
     warnings: list[str] = Field(default_factory=list)
+    # User-facing notes about the Extra Instructions step ONLY (e.g. "Added
+    # project X", "Couldn't add Y"). Kept separate from ``warnings`` so internal
+    # diff diagnostics (e.g. "N changes rejected during verification") never leak
+    # into the instruction-results UI.
+    instruction_notes: list[str] = Field(default_factory=list)
     refinement_attempted: bool = False
     refinement_successful: bool = False
 
@@ -693,20 +736,43 @@ class ImproveResumeResponse(BaseModel):
 class ImproveResumeConfirmRequest(BaseModel):
     """Request to confirm and save a tailored resume."""
 
+    preview_id: str
     resume_id: str
     job_id: str
     improved_data: ResumeData
     improvements: list[ImprovementSuggestion]
+    # Apply the chosen template's photo intent server-side AFTER the preview hash
+    # is validated (mutating improved_data before hashing would break the match):
+    # True -> show the canonical profile photo, False -> hide it, None -> leave
+    # the resume exactly as generated.
+    include_photo: bool | None = None
 
 
 # Config Models
 ReasoningEffortLiteral = Literal["minimal", "low", "medium", "high"]
 
+# The supported LLM providers (mirrors Settings.llm_provider and the frontend
+# provider enum). Persisting an unknown provider would silently break later
+# reads (get_model_name has no prefix for it) and produce cryptic call failures,
+# so the update boundary rejects anything outside this set (422).
+LLMProviderLiteral = Literal[
+    "openai",
+    "openai_compatible",
+    "anthropic",
+    "openrouter",
+    "gemini",
+    "deepseek",
+    "groq",
+    "ollama",
+]
+
 
 class LLMConfigRequest(BaseModel):
     """Request to update LLM configuration."""
 
-    provider: str | None = None
+    # Strictly typed so an unknown provider is rejected at the boundary (422)
+    # instead of being persisted to config.json and failing cryptically later.
+    provider: LLMProviderLiteral | None = None
     model: str | None = None
     api_key: str | None = None
     api_base: str | None = None
@@ -718,6 +784,43 @@ class LLMConfigRequest(BaseModel):
     # Strictly typed so invalid values are rejected at the boundary (422)
     # rather than corrupting config.json and crashing later reads.
     reasoning_effort: Literal["minimal", "low", "medium", "high", ""] | None = None
+
+    @field_validator("model")
+    @classmethod
+    def _validate_model(cls, v: str | None) -> str | None:
+        """Reject a blank/whitespace-only model name (would break call routing)."""
+        if v is None:
+            return None
+        cleaned = v.strip()
+        if not cleaned:
+            raise ValueError("model must not be blank")
+        return cleaned
+
+    @field_validator("api_base")
+    @classmethod
+    def _validate_api_base(cls, v: str | None) -> str | None:
+        """Validate a provided Base URL is a real http(s) URL (fix 8).
+
+        ``None``/empty is allowed (an explicit clear). Anything else must parse
+        as an ``http``/``https`` URL with a host, so a malformed endpoint can
+        never be persisted and later sent to LiteLLM as a bogus target.
+        """
+        if v is None:
+            return None
+        cleaned = v.strip()
+        if not cleaned:
+            return cleaned  # explicit clear (router normalizes "" -> None)
+        from urllib.parse import urlparse
+
+        try:
+            parsed = urlparse(cleaned)
+        except Exception as exc:  # pragma: no cover - urlparse is very tolerant
+            raise ValueError("api_base is not a valid URL") from exc
+        if parsed.scheme not in ("http", "https") or not parsed.netloc:
+            raise ValueError(
+                "api_base must be an http(s) URL, e.g. https://host/v1"
+            )
+        return cleaned
 
 
 class LLMConfigResponse(BaseModel):
@@ -967,13 +1070,25 @@ class SetupStatusResponse(BaseModel):
 
 
 class StatusResponse(BaseModel):
-    """Application status response (includes live subsystem health)."""
+    """Persisted application setup status; provider health is not probed."""
 
-    status: str
+    status: Literal["ready", "setup_required"]
     llm_configured: bool
-    llm_healthy: bool
+    llm_healthy: bool | None = Field(
+        default=None,
+        description="Provider health, or null when no live provider check was made.",
+    )
     has_master_resume: bool
     database_stats: dict[str, Any]
+    single_user: bool = Field(
+        default=False,
+        description=(
+            "True when the backend runs in local single-user mode. The frontend "
+            "compares this against its own baked NEXT_PUBLIC single-user flag to "
+            "detect a deployment mismatch (e.g. hosted UI against a single-user "
+            "backend) and warn loudly."
+        ),
+    )
 
 
 # Diff-Based Improvement Models

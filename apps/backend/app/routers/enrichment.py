@@ -13,7 +13,7 @@ from app.auth import get_effective_user_id, require_verified_user_id
 from app.llm_ratelimit import llm_rate_limit_dep
 from app.config_cache import get_content_language
 from app.database import db
-from app.llm import complete_json
+from app.llm import complete_json, llm_api_error
 from app.prompts.enrichment import (
     ANALYZE_RESUME_PROMPT,
     ENHANCE_DESCRIPTION_PROMPT,
@@ -35,6 +35,11 @@ from app.schemas.enrichment import (
     RegenerateRequest,
     RegenerateResponse,
     RegeneratedItem,
+)
+from app.schemas.llm_outputs import (
+    EnrichmentEnhancementOutput,
+    RegeneratedBulletsOutput,
+    RegeneratedSkillsOutput,
 )
 
 logger = logging.getLogger(__name__)
@@ -125,7 +130,12 @@ async def analyze_resume(
     try:
         # Call LLM with increased max_tokens for non-English languages
         result = await asyncio.wait_for(
-            complete_json(prompt, max_tokens=8192, schema_type="enrichment"),
+            complete_json(
+                prompt,
+                max_tokens=8192,
+                schema_type="enrichment",
+                response_model=AnalysisResponse,
+            ),
             timeout=180.0,  # 3-minute hard limit
         )
 
@@ -158,24 +168,9 @@ async def analyze_resume(
             analysis_summary=result.get("analysis_summary"),
         )
 
-    except asyncio.TimeoutError:
-        logger.error("Resume analysis timed out for resume %s", resume_id)
-        raise HTTPException(
-            status_code=504,
-            detail="Resume analysis timed out. Please try again with a shorter resume or a faster model.",
-        )
-    except ValueError as e:
-        logger.error("Resume analysis failed (content): %s", e)
-        raise HTTPException(
-            status_code=422,
-            detail="The AI returned an unreadable response. Please try again or switch models.",
-        )
     except Exception as e:
-        logger.error("Resume analysis failed: %s", e)
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to analyze resume. Please try again.",
-        )
+        logger.exception("Resume analysis provider call failed for %s", resume_id)
+        raise llm_api_error(e, stage="enrichment_analysis") from e
 
 
 @router.post(
@@ -237,27 +232,19 @@ async def generate_enhancements(
 
         try:
             analysis_result = await asyncio.wait_for(
-                complete_json(analysis_prompt, max_tokens=8192, schema_type="enrichment"),
+                complete_json(
+                    analysis_prompt,
+                    max_tokens=8192,
+                    schema_type="enrichment",
+                    response_model=AnalysisResponse,
+                ),
                 timeout=180.0,
             )
-        except asyncio.TimeoutError:
-            logger.error("Resume re-analysis timed out for resume %s", request.resume_id)
-            raise HTTPException(
-                status_code=504,
-                detail="Resume analysis timed out. Please try again with a shorter resume or a faster model.",
-            )
-        except ValueError as e:
-            logger.error("Resume re-analysis failed (content): %s", e)
-            raise HTTPException(
-                status_code=422,
-                detail="The AI returned an unreadable response. Please try again or switch models.",
-            )
         except Exception as e:
-            logger.error("Failed to re-analyze resume: %s", e)
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to process enhancements. Please try again.",
+            logger.exception(
+                "Resume re-analysis provider call failed for %s", request.resume_id
             )
+            raise llm_api_error(e, stage="enrichment_reanalysis") from e
 
         question_to_item: dict[str, str] = {}
         for q in analysis_result.get("questions", []):
@@ -314,7 +301,11 @@ async def generate_enhancements(
         )
 
         try:
-            result = await complete_json(prompt, schema_type="diff")
+            result = await complete_json(
+                prompt,
+                schema_type="diff",
+                response_model=EnrichmentEnhancementOutput,
+            )
             # Get additional bullets from LLM (new key name)
             additional_bullets = result.get("additional_bullets", [])
             # Fallback to old key for backwards compatibility
@@ -335,8 +326,12 @@ async def generate_enhancements(
                 )
             )
         except Exception as e:
-            logger.warning(f"Failed to enhance item {item_id}: {e}")
-            # Continue with other items
+            logger.exception("Failed to enhance resume item %s", item_id)
+            raise llm_api_error(
+                e,
+                stage="enrichment_description",
+                details={"item_id": item_id},
+            ) from e
 
     return EnhancementPreview(enhancements=enhancements)
 
@@ -453,7 +448,12 @@ async def _regenerate_experience_or_project(
         user_instruction=instruction,
     )
 
-    result = await complete_json(prompt, max_tokens=4096, schema_type="diff")
+    result = await complete_json(
+        prompt,
+        max_tokens=4096,
+        schema_type="diff",
+        response_model=RegeneratedBulletsOutput,
+    )
 
     new_bullets = result.get("new_bullets", [])
     if not isinstance(new_bullets, list):
@@ -485,7 +485,12 @@ async def _regenerate_skills(
         user_instruction=instruction,
     )
 
-    result = await complete_json(prompt, max_tokens=2048, schema_type="diff")
+    result = await complete_json(
+        prompt,
+        max_tokens=2048,
+        schema_type="diff",
+        response_model=RegeneratedSkillsOutput,
+    )
 
     new_skills = result.get("new_skills", [])
     if not isinstance(new_skills, list):
@@ -540,9 +545,12 @@ async def regenerate_items(
 
     regenerated_items: list[RegeneratedItem] = []
     errors: list[RegenerateItemError] = []
+    first_provider_error: Exception | None = None
 
     for item, result in zip(request.items, results):
         if isinstance(result, Exception):
+            if first_provider_error is None:
+                first_provider_error = result
             logger.error(
                 "Failed to regenerate item. "
                 f"resume_id={request.resume_id} item_id={item.item_id} item_type={item.item_type}",
@@ -561,11 +569,11 @@ async def regenerate_items(
 
         regenerated_items.append(result)
 
-    if not regenerated_items:
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to regenerate content. Please try again.",
-        )
+    if not regenerated_items and first_provider_error is not None:
+        raise llm_api_error(
+            first_provider_error,
+            stage="enrichment_regeneration",
+        ) from first_provider_error
 
     return RegenerateResponse(regenerated_items=regenerated_items, errors=errors)
 

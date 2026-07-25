@@ -47,12 +47,41 @@ export function ProfileAvatar({
   priority = false,
   className,
 }: ProfileAvatarProps) {
+  // Retry a transient load failure a couple of times before falling back to
+  // initials, instead of hiding the photo permanently on the first hiccup (a
+  // single CDN 404/timeout used to flip to initials until remount).
+  const MAX_RETRIES = 2;
+  const [attempt, setAttempt] = React.useState(0);
   const [failed, setFailed] = React.useState(false);
+
+  // A new URL (photo changed) restarts the attempt/fallback state so an updated
+  // avatar is always re-tried even if a prior URL had failed on this mount.
+  React.useEffect(() => {
+    setAttempt(0);
+    setFailed(false);
+  }, [url]);
+
   const boxStyle: React.CSSProperties = {
     width: size,
     height: size,
     background: dominantColor || undefined,
   };
+
+  function withRetryParam(u: string, n: number): string {
+    const sep = u.includes('?') ? '&' : '?';
+    return `${u}${sep}__r=${n}`;
+  }
+
+  function onImgError() {
+    if (attempt < MAX_RETRIES) {
+      const next = attempt + 1;
+      // Small backoff; bumping `attempt` reloads with a cache-busting param so
+      // a cached failed response isn't reused.
+      window.setTimeout(() => setAttempt(next), 300 * next);
+    } else {
+      setFailed(true);
+    }
+  }
 
   if (!url || failed) {
     return (
@@ -69,7 +98,11 @@ export function ProfileAvatar({
     );
   }
 
-  const srcSet = srcset && srcset.length ? toSrcSetAttr(srcset) : undefined;
+  // On a retry, drop the srcSet and use a single cache-busted src so the reload
+  // actually re-fetches (a srcSet candidate would otherwise be reused as-is).
+  const isRetry = attempt > 0;
+  const displaySrc = isRetry ? withRetryParam(url, attempt) : url;
+  const srcSet = !isRetry && srcset && srcset.length ? toSrcSetAttr(srcset) : undefined;
 
   return (
     <div
@@ -78,7 +111,8 @@ export function ProfileAvatar({
     >
       {/* eslint-disable-next-line @next/next/no-img-element -- external CDN master; responsive srcset is built server-side, Next/Image proxying adds no value and breaks the public SSR/OG paths. */}
       <img
-        src={url}
+        key={attempt}
+        src={displaySrc}
         srcSet={srcSet}
         sizes={srcSet ? (sizes ?? `${size}px`) : undefined}
         alt={name ? `${name} - profile photo` : 'Profile photo'}
@@ -88,7 +122,7 @@ export function ProfileAvatar({
         // fetchPriority is a valid DOM attribute; React 19 passes it through.
         fetchPriority={priority ? 'high' : 'auto'}
         decoding="async"
-        onError={() => setFailed(true)}
+        onError={onImgError}
         className="h-full w-full object-cover"
         style={{ background: dominantColor || undefined }}
       />

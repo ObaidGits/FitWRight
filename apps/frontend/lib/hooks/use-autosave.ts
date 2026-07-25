@@ -149,7 +149,10 @@ export function useAutosave<T extends Record<string, unknown>>(
     storeRef.current = store;
     setStorageDegraded(!durable || store.isDegraded());
 
-    const reach = new ReachabilityMonitor({ intervalMs: 20_000 });
+    // Debounced offline (2 misses) avoids queueing on a single transient probe
+    // blip, but we confirm quickly (short re-probe) so genuine offline edits
+    // still route to the durable outbox within ~1s.
+    const reach = new ReachabilityMonitor({ intervalMs: 20_000, retryDelayMs: 1000 });
     reachRef.current = reach;
 
     const coord = new TabCoordinator({

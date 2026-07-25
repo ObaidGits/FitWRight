@@ -139,6 +139,73 @@ class TestPdfUsesStoredTemplate:
         assert "template=modern" in captured["url"]
 
 
+class TestPdfRenderCache:
+    """The rendered-PDF cache: identical requests skip Chromium; edits bust it."""
+
+    async def test_repeat_download_is_served_from_cache(
+        self, isolated_db, owner_id, client, monkeypatch
+    ):
+        import app.routers.resumes as resumes_mod
+        from app.pdf_cache import get_pdf_cache
+
+        cache = get_pdf_cache()
+        assert cache is not None
+        await cache.clear()
+
+        calls = {"n": 0}
+
+        async def fake_render(url, page_size, margins=None):
+            calls["n"] += 1
+            return b"%PDF-1.4 fake"
+
+        monkeypatch.setattr(resumes_mod, "render_resume_pdf", fake_render)
+
+        rid = await _seed(isolated_db, owner_id)
+
+        async with client:
+            first = await client.get(f"/api/v1/resumes/{rid}/pdf")
+            second = await client.get(f"/api/v1/resumes/{rid}/pdf")
+
+        assert first.status_code == 200 and second.status_code == 200
+        assert first.content == second.content == b"%PDF-1.4 fake"
+        # Second identical request was served from cache - no re-render.
+        assert calls["n"] == 1
+        # Meaningful, name-based filename (seed name is "Ada").
+        assert 'filename="Ada_Resume.pdf"' in first.headers["content-disposition"]
+
+    async def test_content_change_busts_cache(
+        self, isolated_db, owner_id, client, monkeypatch
+    ):
+        import app.routers.resumes as resumes_mod
+        from app.pdf_cache import get_pdf_cache
+
+        cache = get_pdf_cache()
+        assert cache is not None
+        await cache.clear()
+
+        calls = {"n": 0}
+
+        async def fake_render(url, page_size, margins=None):
+            calls["n"] += 1
+            return b"%PDF-1.4 fake"
+
+        monkeypatch.setattr(resumes_mod, "render_resume_pdf", fake_render)
+
+        rid = await _seed(isolated_db, owner_id)
+
+        async with client:
+            await client.get(f"/api/v1/resumes/{rid}/pdf")
+            # Edit the resume content -> the cache key changes -> re-render.
+            await isolated_db.update_resume(
+                owner_id, rid, {"processed_data": {"personalInfo": {"name": "Grace"}}}
+            )
+            resp = await client.get(f"/api/v1/resumes/{rid}/pdf")
+
+        assert resp.status_code == 200
+        assert calls["n"] == 2
+        assert 'filename="Grace_Resume.pdf"' in resp.headers["content-disposition"]
+
+
 class TestCreateFromData:
     """POST /resumes/from-data - powers Use-Sample + duplication."""
 

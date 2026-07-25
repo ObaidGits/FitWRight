@@ -8,7 +8,13 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 
 from app.auth import get_effective_user_id
 from app.config import settings
-from app.llm import check_llm_health, LLMConfig, resolve_api_key
+from app.llm import (
+    check_llm_health,
+    check_structured_output,
+    LLMConfig,
+    provider_uses_custom_base,
+    resolve_api_key,
+)
 from app.schemas import (
     LLMConfigRequest,
     LLMConfigResponse,
@@ -36,7 +42,7 @@ from app.prompts import (
 from app.prompts.templates import COVER_LETTER_PROMPT, OUTREACH_MESSAGE_PROMPT
 from app.config import (
     get_api_keys_from_config,
-    save_api_keys_to_config,
+    patch_api_keys_in_config,
     delete_api_key_from_config,
     clear_all_api_keys,
     load_config_file,
@@ -158,13 +164,25 @@ async def update_llm_config(
 
     # Build normalized config for response and background health check
     resolved_provider = stored.get("provider", settings.llm_provider)
+    # A Base URL only belongs to custom-endpoint providers. When the active
+    # provider is a cloud one (gemini/openai/anthropic/...), drop any stored base
+    # so it can never leak to the wrong endpoint (the Gemini 404 bug). The Base
+    # URL field is hidden for these providers in the UI, so this is also the only
+    # place a previously-saved base gets cleaned up.
+    if not provider_uses_custom_base(resolved_provider):
+        stored["api_base"] = None
     raw_re = stored.get("reasoning_effort", settings.reasoning_effort)
     resolved_reasoning_effort = raw_re if raw_re else None
+    resolved_api_base = (
+        stored.get("api_base", settings.llm_api_base)
+        if provider_uses_custom_base(resolved_provider)
+        else None
+    )
     test_config = LLMConfig(
         provider=resolved_provider,
         model=stored.get("model", settings.llm_model),
         api_key=resolve_api_key(stored, resolved_provider),
-        api_base=stored.get("api_base", settings.llm_api_base),
+        api_base=resolved_api_base,
         reasoning_effort=resolved_reasoning_effort,
     )
 
@@ -214,9 +232,13 @@ async def test_llm_connection(
             else resolve_api_key(stored, test_provider)
         ),
         api_base=(
-            request.api_base
-            if request and request.api_base is not None
-            else stored.get("api_base", settings.llm_api_base)
+            (
+                request.api_base
+                if request and request.api_base is not None
+                else stored.get("api_base", settings.llm_api_base)
+            )
+            if provider_uses_custom_base(test_provider)
+            else None
         ),
         reasoning_effort=(
             (request.reasoning_effort or None)
@@ -226,7 +248,28 @@ async def test_llm_connection(
     )
 
     test_prompt = "Hi"
-    return await check_llm_health(config, include_details=True, test_prompt=test_prompt)
+    health = await check_llm_health(config, include_details=True, test_prompt=test_prompt)
+
+    # Only probe structured-output capability once basic connectivity works
+    # (otherwise the auth/404/timeout reason is the actionable one). This is the
+    # signal that actually predicts whether resume tailoring will succeed: a
+    # model can chat fine yet fail to return valid JSON. A weak model surfaces a
+    # clear "unsupported/flaky" verdict + warning here, BEFORE the user hits an
+    # opaque failure mid-tailor.
+    if health.get("healthy"):
+        try:
+            probe = await check_structured_output(config)
+            health.update(probe)
+            if probe.get("structured_verdict") == "unsupported":
+                # Elevate to a visible warning even though the connection works.
+                health.setdefault("warning_code", "structured_output_unsupported")
+                health.setdefault("warning", probe.get("structured_message"))
+        except Exception:  # noqa: BLE001 - probe is best-effort; never break the test
+            logging.exception(
+                "Structured-output probe failed unexpectedly",
+                extra={"provider": config.provider, "model": config.model},
+            )
+    return health
 
 
 @router.get("/features", response_model=FeatureConfigResponse)
@@ -521,67 +564,18 @@ async def update_api_keys(
     Only updates the providers that are explicitly set in the request.
     Empty strings will clear the key for that provider.
     """
-    stored_keys = get_api_keys_from_config(user_id)
-    updated = []
-
-    # Update each provider if provided in request
-    if request.openai is not None:
-        if request.openai:
-            stored_keys["openai"] = request.openai
-        elif "openai" in stored_keys:
-            del stored_keys["openai"]
-        updated.append("openai")
-
-    if request.anthropic is not None:
-        if request.anthropic:
-            stored_keys["anthropic"] = request.anthropic
-        elif "anthropic" in stored_keys:
-            del stored_keys["anthropic"]
-        updated.append("anthropic")
-
-    if request.google is not None:
-        if request.google:
-            stored_keys["google"] = request.google
-        elif "google" in stored_keys:
-            del stored_keys["google"]
-        updated.append("google")
-
-    if request.openrouter is not None:
-        if request.openrouter:
-            stored_keys["openrouter"] = request.openrouter
-        elif "openrouter" in stored_keys:
-            del stored_keys["openrouter"]
-        updated.append("openrouter")
-
-    if request.deepseek is not None:
-        if request.deepseek:
-            stored_keys["deepseek"] = request.deepseek
-        elif "deepseek" in stored_keys:
-            del stored_keys["deepseek"]
-        updated.append("deepseek")
-
-    if request.groq is not None:
-        if request.groq:
-            stored_keys["groq"] = request.groq
-        elif "groq" in stored_keys:
-            del stored_keys["groq"]
-        updated.append("groq")
-
-    if request.openai_compatible is not None:
-        if request.openai_compatible:
-            stored_keys["openai_compatible"] = request.openai_compatible
-        elif "openai_compatible" in stored_keys:
-            del stored_keys["openai_compatible"]
-        updated.append("openai_compatible")
-
-    if request.ollama is not None:
-        if request.ollama:
-            stored_keys["ollama"] = request.ollama
-        elif "ollama" in stored_keys:
-            del stored_keys["ollama"]
-        updated.append("ollama")
-
-    save_api_keys_to_config(stored_keys, user_id)
+    provided = {
+        provider: value
+        for provider, value in request.model_dump(exclude_unset=True).items()
+        if provider in SUPPORTED_PROVIDERS and value is not None
+    }
+    # Empty strings are explicit per-provider deletes. Encryption and all
+    # upserts/deletes occur atomically without a stale read of unrelated keys.
+    patch_api_keys_in_config(
+        {provider: value or None for provider, value in provided.items()},
+        user_id,
+    )
+    updated = list(provided)
     invalidate_config_cache()
 
     return ApiKeysUpdateResponse(

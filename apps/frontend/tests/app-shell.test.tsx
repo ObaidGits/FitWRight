@@ -25,6 +25,7 @@ vi.mock('@/components/notifications/notification-center', () => ({
 }));
 vi.mock('@/components/resilience/offline-indicator', () => ({ OfflineIndicator: () => <div /> }));
 vi.mock('@/components/auth/verify-email-banner', () => ({ VerifyEmailBanner: () => <div /> }));
+vi.mock('@/components/dev/mode-mismatch-banner', () => ({ ModeMismatchBanner: () => <div /> }));
 
 import { AppShell } from '@/components/layout/app-shell';
 

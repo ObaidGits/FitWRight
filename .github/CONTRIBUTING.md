@@ -34,20 +34,25 @@ Full setup instructions live in [SETUP.md](../SETUP.md). In short:
    cd FitWRight
    ```
 
-3. Start the backend (Terminal 1):
+3. Install locked dependencies (macOS, Linux, or WSL):
+
+   ```bash
+   bash scripts/setup-local.sh
+   ```
+
+   The script preserves existing environment files and local data.
+
+4. Start the backend (Terminal 1):
 
    ```bash
    cd apps/backend
-   cp .env.example .env
-   uv sync
-   uv run app
+   RELOAD=true uv run app
    ```
 
-4. Start the frontend (Terminal 2):
+5. Start the frontend (Terminal 2):
 
    ```bash
    cd apps/frontend
-   npm install
    npm run dev
    ```
 

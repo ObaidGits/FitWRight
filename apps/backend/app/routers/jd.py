@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.auth import get_effective_user_id
 from app.config import settings
+from app.errors import ApiError
 from app.jd.service import JdFetchError, JdRateLimited, fetch_jd_from_url
 from app.schemas.jd import (
     ExtractRenderedRequest,
@@ -106,6 +107,28 @@ async def _fetch_v2(request: FetchUrlRequest, user_id: str) -> FetchUrlResponse:
         cleaned = await _maybe_clean(user_id, result.to_legacy_dict())
         if cleaned.get("content"):
             result.content = cleaned["content"]
+
+    # Empty extraction results are failures, not successful HTTP 200 payloads.
+    # Keep the upstream status/body private: 422 means the submitted source could
+    # not be extracted, not that FitWright denied the authenticated user.
+    if not result.content and result.error_code:
+        messages = {
+            "waf_blocked": "The job site blocked automated access. Paste the job description instead.",
+            "captcha_blocked": "The job site requires a human verification step. Paste the job description instead.",
+            "login_required": "The job page requires sign-in. Sign in there, then paste the description.",
+            "job_expired": "The job posting is no longer available.",
+            "fetch_failed": "The job page could not be retrieved.",
+        }
+        details = {
+            "suggestions": result.explanation.suggestions,
+            "retryable": result.error_code not in {"job_expired", "login_required"},
+        }
+        raise ApiError(
+            status_code=422,
+            code=result.error_code,
+            message=messages.get(result.error_code, "The job posting could not be extracted."),
+            details=details,
+        )
 
     # Return v1-compatible shape + optional v2 metadata. The frontend detects v2
     # by the presence of `schema_version` and can surface confidence/errors.

@@ -42,9 +42,10 @@ describe('SaveController', () => {
   afterEach(() => vi.useRealTimers());
 
   it('debounces and saves the latest content once', async () => {
-    const save = vi.fn(
-      async (_p: Payload, _ctx: SaveContext): Promise<SaveOutcome> => ({ type: 'ok', version: 2 })
-    );
+    const save = vi.fn<(p: Payload, ctx: SaveContext) => Promise<SaveOutcome>>(async () => ({
+      type: 'ok',
+      version: 2,
+    }));
     const { controller, persistDraft, onSaved } = makeController(save);
     controller.setBaseVersion(1);
 
@@ -105,9 +106,7 @@ describe('SaveController', () => {
   });
 
   it('treats an identical-content save as a no-op (R4.2)', async () => {
-    const save = vi.fn(
-      async (_p: Payload, _c: SaveContext): Promise<SaveOutcome> => ({ type: 'ok', version: 2 })
-    );
+    const save = vi.fn(async (): Promise<SaveOutcome> => ({ type: 'ok', version: 2 }));
     const { controller } = makeController(save);
     controller.setBaseVersion(1);
     controller.update({ summary: 'same' });
@@ -121,9 +120,7 @@ describe('SaveController', () => {
   });
 
   it('noteExternalSave reconciles so a later identical flush is a no-op', async () => {
-    const save = vi.fn(
-      async (_p: Payload, _c: SaveContext): Promise<SaveOutcome> => ({ type: 'ok', version: 9 })
-    );
+    const save = vi.fn(async (): Promise<SaveOutcome> => ({ type: 'ok', version: 9 }));
     const { controller } = makeController(save);
     controller.setBaseVersion(1);
     controller.update({ summary: 'queued offline' });

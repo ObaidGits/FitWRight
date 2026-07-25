@@ -27,6 +27,7 @@ import { Textarea } from '@/components/atelier/input';
 import { Badge } from '@/components/atelier/badge';
 import { useToast } from '@/components/atelier/toast';
 import { useSystemStatus } from '@/features/home/hooks';
+import { deriveAiAvailability } from '@/lib/ai-availability';
 import { RenderTemplate } from '@/components/resume/render-template';
 import { UnsavedChangesGuard } from '@/components/common/unsaved-changes-guard';
 import { useDraft } from '@/lib/hooks/use-draft';
@@ -60,7 +61,9 @@ export default function WizardPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const statusQuery = useSystemStatus();
-  const aiUnconfigured = statusQuery.data && !statusQuery.data.llm_configured;
+  const aiAvailability = deriveAiAvailability(statusQuery);
+  const aiUnconfigured = aiAvailability.state === 'unconfigured';
+  const aiBlocked = !aiAvailability.canUseAi;
 
   const [state, setState] = React.useState<ResumeWizardState>(() =>
     createInitialResumeWizardState()
@@ -154,6 +157,7 @@ export default function WizardPage() {
     action: ResumeWizardAction,
     structuredPayload?: ResumeWizardStructuredUpdate
   ) {
+    if (aiBlocked) return;
     setBusy(true);
     try {
       const res = await postResumeWizardTurn({
@@ -250,8 +254,33 @@ export default function WizardPage() {
   const dirty =
     !saved && (state.history.length > 0 || state.step !== 'intro' || canAnswer || structuredDirty);
 
-  // The wizard is entirely AI-driven - block it up front (rather than letting
-  // the first turn fail) when no provider is configured.
+  // The wizard is entirely AI-driven. Unknown/error status is fail-closed so
+  // the first turn can never spend against an unverified configuration.
+  if (aiBlocked && !aiUnconfigured) {
+    const statusFailed = aiAvailability.state === 'status-error';
+    return (
+      <div className="mx-auto max-w-lg space-y-4 py-6">
+        <Link
+          href="/import"
+          className="inline-flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+        >
+          <ArrowLeft className="h-4 w-4" /> Back to import
+        </Link>
+        <Card className="space-y-3 p-6 text-center">
+          <h2 className="text-lg font-semibold">
+            {statusFailed ? 'AI availability could not be verified' : 'Checking AI availability…'}
+          </h2>
+          <p className="text-sm text-[var(--muted-foreground)]">
+            {statusFailed
+              ? 'Refresh the page to verify your AI settings before starting the wizard.'
+              : 'Please wait while your AI settings load.'}
+          </p>
+          {statusFailed && <Button onClick={() => void statusQuery.refetch()}>Try again</Button>}
+        </Card>
+      </div>
+    );
+  }
+
   if (aiUnconfigured) {
     return (
       <div className="mx-auto max-w-lg space-y-4 py-6">

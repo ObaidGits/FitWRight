@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.auth import get_effective_user_id, require_verified_user_id
 from app.llm_ratelimit import enforce_llm_rate_limit, llm_rate_limit_dep
 from app.database import db
+from app.llm import llm_api_error
 from app.profile.service import profile_service
 from app.schemas.models import ResumeData, normalize_resume_data
 from app.schemas.resume_wizard import (
@@ -99,6 +100,7 @@ async def resume_wizard_turn(
     verification is enabled. In ``SINGLE_USER_MODE`` it resolves to the verified
     bootstrap owner, so local zero-config behaves exactly as before.
     """
+    provider_stage: str | None = None
     try:
         action = request.action
         if action == "start":
@@ -130,15 +132,22 @@ async def resume_wizard_turn(
         # limit here (not on the whole route).
         await enforce_llm_rate_limit(user_id)
         answer_text = request.answer.text if request.answer else ""
+        provider_stage = "resume_wizard_turn"
         state = await run_ai_turn(request.state, answer_text, skip=False)
         return ResumeWizardTurnResponse(state=state)
     except HTTPException:
         raise
     except ValueError as e:
+        if provider_stage:
+            logger.exception("Resume wizard provider response failed")
+            raise llm_api_error(e, stage=provider_stage) from e
         logger.error("Resume wizard turn validation failed: %s", e)
         raise HTTPException(status_code=422, detail="Could not update the resume draft.")
     except Exception as e:
-        logger.error("Resume wizard turn failed: %s", e)
+        if provider_stage:
+            logger.exception("Resume wizard provider call failed")
+            raise llm_api_error(e, stage=provider_stage) from e
+        logger.exception("Resume wizard turn failed")
         raise HTTPException(
             status_code=500,
             detail="Resume wizard failed. Please try again.",
@@ -174,8 +183,8 @@ async def resume_wizard_assist(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Resume wizard assist failed: %s", e)
-        raise HTTPException(status_code=500, detail="AI assist failed. Please try again.")
+        logger.exception("Resume wizard assist provider call failed")
+        raise llm_api_error(e, stage="resume_wizard_assist") from e
 
 
 @router.post(

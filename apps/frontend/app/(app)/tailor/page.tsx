@@ -9,14 +9,21 @@
  */
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
-import { useQueryClient } from '@tanstack/react-query';
-import { invalidateApplicationLists, invalidateResumeLists } from '@/lib/query/client';
+import { useQueryClient, useQuery } from '@tanstack/react-query';
+import { invalidateApplicationLists, invalidateResumeLists, queryKeys } from '@/lib/query/client';
+import { getProfile, type Profile } from '@/lib/api/profile';
+import { AvatarUploader } from '@/components/profile/avatar-uploader';
+import { DEFAULT_PHOTO_CONFIG } from '@/lib/types/photo';
 import Sparkles from 'lucide-react/dist/esm/icons/sparkles';
 import ChevronDown from 'lucide-react/dist/esm/icons/chevron-down';
 import ShieldCheck from 'lucide-react/dist/esm/icons/shield-check';
 import Target from 'lucide-react/dist/esm/icons/target';
 import TriangleAlert from 'lucide-react/dist/esm/icons/triangle-alert';
 import RotateCw from 'lucide-react/dist/esm/icons/rotate-cw';
+import Download from 'lucide-react/dist/esm/icons/download';
+import Eye from 'lucide-react/dist/esm/icons/eye';
+import ArrowRight from 'lucide-react/dist/esm/icons/arrow-right';
+import TrendingUp from 'lucide-react/dist/esm/icons/trending-up';
 
 import { Button } from '@/components/atelier/button';
 import { Card } from '@/components/atelier/card';
@@ -32,33 +39,70 @@ import {
 } from '@/components/atelier/select';
 import { LoadingSkeleton, EmptyState } from '@/components/atelier/states';
 import { AiProgress } from '@/components/ai/ai-progress';
-import { TAILOR_MESSAGES, ESTIMATE_MEDIUM } from '@/lib/ai-progress-copy';
+import { ESTIMATE_MEDIUM } from '@/lib/ai-progress-copy';
 import { useToast } from '@/components/atelier/toast';
 import { Explain } from '@/components/ai/explain';
 import { RecoveryBanner } from '@/components/resilience/recovery-banner';
 import { useDraft } from '@/lib/hooks/use-draft';
 import { useTailorResumes, usePromptOptions } from '@/features/tailor/hooks';
 import { useSystemStatus } from '@/features/home/hooks';
+import { deriveAiAvailability } from '@/lib/ai-availability';
 import Key from 'lucide-react/dist/esm/icons/key-round';
 import { fetchJdFromUrl, jdSourceLabel, type JdConfidence } from '@/lib/api/jd';
 import {
   uploadJobDescriptions,
   previewImproveResume,
   streamImproveResume,
+  recoverTailorPreview,
   cancelTailorStream,
+  downloadResumePdf,
+  updateResumeTemplateSettings,
   TailorStreamCancelled,
+  TailorStreamError,
   confirmImproveResume,
   analyzeJob,
+  fetchResume,
   type JobAnalyzeResult,
   type TailorStageName,
 } from '@/lib/api/resume';
 import type { ImprovedResult } from '@/components/common/resume_previewer_context';
+import { ResumeDocument } from '@/components/resume/resume-document';
 import type { ResumeData } from '@/components/dashboard/resume-component';
+import { type TemplateSettings } from '@/lib/types/template-settings';
+import {
+  getPreferredTemplateSettings,
+  getPreferredTemplateId,
+} from '@/lib/resume/preferred-template';
+import { buildResumeFilename } from '@/lib/resume/filename';
+import {
+  getTemplateById,
+  templateToSettings,
+  type ResumeTemplate,
+} from '@/lib/resume/template-catalog';
+import { TemplateGallery } from '@/components/resume/template-gallery';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/atelier/dialog';
 import { ApiError, toMessage } from '@/lib/api/errors';
 import Link from 'next/link';
 
 const MIN_JD = 50;
 type Phase = 'input' | 'generating' | 'review' | 'error';
+
+/** The full set of tailoring inputs persisted for crash/navigation recovery.
+ *  Previously only the JD string was saved, so a restore silently dropped the
+ *  Extra Instructions, tailoring style, source resume and template choice. */
+interface TailorDraft {
+  jd: string;
+  customInstructions?: string;
+  promptId?: string;
+  resumeId?: string;
+  templateId?: string;
+}
 
 type StageStatus = 'pending' | 'active' | 'done';
 
@@ -135,6 +179,24 @@ function ScoreRing({ score }: { score: number }) {
   );
 }
 
+/** Coerce a tailored `resume_preview` into a fully-shaped, render-safe
+ *  ResumeData. The pipeline always returns the full object, but normalizing
+ *  guards the WYSIWYG renderer against a partial/legacy payload (missing
+ *  arrays would otherwise throw inside the template). */
+function toResumeData(preview: unknown): ResumeData {
+  const p = (preview ?? {}) as Partial<ResumeData>;
+  return {
+    personalInfo: p.personalInfo ?? {},
+    summary: p.summary ?? '',
+    workExperience: Array.isArray(p.workExperience) ? p.workExperience : [],
+    education: Array.isArray(p.education) ? p.education : [],
+    personalProjects: Array.isArray(p.personalProjects) ? p.personalProjects : [],
+    additional: p.additional ?? {},
+    sectionMeta: p.sectionMeta,
+    customSections: p.customSections,
+  };
+}
+
 export default function TailorPage() {
   const router = useRouter();
   const { toast } = useToast();
@@ -142,11 +204,106 @@ export default function TailorPage() {
   const resumesQuery = useTailorResumes();
   const promptsQuery = usePromptOptions();
   const statusQuery = useSystemStatus();
-  const aiUnconfigured = statusQuery.data && !statusQuery.data.llm_configured;
+  const aiAvailability = deriveAiAvailability(statusQuery);
+  const aiUnconfigured = aiAvailability.state === 'unconfigured';
+  const aiBlocked = !aiAvailability.canUseAi;
+  const aiBlockTitle = aiUnconfigured
+    ? 'Add an AI key in settings first'
+    : aiBlocked
+      ? 'Checking AI availability'
+      : undefined;
 
   const [resumeId, setResumeId] = React.useState('');
   const [jd, setJd] = React.useState('');
   const [promptId, setPromptId] = React.useState<string>('');
+  // Optional per-run steering (emphasis/ordering/tone, or real content the user
+  // attests to). Sent as custom_instructions; the backend sanitizes it and keeps
+  // it subordinate to the anti-fabrication rules.
+  const [customInstructions, setCustomInstructions] = React.useState('');
+  const CUSTOM_INSTRUCTIONS_MAX = 2000;
+  // Presentation template for the tailored result: drives the WYSIWYG preview,
+  // the downloaded PDF, and is persisted on save. Seeded from the user's
+  // preferred template so most users never need to touch it. Affects layout
+  // only - never the tailored content. Chosen via the SAME visual gallery as
+  // the /templates page (real-render cards), not a dropdown.
+  const [templateSettings, setTemplateSettings] = React.useState<TemplateSettings>(() =>
+    getPreferredTemplateSettings()
+  );
+  const [selectedTemplateId, setSelectedTemplateId] = React.useState<string | undefined>(
+    () => getPreferredTemplateId() ?? undefined
+  );
+  const [templatePickerOpen, setTemplatePickerOpen] = React.useState(false);
+  const selectedTemplateName = selectedTemplateId
+    ? (getTemplateById(selectedTemplateId)?.name ?? 'Custom')
+    : 'Default';
+
+  const onPickTemplate = (t: ResumeTemplate) => {
+    setSelectedTemplateId(t.id);
+    setTemplateSettings(templateToSettings(t));
+    setTemplatePickerOpen(false);
+    // Persist the template choice so a later restore brings the look back too.
+    saveDraft({ templateId: t.id });
+  };
+
+  // Profile photo (the canonical source for a photo template's header). Read
+  // from the account master - the same source resumes resolve server-side.
+  const profileQuery = useQuery<Profile>({ queryKey: queryKeys.profile, queryFn: getProfile });
+  const profileAvatarUrl = profileQuery.data?.avatar_url ?? null;
+
+  // The selected source resume's processed data, used to preview the user's
+  // CURRENT resume in the right pane before they generate - so the split view
+  // always shows a document (their resume -> becomes the tailored one), not an
+  // empty box. Cheap: cached per resume and only the ready sources are listed.
+  const sourceResumeQuery = useQuery({
+    queryKey: ['resume', 'tailor-source', resumeId],
+    queryFn: () => fetchResume(resumeId),
+    enabled: Boolean(resumeId),
+    staleTime: 60_000,
+  });
+  const sourceResumeData = sourceResumeQuery.data?.processed_resume
+    ? toResumeData(sourceResumeQuery.data.processed_resume)
+    : null;
+
+  const selectedTemplate = selectedTemplateId ? getTemplateById(selectedTemplateId) : undefined;
+  // A photo template should SHOW the profile photo by default (issue: results
+  // used to ignore the template's photo slot). Only decide this when we know the
+  // chosen template's photo support.
+  const templateWantsPhoto = selectedTemplate
+    ? selectedTemplate.photoSupport !== 'none'
+    : undefined;
+
+  // Apply the selected template's photo intent to resume data used for BOTH the
+  // preview and the saved copy, so preview == PDF == stored:
+  //  - photo template  -> show the header photo (canonical -> profile avatar).
+  //  - no-photo template -> hide it.
+  // Leaves data untouched when no template is explicitly selected (the backend
+  // already resolved any canonical photo at generation time).
+  const applyTemplatePhoto = React.useCallback(
+    (data: ResumeData): ResumeData => {
+      if (templateWantsPhoto === undefined) return data;
+      const pi = { ...(data.personalInfo ?? {}) } as Record<string, unknown>;
+      const currentPhoto = (pi.photo as Record<string, unknown>) ?? DEFAULT_PHOTO_CONFIG;
+      if (templateWantsPhoto) {
+        pi.photo = { ...currentPhoto, show: true, ref: 'canonical' };
+        pi.avatarUrl = profileAvatarUrl ?? (pi.avatarUrl as string | null) ?? null;
+      } else {
+        pi.photo = { ...currentPhoto, show: false };
+      }
+      return { ...data, personalInfo: pi } as ResumeData;
+    },
+    [templateWantsPhoto, profileAvatarUrl]
+  );
+
+  const onProfilePhotoChange = React.useCallback(
+    (url: string | null) => {
+      qc.setQueryData<Profile>(queryKeys.profile, (old) =>
+        old ? { ...old, avatar_url: url } : old
+      );
+      qc.invalidateQueries({ queryKey: queryKeys.profile });
+    },
+    [qc]
+  );
+
   const [showOptions, setShowOptions] = React.useState(false);
   const [phase, setPhase] = React.useState<Phase>('input');
   const [result, setResult] = React.useState<ImprovedResult['data'] | null>(null);
@@ -156,6 +313,18 @@ export default function TailorPage() {
   // visible on arrival, not hidden behind a disclosure.
   const [showDetail, setShowDetail] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
+  const [downloading, setDownloading] = React.useState(false);
+  const [editing, setEditing] = React.useState(false);
+  // Score of the PREVIOUS attempt, captured just before a Regenerate, so the
+  // review can show an honest "82 -> 88" delta instead of silently discarding
+  // the prior result. Null on the first generation.
+  const [prevScore, setPrevScore] = React.useState<number | null>(null);
+  // Snapshot of the pre-generation fit analysis at the moment Generate ran, so
+  // the review can show how much tailoring closed the gap even if the live
+  // `analysis` panel is later cleared. Null when the user skipped "Analyze fit".
+  const [preFit, setPreFit] = React.useState<{ score: number | null; missing: number } | null>(
+    null
+  );
   // Graceful, structured failure surface (never raw HTML/error text). Input is
   // preserved so the user can retry or edit without re-entering anything.
   const [failure, setFailure] = React.useState<{
@@ -169,6 +338,19 @@ export default function TailorPage() {
   // keyword-extraction call before committing to a full tailor pass.
   const [analysis, setAnalysis] = React.useState<JobAnalyzeResult | null>(null);
   const [analyzing, setAnalyzing] = React.useState(false);
+  // The exact inputs (resume + JD) the current analysis was computed for. When
+  // the live inputs drift from this, the analysis is marked STALE (a subtle
+  // banner) rather than silently wiped on every keystroke - so a one-character
+  // edit no longer forces an immediate, costly re-analyze.
+  const [analyzedKey, setAnalyzedKey] = React.useState<string | null>(null);
+  // The FULL previous attempt, kept across a Regenerate so the user can compare
+  // and restore the better of the two instead of losing a good result.
+  const [prevResult, setPrevResult] = React.useState<ImprovedResult['data'] | null>(null);
+  // Two-step Discard so an accidental click never throws away a tailored result.
+  const [confirmingDiscard, setConfirmingDiscard] = React.useState(false);
+  // A completed-but-unsaved preview from a prior visit, offered for recovery.
+  const [recoverable, setRecoverable] = React.useState<{ requestId: string } | null>(null);
+  const [recovering, setRecovering] = React.useState(false);
 
   // Live stage progress for streamed tailoring + cancel machinery.
   const [stages, setStages] = React.useState<Record<TailorStageName, StageStatus>>(freshStages);
@@ -213,7 +395,7 @@ export default function TailorPage() {
         });
       } else {
         setJd(res.content);
-        draft.save(res.content);
+        saveDraft({ jd: res.content });
         setLowConfidence(res.lowConfidence);
         setJdMeta({
           confidenceLevel: res.confidenceLevel,
@@ -240,8 +422,23 @@ export default function TailorPage() {
     }
   }
 
-  // Draft persistence for the JD (Task 18 / Req 30.1) - never lose a long paste.
-  const draft = useDraft<string>('tailor-jd');
+  // Draft persistence for the full input set (Task 18 / Req 30.1) - never lose
+  // a long paste OR the accompanying Extra Instructions / style / template.
+  const draft = useDraft<TailorDraft | string>('tailor-jd');
+
+  // Persist the current inputs as one structured draft. `overrides` carries the
+  // just-changed field so we don't race React's async state (the closure holds
+  // the previous value for that field until the next render).
+  const saveDraft = (overrides: Partial<TailorDraft> = {}) => {
+    draft.save({
+      jd,
+      customInstructions: customInstructions || undefined,
+      promptId: promptId || undefined,
+      resumeId: resumeId || undefined,
+      templateId: selectedTemplateId,
+      ...overrides,
+    });
+  };
 
   // ARIA live announcement for async AI results (Task 16 / Req 21.6).
   const activeStageLabel = TAILOR_STAGES.find((s) => stages[s.key] === 'active')?.label;
@@ -261,11 +458,86 @@ export default function TailorPage() {
         ? `Tailored resume ready. Match score ${Math.round(result.ats_score?.overall_score ?? 0)} out of 100.`
         : '';
 
-  // A prior fit analysis becomes stale the moment the JD or source resume
-  // changes - clear it so we never show a result that no longer matches inputs.
+  // A fit analysis is tied to the inputs it was computed for. Rather than wipe
+  // it on every keystroke (which forced a costly re-analyze after a trivial
+  // edit), we KEEP it and flag staleness when the live inputs drift, so the
+  // user can still see the last result and decide whether to re-analyze.
+  const currentInputKey = `${resumeId}::${jd.trim()}`;
+  const analysisStale = analysis != null && analyzedKey !== currentInputKey;
+
+  // Rough, honest cost/time expectations so users on slow/free models aren't
+  // surprised. Analyze is a single keyword call; Generate runs the 5-stage
+  // pipeline. Not a billing figure - just order-of-magnitude guidance.
+  const GENERATE_COST_HINT = `About ${TAILOR_STAGES.length} AI steps · typically 20-60s`;
+  const ANALYZE_COST_HINT = '1 AI call · a few seconds';
+
+  // Offer to restore a completed-but-unsaved tailored resume from a prior visit
+  // (the result otherwise lives only in React state and is lost on navigation).
+  // We persist just the request id locally; the payload is re-fetched securely
+  // from the server via recoverTailorPreview.
+  const RECOVER_KEY = 'tailor-last-preview';
   React.useEffect(() => {
-    setAnalysis(null);
-  }, [jd, resumeId]);
+    if (phase !== 'input' || result) return;
+    try {
+      const raw = localStorage.getItem(RECOVER_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw) as { requestId?: string; savedAt?: number };
+      // Only offer recent previews (24h) with a usable request id.
+      if (saved.requestId && saved.savedAt && Date.now() - saved.savedAt < 24 * 60 * 60 * 1000) {
+        setRecoverable({ requestId: saved.requestId });
+      } else {
+        localStorage.removeItem(RECOVER_KEY);
+      }
+    } catch {
+      /* ignore malformed/unavailable storage */
+    }
+    // Run once on mount for the input phase.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function rememberPreview(requestId: string) {
+    try {
+      localStorage.setItem(RECOVER_KEY, JSON.stringify({ requestId, savedAt: Date.now() }));
+    } catch {
+      /* storage unavailable - recovery is best-effort */
+    }
+  }
+
+  function forgetPreview() {
+    try {
+      localStorage.removeItem(RECOVER_KEY);
+    } catch {
+      /* ignore */
+    }
+    setRecoverable(null);
+  }
+
+  async function onRecoverPreview() {
+    if (!recoverable) return;
+    setRecovering(true);
+    try {
+      const res = await recoverTailorPreview(recoverable.requestId);
+      if (!res) {
+        toast({ title: 'That tailored resume is no longer available.', variant: 'info' });
+        forgetPreview();
+        return;
+      }
+      setResult(res.data);
+      setJobId(res.data.job_id ?? '');
+      setPrevResult(null);
+      setPrevScore(null);
+      setPreFit(null);
+      setRecoverable(null);
+      setPhase('review');
+    } catch (e) {
+      toast({
+        title: toMessage(e, 'Could not restore your last tailored resume.'),
+        variant: 'error',
+      });
+    } finally {
+      setRecovering(false);
+    }
+  }
 
   // Preselect source resume: ?resume= param, else master, else first.
   React.useEffect(() => {
@@ -279,11 +551,13 @@ export default function TailorPage() {
   }, [resumesQuery.data, resumeId]);
 
   async function onAnalyze() {
-    if (jd.trim().length < MIN_JD || !resumeId || analyzing) return;
+    if (aiBlocked || jd.trim().length < MIN_JD || !resumeId || analyzing) return;
     setAnalyzing(true);
     try {
       const res = await analyzeJob(jd.trim(), resumeId);
       setAnalysis(res);
+      // Bind this analysis to the exact inputs it reflects (staleness anchor).
+      setAnalyzedKey(`${resumeId}::${jd.trim()}`);
     } catch (e) {
       toast({ title: e instanceof Error ? e.message : 'Analysis failed', variant: 'error' });
     } finally {
@@ -292,7 +566,22 @@ export default function TailorPage() {
   }
 
   async function onGenerate() {
-    if (jd.trim().length < MIN_JD || !resumeId) return;
+    if (aiBlocked || jd.trim().length < MIN_JD || !resumeId) return;
+    // Remember the current attempt's score AND full result before it's
+    // replaced, so a Regenerate can surface a before/after delta and let the
+    // user restore the prior attempt if it was better (no silent loss).
+    setPrevScore(result?.ats_score?.overall_score ?? null);
+    setPrevResult(result ?? null);
+    // Capture the pre-generation fit (if the user analyzed first) to quantify
+    // how much this tailor pass improved coverage.
+    setPreFit(
+      analysis
+        ? {
+            score: analysis.fit_score ?? null,
+            missing: analysis.missing.length,
+          }
+        : null
+    );
     setPhase('generating');
     setResult(null);
     setFailure(null);
@@ -314,6 +603,7 @@ export default function TailorPage() {
         const res = await streamImproveResume(resumeId, jid, promptId || undefined, {
           requestId,
           signal: controller.signal,
+          customInstructions: customInstructions.trim() || undefined,
           onStage: (e) =>
             setStages((prev) => ({
               ...prev,
@@ -323,17 +613,41 @@ export default function TailorPage() {
         data = res.data;
       } catch (streamErr) {
         if (streamErr instanceof TailorStreamCancelled) {
-          // User cancelled - preserve input, no error toast.
+          // User cancelled - preserve input, no error toast or fallback.
           setPhase('input');
           return;
         }
-        // Stream unusable (flag off / unsupported / network) -> transparent
-        // fallback to the non-stream path so the user still gets a result.
-        const res = await previewImproveResume(resumeId, jid, promptId || undefined);
-        data = res.data;
+        if (!(streamErr instanceof TailorStreamError)) throw streamErr;
+        if (!streamErr.fallbackSafe) {
+          const canRecoverCompletedResult =
+            streamErr.phase === 'after-event' &&
+            ['stream_incomplete', 'stream_transport_error'].includes(streamErr.code);
+          if (!canRecoverCompletedResult) throw streamErr;
+
+          // The server may have completed and committed the preview even though
+          // the terminal SSE event was lost. Recover by request ID; never issue
+          // another provider generation after observed progress.
+          const recovered = await recoverTailorPreview(requestId);
+          if (!recovered) throw streamErr;
+          data = recovered.data;
+        } else {
+          // Only explicit capability negotiation or a transport failure before
+          // the first SSE event can safely use the non-stream endpoint.
+          const res = await previewImproveResume(
+            resumeId,
+            jid,
+            promptId || undefined,
+            customInstructions.trim() || undefined
+          );
+          data = res.data;
+        }
       }
 
       setResult(data);
+      // Persist just the request id so this completed-but-unsaved preview can be
+      // restored if the user navigates away before saving.
+      rememberPreview(requestId);
+      setRecoverable(null);
       setPhase('review');
     } catch (e) {
       // Preserve input (jd/resume stay in state) and show a graceful, structured
@@ -364,24 +678,60 @@ export default function TailorPage() {
     if (requestIdRef.current) void cancelTailorStream(requestIdRef.current);
   }
 
+  /** Persist the tailored preview as a new resume variant. Returns the new
+   *  resume id on success (or null on failure) so callers can chain a follow-up
+   *  action such as a PDF download. Never throws. */
+  async function confirmPreview(): Promise<string | null> {
+    if (!result) return null;
+    if (!result.preview_id) {
+      toast({
+        title: 'This preview can no longer be confirmed. Please generate it again.',
+        variant: 'error',
+      });
+      return null;
+    }
+    const confirmed = await confirmImproveResume({
+      preview_id: result.preview_id,
+      resume_id: resumeId,
+      job_id: jobId,
+      // Send the preview UNMODIFIED so its integrity hash matches; the photo
+      // intent for the chosen template is applied server-side after validation
+      // (mutating it here would break the preview hash and reject the save).
+      improved_data: result.resume_preview as unknown as ResumeData,
+      improvements: (result.improvements ?? []).map((i) => ({
+        suggestion: i.suggestion,
+        lineNumber: typeof i.lineNumber === 'number' ? i.lineNumber : null,
+      })),
+      // Only send when a template is explicitly chosen (else leave as generated).
+      ...(templateWantsPhoto === undefined ? {} : { include_photo: templateWantsPhoto }),
+    });
+    draft.clear();
+    // The preview is now saved; drop the recovery breadcrumb.
+    forgetPreview();
+    const newResumeId = confirmed?.data?.resume_id ?? null;
+    // Persist the chosen presentation template on the new tailored resume so it
+    // matches the preview the user just approved (best-effort - never block the
+    // save if only the appearance write fails).
+    if (newResumeId) {
+      try {
+        await updateResumeTemplateSettings(newResumeId, templateSettings);
+      } catch {
+        /* appearance is non-critical; the resume is safely saved */
+      }
+    }
+    // A confirmed tailor creates a NEW resume variant AND a new application
+    // card - refresh both list surfaces so they're visible immediately.
+    invalidateResumeLists(qc);
+    invalidateApplicationLists(qc);
+    return newResumeId;
+  }
+
   async function onAccept() {
     if (!result) return;
+    setConfirmingDiscard(false);
     setSaving(true);
     try {
-      await confirmImproveResume({
-        resume_id: resumeId,
-        job_id: jobId,
-        improved_data: result.resume_preview as unknown as ResumeData,
-        improvements: (result.improvements ?? []).map((i) => ({
-          suggestion: i.suggestion,
-          lineNumber: typeof i.lineNumber === 'number' ? i.lineNumber : null,
-        })),
-      });
-      draft.clear();
-      // A confirmed tailor creates a NEW resume variant AND a new application
-      // card - refresh both list surfaces so they're visible immediately.
-      invalidateResumeLists(qc);
-      invalidateApplicationLists(qc);
+      await confirmPreview();
       toast({ title: 'Tailored resume saved', variant: 'success' });
       router.push('/applications');
     } catch (e) {
@@ -391,6 +741,114 @@ export default function TailorPage() {
       });
     } finally {
       setSaving(false);
+    }
+  }
+
+  /** Save the tailored resume and open it in the full editor - the path for a
+   *  user who wants to tweak a bullet before finalizing (the review surface is
+   *  read-only by design). */
+  async function onAcceptAndEdit() {
+    if (!result) return;
+    setConfirmingDiscard(false);
+    setEditing(true);
+    try {
+      const newId = await confirmPreview();
+      if (!newId) {
+        toast({
+          title: 'Could not save your tailored resume. Please try again.',
+          variant: 'error',
+        });
+        return;
+      }
+      toast({ title: 'Saved - opening the editor', variant: 'success' });
+      router.push(`/resumes/${newId}`);
+    } catch (e) {
+      toast({
+        title: toMessage(e, 'Could not save your tailored resume. Please try again.'),
+        variant: 'error',
+      });
+    } finally {
+      setEditing(false);
+    }
+  }
+
+  /** Two-step discard: first click arms a confirmation, second click discards.
+   *  Prevents an accidental click from throwing away a tailored result. */
+  function onDiscard() {
+    if (!confirmingDiscard) {
+      setConfirmingDiscard(true);
+      return;
+    }
+    setConfirmingDiscard(false);
+    forgetPreview();
+    setPrevResult(null);
+    setPrevScore(null);
+    setPreFit(null);
+    setPhase('input');
+  }
+
+  /** Restore the previous attempt as the current result (A/B: keep the better
+   *  of two generations). The just-replaced attempt becomes the "previous" so
+   *  the user can toggle back and forth. */
+  function onRestorePrevious() {
+    if (!prevResult) return;
+    const current = result;
+    setResult(prevResult);
+    setPrevResult(current);
+    setPrevScore(current?.ats_score?.overall_score ?? null);
+  }
+
+  /** Save the tailored resume, then immediately download its PDF - the fast
+   *  path a user wants right after tailoring (no navigate-away, no hunting for
+   *  the file). Falls back gracefully if the export fails after a successful
+   *  save (the resume is still safely persisted). */
+  async function onAcceptAndDownload() {
+    if (!result) return;
+    setConfirmingDiscard(false);
+    setDownloading(true);
+    try {
+      const newId = await confirmPreview();
+      if (!newId) {
+        toast({
+          title: 'Could not save your tailored resume. Please try again.',
+          variant: 'error',
+        });
+        return;
+      }
+      try {
+        const blob = await downloadResumePdf(newId, templateSettings);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        // Meaningful name from the tailored resume's own header (name + role),
+        // not the opaque UUID. Falls back to a short id-based name if empty.
+        const pi = toResumeData(result.resume_preview).personalInfo ?? {};
+        a.download = buildResumeFilename({
+          name: (pi as { name?: string }).name,
+          role: (pi as { title?: string }).title,
+          id: newId,
+        });
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        toast({ title: 'Saved and downloaded', variant: 'success' });
+      } catch {
+        // Saved fine; only the export leg failed. Point the user to the saved
+        // copy rather than losing their work.
+        toast({
+          title: 'Saved. The PDF export failed - you can download it from Applications.',
+          variant: 'info',
+        });
+      }
+      router.push('/applications');
+    } catch (e) {
+      toast({
+        title: toMessage(e, 'Could not save your tailored resume. Please try again.'),
+        variant: 'error',
+      });
+    } finally {
+      setDownloading(false);
     }
   }
 
@@ -413,8 +871,123 @@ export default function TailorPage() {
   const ats = result?.ats_score;
   const diff = result?.diff_summary;
 
+  // The right-hand preview surface (split view). It always shows a document so
+  // the reader never faces an empty pane, adapting to the phase:
+  //  - review     -> the tailored resume (hero) + primary save/download actions
+  //  - generating -> the honest per-stage streaming timeline
+  //  - input/error-> the user's CURRENT source resume (or a gentle empty state)
+  // Sticky on desktop so the resume stays in view while editing on the left.
+  const previewTitle =
+    phase === 'review' && result
+      ? 'Tailored resume'
+      : phase === 'generating'
+        ? 'Tailoring your resume…'
+        : 'Your current resume';
+
+  const previewBody =
+    phase === 'generating' ? (
+      <div className="space-y-4 p-5">
+        <AiProgress
+          stages={TAILOR_STAGES}
+          activeKey={liveActiveKey}
+          doneKeys={liveDoneKeys}
+          estimate={ESTIMATE_MEDIUM}
+        />
+        <div className="flex items-center justify-between gap-3 pt-1">
+          <span className="text-xs text-[var(--muted-foreground)]">
+            You can cancel anytime - nothing is saved until you accept.
+          </span>
+          <Button variant="outline" size="sm" onClick={onCancelGenerate}>
+            Cancel
+          </Button>
+        </div>
+      </div>
+    ) : phase === 'review' && result ? (
+      <div className="overflow-auto bg-[var(--at-surface-2)] p-3 lg:max-h-[calc(100vh-9rem)]">
+        <ResumeDocument
+          data={applyTemplatePhoto(toResumeData(result.resume_preview))}
+          settings={templateSettings}
+        />
+      </div>
+    ) : sourceResumeQuery.isLoading ? (
+      <div className="p-5">
+        <LoadingSkeleton rows={6} />
+      </div>
+    ) : sourceResumeData ? (
+      <div className="overflow-auto bg-[var(--at-surface-2)] p-3 lg:max-h-[calc(100vh-9rem)]">
+        <ResumeDocument data={applyTemplatePhoto(sourceResumeData)} settings={templateSettings} />
+      </div>
+    ) : (
+      <div className="flex flex-col items-center justify-center gap-2 p-10 text-center">
+        <Eye className="h-6 w-6 text-[var(--muted-foreground)]" />
+        <p className="text-sm font-medium">Your tailored resume will appear here</p>
+        <p className="max-w-xs text-xs text-[var(--muted-foreground)]">
+          Pick a resume and paste a job description on the left, then Generate to see the tailored
+          document side by side.
+        </p>
+      </div>
+    );
+
+  const previewPane = (
+    <div className="lg:sticky lg:top-6">
+      <Card className="flex flex-col overflow-hidden p-0">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] px-4 py-3">
+          <p className="flex items-center gap-1.5 text-sm font-medium">
+            <Eye className="h-4 w-4" /> {previewTitle}
+          </p>
+          {phase === 'review' && result ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                onClick={onAcceptAndDownload}
+                loading={downloading}
+                disabled={saving || editing}
+              >
+                <Download className="h-4 w-4" /> Save &amp; download PDF
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={onAccept}
+                loading={saving}
+                disabled={downloading || editing}
+              >
+                Accept &amp; save
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={onAcceptAndEdit}
+                loading={editing}
+                disabled={saving || downloading}
+              >
+                Save &amp; edit
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={onDiscard}
+                disabled={saving || downloading || editing}
+                title={
+                  confirmingDiscard ? 'Click again to discard this tailored resume' : undefined
+                }
+              >
+                {confirmingDiscard ? 'Click again to discard' : 'Discard'}
+              </Button>
+            </div>
+          ) : (
+            <span className="rounded-full bg-[var(--at-surface-2)] px-2 py-0.5 text-xs text-[var(--muted-foreground)]">
+              {selectedTemplateName}
+            </span>
+          )}
+        </div>
+        {previewBody}
+      </Card>
+    </div>
+  );
+
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className="mx-auto max-w-[1500px] space-y-6">
       <div role="status" aria-live="polite" className="sr-only">
         {announcement}
       </div>
@@ -425,445 +998,698 @@ export default function TailorPage() {
         </p>
       </div>
 
-      {aiUnconfigured && (
-        <Card className="flex items-start gap-3 border-[var(--at-warning)]/40 bg-[var(--at-warning)]/8 p-4">
-          <Key className="mt-0.5 h-5 w-5 shrink-0 text-[var(--at-warning)]" />
-          <div className="flex-1">
-            <p className="text-sm font-medium">Add an AI provider key to tailor</p>
-            <p className="text-xs text-[var(--muted-foreground)]">
-              Tailoring needs a configured AI provider. Add a key in settings, then come back.
-            </p>
-          </div>
-          <Button asChild size="sm" variant="outline">
-            <Link href="/settings">Open settings</Link>
-          </Button>
-        </Card>
-      )}
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:items-start">
+        {/* LEFT: inputs, controls, fit analysis + result metrics/changes. */}
+        <div className="space-y-6">
+          {aiUnconfigured && (
+            <Card className="flex items-start gap-3 border-[var(--at-warning)]/40 bg-[var(--at-warning)]/8 p-4">
+              <Key className="mt-0.5 h-5 w-5 shrink-0 text-[var(--at-warning)]" />
+              <div className="flex-1">
+                <p className="text-sm font-medium">Add an AI provider key to tailor</p>
+                <p className="text-xs text-[var(--muted-foreground)]">
+                  Tailoring needs a configured AI provider. Add a key in settings, then come back.
+                </p>
+              </div>
+              <Button asChild size="sm" variant="outline">
+                <Link href="/settings">Open settings</Link>
+              </Button>
+            </Card>
+          )}
 
-      {draft.recovered && phase === 'input' && !jd && (
-        <RecoveryBanner
-          savedAt={draft.recoveredAt}
-          title="You have an unsaved job description from earlier. Restore it?"
-          restoreLabel="Restore"
-          onRestore={() => {
-            setJd(draft.recovered ?? '');
-            draft.dismissRecovery();
-          }}
-          onDiscard={draft.clear}
-        />
-      )}
-
-      {/* Source + JD (always visible top of the continuous surface) */}
-      <Card className="space-y-4 p-5">
-        <div className="space-y-1.5">
-          <Label>Source resume</Label>
-          <Select value={resumeId} onValueChange={setResumeId} disabled={phase === 'generating'}>
-            <SelectTrigger>
-              <SelectValue placeholder="Choose a resume" />
-            </SelectTrigger>
-            <SelectContent>
-              {resumesQuery.data!.map((r) => (
-                <SelectItem key={r.resume_id} value={r.resume_id}>
-                  {r.title || r.filename || 'Untitled'} {r.is_master ? '- Master' : ''}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="jd-url">Import from a job link (optional)</Label>
-          <div className="flex gap-2">
-            <Input
-              id="jd-url"
-              type="url"
-              inputMode="url"
-              value={jdUrl}
-              onChange={(e) => setJdUrl(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  importFromUrl();
+          {draft.recovered && phase === 'input' && !jd && (
+            <RecoveryBanner
+              savedAt={draft.recoveredAt}
+              title="You have unsaved tailoring inputs from earlier. Restore them?"
+              restoreLabel="Restore"
+              onRestore={() => {
+                const d = draft.recovered;
+                // Backwards-compatible: older drafts stored just the JD string.
+                if (typeof d === 'string') {
+                  setJd(d);
+                } else if (d) {
+                  setJd(d.jd ?? '');
+                  if (d.customInstructions != null) setCustomInstructions(d.customInstructions);
+                  if (d.promptId != null) setPromptId(d.promptId);
+                  // Only restore a resume that still exists in the current list.
+                  if (d.resumeId && resumesQuery.data?.some((r) => r.resume_id === d.resumeId)) {
+                    setResumeId(d.resumeId);
+                  }
+                  if (d.templateId) {
+                    const t = getTemplateById(d.templateId);
+                    if (t) {
+                      setSelectedTemplateId(t.id);
+                      setTemplateSettings(templateToSettings(t));
+                    }
+                  }
+                  // Reveal the Options panel so restored Extra Instructions /
+                  // style / template are actually visible (they live behind the
+                  // disclosure, otherwise a restore looks like it did nothing).
+                  if (d.customInstructions || d.promptId || d.templateId) setShowOptions(true);
                 }
+                draft.dismissRecovery();
               }}
-              placeholder="https://company.com/careers/123"
-              disabled={fetchingUrl || phase === 'generating'}
+              onDiscard={draft.clear}
             />
-            <Button
-              type="button"
-              variant="outline"
-              onClick={importFromUrl}
-              loading={fetchingUrl}
-              disabled={!jdUrl.trim() || phase === 'generating'}
-            >
-              Import
-            </Button>
-          </div>
-          <p className="text-xs text-[var(--muted-foreground)]">
-            We fetch the page securely and extract the description. Review it before generating.
-          </p>
-        </div>
+          )}
 
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between gap-2">
-            <Label htmlFor="jd">Job description</Label>
-            {jdMeta?.confidenceLevel && (
-              <ConfidenceBadge
-                level={jdMeta.confidenceLevel}
-                score={jdMeta.confidenceScore}
-                source={jdMeta.source}
-              />
-            )}
-          </div>
-          {lowConfidence && (
-            <div
-              role="alert"
-              className="rounded-[var(--radius-at-md)] border border-[var(--at-warning)]/40 bg-[var(--at-warning)]/10 px-3 py-2 text-xs text-[var(--foreground)]"
-            >
-              We couldn&apos;t confidently extract this posting - please check and edit the text
-              below before tailoring.
-            </div>
-          )}
-          {jdMeta?.partial && !lowConfidence && (
-            <div
-              role="status"
-              className="rounded-[var(--radius-at-md)] border border-[var(--at-warning)]/40 bg-[var(--at-warning)]/10 px-3 py-2 text-xs text-[var(--foreground)]"
-            >
-              Some sections may be missing - please verify the full description below.
-            </div>
-          )}
-          {jdMeta?.warnings && jdMeta.warnings.length > 0 && (
-            <ul className="list-disc space-y-0.5 pl-5 text-xs text-[var(--muted-foreground)]">
-              {jdMeta.warnings.map((w, i) => (
-                <li key={`w-${i}`}>{w}</li>
-              ))}
-            </ul>
-          )}
-          {jdMeta?.suggestions && jdMeta.suggestions.length > 0 && (
-            <ul className="list-disc space-y-0.5 pl-5 text-xs text-[var(--muted-foreground)]">
-              {jdMeta.suggestions.map((s, i) => (
-                <li key={`s-${i}`}>{s}</li>
-              ))}
-            </ul>
-          )}
-          <Textarea
-            id="jd"
-            value={jd}
-            onChange={(e) => {
-              setJd(e.target.value);
-              draft.save(e.target.value);
-            }}
-            onKeyDown={(e) => {
-              // Cmd/Ctrl+Enter generates without reaching for the mouse - the
-              // same shortcut the wizard uses, so muscle memory carries over.
-              if (
-                (e.metaKey || e.ctrlKey) &&
-                e.key === 'Enter' &&
-                jd.trim().length >= MIN_JD &&
-                resumeId &&
-                phase !== 'generating' &&
-                !aiUnconfigured
-              ) {
-                e.preventDefault();
-                void onGenerate();
-              }
-            }}
-            placeholder="Paste the full job description here..."
-            className="min-h-40"
-            disabled={phase === 'generating'}
-          />
-          <p className="text-xs text-[var(--muted-foreground)]">
-            {jd.trim().length < MIN_JD
-              ? `Add at least ${MIN_JD} characters (${jd.trim().length}/${MIN_JD}).`
-              : 'Looks good - press ⌘/Ctrl+Enter to generate.'}
-          </p>
-        </div>
-
-        {/* Options (progressive disclosure) */}
-        <div>
-          <button
-            type="button"
-            onClick={() => setShowOptions((v) => !v)}
-            className="flex items-center gap-1 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
-          >
-            <ChevronDown
-              className={`h-4 w-4 transition-transform ${showOptions ? 'rotate-180' : ''}`}
+          {/* Recover a completed-but-unsaved tailored resume from a prior visit. */}
+          {recoverable && phase === 'input' && (
+            <RecoveryBanner
+              savedAt={null}
+              title="You tailored a resume last time but didn't save it. Restore it?"
+              restoreLabel={recovering ? 'Restoring...' : 'Restore tailored resume'}
+              onRestore={onRecoverPreview}
+              onDiscard={forgetPreview}
             />
-            Options
-          </button>
-          {showOptions && (
-            <div className="mt-3 space-y-1.5">
-              <Label>Tailoring style</Label>
-              <Select value={promptId} onValueChange={setPromptId}>
+          )}
+
+          {/* Source + JD (always visible top of the continuous surface) */}
+          <Card className="space-y-4 p-5">
+            <div className="space-y-1.5">
+              <Label>Source resume</Label>
+              <Select
+                value={resumeId}
+                onValueChange={(v) => {
+                  setResumeId(v);
+                  saveDraft({ resumeId: v });
+                }}
+                disabled={phase === 'generating'}
+              >
                 <SelectTrigger>
-                  <SelectValue placeholder="Default" />
+                  <SelectValue placeholder="Choose a resume" />
                 </SelectTrigger>
                 <SelectContent>
-                  {(promptsQuery.data?.prompt_options ?? []).map((o) => (
-                    <SelectItem key={o.id} value={o.id}>
-                      {o.label}
+                  {resumesQuery.data!.map((r) => (
+                    <SelectItem key={r.resume_id} value={r.resume_id}>
+                      {r.title || r.filename || 'Untitled'} {r.is_master ? '- Master' : ''}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-          )}
-        </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <Button
-            onClick={onGenerate}
-            loading={phase === 'generating'}
-            disabled={jd.trim().length < MIN_JD || !resumeId || Boolean(aiUnconfigured)}
-            title={aiUnconfigured ? 'Add an AI key in settings first' : undefined}
-          >
-            <Sparkles className="h-4 w-4" /> {phase === 'review' ? 'Regenerate' : 'Generate'}
-          </Button>
-          <Button
-            variant="outline"
-            onClick={onAnalyze}
-            loading={analyzing}
-            disabled={
-              jd.trim().length < MIN_JD ||
-              !resumeId ||
-              phase === 'generating' ||
-              Boolean(aiUnconfigured)
-            }
-            title={
-              aiUnconfigured
-                ? 'Add an AI key in settings first'
-                : 'See how your resume matches before generating'
-            }
-          >
-            <Target className="h-4 w-4" /> Analyze fit
-          </Button>
-          <span className="inline-flex items-center gap-1 text-xs text-[var(--muted-foreground)]">
-            <Sparkles className="h-3 w-3" /> Uses your configured AI provider
-          </span>
-        </div>
-      </Card>
-
-      {/* Pre-generation fit analysis (explicit action, cheaper than a full tailor) */}
-      {analysis && phase !== 'generating' && (
-        <Card className="space-y-4 p-5">
-          <div className="flex items-start gap-5">
-            {analysis.fit_score != null && <ScoreRing score={analysis.fit_score} />}
-            <div className="flex-1 space-y-1">
-              <p className="flex items-center gap-1.5 text-sm font-medium">
-                Fit analysis
-                <Explain label="What is fit analysis?">
-                  A quick, pre-generation estimate of how many keywords from this job already appear
-                  in your selected resume. Use it to decide whether to tailor - it does not change
-                  your resume.
-                </Explain>
-              </p>
-              <p className="text-xs text-[var(--muted-foreground)]">
-                {analysis.fit_score != null
-                  ? `Your resume already covers ${analysis.matched.length} of ${
-                      analysis.matched.length + analysis.missing.length
-                    } key terms. Generate to close the gaps.`
-                  : 'Keyword breakdown for this role. Pick a resume with processed data for a fit score.'}
-              </p>
-            </div>
-          </div>
-
-          {analysis.missing.length > 0 && (
-            <div>
-              <p className="mb-1.5 text-xs font-medium text-[var(--foreground)]">
-                Missing from your resume
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {analysis.missing.map((k) => (
-                  <Badge key={`miss-${k}`} variant="warning">
-                    {k}
-                  </Badge>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {analysis.matched.length > 0 && (
-            <div>
-              <p className="mb-1.5 text-xs font-medium text-[var(--foreground)]">Already covered</p>
-              <div className="flex flex-wrap gap-1.5">
-                {analysis.matched.map((k) => (
-                  <Badge key={`match-${k}`} variant="success">
-                    {k}
-                  </Badge>
-                ))}
-              </div>
-            </div>
-          )}
-        </Card>
-      )}
-
-      {/* Generating - honest, per-stage progress streamed from the backend
-          (shared AiProgress in LIVE mode). */}
-      {phase === 'generating' && (
-        <Card className="space-y-4 p-5">
-          <p className="text-sm font-medium">Tailoring your resume...</p>
-          <AiProgress
-            stages={TAILOR_STAGES}
-            activeKey={liveActiveKey}
-            doneKeys={liveDoneKeys}
-            messages={TAILOR_MESSAGES}
-            estimate={ESTIMATE_MEDIUM}
-          />
-          <div className="flex items-center justify-between gap-3 pt-1">
-            <span className="text-xs text-[var(--muted-foreground)]">
-              You can cancel anytime - nothing is saved until you accept.
-            </span>
-            <Button variant="outline" size="sm" onClick={onCancelGenerate}>
-              Cancel
-            </Button>
-          </div>
-        </Card>
-      )}
-
-      {/* Failure - graceful, structured surface. Never raw HTML/stack traces.
-          Input is preserved so Retry re-runs with the same JD + resume. */}
-      {phase === 'error' && failure && (
-        <Card
-          role="alert"
-          className="space-y-4 border-[var(--destructive)]/40 bg-[var(--destructive)]/5 p-5"
-        >
-          <div className="flex items-start gap-3">
-            <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0 text-[var(--destructive)]" />
-            <div className="flex-1 space-y-1">
-              <p className="text-sm font-medium">Resume tailoring didn't complete</p>
-              <p className="text-sm text-[var(--muted-foreground)]">{failure.message}</p>
-              <p className="text-xs text-[var(--muted-foreground)]">
-                Your job description and resume selection are saved - nothing was lost.
-              </p>
-              {failure.requestId && (
-                <p className="pt-1 font-mono text-[11px] text-[var(--muted-foreground)]">
-                  Reference: {failure.requestId}
-                </p>
-              )}
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {failure.retryable && (
-              <Button size="sm" onClick={onGenerate} disabled={Boolean(aiUnconfigured)}>
-                <RotateCw className="h-4 w-4" /> Try again
-              </Button>
-            )}
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                setFailure(null);
-                setPhase('input');
-              }}
-            >
-              Back to editing
-            </Button>
-            <Button asChild size="sm" variant="ghost">
-              <Link href="/contact?topic=bug">Report issue</Link>
-            </Button>
-          </div>
-        </Card>
-      )}
-
-      {/* Review - results render inline below */}
-      {phase === 'review' && result && (
-        <div className="space-y-4">
-          {ats && (
-            <Card className="flex items-center gap-5 p-5">
-              <ScoreRing score={ats.overall_score} />
-              <div className="flex-1 space-y-2">
-                <p className="flex items-center gap-1.5 text-sm font-medium">
-                  Match score
-                  <Explain label="What is the match score?">
-                    An estimate of how well this tailored resume aligns with the job description,
-                    combining keyword match, skills coverage, and section completeness. Higher is
-                    better - aim for 75+. It is guidance, not a guarantee of how a specific ATS will
-                    parse your resume.
-                  </Explain>
-                </p>
-                <div className="grid grid-cols-3 gap-2 text-xs">
-                  <SubScore label="Keywords" value={ats.sub_scores.keyword_match} />
-                  <SubScore label="Skills" value={ats.sub_scores.skills_coverage} />
-                  <SubScore label="Sections" value={ats.sub_scores.section_completeness} />
-                </div>
-              </div>
-            </Card>
-          )}
-
-          {ats && ats.missing_keywords.length > 0 && (
-            <Card className="p-5">
-              <p className="mb-2 text-sm font-medium">Missing keywords</p>
-              <div className="flex flex-wrap gap-1.5">
-                {ats.missing_keywords.slice(0, showDetail ? undefined : 10).map((k) => (
-                  <Badge key={k} variant="warning">
-                    {k}
-                  </Badge>
-                ))}
-              </div>
-            </Card>
-          )}
-
-          {diff && (
-            <Card className="p-5">
-              <div className="flex items-center justify-between">
-                <p className="flex items-center gap-1.5 text-sm font-medium">
-                  {diff.total_changes} change{diff.total_changes === 1 ? '' : 's'} proposed
-                  <Explain label="What are these changes?">
-                    Each change rewrites or reorders content you already have to better match the
-                    role - emphasising relevant skills and keywords. Nothing is invented; expand the
-                    details to review every edit before you accept.
-                  </Explain>
-                </p>
-                <button
-                  onClick={() => setShowDetail((v) => !v)}
-                  className="text-xs text-[var(--primary)] hover:underline"
+            <div className="space-y-1.5">
+              <Label htmlFor="jd-url">Import from a job link (optional)</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="jd-url"
+                  type="url"
+                  inputMode="url"
+                  value={jdUrl}
+                  onChange={(e) => setJdUrl(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      importFromUrl();
+                    }
+                  }}
+                  placeholder="https://company.com/careers/123"
+                  disabled={fetchingUrl || phase === 'generating'}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={importFromUrl}
+                  loading={fetchingUrl}
+                  disabled={!jdUrl.trim() || phase === 'generating'}
                 >
-                  {showDetail ? 'Hide details' : 'Expand details'}
-                </button>
+                  Import
+                </Button>
               </div>
-              <p className="mt-1 flex items-center gap-1.5 text-xs text-[var(--at-success)]">
-                <ShieldCheck className="h-3.5 w-3.5" /> Grounded in your resume - no invented
-                experience.
+              <p className="text-xs text-[var(--muted-foreground)]">
+                We fetch the page securely and extract the description. Review it before generating.
               </p>
-              {showDetail && result.detailed_changes && (
-                <ul className="mt-3 space-y-2">
-                  {result.detailed_changes.map((c, i) => (
-                    <li
-                      key={i}
-                      className="rounded-[var(--radius-at-md)] bg-[var(--at-surface-2)] p-2.5 text-xs"
-                    >
-                      <Badge
-                        variant={
-                          c.change_type === 'added'
-                            ? 'success'
-                            : c.change_type === 'removed'
-                              ? 'danger'
-                              : 'neutral'
-                        }
-                      >
-                        {c.change_type}
-                      </Badge>{' '}
-                      <span className="text-[var(--muted-foreground)]">{c.field_path}</span>
-                      {c.new_value && (
-                        <p className="mt-1 text-[var(--foreground)]">{c.new_value}</p>
-                      )}
-                    </li>
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="jd">Job description</Label>
+                {jdMeta?.confidenceLevel && (
+                  <ConfidenceBadge
+                    level={jdMeta.confidenceLevel}
+                    score={jdMeta.confidenceScore}
+                    source={jdMeta.source}
+                  />
+                )}
+              </div>
+              {lowConfidence && (
+                <div
+                  role="alert"
+                  className="rounded-[var(--radius-at-md)] border border-[var(--at-warning)]/40 bg-[var(--at-warning)]/10 px-3 py-2 text-xs text-[var(--foreground)]"
+                >
+                  We couldn&apos;t confidently extract this posting - please check and edit the text
+                  below before tailoring.
+                </div>
+              )}
+              {jdMeta?.partial && !lowConfidence && (
+                <div
+                  role="status"
+                  className="rounded-[var(--radius-at-md)] border border-[var(--at-warning)]/40 bg-[var(--at-warning)]/10 px-3 py-2 text-xs text-[var(--foreground)]"
+                >
+                  Some sections may be missing - please verify the full description below.
+                </div>
+              )}
+              {jdMeta?.warnings && jdMeta.warnings.length > 0 && (
+                <ul className="list-disc space-y-0.5 pl-5 text-xs text-[var(--muted-foreground)]">
+                  {jdMeta.warnings.map((w, i) => (
+                    <li key={`w-${i}`}>{w}</li>
                   ))}
                 </ul>
               )}
+              {jdMeta?.suggestions && jdMeta.suggestions.length > 0 && (
+                <ul className="list-disc space-y-0.5 pl-5 text-xs text-[var(--muted-foreground)]">
+                  {jdMeta.suggestions.map((s, i) => (
+                    <li key={`s-${i}`}>{s}</li>
+                  ))}
+                </ul>
+              )}
+              <Textarea
+                id="jd"
+                value={jd}
+                onChange={(e) => {
+                  setJd(e.target.value);
+                  saveDraft({ jd: e.target.value });
+                }}
+                onKeyDown={(e) => {
+                  const ready =
+                    (e.metaKey || e.ctrlKey) &&
+                    e.key === 'Enter' &&
+                    jd.trim().length >= MIN_JD &&
+                    resumeId &&
+                    phase !== 'generating' &&
+                    !aiBlocked;
+                  if (!ready) return;
+                  e.preventDefault();
+                  // Cmd/Ctrl+Shift+Enter runs the cheaper "Analyze fit"; plain
+                  // Cmd/Ctrl+Enter generates. Same muscle memory as the wizard.
+                  if (e.shiftKey) {
+                    if (!analyzing) void onAnalyze();
+                  } else {
+                    void onGenerate();
+                  }
+                }}
+                placeholder="Paste the full job description here..."
+                className="min-h-40"
+                disabled={phase === 'generating'}
+              />
+              <p className="text-xs text-[var(--muted-foreground)]">
+                {jd.trim().length < MIN_JD
+                  ? `Add at least ${MIN_JD} characters (${jd.trim().length}/${MIN_JD}).`
+                  : 'Looks good - press ⌘/Ctrl+Enter to generate, or ⌘/Ctrl+Shift+Enter to analyze fit.'}
+              </p>
+            </div>
+
+            {/* Options (progressive disclosure) */}
+            <div>
+              <button
+                type="button"
+                onClick={() => setShowOptions((v) => !v)}
+                className="flex items-center gap-1 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+              >
+                <ChevronDown
+                  className={`h-4 w-4 transition-transform ${showOptions ? 'rotate-180' : ''}`}
+                />
+                Options
+              </button>
+              {showOptions && (
+                <div className="mt-3 space-y-4">
+                  <div className="space-y-1.5">
+                    <Label>Tailoring style</Label>
+                    <Select
+                      value={promptId}
+                      onValueChange={(v) => {
+                        setPromptId(v);
+                        saveDraft({ promptId: v });
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Default" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(promptsQuery.data?.prompt_options ?? []).map((o) => (
+                          <SelectItem key={o.id} value={o.id}>
+                            {o.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label>Resume template</Label>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span className="text-sm">{selectedTemplateName}</span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setTemplatePickerOpen(true)}
+                      >
+                        Change template
+                      </Button>
+                    </div>
+                    <p className="text-xs text-[var(--muted-foreground)]">
+                      Sets the look of the tailored resume in the preview and PDF. Affects layout
+                      only, not the content.
+                    </p>
+                  </div>
+
+                  {/* Photo templates: use the profile photo by default; offer an
+                  upload here so the user can add one if their profile has none.
+                  If they add nothing, the resume simply renders without a photo. */}
+                  {templateWantsPhoto && (
+                    <div className="space-y-1.5">
+                      <Label>Profile photo</Label>
+                      <AvatarUploader
+                        avatarUrl={profileAvatarUrl}
+                        onUploaded={(r) => onProfilePhotoChange(r.avatar_url)}
+                        onRemoved={() => onProfilePhotoChange(null)}
+                        onError={(m) => toast({ title: m, variant: 'error' })}
+                      />
+                      <p className="text-xs text-[var(--muted-foreground)]">
+                        This template shows a photo. Your profile photo is used by default. Upload
+                        one here if you don&apos;t have a profile photo yet - or leave it empty to
+                        render without a photo.
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <Label htmlFor="custom-instructions">Extra instructions (optional)</Label>
+                      <span className="text-[11px] text-[var(--muted-foreground)]">
+                        {customInstructions.length}/{CUSTOM_INSTRUCTIONS_MAX}
+                      </span>
+                    </div>
+                    <Textarea
+                      id="custom-instructions"
+                      value={customInstructions}
+                      maxLength={CUSTOM_INSTRUCTIONS_MAX}
+                      onChange={(e) => {
+                        const v = e.target.value.slice(0, CUSTOM_INSTRUCTIONS_MAX);
+                        setCustomInstructions(v);
+                        saveDraft({ customInstructions: v });
+                      }}
+                      placeholder={
+                        'e.g. Emphasize backend over frontend. Prioritize Kubernetes and Postgres. ' +
+                        'Add project KRIA: automates daily tasks, voice/desktop control. ' +
+                        'I also know Rust - add it.'
+                      }
+                      className="min-h-24"
+                      disabled={phase === 'generating'}
+                    />
+                    <p className="text-xs text-[var(--muted-foreground)]">
+                      Steer emphasis, ordering, and tone - and add your own real content (a project,
+                      role, or skill you actually have). It only adds what you explicitly provide;
+                      the AI won&apos;t invent experience on its own.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                onClick={onGenerate}
+                loading={phase === 'generating'}
+                disabled={jd.trim().length < MIN_JD || !resumeId || aiBlocked}
+                title={aiBlocked ? aiBlockTitle : GENERATE_COST_HINT}
+              >
+                <Sparkles className="h-4 w-4" /> {phase === 'review' ? 'Regenerate' : 'Generate'}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={onAnalyze}
+                loading={analyzing}
+                disabled={
+                  jd.trim().length < MIN_JD || !resumeId || phase === 'generating' || aiBlocked
+                }
+                title={
+                  aiBlocked
+                    ? aiBlockTitle
+                    : `See how your resume matches first · ${ANALYZE_COST_HINT}`
+                }
+              >
+                <Target className="h-4 w-4" /> Analyze fit
+              </Button>
+            </div>
+            {/* Honest cost/time expectation so users on slow/free models aren't
+            surprised by a multi-step run. */}
+            <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--muted-foreground)]">
+              <span className="inline-flex items-center gap-1">
+                <Sparkles className="h-3 w-3" /> Uses your configured AI provider
+              </span>
+              <span>Generate: {GENERATE_COST_HINT}</span>
+              <span>Analyze fit: {ANALYZE_COST_HINT}</span>
+            </p>
+          </Card>
+
+          {/* Pre-generation fit analysis (explicit action, cheaper than a full tailor) */}
+          {analysis && phase !== 'generating' && (
+            <Card className="space-y-4 p-5">
+              {/* Inputs changed since this analysis ran - flag it as stale instead
+              of wiping it, so the user keeps the reference and re-analyzes only
+              if they want to. */}
+              {analysisStale && (
+                <div
+                  role="status"
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--radius-at-md)] border border-[var(--at-warning)]/40 bg-[var(--at-warning)]/10 px-3 py-2 text-xs text-[var(--foreground)]"
+                >
+                  <span>
+                    Your resume or job description changed since this analysis. It may be out of
+                    date.
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={onAnalyze}
+                    loading={analyzing}
+                    disabled={jd.trim().length < MIN_JD || !resumeId || aiBlocked}
+                  >
+                    Re-analyze
+                  </Button>
+                </div>
+              )}
+              <div className="flex items-start gap-5">
+                {analysis.fit_score != null && <ScoreRing score={analysis.fit_score} />}
+                <div className="flex-1 space-y-1">
+                  <p className="flex items-center gap-1.5 text-sm font-medium">
+                    Fit analysis
+                    <Explain label="What is fit analysis?">
+                      A quick, pre-generation estimate of how many keywords from this job already
+                      appear in your selected resume. Use it to decide whether to tailor - it does
+                      not change your resume.
+                    </Explain>
+                  </p>
+                  <p className="text-xs text-[var(--muted-foreground)]">
+                    {analysis.fit_score != null
+                      ? `Your resume already covers ${analysis.matched.length} of ${
+                          analysis.matched.length + analysis.missing.length
+                        } key terms. Generate to close the gaps.`
+                      : 'We could show the keyword breakdown, but not a fit score: this resume has no processed data yet (it may still be importing). Pick a ready resume, or generate anyway - tailoring will still work.'}
+                  </p>
+                </div>
+              </div>
+
+              {analysis.missing.length > 0 && (
+                <div>
+                  <p className="mb-1.5 text-xs font-medium text-[var(--foreground)]">
+                    Missing from your resume
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {analysis.missing.map((k) => (
+                      <Badge key={`miss-${k}`} variant="warning">
+                        {k}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {analysis.matched.length > 0 && (
+                <div>
+                  <p className="mb-1.5 text-xs font-medium text-[var(--foreground)]">
+                    Already covered
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {analysis.matched.map((k) => (
+                      <Badge key={`match-${k}`} variant="success">
+                        {k}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
             </Card>
           )}
 
-          <div className="flex gap-2">
-            <Button onClick={onAccept} loading={saving}>
-              Accept &amp; save
-            </Button>
-            <Button variant="outline" onClick={() => setPhase('input')} disabled={saving}>
-              Discard
-            </Button>
-          </div>
+          {/* Generating progress + the tailored/source resume render in the sticky
+          preview pane (right column) - see `previewPane`. */}
+
+          {/* Failure - graceful, structured surface. Never raw HTML/stack traces.
+          Input is preserved so Retry re-runs with the same JD + resume. */}
+          {phase === 'error' && failure && (
+            <Card
+              role="alert"
+              className="space-y-4 border-[var(--destructive)]/40 bg-[var(--destructive)]/5 p-5"
+            >
+              <div className="flex items-start gap-3">
+                <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0 text-[var(--destructive)]" />
+                <div className="flex-1 space-y-1">
+                  <p className="text-sm font-medium">Resume tailoring did not complete</p>
+                  <p className="text-sm text-[var(--muted-foreground)]">{failure.message}</p>
+                  <p className="text-xs text-[var(--muted-foreground)]">
+                    Your job description and resume selection are saved - nothing was lost.
+                  </p>
+                  {failure.requestId && (
+                    <p className="pt-1 font-mono text-[11px] text-[var(--muted-foreground)]">
+                      Reference: {failure.requestId}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {failure.retryable && (
+                  <Button size="sm" onClick={onGenerate} disabled={aiBlocked}>
+                    <RotateCw className="h-4 w-4" /> Try again
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setFailure(null);
+                    setPhase('input');
+                  }}
+                >
+                  Back to editing
+                </Button>
+                <Button asChild size="sm" variant="ghost">
+                  <Link href="/contact?topic=bug">Report issue</Link>
+                </Button>
+              </div>
+            </Card>
+          )}
+
+          {/* Review - results render inline below */}
+          {phase === 'review' && result && (
+            <div className="space-y-4">
+              {/* The tailored resume and its primary actions (save / download /
+              edit / discard) live in the sticky preview pane on the right. Here
+              on the left we surface the metrics and the change list. On narrow
+              screens the pane stacks below this column. */}
+              <Card className="flex items-center gap-3 p-4">
+                <ShieldCheck className="h-5 w-5 shrink-0 text-[var(--at-success)]" />
+                <div>
+                  <p className="text-sm font-medium">Your tailored resume is ready</p>
+                  <p className="text-xs text-[var(--muted-foreground)]">
+                    Review it in the preview, then save or download it from there.
+                  </p>
+                </div>
+              </Card>
+
+              {/* A/B: a prior attempt is available (user regenerated). Let them
+              restore the better one instead of losing it. */}
+              {prevResult && (
+                <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
+                  <p className="text-sm text-[var(--muted-foreground)]">
+                    You have a previous attempt
+                    {prevResult.ats_score
+                      ? ` (match ${Math.round(prevResult.ats_score.overall_score)})`
+                      : ''}
+                    . Prefer it?
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={onRestorePrevious}
+                    disabled={saving || downloading || editing}
+                  >
+                    <RotateCw className="h-4 w-4" /> Restore previous attempt
+                  </Button>
+                </Card>
+              )}
+
+              {/* Before -> after: quantify what tailoring changed. Shown when the
+              user analyzed first (fit delta) or regenerated (score delta). */}
+              {ats && (preFit || prevScore != null) && (
+                <Card className="flex flex-wrap items-center gap-x-6 gap-y-2 p-4">
+                  <p className="flex items-center gap-1.5 text-sm font-medium">
+                    <TrendingUp className="h-4 w-4 text-[var(--at-success)]" />
+                    {prevScore != null ? 'Since your last attempt' : 'What tailoring improved'}
+                  </p>
+                  {preFit?.score != null && (
+                    <span className="inline-flex items-center gap-1.5 text-sm">
+                      <span className="text-[var(--muted-foreground)]">Fit</span>
+                      <span className="font-semibold">{Math.round(preFit.score)}</span>
+                      <ArrowRight className="h-3.5 w-3.5 text-[var(--muted-foreground)]" />
+                      <span className="font-semibold text-[var(--at-success)]">
+                        {Math.round(ats.overall_score)}
+                      </span>
+                    </span>
+                  )}
+                  {prevScore != null && (
+                    <span className="inline-flex items-center gap-1.5 text-sm">
+                      <span className="text-[var(--muted-foreground)]">Match</span>
+                      <span className="font-semibold">{Math.round(prevScore)}</span>
+                      <ArrowRight className="h-3.5 w-3.5 text-[var(--muted-foreground)]" />
+                      <span className="font-semibold text-[var(--at-success)]">
+                        {Math.round(ats.overall_score)}
+                      </span>
+                    </span>
+                  )}
+                  {preFit && (
+                    <span className="inline-flex items-center gap-1.5 text-sm">
+                      <span className="text-[var(--muted-foreground)]">Missing terms</span>
+                      <span className="font-semibold">{preFit.missing}</span>
+                      <ArrowRight className="h-3.5 w-3.5 text-[var(--muted-foreground)]" />
+                      <span className="font-semibold text-[var(--at-success)]">
+                        {ats.missing_keywords.length}
+                      </span>
+                    </span>
+                  )}
+                </Card>
+              )}
+
+              {/* Instruction results / notices (e.g. "Added project KRIA",
+              "Couldn't add X"). Surfaces ONLY what the Extra Instructions step
+              did - never internal diff diagnostics - so an addition is never
+              silently dropped and the message is always relevant. */}
+              {result.instruction_notes && result.instruction_notes.length > 0 && (
+                <Card className="space-y-1.5 border-[var(--at-warning)]/40 bg-[var(--at-warning)]/8 p-4">
+                  <p className="text-sm font-medium">Notes on your instructions</p>
+                  <ul className="list-disc space-y-0.5 pl-5 text-xs text-[var(--muted-foreground)]">
+                    {result.instruction_notes.map((w, i) => (
+                      <li key={`note-${i}`}>{w}</li>
+                    ))}
+                  </ul>
+                </Card>
+              )}
+
+              {ats && (
+                <Card className="flex items-center gap-5 p-5">
+                  <ScoreRing score={ats.overall_score} />
+                  <div className="flex-1 space-y-2">
+                    <p className="flex items-center gap-1.5 text-sm font-medium">
+                      Match score
+                      <Explain label="What is the match score?">
+                        An estimate of how well this tailored resume aligns with the job
+                        description, combining keyword match, skills coverage, and section
+                        completeness. Higher is better - aim for 75+. It is guidance, not a
+                        guarantee of how a specific ATS will parse your resume.
+                      </Explain>
+                    </p>
+                    <div className="grid grid-cols-3 gap-2 text-xs">
+                      <SubScore label="Keywords" value={ats.sub_scores.keyword_match} />
+                      <SubScore label="Skills" value={ats.sub_scores.skills_coverage} />
+                      <SubScore label="Sections" value={ats.sub_scores.section_completeness} />
+                    </div>
+                  </div>
+                </Card>
+              )}
+
+              {ats && ats.missing_keywords.length > 0 && (
+                <Card className="p-5">
+                  <p className="mb-2 text-sm font-medium">Missing keywords</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {ats.missing_keywords.slice(0, showDetail ? undefined : 10).map((k) => (
+                      <Badge key={k} variant="warning">
+                        {k}
+                      </Badge>
+                    ))}
+                  </div>
+                </Card>
+              )}
+
+              {diff && (
+                <Card className="p-5">
+                  <div className="flex items-center justify-between">
+                    <p className="flex items-center gap-1.5 text-sm font-medium">
+                      {diff.total_changes} change{diff.total_changes === 1 ? '' : 's'} proposed
+                      <Explain label="What are these changes?">
+                        Each change rewrites or reorders content you already have to better match
+                        the role - emphasising relevant skills and keywords. Nothing is invented;
+                        expand the details to review every edit before you accept.
+                      </Explain>
+                    </p>
+                    <button
+                      onClick={() => setShowDetail((v) => !v)}
+                      className="text-xs text-[var(--primary)] hover:underline"
+                    >
+                      {showDetail ? 'Hide details' : 'Expand details'}
+                    </button>
+                  </div>
+                  <p className="mt-1 flex items-center gap-1.5 text-xs text-[var(--at-success)]">
+                    <ShieldCheck className="h-3.5 w-3.5" /> Grounded in your resume - no invented
+                    experience.
+                  </p>
+                  {showDetail && result.detailed_changes && (
+                    <ul className="mt-3 space-y-2">
+                      {result.detailed_changes.map((c, i) => (
+                        <li
+                          key={i}
+                          className="rounded-[var(--radius-at-md)] bg-[var(--at-surface-2)] p-2.5 text-xs"
+                        >
+                          <Badge
+                            variant={
+                              c.change_type === 'added'
+                                ? 'success'
+                                : c.change_type === 'removed'
+                                  ? 'danger'
+                                  : 'neutral'
+                            }
+                          >
+                            {c.change_type}
+                          </Badge>{' '}
+                          <span className="text-[var(--muted-foreground)]">{c.field_path}</span>
+                          {/* Modified edits show the before -> after so the user can
+                          judge the rewrite; added/removed show the single value. */}
+                          {c.change_type === 'modified' && c.original_value ? (
+                            <div className="mt-1 space-y-1">
+                              <p className="text-[var(--muted-foreground)] line-through">
+                                {c.original_value}
+                              </p>
+                              {c.new_value && (
+                                <p className="text-[var(--foreground)]">{c.new_value}</p>
+                              )}
+                            </div>
+                          ) : (
+                            c.new_value && (
+                              <p className="mt-1 text-[var(--foreground)]">{c.new_value}</p>
+                            )
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </Card>
+              )}
+            </div>
+          )}
         </div>
-      )}
+        {previewPane}
+      </div>
+
+      {/* Template picker - the SAME visual gallery as the /templates page
+          (real-render cards, search/filter/preview), not a dropdown. */}
+      <Dialog open={templatePickerOpen} onOpenChange={setTemplatePickerOpen}>
+        <DialogContent className="max-w-6xl">
+          <DialogHeader>
+            <DialogTitle>Choose a template</DialogTitle>
+            <DialogDescription>
+              Pick the look for your tailored resume. Every preview is the real renderer, so what
+              you see is exactly what you&apos;ll export.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[75vh] overflow-y-auto pr-1">
+            <TemplateGallery
+              selectedId={selectedTemplateId}
+              onSelect={onPickTemplate}
+              ctaLabel="Use this template"
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

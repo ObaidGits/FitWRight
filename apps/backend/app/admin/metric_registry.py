@@ -13,8 +13,9 @@ Design guarantees enforced structurally here (Req 20.2-20.5, Property 8):
   (Task 1.5) asserts this.
 - **Closed, enumerated dimensions.** Where a metric is dimensioned (AI provider,
   downsamplable audit event), each dimension value is its *own* pre-registered
-  static key drawn from a closed set (the 5 per-provider ``AI_CALLS_*`` keys and
-  the single ``AUDIT_DOWNSAMPLED_*`` key). The provider/event -> key mappings are
+  static key drawn from a closed set (one key for every member of the bounded
+  AI-provider dimension and the single ``AUDIT_DOWNSAMPLED_*`` key). The
+  provider/event -> key mappings are
   fixed dictionaries over closed :class:`enum.Enum` inputs, so a lookup can only
   ever return an already-registered constant (never a new key). Adding a provider
   or event is a one-line edit here.
@@ -64,6 +65,10 @@ __all__ = [
     "AI_CALLS_ANTHROPIC",
     "AI_CALLS_OLLAMA",
     "AI_CALLS_OPENAI_COMPAT",
+    "AI_CALLS_OPENROUTER",
+    "AI_CALLS_DEEPSEEK",
+    "AI_CALLS_GROQ",
+    "AI_CALLS_OTHER",
     # Errors category
     "REQUEST_2XX",
     "REQUEST_4XX",
@@ -119,6 +124,10 @@ class AiProvider(str, Enum):
     ANTHROPIC = "anthropic"
     OLLAMA = "ollama"
     OPENAI_COMPAT = "openai_compat"
+    OPENROUTER = "openrouter"
+    DEEPSEEK = "deepseek"
+    GROQ = "groq"
+    OTHER = "other"
 
 
 class DownsamplableEvent(str, Enum):
@@ -141,13 +150,17 @@ AI_RETRIES = "ai_retries"  # AI call retry attempts.
 AI_TOKENS_SUM = "ai_tokens_sum"  # Summed tokens across AI calls (for averages).
 AI_LATENCY_MS_SUM = "ai_latency_ms_sum"  # Summed AI latency in ms (for averages).
 
-# Per-provider AI call counts - a closed enumeration (5 static keys), never
+# Per-provider AI call counts - a closed enumeration of static keys, never
 # ``ai_calls:<provider>`` composed at runtime (Req 20.2/20.3).
 AI_CALLS_OPENAI = "ai_calls_openai"  # AI calls to OpenAI.
 AI_CALLS_GEMINI = "ai_calls_gemini"  # AI calls to Gemini.
 AI_CALLS_ANTHROPIC = "ai_calls_anthropic"  # AI calls to Anthropic.
 AI_CALLS_OLLAMA = "ai_calls_ollama"  # AI calls to Ollama.
 AI_CALLS_OPENAI_COMPAT = "ai_calls_openai_compat"  # AI calls to an OpenAI-compatible provider.
+AI_CALLS_OPENROUTER = "ai_calls_openrouter"  # AI calls routed through OpenRouter.
+AI_CALLS_DEEPSEEK = "ai_calls_deepseek"  # AI calls to DeepSeek.
+AI_CALLS_GROQ = "ai_calls_groq"  # AI calls to Groq.
+AI_CALLS_OTHER = "ai_calls_other"  # AI calls with an unknown or blank provider label.
 
 # -- Errors (owner: ErrorsMetricsService) -----------------------------------
 REQUEST_2XX = "request_2xx"  # Requests answered with a 2xx status.
@@ -213,6 +226,10 @@ METRIC_REGISTRY: tuple[MetricKeySpec, ...] = (
     MetricKeySpec(AI_CALLS_ANTHROPIC, MetricCategory.AI, "AI calls to Anthropic."),
     MetricKeySpec(AI_CALLS_OLLAMA, MetricCategory.AI, "AI calls to Ollama."),
     MetricKeySpec(AI_CALLS_OPENAI_COMPAT, MetricCategory.AI, "AI calls to an OpenAI-compatible provider."),
+    MetricKeySpec(AI_CALLS_OPENROUTER, MetricCategory.AI, "AI calls routed through OpenRouter."),
+    MetricKeySpec(AI_CALLS_DEEPSEEK, MetricCategory.AI, "AI calls to DeepSeek."),
+    MetricKeySpec(AI_CALLS_GROQ, MetricCategory.AI, "AI calls to Groq."),
+    MetricKeySpec(AI_CALLS_OTHER, MetricCategory.AI, "AI calls with an unknown or blank provider label."),
     # Errors
     MetricKeySpec(REQUEST_2XX, MetricCategory.ERRORS, "Requests answered with a 2xx status."),
     MetricKeySpec(REQUEST_4XX, MetricCategory.ERRORS, "Requests answered with a 4xx status."),
@@ -254,6 +271,10 @@ AI_CALLS_BY_PROVIDER: dict[AiProvider, str] = {
     AiProvider.ANTHROPIC: AI_CALLS_ANTHROPIC,
     AiProvider.OLLAMA: AI_CALLS_OLLAMA,
     AiProvider.OPENAI_COMPAT: AI_CALLS_OPENAI_COMPAT,
+    AiProvider.OPENROUTER: AI_CALLS_OPENROUTER,
+    AiProvider.DEEPSEEK: AI_CALLS_DEEPSEEK,
+    AiProvider.GROQ: AI_CALLS_GROQ,
+    AiProvider.OTHER: AI_CALLS_OTHER,
 }
 
 AUDIT_DOWNSAMPLE_BY_EVENT: dict[DownsamplableEvent, str] = {

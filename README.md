@@ -8,7 +8,7 @@ The AI harness to build tailored resumes for each job application with Claude, C
 
 [How to Install](SETUP.md) - [Key Features](#key-features) - [Tech Stack](#tech-stack) - [Creator](#creators-note)
 
-![version](https://img.shields.io/badge/Version-1.2-FFF?labelColor=F0F0E8&style=for-the-badge&color=1d4ed8) ![license](https://img.shields.io/badge/License-Apache%202.0-FFF?labelColor=F0F0E8&style=for-the-badge&color=1d4ed8)
+![version](https://img.shields.io/badge/Version-2.0-FFF?labelColor=F0F0E8&style=for-the-badge&color=1d4ed8) ![license](https://img.shields.io/badge/License-Apache%202.0-FFF?labelColor=F0F0E8&style=for-the-badge&color=1d4ed8)
 
 </div>
 
@@ -86,36 +86,28 @@ If you have any suggestions or feature requests, please feel free to open an iss
 
 For detailed setup instructions, see **[SETUP.md](SETUP.md)**.
 
-### Prerequisites
+### Recommended local install (Docker)
 
-| Tool | Version | Installation |
-|------|---------|--------------|
-| Python | 3.13+ | [python.org](https://python.org) |
-| Node.js | 22+ | [nodejs.org](https://nodejs.org) |
-| uv | Latest | [astral.sh/uv](https://docs.astral.sh/uv/getting-started/installation/) |
-
-### Quick Start
-
-Fastest for MacOS, WSL and Ubuntu users:
+| Tool | Version |
+|------|---------|
+| Git | Any supported version |
+| Docker | Docker Desktop or Docker Engine with Compose v2 |
 
 ```bash
-# Clone the repository
 git clone https://github.com/ObaidGits/FitWRight.git
 cd FitWRight
-
-# Backend (Terminal 1)
-cd apps/backend
-cp .env.example .env        # Configure your AI provider
-uv sync                      # Install dependencies
-uv run app
-
-# Frontend (Terminal 2)
-cd apps/frontend
-npm install
-npm run dev
+docker compose up -d --build
 ```
 
-Open **<http://localhost:3000>** and configure your AI provider in Settings.
+When `docker compose ps` reports the service as healthy, open **<http://localhost:3000>** and configure your AI provider in Settings. No API key is required to install or start the app, and local data persists in a Docker volume.
+
+For native development with hot reload, install Node.js 24 and `uv`, then run:
+
+```bash
+bash scripts/setup-local.sh
+```
+
+Start the backend and frontend using the commands printed by the script. See **[SETUP.md](SETUP.md)** for custom ports, Ollama, updates, native commands, and troubleshooting.
 
 ### Supported AI Providers
 
@@ -130,10 +122,10 @@ Open **<http://localhost:3000>** and configure your AI provider in Settings.
 
 ### Docker Deployment
 
-Build and run on a single public port (`3000`) with the API available at `/api`:
+Build and run locally on one public port (`3000`) with the API available at `/api`:
 
 ```bash
-docker compose up -d
+docker compose up -d --build
 ```
 
 Endpoints:
@@ -150,7 +142,7 @@ Endpoints:
 |-----------|------------|
 | Backend | FastAPI, Python 3.13+, LiteLLM |
 | Frontend | Next.js 16, React 19, TypeScript |
-| Database | TinyDB (JSON file storage) |
+| Database | SQLite locally; PostgreSQL for hosted deployments |
 | Styling | Tailwind CSS 4, Swiss International Style |
 | PDF | Headless Chromium via Playwright |
 

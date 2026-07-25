@@ -117,6 +117,7 @@ export interface InterviewPrepData {
 
 export interface Data {
   request_id: string;
+  preview_id: string | null;
   resume_id: string | null;
   job_id: string;
   resume_preview: ResumePreview;
@@ -136,6 +137,11 @@ export interface Data {
   diff_summary?: ResumeDiffSummary;
   detailed_changes?: ResumeFieldDiff[];
   ats_score?: ATSScore;
+  /** Internal tailoring diagnostics (not shown to the user directly). */
+  warnings?: string[];
+  /** User-facing Extra-Instructions outcomes only (e.g. "Added project KRIA",
+   *  "Couldn't add X"). Shown in the review "Notes on your instructions" card. */
+  instruction_notes?: string[];
 }
 
 export interface ImprovedResult {

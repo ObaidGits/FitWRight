@@ -1,66 +1,45 @@
 # Quickstart Guide
 
-> Essential commands to build, run, and test FitWright.
+> Essential commands to install, run, and test FitWright.
 
-## Prerequisites
+## User installation
 
-- Node.js 22+
-- Python 3.13+
-- [uv](https://docs.astral.sh/uv/) (Python package manager)
-
-## Installation
+Docker Compose is the canonical local path:
 
 ```bash
-# Backend (from repo root)
-cd apps/backend
-uv sync
+docker compose up -d --build
+docker compose ps
+```
 
-# Frontend (from repo root)
+Open <http://localhost:3000> after the service becomes healthy. Configure AI at <http://localhost:3000/settings>; a provider key is not required for startup.
+
+## Native developer setup
+
+Requires Node.js 24 and `uv` with Python 3.13:
+
+```bash
+bash scripts/setup-local.sh
+```
+
+Then run in separate terminals:
+
+```bash
+cd apps/backend && RELOAD=true uv run app
+cd apps/frontend && npm run dev
+```
+
+## Quality checks
+
+```bash
+cd apps/backend
+uv sync --frozen --extra dev
+uv run pytest -q
+
 cd apps/frontend
-npm install
+npm ci
+npm run lint
+npm run test
+npm run build
 ```
 
-## Development
-
-```bash
-# Backend (Terminal 1, from repo root)
-cd apps/backend
-uv run uvicorn app.main:app --reload --port 8000
-
-# Frontend (Terminal 2, from repo root)
-cd apps/frontend
-npm run dev
-```
-
-## Quality Checks
-
-```bash
-# From apps/frontend
-npm run lint     # Lint frontend
-npm run format   # Prettier
-```
-
-## Backend Commands
-
-```bash
-cd apps/backend
-uv run uvicorn app.main:app --reload --port 8000
-uv run pytest
-```
-
-## Environment Setup
-
-```bash
-# Backend
-cp apps/backend/.env.example apps/backend/.env
-
-# Frontend
-cp apps/frontend/.env.sample apps/frontend/.env.local
-```
-
-## First-Time Setup
-
-1. Open http://localhost:3000/settings
-2. Select AI provider + enter API key
-3. Click "Test Connection"
-4. Upload your first resume!
+Environment templates are `apps/backend/.env.example` and `apps/frontend/.env.sample`. Setup never overwrites real environment files or local data. See [SETUP.md](../../SETUP.md) for Ollama, custom ports, and troubleshooting.

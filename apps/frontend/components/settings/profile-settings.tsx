@@ -23,7 +23,7 @@ import { useToast } from '@/components/atelier/toast';
 import { AvatarUploader } from '@/components/profile/avatar-uploader';
 import { useSession } from '@/lib/context/session';
 import { getProfile, updateProfile, type Profile, type ProfileLink } from '@/lib/api/profile';
-import { queryKeys } from '@/lib/query/client';
+import { queryKeys, invalidateResumeLists } from '@/lib/query/client';
 
 export function ProfileSettings() {
   const { toast } = useToast();
@@ -35,6 +35,10 @@ export function ProfileSettings() {
   const syncAvatarEverywhere = React.useCallback(async () => {
     await refreshSession();
     qc.invalidateQueries({ queryKey: queryKeys.professionalProfile });
+    // Resume cards/previews resolve the canonical photo server-side; refresh the
+    // list surfaces so they reflect the new avatar (editor detail is left alone
+    // to avoid clobbering in-progress edits - it re-resolves on next open).
+    invalidateResumeLists(qc);
   }, [refreshSession, qc]);
 
   const profileQuery = useQuery<Profile>({ queryKey: queryKeys.profile, queryFn: getProfile });

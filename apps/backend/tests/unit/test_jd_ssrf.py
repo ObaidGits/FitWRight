@@ -64,6 +64,19 @@ class TestUrlValidation:
         with pytest.raises(SsrfError):
             validate_fetch_url("https:///nohost")
 
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "https://example.com:not-a-port/path",
+            "https://example.com:99999/path",
+            "https://example.com:-1/path",
+        ],
+    )
+    def test_malformed_port_uses_opaque_ssrf_error(self, url):
+        with pytest.raises(SsrfError) as exc:
+            validate_fetch_url(url)
+        assert exc.value.reason == "invalid_port"
+
 
 class TestRealFetchGuard:
     """Exercise the real fetch() path (no mock) - it must block before connecting."""

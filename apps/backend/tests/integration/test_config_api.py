@@ -123,7 +123,9 @@ class TestLlmConfig:
     async def test_put_omitting_api_base_leaves_it_unchanged(
         self, mock_load, mock_save, mock_log_health, client
     ):
-        mock_load.return_value = {"provider": "openrouter", "api_base": "http://keep/v1"}
+        # Custom-base provider: omitting api_base must leave the saved base
+        # untouched (the base legitimately belongs to this provider).
+        mock_load.return_value = {"provider": "openai_compatible", "api_base": "http://keep/v1"}
         async with client:
             resp = await client.put(
                 "/api/v1/config/llm-api-key",
@@ -133,9 +135,179 @@ class TestLlmConfig:
         assert mock_save.call_args.args[0]["api_base"] == "http://keep/v1"
         mock_log_health.assert_awaited_once()
 
+    # --- Gemini 404 bug: a stale Base URL must NOT leak to a cloud provider ---
+    @patch("app.routers.config._log_llm_health_check", new_callable=AsyncMock)
+    @patch("app.routers.config._save_config")
+    @patch("app.routers.config._load_config")
+    async def test_switching_to_cloud_provider_drops_stale_base(
+        self, mock_load, mock_save, mock_log_health, client
+    ):
+        # User was on openai_compatible (base saved), then switches to gemini.
+        mock_load.return_value = {
+            "provider": "openai_compatible",
+            "model": "deepseek-v4-flash-free",
+            "api_base": "https://opencode.ai/zen/v1",
+        }
+        async with client:
+            resp = await client.put(
+                "/api/v1/config/llm-api-key",
+                json={"provider": "gemini", "model": "gemini-2.5-flash"},
+            )
+        assert resp.status_code == 200
+        # Stored base cleared, and the response never reports the leaked base.
+        assert mock_save.call_args.args[0]["api_base"] is None
+        assert resp.json()["api_base"] is None
+
+    # --- Fix 7: provider is validated against the supported set -----------
+    @patch("app.routers.config._save_config")
+    @patch("app.routers.config._load_config")
+    async def test_put_rejects_unknown_provider(self, mock_load, mock_save, client):
+        mock_load.return_value = {}
+        async with client:
+            resp = await client.put(
+                "/api/v1/config/llm-api-key",
+                json={"provider": "not-a-provider", "model": "x"},
+            )
+        assert resp.status_code == 422
+        mock_save.assert_not_called()
+
+    @patch("app.routers.config._log_llm_health_check", new_callable=AsyncMock)
+    @patch("app.routers.config._save_config")
+    @patch("app.routers.config._load_config")
+    async def test_put_accepts_every_supported_provider(
+        self, mock_load, mock_save, _health, client
+    ):
+        mock_load.return_value = {}
+        providers = [
+            "openai",
+            "openai_compatible",
+            "anthropic",
+            "openrouter",
+            "gemini",
+            "deepseek",
+            "groq",
+            "ollama",
+        ]
+        async with client:
+            for p in providers:
+                resp = await client.put(
+                    "/api/v1/config/llm-api-key", json={"provider": p, "model": "m"}
+                )
+                assert resp.status_code == 200, p
+
+    # --- Fix 8: api_base must be a valid http(s) URL when provided --------
+    @patch("app.routers.config._save_config")
+    @patch("app.routers.config._load_config")
+    async def test_put_rejects_malformed_api_base(self, mock_load, mock_save, client):
+        mock_load.return_value = {}
+        async with client:
+            for bad in ("not a url", "ftp://host/v1", "justtext", "://missing-scheme"):
+                resp = await client.put(
+                    "/api/v1/config/llm-api-key",
+                    json={"provider": "openai_compatible", "model": "m", "api_base": bad},
+                )
+                assert resp.status_code == 422, bad
+        mock_save.assert_not_called()
+
+    @patch("app.routers.config._log_llm_health_check", new_callable=AsyncMock)
+    @patch("app.routers.config._save_config")
+    @patch("app.routers.config._load_config")
+    async def test_put_accepts_valid_api_base(self, mock_load, mock_save, _health, client):
+        mock_load.return_value = {}
+        async with client:
+            resp = await client.put(
+                "/api/v1/config/llm-api-key",
+                json={
+                    "provider": "openai_compatible",
+                    "model": "m",
+                    "api_base": "https://opencode.ai/zen/v1",
+                },
+            )
+        assert resp.status_code == 200
+        assert mock_save.call_args.args[0]["api_base"] == "https://opencode.ai/zen/v1"
+
+    @patch("app.routers.config._save_config")
+    @patch("app.routers.config._load_config")
+    async def test_put_rejects_blank_model(self, mock_load, mock_save, client):
+        mock_load.return_value = {}
+        async with client:
+            resp = await client.put(
+                "/api/v1/config/llm-api-key",
+                json={"provider": "openai", "model": "   "},
+            )
+        assert resp.status_code == 422
+        mock_save.assert_not_called()
+
+    # --- Fix 6: reasoning_effort round-trips through PUT ------------------
+    @patch("app.routers.config._log_llm_health_check", new_callable=AsyncMock)
+    @patch("app.routers.config._save_config")
+    @patch("app.routers.config._load_config")
+    async def test_put_persists_reasoning_effort(
+        self, mock_load, mock_save, _health, client
+    ):
+        mock_load.return_value = {"provider": "openai", "model": "gpt-5"}
+        async with client:
+            resp = await client.put(
+                "/api/v1/config/llm-api-key",
+                json={"provider": "openai", "model": "gpt-5", "reasoning_effort": "high"},
+            )
+        assert resp.status_code == 200
+        assert mock_save.call_args.args[0]["reasoning_effort"] == "high"
+        assert resp.json()["reasoning_effort"] == "high"
+
+    @patch("app.routers.config._log_llm_health_check", new_callable=AsyncMock)
+    @patch("app.routers.config._save_config")
+    @patch("app.routers.config._load_config")
+    async def test_put_clears_reasoning_effort_with_empty_string(
+        self, mock_load, mock_save, _health, client
+    ):
+        mock_load.return_value = {
+            "provider": "openai",
+            "model": "gpt-5",
+            "reasoning_effort": "high",
+        }
+        async with client:
+            resp = await client.put(
+                "/api/v1/config/llm-api-key",
+                json={"provider": "openai", "model": "gpt-5", "reasoning_effort": ""},
+            )
+        assert resp.status_code == 200
+        # Persisted as "" (so the gpt-5 auto-migration does not re-fire) and
+        # surfaced as null in the response.
+        assert mock_save.call_args.args[0]["reasoning_effort"] == ""
+        assert resp.json()["reasoning_effort"] is None
+
+    @patch("app.routers.config._save_config")
+    @patch("app.routers.config._load_config")
+    async def test_put_rejects_invalid_reasoning_effort(self, mock_load, mock_save, client):
+        mock_load.return_value = {}
+        async with client:
+            resp = await client.put(
+                "/api/v1/config/llm-api-key",
+                json={"provider": "openai", "model": "gpt-5", "reasoning_effort": "extreme"},
+            )
+        assert resp.status_code == 422
+        mock_save.assert_not_called()
+
 
 class TestLlmTest:
     """POST /api/v1/config/llm-test"""
+
+    @pytest.fixture(autouse=True)
+    def _stub_structured_probe(self):
+        # The endpoint runs a structured-output probe after a healthy connection;
+        # stub it so these connectivity tests stay hermetic (no real provider).
+        with patch(
+            "app.routers.config.check_structured_output", new_callable=AsyncMock
+        ) as m:
+            m.return_value = {
+                "structured_ok": True,
+                "structured_verdict": "reliable",
+                "structured_attempts": 2,
+                "structured_successes": 2,
+                "structured_message": "ok",
+            }
+            yield m
 
     @patch("app.routers.config.check_llm_health", new_callable=AsyncMock)
     @patch("app.routers.config._load_config")
@@ -199,6 +371,42 @@ class TestLlmTest:
         assert config.api_key == "typed-local-key"
         assert config.api_base == "http://localhost:1234/v1"
 
+    # --- Fix 13: llm-test honors reasoning_effort (test == prod behavior) ---
+    @patch("app.routers.config.check_llm_health", new_callable=AsyncMock)
+    @patch("app.routers.config._load_config")
+    async def test_connection_test_uses_request_reasoning_effort(
+        self, mock_load, mock_health, client
+    ):
+        mock_load.return_value = {"provider": "openai", "model": "gpt-5"}
+        mock_health.return_value = {"healthy": True, "provider": "openai", "model": "gpt-5"}
+        async with client:
+            resp = await client.post(
+                "/api/v1/config/llm-test",
+                json={"provider": "openai", "model": "gpt-5", "reasoning_effort": "high"},
+            )
+        assert resp.status_code == 200
+        config = mock_health.call_args.args[0]
+        assert config.reasoning_effort == "high"
+
+    @patch("app.routers.config.check_llm_health", new_callable=AsyncMock)
+    @patch("app.routers.config._load_config")
+    async def test_connection_test_falls_back_to_stored_reasoning_effort(
+        self, mock_load, mock_health, client
+    ):
+        mock_load.return_value = {
+            "provider": "openai",
+            "model": "gpt-5",
+            "reasoning_effort": "low",
+        }
+        mock_health.return_value = {"healthy": True, "provider": "openai", "model": "gpt-5"}
+        async with client:
+            resp = await client.post(
+                "/api/v1/config/llm-test",
+                json={"provider": "openai", "model": "gpt-5"},
+            )
+        assert resp.status_code == 200
+        assert mock_health.call_args.args[0].reasoning_effort == "low"
+
     @patch("app.routers.config.check_llm_health", new_callable=AsyncMock)
     @patch("app.routers.config._load_config")
     async def test_connection_test_falls_back_to_stored_key_when_request_omits_it(
@@ -230,6 +438,50 @@ class TestLlmTest:
         assert config.model == "llama-3.1-8b"
         assert config.api_key == "stored-local-key"
         assert config.api_base == "http://localhost:8080/v1"
+
+    @patch("app.routers.config.check_llm_health", new_callable=AsyncMock)
+    @patch("app.routers.config._load_config")
+    async def test_healthy_connection_merges_structured_verdict(
+        self, mock_load, mock_health, client
+    ):
+        """A connected-but-weak model surfaces a clear structured-output verdict
+        + warning, so the user learns it may fail BEFORE tailoring."""
+        mock_load.return_value = {"provider": "openai_compatible", "model": "weak"}
+        mock_health.return_value = {"healthy": True, "provider": "openai_compatible", "model": "weak"}
+        with patch(
+            "app.routers.config.check_structured_output", new_callable=AsyncMock
+        ) as probe:
+            probe.return_value = {
+                "structured_ok": False,
+                "structured_verdict": "unsupported",
+                "structured_attempts": 2,
+                "structured_successes": 0,
+                "structured_message": "This model failed to return valid structured output.",
+            }
+            async with client:
+                resp = await client.post("/api/v1/config/llm-test")
+        body = resp.json()
+        assert body["healthy"] is True  # connection is fine
+        assert body["structured_verdict"] == "unsupported"
+        assert body["structured_ok"] is False
+        # Elevated to a visible warning even though the connection works.
+        assert body["warning_code"] == "structured_output_unsupported"
+        assert body["warning"]
+
+    @patch("app.routers.config.check_llm_health", new_callable=AsyncMock)
+    @patch("app.routers.config._load_config")
+    async def test_unhealthy_connection_skips_structured_probe(
+        self, mock_load, mock_health, client
+    ):
+        mock_load.return_value = {}
+        mock_health.return_value = {"healthy": False, "error_code": "api_key_missing"}
+        with patch(
+            "app.routers.config.check_structured_output", new_callable=AsyncMock
+        ) as probe:
+            async with client:
+                resp = await client.post("/api/v1/config/llm-test")
+        assert resp.json()["healthy"] is False
+        probe.assert_not_awaited()
 
 
 class TestFeatureConfig:
@@ -522,3 +774,27 @@ class TestLegacyKeyMigration:
         if config_module.CONFIG_FILE_PATH.exists():
             config_module.CONFIG_FILE_PATH.unlink()
         migrate_legacy_keys()
+
+
+@pytest.mark.asyncio
+async def test_concurrent_disjoint_api_key_patches_do_not_clobber(isolated_db, owner_id):
+    """Two provider updates racing in separate transactions must both survive."""
+    import asyncio
+
+    await asyncio.gather(
+        asyncio.to_thread(
+            isolated_db.patch_api_key_ciphertexts,
+            owner_id,
+            {"openai": "cipher-a"},
+        ),
+        asyncio.to_thread(
+            isolated_db.patch_api_key_ciphertexts,
+            owner_id,
+            {"anthropic": "cipher-b"},
+        ),
+    )
+
+    assert isolated_db.get_api_key_ciphertexts(owner_id) == {
+        "openai": "cipher-a",
+        "anthropic": "cipher-b",
+    }

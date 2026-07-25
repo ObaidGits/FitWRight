@@ -1,19 +1,16 @@
 """Integration tests for ``GET /api/v1/admin/security`` (Task 13.4).
 
-Exercises the real Security view endpoint end-to-end over an ASGI transport
-against an isolated temp database in **hosted** mode, so authN/CSRF/rate-limit/
-capability all apply. Reuses the ``_client`` / ``_admin_client`` / ``_seed`` /
-``hosted`` harness from :mod:`tests.integration.test_admin_api`.
-
-Covers the ``require_admin_read`` authz matrix (anon 401, non-admin 403, admin
-200 - Req 9.4 / 15.1) with a secret-free ``SecurityView`` body (Property 3 /
-Req 15.8). With an empty store the view degrades to all-zero counts rather than
-erroring (no ``audit_log`` fallback - Req 9.5).
+Exercises the real exact-window Security view endpoint end-to-end over an ASGI
+transport against an isolated temp database in hosted mode. The admin login used
+to authorize the successful request is itself a durable audit event, so the
+response must report it rather than assuming an empty aggregate source.
 
 Requirements: 9.4, 15.1, 15.8.
 """
 
 from __future__ import annotations
+
+from datetime import datetime, timedelta
 
 import pytest
 
@@ -46,20 +43,19 @@ class TestSecurityAuthz:
             resp = await client.get(_SECURITY_URL)
         assert resp.status_code == 200
         body = resp.json()
-        # No secret ever serializes (Property 3 / Req 15.8).
         assert_no_forbidden_fields(body)
-        # Fixed 24h window + every count present and non-negative.
+
         assert body["windowHours"] == 24
+        start = datetime.fromisoformat(body["windowStart"])
+        end = datetime.fromisoformat(body["windowEnd"])
+        assert end - start == timedelta(hours=24)
+        assert body["windowKind"] == "exact_trailing"
+        assert body["adminLoginRoleBasis"] == "current_role_at_query_time"
+
         for field in ("loginFailed", "adminLogin", "authzDenied", "rateLimited", "suspicious"):
             assert field in body
             assert body[field] >= 0
-        # Empty store -> all-zero counts, no audit_log fallback (Req 9.5).
-        assert body["loginFailed"] == 0
-        assert body["adminLogin"] == 0
-        assert body["authzDenied"] == 0
-        assert body["rateLimited"] == 0
-        assert body["suspicious"] == 0
-        # Honesty: signals with no durable source are flagged not-instrumented
-        # (rendered as such by the UI) rather than surfaced as a real "0".
-        assert set(body["notInstrumented"]) == {"rateLimited", "suspicious"}
-        assert "computedAt" in body
+        # The login establishing this admin session is in the exact audit window.
+        assert body["adminLogin"] >= 1
+        assert body["notInstrumented"] == []
+        assert body["computedAt"] == body["windowEnd"]

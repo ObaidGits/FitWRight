@@ -6,6 +6,7 @@ import logging
 import re
 import threading
 import time
+from collections import OrderedDict
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal
@@ -13,7 +14,7 @@ from typing import Any, Literal
 import litellm
 from litellm import Router
 from litellm.router import RetryPolicy
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from app.config import load_config_file, save_config_file, settings
 
@@ -44,6 +45,12 @@ LLM_TIMEOUT_HEALTH_CHECK = 30
 LLM_TIMEOUT_COMPLETION = 120
 LLM_TIMEOUT_JSON = 180  # JSON completions may take longer
 
+# Health-check probe output budget. Must be generous enough for a reasoning
+# model to complete its hidden reasoning AND emit a visible token, otherwise a
+# small budget is consumed entirely by reasoning (finish_reason="length") and
+# the probe sees empty content. Clamped to the model's real limit at call time.
+HEALTH_CHECK_MAX_TOKENS = 512
+
 # JSON-010: JSON extraction safety limits
 MAX_JSON_EXTRACTION_RECURSION = 10
 MAX_JSON_CONTENT_SIZE = 1024 * 1024  # 1MB
@@ -53,6 +60,40 @@ MAX_JSON_CONTENT_SIZE = 1024 * 1024  # 1MB
 # output limits. Callers should use get_safe_max_tokens() so this is
 # automatically clamped to the model's actual capacity.
 DEFAULT_JSON_MAX_TOKENS = 8192
+
+
+class LLMRequestCancelled(asyncio.CancelledError):
+    """Structured provider work was cancelled by its owning request."""
+
+
+async def _await_with_cancellation(
+    awaitable: Awaitable[Any],
+    cancel_check: Callable[[], Awaitable[bool]] | None,
+) -> Any:
+    """Await provider work while polling an optional distributed cancel check.
+
+    LiteLLM owns the underlying transport task. Cancelling and awaiting it here
+    closes that work promptly and prevents an abandoned request from continuing
+    to consume provider time in the background.
+    """
+    task = asyncio.ensure_future(awaitable)
+    if cancel_check is None:
+        return await task
+
+    try:
+        if await cancel_check():
+            raise LLMRequestCancelled()
+        while True:
+            done, _ = await asyncio.wait({task}, timeout=0.5)
+            if done:
+                return task.result()
+            if await cancel_check():
+                raise LLMRequestCancelled()
+    except BaseException:
+        if not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        raise
 
 
 class LLMConfig(BaseModel):
@@ -198,37 +239,30 @@ def _join_text_parts(parts: list[str]) -> str | None:
 
 
 def _extract_message_text(message: Any) -> str | None:
-    """Extract plain text from a LiteLLM message object across providers.
+    """Extract only the provider's final answer from ``message.content``.
 
-    Fallback order:
-      1. message.content (standard OpenAI-compatible path)
-      2. message.reasoning_content (DeepSeek R1, OpenAI o1/o3 via LiteLLM
-         standardized field)
-      3. message.thinking (Anthropic extended thinking)
-
-    Reasoning-only responses are treated as valid content so thinking models
-    can be used without special-casing them in every call site.
+    Reasoning channels are deliberately excluded. Promoting
+    ``reasoning_content`` or ``thinking`` to final output leaks internal
+    reasoning and, for structured calls, feeds prose into the JSON parser.
+    Providers must place their user-visible answer in the standard content
+    channel; a reasoning-only response is treated as incomplete.
     """
-    content: Any = None
+    return _join_text_parts(_extract_text_parts(_safe_get(message, "content")))
 
-    if hasattr(message, "content"):
-        content = message.content
-    elif isinstance(message, dict):
-        content = message.get("content")
 
-    text = _join_text_parts(_extract_text_parts(content))
-    if text:
-        return text
+def _extract_reasoning_text(message: Any) -> str | None:
+    """Extract provider reasoning for explicit, internal diagnostics only.
 
-    # Fallback: reasoning_content (DeepSeek R1, OpenAI o1/o3).
-    reasoning = _safe_get(message, "reasoning_content")
-    text = _join_text_parts(_extract_text_parts(reasoning))
-    if text:
-        return text
-
-    # Fallback: thinking (Anthropic extended thinking).
-    thinking = _safe_get(message, "thinking")
-    return _join_text_parts(_extract_text_parts(thinking))
+    This helper must never be used as an application response or structured
+    payload fallback. Keeping it separate makes that boundary mechanically
+    reviewable while still allowing safe presence/length diagnostics.
+    """
+    reasoning = _join_text_parts(
+        _extract_text_parts(_safe_get(message, "reasoning_content"))
+    )
+    if reasoning:
+        return reasoning
+    return _join_text_parts(_extract_text_parts(_safe_get(message, "thinking")))
 
 
 def _safe_get(obj: Any, key: str) -> Any:
@@ -258,6 +292,22 @@ def _extract_choice_text(choice: Any) -> str | None:
                 return extracted
 
     return None
+
+
+def _finish_reason(response: Any) -> str | None:
+    """Return ``choices[0].finish_reason`` for a completion response, or None.
+
+    ``"length"`` means the model hit ``max_tokens`` before finishing - the key
+    signal that a reasoning model spent the whole budget on hidden reasoning
+    tokens and had no room left to emit visible content.
+    """
+    try:
+        choices = _safe_get(response, "choices") or []
+        if not choices:
+            return None
+        return _safe_get(choices[0], "finish_reason")
+    except Exception:  # pragma: no cover - defensive only
+        return None
 
 
 def _to_code_block(content: str | None, language: str = "text") -> str:
@@ -322,6 +372,25 @@ _PROVIDER_KEY_MAP: dict[str, str] = {
 _PROVIDERS_WITHOUT_ENV_KEY_FALLBACK: frozenset[str] = frozenset(
     {"openai_compatible", "ollama"}
 )
+
+
+# Providers whose endpoint IS a user-supplied Base URL. Every other provider
+# must use LiteLLM's built-in endpoint for that provider, so a stored/env
+# ``api_base`` (which only makes sense for a custom endpoint) must never be
+# applied to them. Without this guard a Base URL saved for ``openai_compatible``
+# leaks into e.g. ``gemini`` on a provider switch and the request 404s against
+# the wrong host even with a correct key + model.
+_CUSTOM_BASE_PROVIDERS: frozenset[str] = frozenset({"openai_compatible", "ollama"})
+
+
+def provider_uses_custom_base(provider: str) -> bool:
+    """Whether ``provider``'s endpoint is a user-supplied Base URL.
+
+    Only these providers should ever carry an ``api_base``; cloud providers
+    (openai/anthropic/gemini/openrouter/deepseek/groq) always use their own
+    default endpoint, so any stored base is ignored for them.
+    """
+    return provider in _CUSTOM_BASE_PROVIDERS
 
 
 def resolve_api_key(stored: dict, provider: str) -> str:
@@ -400,11 +469,17 @@ def get_llm_config(user_id: str | None = None) -> LLMConfig:
     # Normalize empty string to None - user explicitly cleared.
     reasoning_effort = raw_re if raw_re else None
 
+    # Only custom-endpoint providers carry a Base URL. Ignoring it for cloud
+    # providers prevents a stale base (e.g. left over from openai_compatible)
+    # from being sent to gemini/openai/anthropic/... and 404-ing.
+    raw_api_base = stored.get("api_base", settings.llm_api_base)
+    api_base = raw_api_base if provider_uses_custom_base(provider) else None
+
     return LLMConfig(
         provider=provider,
         model=model,
         api_key=api_key,
-        api_base=stored.get("api_base", settings.llm_api_base),
+        api_base=api_base,
         reasoning_effort=reasoning_effort,
     )
 
@@ -461,8 +536,13 @@ def get_model_name(config: LLMConfig) -> str:
 # Router - centralises transport retries, cooldowns, and error-type policies
 # ---------------------------------------------------------------------------
 
-_router: Router | None = None
-_router_config_key: str = ""
+# Bounded LRU cache of Routers keyed by config fingerprint. A single-slot cache
+# thrashed under multi-user/hosted load: alternating users (different keys)
+# rebuilt the Router on nearly every request. Keeping one Router per distinct
+# config removes that thrash while bounding memory (least-recently-used configs
+# are evicted).
+_ROUTER_CACHE_MAX = 32
+_router_cache: "OrderedDict[str, Router]" = OrderedDict()
 _router_lock = threading.Lock()
 
 
@@ -514,23 +594,29 @@ def _build_router(config: LLMConfig) -> Router:
 
 
 def get_router(config: LLMConfig | None = None) -> tuple[Router, LLMConfig]:
-    """Get or rebuild the LiteLLM Router.
+    """Get (or build) the LiteLLM Router for ``config``.
 
-    The Router is cached and only rebuilt when the underlying config changes.
+    Routers are cached per distinct config fingerprint in a bounded LRU, so a
+    given provider/model/key/base reuses its Router across requests instead of
+    rebuilding it whenever a different user's config was used in between.
     Returns the Router and the config it was built from.
     """
-    global _router, _router_config_key
-
     if config is None:
         config = get_llm_config()
 
     key = _config_fingerprint(config)
     with _router_lock:
-        if _router is None or _router_config_key != key:
-            _router = _build_router(config)
-            _router_config_key = key
-            logging.info("LiteLLM Router rebuilt for %s/%s", config.provider, config.model)
-        router = _router
+        router = _router_cache.get(key)
+        if router is None:
+            router = _build_router(config)
+            _router_cache[key] = router
+            logging.info("LiteLLM Router built for %s/%s", config.provider, config.model)
+            # Evict least-recently-used entries beyond the cap.
+            while len(_router_cache) > _ROUTER_CACHE_MAX:
+                _router_cache.popitem(last=False)
+        else:
+            # Mark most-recently-used.
+            _router_cache.move_to_end(key)
 
     return router, config
 
@@ -562,29 +648,65 @@ async def check_llm_health(
     prompt = test_prompt or "Hi"
 
     try:
-        # Make a minimal test call with timeout
+        # Make a test call with timeout. The probe budget must be large enough
+        # for a REASONING model to finish its hidden reasoning AND still emit a
+        # visible token; a tiny budget (the former 64) is spent entirely on
+        # reasoning, returning finish_reason="length" with empty content and a
+        # false "unhealthy". Clamp to the model's real output limit.
+        probe_max_tokens = get_safe_max_tokens(model_name, HEALTH_CHECK_MAX_TOKENS)
         # Pass API key directly to avoid race conditions with global os.environ
         kwargs: dict[str, Any] = {
             "model": model_name,
             "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": 64,
+            "max_tokens": probe_max_tokens,
             "api_key": _effective_api_key(config.provider, config.api_key),
             "api_base": _normalize_api_base(config.provider, config.api_base),
             "timeout": LLM_TIMEOUT_HEALTH_CHECK,
         }
-        if config.reasoning_effort:
+        if _supports_reasoning_effort(model_name, config.reasoning_effort):
             kwargs["reasoning_effort"] = config.reasoning_effort
 
         response = await litellm.acompletion(**kwargs)
         content = _extract_choice_text(response.choices[0])
         if not content:
-            # LLM-003: Empty response (even after reasoning_content / thinking
-            # fallbacks in _extract_choice_text) marks health as unhealthy.
+            finish_reason = _finish_reason(response)
+            reasoning = _extract_reasoning_text(_safe_get(response.choices[0], "message"))
+            # A reasoning model that hit the token cap mid-reasoning
+            # (finish_reason="length") with visible reasoning output IS
+            # reachable, authenticated, and generating - it simply needs a
+            # larger budget, which real feature calls provide. Treat this as
+            # healthy-with-warning rather than a misleading configuration
+            # failure (fixes the false "Connection failed" for reasoning models).
+            if finish_reason == "length" and reasoning:
+                logging.info(
+                    "LLM health check: reasoning model exhausted probe budget "
+                    "on internal reasoning; treating as healthy",
+                    extra={"provider": config.provider, "model": config.model},
+                )
+                result: dict[str, Any] = {
+                    "healthy": True,
+                    "provider": config.provider,
+                    "model": config.model,
+                    "response_model": response.model if response else None,
+                    "warning_code": "reasoning_truncated",
+                    "warning": (
+                        "This is a reasoning model. The connection works, but the "
+                        "short test used its whole budget on internal reasoning. "
+                        "Real requests use a larger budget and will return output."
+                    ),
+                }
+                if include_details:
+                    result["test_prompt"] = _to_code_block(prompt)
+                    result["model_output"] = _to_code_block(None)
+                    result["reasoning_content"] = _to_code_block(reasoning)
+                return result
+            # LLM-003: Genuine empty response (no reasoning, or a normal stop)
+            # marks health as unhealthy.
             logging.warning(
                 "LLM health check returned empty content",
                 extra={"provider": config.provider, "model": config.model},
             )
-            result: dict[str, Any] = {
+            result = {
                 "healthy": False,
                 "provider": config.provider,
                 "model": config.model,
@@ -657,16 +779,199 @@ async def check_llm_health(
         return result
 
 
+class _ProbeChange(BaseModel):
+    path: str
+    action: str
+    value: str
+
+
+class _StructuredProbeOutput(BaseModel):
+    """Representative schema for the structured-output capability probe.
+
+    Deliberately mirrors the NESTED shape resume tailoring actually demands (an
+    object containing an array of objects with fixed string keys, plus a scalar)
+    rather than a trivial flat object. A trivial `{ok, tags}` probe is passed
+    even by weak models that then fail the real diff/keyword schema; this nested
+    shape is a far better predictor of whether tailoring will succeed.
+    """
+
+    changes: list[_ProbeChange]
+    notes: str
+
+
+_STRUCTURED_PROBE_PROMPT = (
+    'Return ONLY a JSON object with exactly two keys:\n'
+    '  "changes": an array of exactly TWO objects, each with the string keys '
+    '"path", "action", and "value";\n'
+    '  "notes": a short string.\n'
+    'Example (match this shape exactly):\n'
+    '{"changes": [{"path": "summary", "action": "replace", "value": "text"}, '
+    '{"path": "skills", "action": "reorder", "value": "text"}], "notes": "done"}\n'
+    'Output only the JSON object - no prose, no markdown, no code fence.'
+)
+
+
+async def check_structured_output(
+    config: LLMConfig | None = None,
+    *,
+    attempts: int = 2,
+) -> dict[str, Any]:
+    """Probe whether a model reliably returns valid STRUCTURED (JSON) output.
+
+    This is the capability that actually decides whether features like resume
+    tailoring work - a plain "Hi" health check passes for models that later fail
+    to produce parseable JSON. Runs the same ``complete_json`` path the features
+    use, a few times, and returns a clear verdict:
+
+    - ``reliable``    - every attempt returned valid structured output.
+    - ``flaky``       - some attempts succeeded; generation may need a retry.
+    - ``unsupported`` - no attempt produced valid structured output; features
+                        that need JSON will likely fail on this model.
+
+    A non-content provider error (auth / rate limit / timeout / unavailable /
+    request rejected) short-circuits to ``verdict="unknown"`` with the classified
+    reason, since that is a connection problem, not a structured-output verdict.
+    """
+    if config is None:
+        config = get_llm_config()
+
+    attempts = max(1, min(attempts, 3))
+    successes = 0
+    for _ in range(attempts):
+        try:
+            await complete_json(
+                _STRUCTURED_PROBE_PROMPT,
+                config=config,
+                system_prompt="You output only valid JSON matching the requested shape.",
+                max_tokens=256,
+                retries=1,
+                schema_type="diff",
+                response_model=_StructuredProbeOutput,
+            )
+            successes += 1
+        except Exception as exc:  # noqa: BLE001 - classified below
+            _status, code, message, _retryable = classify_llm_error(exc)
+            if code != "llm_response_invalid":
+                # Not a structured-output problem - a real connection/provider
+                # error. Report it as such rather than a capability verdict.
+                logging.info(
+                    "Structured-output probe hit a provider error (%s); "
+                    "reporting as connection issue",
+                    code,
+                    extra={"provider": config.provider, "model": config.model},
+                )
+                return {
+                    "structured_ok": None,
+                    "structured_verdict": "unknown",
+                    "structured_attempts": attempts,
+                    "structured_successes": successes,
+                    "structured_error_code": code,
+                    "structured_message": message,
+                }
+
+    if successes == attempts:
+        verdict, ok, msg = (
+            "reliable",
+            True,
+            "This model reliably returns the structured output the app needs.",
+        )
+    elif successes > 0:
+        verdict, ok, msg = (
+            "flaky",
+            True,
+            "This model works but sometimes returns invalid structured output; "
+            "generation may occasionally need a retry.",
+        )
+    else:
+        verdict, ok, msg = (
+            "unsupported",
+            False,
+            "This model failed to return valid structured output. Features like "
+            "resume tailoring may fail on it - choose a model that supports "
+            "JSON/structured output.",
+        )
+    return {
+        "structured_ok": ok,
+        "structured_verdict": verdict,
+        "structured_attempts": attempts,
+        "structured_successes": successes,
+        "structured_message": msg,
+    }
+
+
 # ---------------------------------------------------------------------------
 # AI metrics instrumentation (admin-panel-upgrade Req 4.1)
 # ---------------------------------------------------------------------------
 #
-# Every provider round-trip (the Router-backed completion functions below) is
-# counted once via the in-process AiMetricsService. Only the allowlisted
-# aggregate signals are recorded - total calls / success / failure / timeouts /
-# retries / per-provider counts / total tokens / latency. Rejected fields
-# (temperature, prompt/completion length, model version, system prompt, tool
-# calls, reasoning tokens, ids) are never passed. See app/admin/ai_metrics.py.
+# Every non-cancelled provider round-trip (the Router-backed completion functions
+# below) is counted once via the in-process AiMetricsService. The current metric
+# model is binary (success/failure), so cancelled streams are omitted rather than
+# misclassified; see ``stream_complete`` and its focused metrics test. Only the
+# allowlisted aggregate signals are recorded - total calls / success / failure /
+# timeouts / retries / per-provider counts / total tokens / latency. Rejected
+# fields (temperature, prompt/completion length, model version, system prompt,
+# tool calls, reasoning tokens, ids) are never passed. See app/admin/ai_metrics.py.
+
+
+def classify_llm_error(exc: BaseException) -> tuple[int, str, str, bool]:
+    """Classify provider failures into a stable, secret-safe API contract.
+
+    The exception chain is inspected because completion helpers may wrap the
+    transport exception. No upstream body, model name, URL, or credential data
+    is returned to clients.
+    """
+    chain: list[BaseException] = []
+    current: BaseException | None = exc
+    while current is not None and current not in chain:
+        chain.append(current)
+        current = current.__cause__ or current.__context__
+
+    def contains(*names: str) -> bool:
+        classes = tuple(
+            cls
+            for name in names
+            if isinstance((cls := getattr(litellm, name, None)), type)
+        )
+        return bool(classes) and any(isinstance(item, classes) for item in chain)
+
+    if contains("AuthenticationError"):
+        return 424, "llm_authentication_failed", "The AI provider rejected its credentials. Check the provider key in Settings.", False
+    if contains("RateLimitError"):
+        return 429, "llm_rate_limited", "The AI provider is rate-limiting requests. Please wait and retry.", True
+    if any(_is_timeout_error(item) for item in chain):
+        return 504, "llm_timeout", "The AI provider did not respond in time. Please retry.", True
+    if contains("BadRequestError", "ContextWindowExceededError"):
+        return 422, "llm_request_rejected", "The configured AI model rejected this request. Verify the model and provider settings.", False
+    if any(isinstance(item, (ValueError, ValidationError, json.JSONDecodeError)) for item in chain):
+        return 422, "llm_response_invalid", "The AI provider returned an invalid response. Please retry or choose another model.", True
+    if contains("ServiceUnavailableError", "InternalServerError", "APIConnectionError"):
+        return 503, "llm_provider_unavailable", "The AI provider is temporarily unavailable. Please retry shortly.", True
+    return 502, "llm_provider_error", "The AI provider could not complete the request. Please verify Settings or retry.", True
+
+
+def llm_api_error(
+    exc: BaseException,
+    *,
+    stage: str,
+    details: dict[str, Any] | None = None,
+) -> "ApiError":
+    """Build the standard secret-safe API error for a provider operation.
+
+    Call this only at a boundary known to be executing provider work; database,
+    storage, and programming failures must retain their own error semantics.
+    """
+    from app.errors import ApiError
+
+    status, code, message, retryable = classify_llm_error(exc)
+    safe_details: dict[str, Any] = {"stage": stage, "retryable": retryable}
+    if details:
+        safe_details.update(details)
+    return ApiError(
+        status_code=status,
+        code=code,
+        message=message,
+        details=safe_details,
+    )
 
 
 def _is_timeout_error(exc: BaseException) -> bool:
@@ -695,6 +1000,49 @@ def _usage_total_tokens(response: Any) -> int:
         return int(total) if total else 0
     except Exception:
         return 0
+
+
+def _router_retry_count(value: Any) -> int:
+    """Return a Router retry count only when LiteLLM explicitly exposes one.
+
+    Successful Router calls publish ``x-litellm-attempted-retries`` in the
+    response's private ``additional_headers`` metadata. Exhausted LiteLLM
+    exceptions publish both ``num_retries`` (actual attempts) and
+    ``max_retries``. Reading only these documented, numeric counters avoids
+    guessing from configured limits, exception wording, prompts, or other
+    potentially sensitive metadata.
+    """
+
+    def _non_negative_int(raw: Any) -> int | None:
+        if isinstance(raw, bool):
+            return None
+        try:
+            parsed = int(raw)
+        except (TypeError, ValueError):
+            return None
+        return parsed if parsed >= 0 else None
+
+    try:
+        hidden = _safe_get(value, "_hidden_params")
+        headers = _safe_get(hidden, "additional_headers")
+        explicit = _safe_get(headers, "x-litellm-attempted-retries")
+        parsed = _non_negative_int(explicit)
+        if parsed is not None:
+            return parsed
+    except Exception:
+        pass
+
+    # LiteLLM sets this pair after its Router exhausts retries. Requiring both
+    # fields avoids mistaking a deployment's configured ``num_retries`` for an
+    # observed retry count.
+    try:
+        actual = _non_negative_int(_safe_get(value, "num_retries"))
+        maximum = _non_negative_int(_safe_get(value, "max_retries"))
+        if actual is not None and maximum is not None:
+            return actual
+    except Exception:
+        pass
+    return 0
 
 
 def _record_ai_call(
@@ -751,22 +1099,65 @@ async def complete(
     _ok = False
     _timed_out = False
     _tokens = 0
+    _router_retries = 0
+    # Central clamp (fix 11): never send more than a KNOWN model limit on the
+    # first attempt; unknown/custom models keep the caller's request.
+    effective_max_tokens = _clamp_to_model_limit(model_name, max_tokens)
     try:
-        kwargs: dict[str, Any] = {
-            "model": "primary",
-            "messages": messages,
-            "max_tokens": max_tokens,
-            "timeout": _calculate_timeout("completion", max_tokens, config.provider),
-        }
-        if _supports_temperature(model_name, temperature):
-            kwargs["temperature"] = temperature
-        if config.reasoning_effort:
-            kwargs["reasoning_effort"] = config.reasoning_effort
+        content: str | None = None
+        # Up to 3 attempts to get non-empty content. Two empty-content shapes
+        # are recovered instead of failing:
+        #   * finish_reason="length" -> reasoning model spent the budget on
+        #     hidden reasoning; retry with a larger, model-clamped budget.
+        #   * genuine empty (normal stop, no content) -> the free model is
+        #     non-deterministic; retry (nudging temperature when supported).
+        # This directly hardens the small plain-text calls (title, outreach,
+        # cover letter) against the intermittent empty responses free models emit.
+        attempt_temperature = temperature
+        _MAX_EMPTY_ATTEMPTS = 3
+        for _attempt in range(_MAX_EMPTY_ATTEMPTS):
+            kwargs: dict[str, Any] = {
+                "model": "primary",
+                "messages": messages,
+                "max_tokens": effective_max_tokens,
+                "timeout": _calculate_timeout(
+                    "completion", effective_max_tokens, config.provider
+                ),
+            }
+            if _supports_temperature(model_name, attempt_temperature):
+                kwargs["temperature"] = attempt_temperature
+            if _supports_reasoning_effort(model_name, config.reasoning_effort):
+                kwargs["reasoning_effort"] = config.reasoning_effort
 
-        response = await router.acompletion(**kwargs)
-        _tokens = _usage_total_tokens(response)
+            response = await router.acompletion(**kwargs)
+            _router_retries = _router_retry_count(response)
+            _tokens = _usage_total_tokens(response)
 
-        content = _extract_choice_text(response.choices[0])
+            content = _extract_choice_text(response.choices[0])
+            if content:
+                break
+            if _attempt >= _MAX_EMPTY_ATTEMPTS - 1:
+                break
+            bumped = get_safe_max_tokens(model_name, effective_max_tokens + 2048)
+            if _finish_reason(response) == "length" and bumped > effective_max_tokens:
+                logging.info(
+                    "Empty content with finish_reason=length; retrying with a "
+                    "larger budget (%d -> %d) for %s",
+                    effective_max_tokens,
+                    bumped,
+                    model_name,
+                )
+                effective_max_tokens = bumped
+            else:
+                # Genuine empty response: nudge temperature (when supported) and
+                # retry, since the provider is non-deterministic.
+                logging.info(
+                    "Empty content (finish_reason=%s); retrying for %s",
+                    _finish_reason(response),
+                    model_name,
+                )
+                attempt_temperature = min(1.0, (attempt_temperature or 0.7) + 0.2)
+
         if not content:
             raise ValueError("Empty response from LLM")
         # Strip thinking tags from reasoning models (deepseek-r1, qwq, etc.)
@@ -778,6 +1169,8 @@ async def complete(
         return content
     except Exception as e:
         _timed_out = _is_timeout_error(e)
+        if _router_retries == 0:
+            _router_retries = _router_retry_count(e)
         # Log the actual error server-side for debugging
         logging.error(f"LLM completion failed: {e}", extra={
                       "model": model_name})
@@ -785,13 +1178,11 @@ async def complete(
             "LLM completion failed. Please check your API configuration and try again."
         ) from e
     finally:
-        # retried: the Router's transport retries are not observable here, so
-        # this single-shot path best-effort reports no app-level retry (0).
         _record_ai_call(
             config.provider,
             ok=_ok,
             timed_out=_timed_out,
-            retried=False,
+            retried=_router_retries,
             tokens=_tokens,
             latency_ms=(time.perf_counter() - _start) * 1000,
         )
@@ -827,22 +1218,24 @@ class StreamResult:
 
 
 def provider_supports_streaming(config: LLMConfig | None = None) -> bool:
-    """Capability probe: whether the active provider/model can stream (R1.3).
+    """Return whether the active model is known not to support native streams.
 
-    LiteLLM supports SSE streaming for all first-class providers we ship; the
-    only realistic non-streaming case is a misconfigured OpenAI-compatible
-    server. We consult LiteLLM's model registry when available and default to
-    ``True`` for known providers, so a negative probe deterministically routes
-    the client to the non-stream fallback.
+    LiteLLM's model registry exposes ``supports_native_streaming``. A declared
+    negative is authoritative. Registry entries that predate the flag and
+    unknown compatible models remain runtime-probed instead of being disabled;
+    their stream errors are classified by the SSE endpoint.
     """
     if config is None:
         config = get_llm_config()
     model_name = get_model_name(config)
     try:
-        return bool(litellm.supports_response_schema) or litellm.supports_function_calling(model_name) or True
+        info = litellm.get_model_info(model_name) or {}
+        supports = info.get("supports_native_streaming")
+        return supports is not False
     except Exception:
-        # Unknown/local model - assume streaming works; a mid-stream error still
-        # triggers the transparent fallback, so this is safe.
+        # Unknown is not the same as unsupported. This preserves streaming for
+        # custom OpenAI-compatible servers while allowing explicit registry
+        # negatives to take the deterministic non-stream path.
         return True
 
 
@@ -879,6 +1272,9 @@ async def stream_complete(
     """
     router, config = get_router(config)
     model_name = get_model_name(config)
+    # Central clamp (fix 11): cap to a KNOWN model limit; unknown/custom models
+    # keep the caller's request.
+    max_tokens = _clamp_to_model_limit(model_name, max_tokens)
 
     messages: list[dict[str, str]] = []
     if system_prompt:
@@ -897,25 +1293,33 @@ async def stream_complete(
     }
     if _supports_temperature(model_name, temperature):
         kwargs["temperature"] = temperature
-    if config.reasoning_effort:
+    if _supports_reasoning_effort(model_name, config.reasoning_effort):
         kwargs["reasoning_effort"] = config.reasoning_effort
 
     # AI metrics (Req 4.1): time + classify this streamed provider round-trip.
-    # Recorded once when the stream completes/errors/closes (via the outer
-    # finally), reading the allowlisted aggregate token count off ``result``.
+    # The current metric model has no cancellation state and requires every
+    # recorded call to be success or failure. Cancelled/consumer-closed streams
+    # are therefore deliberately omitted rather than misclassified; completed
+    # and provider-failed streams are still recorded once.
     _start = time.perf_counter()
     _ok = False
     _timed_out = False
+    _router_retries = 0
+    _cancelled_for_metrics = False
+    saw_reasoning = False
     try:
         try:
             response = await router.acompletion(**kwargs)
+            _router_retries = _router_retry_count(response)
         except Exception as _e:
             _timed_out = _is_timeout_error(_e)
+            _router_retries = _router_retry_count(_e)
             raise
         try:
             async for chunk in response:
                 if cancel_check is not None and await cancel_check():
                     result.cancelled = True
+                    _cancelled_for_metrics = True
                     break
                 # Capture usage if the provider reports it on any chunk.
                 usage = _safe_get(chunk, "usage")
@@ -929,6 +1333,8 @@ async def stream_complete(
                 if not choices:
                     continue
                 delta = _safe_get(choices[0], "delta")
+                if _extract_reasoning_text(delta):
+                    saw_reasoning = True
                 piece = _join_text_parts(_extract_text_parts(_safe_get(delta, "content")))
                 if piece:
                     result.text += piece
@@ -943,25 +1349,39 @@ async def stream_complete(
                 except Exception:  # pragma: no cover - provider close best-effort
                     pass
 
-        # Strip reasoning tags from the accumulated text for reasoning models.
+        # Strip reasoning tags from providers that embed them in content.
         if "<think>" in result.text:
             result.text = _strip_thinking_tags(result.text)
+
+        if not result.cancelled and not result.text:
+            detail = (
+                "Provider streamed reasoning but no final answer"
+                if saw_reasoning
+                else "Provider stream completed without final content"
+            )
+            raise ValueError(detail)
 
         # Fill in usage if the provider didn't report it (or on cancellation).
         if result.usage.total_tokens == 0 and result.text:
             est = _estimate_tokens(result.text)
             result.usage = StreamUsage(completion_tokens=est, total_tokens=est)
 
-        _ok = True
+        _ok = not result.cancelled
+    except (GeneratorExit, asyncio.CancelledError):
+        # Closing the async generator is another cancellation shape. Preserve
+        # result semantics while keeping it out of provider success/failure.
+        _cancelled_for_metrics = True
+        raise
     finally:
-        _record_ai_call(
-            config.provider,
-            ok=_ok,
-            timed_out=_timed_out,
-            retried=False,
-            tokens=result.usage.total_tokens,
-            latency_ms=(time.perf_counter() - _start) * 1000,
-        )
+        if not _cancelled_for_metrics:
+            _record_ai_call(
+                config.provider,
+                ok=_ok,
+                timed_out=_timed_out,
+                retried=_router_retries,
+                tokens=result.usage.total_tokens,
+                latency_ms=(time.perf_counter() - _start) * 1000,
+            )
 
 
 def _supports_json_mode(model_name: str) -> bool:
@@ -1069,6 +1489,34 @@ def get_safe_max_tokens(model_name: str, requested: int = DEFAULT_JSON_MAX_TOKEN
     return safe
 
 
+def _clamp_to_model_limit(model_name: str, requested: int) -> int:
+    """Clamp ``requested`` to the model's real output cap when the registry knows it.
+
+    Unlike :func:`get_safe_max_tokens`, an UNKNOWN/custom model (common for
+    self-hosted ``openai_compatible`` endpoints) keeps the caller's requested
+    value rather than being shrunk to the conservative fallback - shrinking a
+    self-hosted model's budget could needlessly truncate large resumes. This is
+    the central guard that stops a caller's raw ``max_tokens`` from exceeding a
+    *known* provider limit (which would 400 or truncate), addressing the
+    previously un-clamped first attempt in complete()/complete_json()/stream.
+    """
+    safe_requested = max(1, requested)
+    try:
+        info = litellm.get_model_info(model=model_name) or {}
+        limit = info.get("max_output_tokens") or info.get("max_tokens")
+        if isinstance(limit, int) and limit > 0 and limit < safe_requested:
+            logging.debug(
+                "Clamping max_tokens %d -> %d for %s (known model limit)",
+                safe_requested,
+                limit,
+                model_name,
+            )
+            return limit
+    except Exception:  # pragma: no cover - registry lookup is best-effort
+        pass
+    return safe_requested
+
+
 def _appears_truncated(data: dict, schema_type: str = "resume") -> bool:
     """LLM-001: Check if JSON data appears to be truncated.
 
@@ -1131,6 +1579,47 @@ def _appears_truncated(data: dict, schema_type: str = "resume") -> bool:
     # Diff may legitimately return empty changes; keywords may return empty
     # lists when the job description has no actionable terms.
     return False
+
+
+def _supports_reasoning_effort(model_name: str, effort: str | None) -> bool:
+    """Return whether the registry advertises the requested reasoning control.
+
+    Unknown/custom models are treated conservatively: omitting an optional
+    tuning parameter is safer than turning an otherwise valid completion into a
+    provider 400. LiteLLM still receives the model's natural default behavior.
+    """
+    if not effort:
+        return False
+    # Custom / self-hosted endpoints honor an explicitly configured effort
+    # (fix 14). These map to the ``openai/`` (openai_compatible) and
+    # ``ollama``/``ollama_chat`` prefixes. LiteLLM's registry only *guesses* the
+    # capabilities of a user's private server (it often returns a generic OpenAI
+    # entry that omits reasoning), so its opinion is not authoritative here. We
+    # therefore trust the user's explicit choice and rely on
+    # ``litellm.drop_params=True`` to strip the param before sending when the
+    # endpoint does not accept it (verified: no 400) - enabling reasoning on
+    # capable custom models without breaking ones that ignore it. Real
+    # first-party ``openai`` models carry no ``openai/`` prefix and fall through
+    # to the registry check below, so their behavior is unchanged.
+    if model_name.startswith(("openai/", "ollama/", "ollama_chat/")):
+        return True
+    try:
+        info = litellm.get_model_info(model=model_name) or {}
+        params = info.get("supported_openai_params", []) or []
+        if "reasoning_effort" not in params and not info.get("supports_reasoning"):
+            return False
+        flag_by_effort = {
+            "minimal": "supports_minimal_reasoning_effort",
+            "low": "supports_low_reasoning_effort",
+            "high": "supports_max_reasoning_effort",
+        }
+        flag = flag_by_effort.get(effort)
+        return flag is None or info.get(flag) is not False
+    except Exception:
+        logging.debug(
+            "Model %s not in LiteLLM registry; omitting reasoning_effort", model_name
+        )
+        return False
 
 
 def _supports_temperature(model_name: str, temperature: float | None = None) -> bool:
@@ -1220,11 +1709,16 @@ def _calculate_timeout(
     # Scale by token count (relative to 4096 baseline)
     token_factor = max(1.0, max_tokens / 4096)
 
-    # Provider-specific latency adjustments
+    # Provider-specific latency adjustments. Includes the self-hosted/aggregator
+    # and reasoning-heavy providers that were previously missing (and silently
+    # got the 1.0 default), which under-budgeted their typically higher latency.
     provider_factors = {
         "openai": 1.0,
         "anthropic": 1.2,
-        "openrouter": 1.5,  # More variable latency
+        "openrouter": 1.5,  # Aggregator: more variable latency
+        "openai_compatible": 1.5,  # Self-hosted / gateway: unknown latency profile
+        "deepseek": 1.5,  # Reasoning models emit many hidden tokens
+        "gemini": 1.2,
         "groq": 1.0,
         "ollama": 2.0,  # Local models can be slower
     }
@@ -1332,6 +1826,76 @@ def _extract_json(content: str, _depth: int = 0) -> str:
     raise ValueError(f"No JSON found in response: {original[:200]}")
 
 
+def _repair_json(text: str) -> str:
+    """Best-effort repair of near-valid JSON from weaker/free models.
+
+    Fixes the common ways a free model breaks strict JSON without changing the
+    data's meaning: surrounding prose, ``//`` comments, trailing commas, smart
+    quotes, and truncated output (unclosed strings/objects/arrays). Returns a
+    candidate string for ``json.loads``; callers still validate the parsed
+    result, so an over-eager repair can only fail closed (never fabricates).
+    """
+    s = text.strip()
+    if s.startswith("```"):
+        s = re.sub(r"^```[a-zA-Z]*\n?", "", s).rsplit("```", 1)[0].strip()
+
+    # Trim to the outermost JSON container (drop leading/trailing prose).
+    starts = [i for i in (s.find("{"), s.find("[")) if i != -1]
+    if starts:
+        s = s[min(starts):]
+    end = max(s.rfind("}"), s.rfind("]"))
+    if end != -1:
+        s = s[: end + 1]
+
+    # Strip // line comments and /* */ block comments outside strings is hard;
+    # do a conservative line-level strip of leading `//` comment lines.
+    s = re.sub(r"(?m)^\s*//.*$", "", s)
+    # Normalize smart quotes that models sometimes emit.
+    s = s.replace("\u201c", '"').replace("\u201d", '"').replace("\u2019", "'")
+    # Remove trailing commas before a closing } or ].
+    s = re.sub(r",(\s*[}\]])", r"\1", s)
+
+    # Balance quotes/brackets for truncated output. Scan string-aware and append
+    # the closers still open at end-of-text (in reverse order).
+    stack: list[str] = []
+    in_string = False
+    escape = False
+    for ch in s:
+        if in_string:
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch in "{[":
+            stack.append(ch)
+        elif ch in "}]":
+            if stack and ((ch == "}" and stack[-1] == "{") or (ch == "]" and stack[-1] == "[")):
+                stack.pop()
+    if in_string:
+        s += '"'
+    # Drop a dangling trailing comma introduced by truncation, then close.
+    s = re.sub(r",\s*$", "", s.rstrip())
+    for opener in reversed(stack):
+        s += "}" if opener == "{" else "]"
+    return s
+
+
+def _loads_lenient(json_str: str) -> Any:
+    """Parse JSON, transparently applying :func:`_repair_json` on failure."""
+    try:
+        return json.loads(json_str)
+    except json.JSONDecodeError:
+        repaired = _repair_json(json_str)
+        parsed = json.loads(repaired)  # may raise; caller handles/retries
+        logging.info("Recovered malformed JSON via repair pass")
+        return parsed
+
+
 async def complete_json(
     prompt: str,
     system_prompt: str | None = None,
@@ -1339,17 +1903,22 @@ async def complete_json(
     max_tokens: int = 4096,
     retries: int = 2,
     schema_type: str = "resume",
+    response_model: type[BaseModel] | None = None,
+    cancel_check: Callable[[], Awaitable[bool]] | None = None,
 ) -> dict[str, Any]:
-    """Make a completion request expecting JSON response.
+    """Make a completion request expecting a validated JSON object.
 
-    Uses JSON mode when available, with app-level retries for content-quality
-    issues (malformed JSON, truncation).  Transport retries (429, 500, timeout)
-    are handled by the Router and are NOT retried again here.
+    Provider-native JSON Schema is preferred when a Pydantic ``response_model``
+    is supplied and the model registry advertises support. Otherwise this uses
+    JSON-object mode and finally prompt-only JSON after a classified provider
+    rejection. Content-quality retries cover malformed, truncated, and
+    schema-invalid output; transport retries remain owned by LiteLLM Router.
 
-    Args:
-        schema_type: Expected schema - "resume", "enrichment", "diff",
-            "keywords", or "interview_prep". Passed to _appears_truncated for
-            context-aware truncation detection and used to tailor retry hints.
+    ``response_model`` validates at this shared trust boundary while the
+    original dictionary is returned so provider aliases and extra, explicitly
+    tolerated workflow fields are preserved. ``cancel_check`` is polled while
+    the provider request is in flight; cancellation closes the transport task
+    and raises :class:`LLMRequestCancelled` without recording a false failure.
     """
     router, config = get_router(config)
     model_name = get_model_name(config)
@@ -1363,16 +1932,35 @@ async def complete_json(
         {"role": "user", "content": prompt},
     ]
 
-    # Check if we can use JSON mode
+    # Capability negotiation: native JSON Schema gives the strongest contract,
+    # then JSON-object mode, then prompt-only JSON when the provider rejects the
+    # advertised response format.
     use_json_mode = _supports_json_mode(model_name)
-    json_mode_failed = False
+    use_json_schema = False
+    if response_model is not None:
+        try:
+            use_json_schema = bool(litellm.supports_response_schema(model_name))
+        except Exception:
+            use_json_schema = False
+    response_format_mode: Literal["json_schema", "json_object", "prompt"] = (
+        "json_schema" if use_json_schema else "json_object" if use_json_mode else "prompt"
+    )
 
     # Output budget for this call. A truncation-triggered retry raises this
     # (clamped to the model's real limit) rather than re-issuing an identically
     # capped request that would truncate again - fewer wasted, doomed retries.
-    effective_max_tokens = max_tokens
+    # Central clamp (fix 11): cap the first attempt to a KNOWN model limit;
+    # unknown/custom models keep the caller's request.
+    effective_max_tokens = _clamp_to_model_limit(model_name, max_tokens)
 
     for attempt in range(retries + 1):
+        _attempt_start = time.perf_counter()
+        _attempt_ok = False
+        _attempt_timed_out = False
+        _attempt_tokens = 0
+        _attempt_router_retries = 0
+        _call_started = False
+        _attempt_cancelled = False
         try:
             kwargs: dict[str, Any] = {
                 "model": "primary",
@@ -1384,52 +1972,62 @@ async def complete_json(
             retry_temp = _get_retry_temperature(model_name, attempt)
             if retry_temp is not None:
                 kwargs["temperature"] = retry_temp
-            if config.reasoning_effort:
+            if _supports_reasoning_effort(model_name, config.reasoning_effort):
                 kwargs["reasoning_effort"] = config.reasoning_effort
 
-            # JSON-012: Fallback to prompt-only JSON mode after JSON-mode failure.
-            # LiteLLM registry may report support for models that the upstream
-            # aggregator (OpenRouter) cannot actually serve with response_format.
-            if use_json_mode and not json_mode_failed:
+            if response_format_mode == "json_schema" and response_model is not None:
+                kwargs["response_format"] = {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": response_model.__name__,
+                        "strict": True,
+                        "schema": response_model.model_json_schema(),
+                    },
+                }
+            elif response_format_mode == "json_object":
                 kwargs["response_format"] = {"type": "json_object"}
 
-            # AI metrics (Req 4.1): record this single provider round-trip.
-            # complete_json's app-level retries each perform one round-trip, so
-            # each is counted once here (retried=True for attempt > 0). This is
-            # the narrowest, non-nested call site - complete_json does not call
-            # complete()/stream_complete(), so there is no double-counting.
-            _attempt_start = time.perf_counter()
+            # Metrics are finalized only after structured content validation.
+            # Each Router invocation is one call; ``attempt > 0`` contributes
+            # exactly one app-level content retry, while explicit Router retry
+            # metadata contributes transport retries without inference.
+            _call_started = True
             try:
-                response = await router.acompletion(**kwargs)
-            except Exception as _call_exc:
-                _record_ai_call(
-                    config.provider,
-                    ok=False,
-                    timed_out=_is_timeout_error(_call_exc),
-                    retried=(attempt > 0),
-                    tokens=0,
-                    latency_ms=(time.perf_counter() - _attempt_start) * 1000,
+                response = await _await_with_cancellation(
+                    router.acompletion(**kwargs), cancel_check
                 )
+            except LLMRequestCancelled:
+                _attempt_cancelled = True
                 raise
-            _record_ai_call(
-                config.provider,
-                ok=True,
-                timed_out=False,
-                retried=(attempt > 0),
-                tokens=_usage_total_tokens(response),
-                latency_ms=(time.perf_counter() - _attempt_start) * 1000,
-            )
+            except Exception as _call_exc:
+                _attempt_timed_out = _is_timeout_error(_call_exc)
+                _attempt_router_retries = _router_retry_count(_call_exc)
+                raise
+            _attempt_router_retries = _router_retry_count(response)
+            _attempt_tokens = _usage_total_tokens(response)
             content = _extract_choice_text(response.choices[0])
 
             if not content:
+                # A reasoning model can spend the whole budget on hidden
+                # reasoning (finish_reason="length"), leaving no visible JSON.
+                # Raise the budget (model-clamped) so the content retry can
+                # actually emit the object instead of truncating identically.
+                if _finish_reason(response) == "length":
+                    bumped = get_safe_max_tokens(model_name, effective_max_tokens + 2048)
+                    if bumped > effective_max_tokens:
+                        effective_max_tokens = bumped
                 raise ValueError("Empty response from LLM")
 
             logging.debug(
                 f"LLM response (attempt {attempt + 1}): {content[:300]}")
 
-            # Extract and parse JSON
+            # Extract and parse JSON (with a repair pass for near-valid output).
             json_str = _extract_json(content)
-            result = json.loads(json_str)
+            result = _loads_lenient(json_str)
+            if not isinstance(result, dict):
+                raise ValueError("Structured response must be a JSON object")
+            if response_model is not None:
+                response_model.model_validate(result)
 
             # LLM-001: Check if parsed result appears truncated
             if isinstance(result, dict) and _appears_truncated(result, schema_type):
@@ -1463,22 +2061,30 @@ async def complete_json(
                     if bumped > effective_max_tokens:
                         effective_max_tokens = bumped
                     continue
-                logging.warning(
-                    "Parsed JSON appears truncated on final attempt, proceeding with result"
+                raise ValueError(
+                    f"Structured {schema_type} response remained incomplete after "
+                    f"{retries + 1} attempts"
                 )
 
+            _attempt_ok = True
             return result
 
         except json.JSONDecodeError as e:
             # Content quality - malformed JSON, retry with prompt hint
             logging.warning(f"JSON parse failed (attempt {attempt + 1}): {e}")
-            if use_json_mode and not json_mode_failed:
-                # JSON-012: Registry claimed JSON mode support but the upstream
-                # failed to return valid JSON. Disable JSON mode for retries.
-                json_mode_failed = True
+            if response_format_mode != "prompt":
+                # A provider that claimed native structured support returned
+                # malformed JSON. Step down one capability level for the retry.
+                response_format_mode = (
+                    "json_object"
+                    if response_format_mode == "json_schema" and use_json_mode
+                    else "prompt"
+                )
                 logging.warning(
-                    "JSON mode failed for %s, falling back to prompt-only (attempt %d)",
-                    model_name, attempt + 1,
+                    "Structured response mode failed for %s; retrying with %s (attempt %d)",
+                    model_name,
+                    response_format_mode,
+                    attempt + 1,
                 )
             if attempt < retries:
                 messages[-1]["content"] = (
@@ -1489,12 +2095,25 @@ async def complete_json(
             raise ValueError(
                 f"Failed to parse JSON after {retries + 1} attempts: {e}")
 
-        except ValueError as e:
-            # Content quality - empty response, JSON extraction failure
-            logging.warning(f"Content extraction failed (attempt {attempt + 1}): {e}")
+        except (ValueError, ValidationError) as e:
+            # Empty/extraction/truncation/schema failures are content-quality
+            # failures. Retry with an explicit contract reminder; never accept a
+            # partially valid object merely because the provider returned 2xx.
+            logging.warning(
+                "Structured content validation failed (attempt %d/%d): %s",
+                attempt + 1,
+                retries + 1,
+                e,
+            )
             if attempt < retries:
+                messages[-1]["content"] = (
+                    prompt
+                    + "\n\nIMPORTANT: Return one COMPLETE JSON object matching every requested field and type. No prose."
+                )
                 continue
-            raise
+            raise ValueError(
+                f"Invalid structured response after {retries + 1} attempts"
+            ) from e
 
         except litellm.BadRequestError as e:
             # JSON-012b: some OpenAI-compatible servers (e.g. LM Studio) report
@@ -1504,15 +2123,20 @@ async def complete_json(
             # retrying prompt-only. Unrelated 400s (e.g. context length) still
             # propagate.
             if (
-                use_json_mode
-                and not json_mode_failed
+                response_format_mode != "prompt"
                 and _is_response_format_unsupported(e)
             ):
-                json_mode_failed = True
+                rejected_mode = response_format_mode
+                response_format_mode = (
+                    "json_object"
+                    if rejected_mode == "json_schema" and use_json_mode
+                    else "prompt"
+                )
                 logging.warning(
-                    "Provider rejected response_format for %s; falling back to "
-                    "prompt-only JSON mode (attempt %d)",
+                    "Provider rejected %s response format for %s; retrying with %s (attempt %d)",
+                    rejected_mode,
                     model_name,
+                    response_format_mode,
                     attempt + 1,
                 )
                 if attempt < retries:
@@ -1524,5 +2148,15 @@ async def complete_json(
             # Cooldowns are disabled (see _build_router); no additional
             # retry is attempted here.
             raise
+        finally:
+            if _call_started and not _attempt_cancelled:
+                _record_ai_call(
+                    config.provider,
+                    ok=_attempt_ok,
+                    timed_out=_attempt_timed_out,
+                    retried=_attempt_router_retries + (1 if attempt > 0 else 0),
+                    tokens=_attempt_tokens,
+                    latency_ms=(time.perf_counter() - _attempt_start) * 1000,
+                )
 
     raise ValueError(f"Failed after {retries + 1} attempts")

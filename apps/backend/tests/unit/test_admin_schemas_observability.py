@@ -6,11 +6,11 @@ submodels - must serialize to a body that passes ``assert_no_forbidden_fields``
 (zero forbidden substrings) and must be strict (``extra="forbid"``) so a widened
 model can never silently ride a new column/secret into an admin response.
 
-The strategy: build a fully-populated representative instance of every model
-(every optional field set to a non-None value so the recursive guard actually
-visits it), dump via ``model_dump(by_alias=True)``, and assert the guard does
-not raise. We then assert each model rejects unknown fields and declares
-``extra="forbid"`` at the config level.
+The strategy: build a representative instance of every model with every required
+field and an honest combination of nullable values / availability markers, dump
+via ``model_dump(by_alias=True)``, and assert the guard does not raise. We then
+assert each model rejects unknown fields and declares ``extra="forbid"`` at the
+config level.
 """
 
 from __future__ import annotations
@@ -108,7 +108,10 @@ def _ai_analytics() -> AiAnalytics:
         avgUnitsPerCall=1234.0,
         timeouts=1,
         retries=3,
-        estimatedCostDollars=7,
+        estimatedCostDollars=None,
+        costUnavailable=True,
+        costUnavailableReason="Selected-window cost tracking is not instrumented.",
+        dataScope="durable_daily_plus_current_process",
         providers=[ProviderCount(provider="openai", calls=80), ProviderCount(provider="gemini", calls=20)],
         daily=_series(),
         computedAt=_TS,
@@ -118,11 +121,16 @@ def _ai_analytics() -> AiAnalytics:
 def _errors_summary() -> ErrorsSummary:
     return ErrorsSummary(
         window=30,
+        windowStartDate="2025-12-03",
+        windowEndDate="2026-01-01",
+        granularity="utc_day",
+        dataScope="durable_utc_day_buckets_plus_current_process_route_classes",
         counts4xx=42,
         counts5xx=3,
         topRouteClasses=[RouteClassFailures(routeClass="POST /resumes", failures=2)],
-        bySource=ErrorsBySource(api=3, job=1, storage=0, ai=2),
+        bySource=ErrorsBySource(api=45, job=0, storage=0, ai=2),
         trend=_series(),
+        notInstrumented=["bySource.job", "bySource.storage"],
         computedAt=_TS,
     )
 
@@ -132,12 +140,14 @@ def _performance_signals() -> PerformanceSignals:
         routeClasses=[RouteClassLatency(routeClass="GET /health", avgMs=5.0, p95Ms=9.0)],
         topSlowRoutes=[RouteClassLatency(routeClass="POST /tailor", avgMs=900.0, p95Ms=1500.0)],
         topSlowJobs=[SlowJob(name="rollup", avgMs=1200.0)],
-        dbQueryTimeMs=3.2,
+        dbQueryTimeMs=None,
         cacheHitRatio=0.95,
-        memoryBytes=1024,
-        cpuPercent=12.5,
-        diskBytes=2048,
-        unavailable=["cpuPercent"],
+        cacheObservationCount=100,
+        dataScope="current_process",
+        memoryBytes=None,
+        cpuPercent=None,
+        diskBytes=None,
+        unavailable=["dbQueryTimeMs"],
         computedAt=_TS,
     )
 
@@ -151,10 +161,13 @@ def _storage_panel() -> StoragePanel:
         avatarCount=12,
         resumeCount=340,
         resumeVersionCount=900,
+        countsUnavailable=False,
+        countsStale=False,
+        snapshotAt=_TS,
         retentionStatus="ok",
         growthBytesPerDay=1234.5,
         growthUnavailable=False,
-        growthUnavailableReason="insufficient samples",
+        growthUnavailableReason=None,
         computedAt=_TS,
     )
 
@@ -166,6 +179,8 @@ def _jobs_panel() -> JobsPanel:
         queueLengthUnavailable=False,
         purgeBacklog=2,
         purgeBacklogUnavailable=False,
+        deadLetterCount=1,
+        deadLetterCountUnavailable=False,
         computedAt=_TS,
         stale=False,
     )
@@ -174,11 +189,16 @@ def _jobs_panel() -> JobsPanel:
 def _security_view() -> SecurityView:
     return SecurityView(
         windowHours=24,
+        windowStart="2025-12-31T00:00:00+00:00",
+        windowEnd=_TS,
+        windowKind="exact_trailing",
+        adminLoginRoleBasis="current_role_at_query_time",
         loginFailed=4,
         adminLogin=1,
         authzDenied=0,
         rateLimited=2,
         suspicious=0,
+        notInstrumented=[],
         computedAt=_TS,
     )
 
@@ -187,6 +207,7 @@ def _config_diagnostics() -> ConfigDiagnostics:
     return ConfigDiagnostics(
         env="production",
         activeAiProviders=["openai", "gemini"],
+        providersSource="configured_provider_presence",
         storageProvider="cloudinary",
         emailProvider="smtp",
         featureFlags={"portfolio": True, "coverLetter": False},
@@ -207,6 +228,7 @@ def _overview_kpis() -> OverviewKpis:
         newUsersToday=KpiValue(value=12, unavailable=False),
         aiCallsToday=KpiValue(value=340, unavailable=False),
         errorRate24h=KpiValue(value=1.25, unavailable=False),
+        errorRateWindowLabel="current_utc_day_plus_previous_29_days",
         purgeBacklog=KpiValue(value=None, unavailable=True),
         computedAt=_TS,
         stale=False,
@@ -231,13 +253,15 @@ def _resume_analytics() -> ResumeAnalytics:
             generated=10,
             imported=5,
             tailored=20,
-            deleted=2,
-            generatedPct=27.03,
-            importedPct=13.51,
-            tailoredPct=54.05,
-            deletedPct=5.41,
+            generatedPct=28.57,
+            importedPct=14.29,
+            tailoredPct=57.14,
         ),
         topTemplates=[TemplateCount(name="Modern", count=15), TemplateCount(name="Classic", count=9)],
+        deletedInWindow=2,
+        netChange=8,
+        inventoryAsOf=_TS,
+        templatesAsOf=_TS,
         growth=_series(),
         computedAt=_TS,
     )

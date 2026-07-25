@@ -145,8 +145,8 @@ export function AiSuggestionCard({ className }: { className?: string }) {
         <span className="text-[11px] font-medium text-[var(--at-ai)]">Suggestion</span>
       </div>
       <p className="text-[11px] leading-relaxed text-[var(--foreground)]">
-        Quantify impact: "Cut API latency <span className="font-semibold">40%</span> by adding Redis
-        caching."
+        Quantify impact: &quot;Cut API latency <span className="font-semibold">40%</span> by adding
+        Redis caching.&quot;
       </p>
     </div>
   );

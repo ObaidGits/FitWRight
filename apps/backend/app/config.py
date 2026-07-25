@@ -1,8 +1,10 @@
 """Application configuration using pydantic-settings."""
 
+import copy
 import json
 import logging
 import secrets
+import time
 from pathlib import Path
 from typing import Any, Literal
 
@@ -64,20 +66,91 @@ CONFIG_FILE_PATH = Path(__file__).parent.parent / "data" / "config.json"
 ALLOWED_LOG_LEVELS = ("CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG")
 
 
+# ---------------------------------------------------------------------------
+# Hot-path caches (perf - audit B1)
+# ---------------------------------------------------------------------------
+# ``get_llm_config()`` resolves the caller's non-secret config AND their
+# decrypted provider API keys on EVERY LLM round-trip (keyword extraction,
+# rewrite, refinement, resume parsing, cover letter, ...). Previously each of
+# those calls paid, inline on the single event loop:
+#   1. a blocking ``config.json`` read + ``json.loads`` (``_read_config_json``);
+#   2. a synchronous DB query for the encrypted keys + a Fernet ``decrypt`` per
+#      key (``get_api_keys_from_config`` -> ``db.get_api_key_ciphertexts``).
+# For a single tailor that is 2-3x (keywords + rewrite + injection), more with
+# retries. We cache both without weakening correctness:
+#   * config.json is cached by its (mtime, size) signature, so a re-read only
+#     happens when the file actually changes - no TTL guesswork, and out-of-band
+#     edits are still picked up on the next stat().
+#   * decrypted keys are cached per user. The cache is invalidated at the DB
+#     write methods themselves (see app.database), so a rotation/clear is
+#     reflected immediately regardless of the caller; the TTL is only a backstop
+#     for multi-worker deployments where another worker rotates a key.
+_raw_config_cache: dict[str, Any] | None = None
+_raw_config_cache_sig: tuple[float, int] | None = None
+
+_api_key_cache: dict[str, tuple[float, dict[str, str]]] = {}
+_API_KEY_CACHE_TTL_SECONDS = 60.0
+_API_KEY_CACHE_MAX_ENTRIES = 2048
+
+
+def invalidate_config_read_cache() -> None:
+    """Drop the cached raw config.json read (call after any write)."""
+    global _raw_config_cache, _raw_config_cache_sig
+    _raw_config_cache = None
+    _raw_config_cache_sig = None
+
+
+def invalidate_api_key_cache(user_id: str | None = None) -> None:
+    """Drop cached decrypted keys for ``user_id`` (or all when ``None``).
+
+    Called from the DB key-write methods so a rotation/clear/delete is visible
+    on the very next resolution, preserving the pre-cache "always fresh"
+    guarantee. Safe to call with an unknown user id (no-op).
+    """
+    if user_id is None:
+        _api_key_cache.clear()
+    else:
+        _api_key_cache.pop(user_id, None)
+
+
 def _read_config_json() -> dict[str, Any]:
-    """Raw read of config.json (no key injection)."""
-    if CONFIG_FILE_PATH.exists():
-        try:
-            return json.loads(CONFIG_FILE_PATH.read_text())
-        except (json.JSONDecodeError, OSError):
-            return {}
-    return {}
+    """Raw read of config.json (no key injection), cached by file signature.
+
+    Re-reads only when the file's (mtime, size) changes, so the common hot-path
+    case is a single cheap ``stat()`` instead of a full read + JSON parse.
+    """
+    global _raw_config_cache, _raw_config_cache_sig
+    try:
+        st = CONFIG_FILE_PATH.stat()
+    except OSError:
+        # Absent/unreadable -> empty config; clear any stale cache entry.
+        _raw_config_cache = None
+        _raw_config_cache_sig = None
+        return {}
+
+    sig = (st.st_mtime, st.st_size)
+    if _raw_config_cache is not None and _raw_config_cache_sig == sig:
+        return copy.deepcopy(_raw_config_cache)
+
+    try:
+        data = json.loads(CONFIG_FILE_PATH.read_text())
+    except (json.JSONDecodeError, OSError):
+        return {}
+    if not isinstance(data, dict):
+        data = {}
+    _raw_config_cache = data
+    _raw_config_cache_sig = sig
+    return copy.deepcopy(data)
 
 
 def _write_config_json(config: dict[str, Any]) -> None:
     """Raw write of config.json (no secret stripping)."""
     CONFIG_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
     CONFIG_FILE_PATH.write_text(json.dumps(config, indent=2))
+    # The next read must reflect what we just wrote (the mtime signature would
+    # normally catch this, but invalidating explicitly avoids any sub-second
+    # mtime-resolution races on fast successive writes).
+    invalidate_config_read_cache()
 
 
 def load_config_file(user_id: str | None = None) -> dict[str, Any]:
@@ -142,11 +215,24 @@ def get_api_keys_from_config(user_id: str | None = None) -> dict[str, str]:
     from app.database import db
 
     uid = resolve_key_user_id(user_id)
+
+    now = time.monotonic()
+    cached = _api_key_cache.get(uid)
+    if cached is not None and (now - cached[0]) < _API_KEY_CACHE_TTL_SECONDS:
+        # Return a copy so a caller mutating the dict can't corrupt the cache.
+        return dict(cached[1])
+
     decrypted: dict[str, str] = {}
     for provider, ciphertext in db.get_api_key_ciphertexts(uid).items():
         plaintext = decrypt(ciphertext)
         if plaintext:
             decrypted[provider] = plaintext
+
+    # Bound memory: on the rare occasion the map grows large (many users on one
+    # process), reset rather than grow unbounded.
+    if len(_api_key_cache) >= _API_KEY_CACHE_MAX_ENTRIES:
+        _api_key_cache.clear()
+    _api_key_cache[uid] = (now, dict(decrypted))
     return decrypted
 
 
@@ -166,6 +252,25 @@ def save_api_keys_to_config(api_keys: dict[str, str], user_id: str | None = None
     # keys mid-replace.
     ciphertexts = {provider: encrypt(key) for provider, key in api_keys.items() if key}
     db.replace_api_keys(uid, ciphertexts)
+
+
+def patch_api_keys_in_config(
+    updates: dict[str, str | None], user_id: str | None = None
+) -> None:
+    """Atomically set/delete only the specified encrypted provider keys.
+
+    Encryption completes before the transaction starts, so encryption failures
+    leave the previous store untouched. ``None``/blank values delete one slot;
+    unrelated providers are never read or rewritten.
+    """
+    from app.crypto import encrypt
+    from app.database import db
+
+    uid = resolve_key_user_id(user_id)
+    encrypted: dict[str, str | None] = {}
+    for provider, key in updates.items():
+        encrypted[provider] = encrypt(key) if key else None
+    db.patch_api_key_ciphertexts(uid, encrypted)
 
 
 def delete_api_key_from_config(provider: str, user_id: str | None = None) -> None:
@@ -323,8 +428,17 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
     reload: bool = False
+    maintenance_mode: bool = False
     log_level: Literal["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"] = "INFO"
     frontend_base_url: str = "http://localhost:3000"
+
+    @field_validator("maintenance_mode", mode="before")
+    @classmethod
+    def _blank_maintenance_bool_to_default(cls, v: Any) -> Any:
+        """Treat a blank ``MAINTENANCE_MODE=`` as the safe disabled default."""
+        if isinstance(v, str) and not v.strip():
+            return False
+        return v
 
     # Hard timeout (seconds) for a single resume tailoring/improve request - the
     # backend wraps the improve flow in asyncio.wait_for(timeout=this). It MUST be
@@ -497,6 +611,15 @@ class Settings(BaseSettings):
     migration_database_url: str = ""
     db_pool_size: int = 5
     db_use_pooler: bool = True
+    # Idle pool size for the SYNC engine (encrypted api_keys). Kept small
+    # deliberately (audit D1): the decrypted-key cache (see get_api_keys_from_config)
+    # made this a COLD path - reads only happen on a cache miss (first use after
+    # boot) or a key rotation, and writes are rare. Holding a full db_pool_size
+    # of idle sync connections just doubled the Postgres connection budget the
+    # async document engine already consumes. ``max_overflow`` still rides up to
+    # db_pool_size so a cold-cache burst (e.g. right after deploy) is absorbed;
+    # only the steady-state idle footprint shrinks. SQLite ignores pooling.
+    db_sync_pool_size: int = 2
     # Postgres TLS mode (ADR-13). Blank -> derive from the DATABASE_URL's own
     # ``sslmode`` query param, else default to ``require`` in hosted mode and no
     # forced TLS in local single-user mode. Explicit values (disable | prefer |
@@ -553,6 +676,10 @@ class Settings(BaseSettings):
     # Bounded batch size for ``POST /users/bulk-disable`` (R6.4) - caps the
     # blast radius / request cost of a single bulk action.
     admin_bulk_disable_max: int = 100
+    # Lifetime (hours) of a single-use admin-invite token (secure admin signup,
+    # Option B). Short by default so a leaked link expires quickly; bounded to a
+    # sane window at validation time.
+    admin_invite_ttl_hours: int = 72
 
     @field_validator(
         "admin_enabled",
@@ -577,6 +704,18 @@ class Settings(BaseSettings):
         except (TypeError, ValueError, OverflowError):
             return 7
         return max(1, min(365, days))
+
+    @field_validator("admin_invite_ttl_hours", mode="before")
+    @classmethod
+    def _validate_invite_ttl(cls, v: Any) -> int:
+        """Coerce + bounds-check the invite lifetime to [1, 720] hours (<=30d)."""
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return 72
+        try:
+            hours = int(float(str(v).strip()))
+        except (TypeError, ValueError, OverflowError):
+            return 72
+        return max(1, min(720, hours))
 
     @field_validator("admin_bulk_disable_max", mode="before")
     @classmethod
@@ -824,13 +963,30 @@ class Settings(BaseSettings):
     pdf_max_concurrency: int = 2
     pdf_render_queue_timeout_seconds: int = 30
 
+    # Rendered-PDF cache (app.pdf_cache). Repeat downloads of the same resume +
+    # appearance are served from memory instead of re-rendering via Chromium, so
+    # they're near-instant. The key includes the resume content + resolved
+    # settings, so an edit or template change always busts it (never stale).
+    # ``pdf_prewarm_enabled`` warms Chromium in the background at startup so the
+    # first export doesn't pay the browser cold-start.
+    pdf_cache_enabled: bool = True
+    pdf_cache_ttl_seconds: int = 900
+    pdf_cache_max_entries: int = 64
+    pdf_prewarm_enabled: bool = True
+
     # Per-user rate limit (events/minute) for expensive LLM generation endpoints
     # (resume parse, cover letter, interview prep, enrichment, resume wizard,
     # JD-from-URL). Guards provider cost/abuse; 0 disables. Enforced via the
     # shared KVStore so it holds across workers/instances (see app.llm_ratelimit).
     llm_rate_per_min_user: int = 20
 
-    @field_validator("pdf_max_concurrency", "pdf_render_queue_timeout_seconds", mode="before")
+    @field_validator(
+        "pdf_max_concurrency",
+        "pdf_render_queue_timeout_seconds",
+        "pdf_cache_ttl_seconds",
+        "pdf_cache_max_entries",
+        mode="before",
+    )
     @classmethod
     def _validate_pdf_int(cls, v: Any, info: Any) -> int:
         default = cls.model_fields[info.field_name].default
@@ -971,6 +1127,9 @@ class Settings(BaseSettings):
     # rows older than these are pruned by the retention job (R17.4).
     notification_retention_days: int = 30
     outbox_retention_days: int = 7
+    # Maximum expired tailoring previews removed per retention run. A hard batch
+    # bound keeps cleanup transactions short even after a long scheduler outage.
+    tailor_preview_cleanup_batch: int = 1000
 
     @field_validator("search_enabled", "notifications_enabled", "notifications_email_enabled", "sse_notifications", mode="before")
     @classmethod
@@ -998,6 +1157,17 @@ class Settings(BaseSettings):
         if info.field_name == "notification_poll_interval_seconds":
             return max(15, min(300, n))
         return max(1, min(3650, n))
+
+    @field_validator("tailor_preview_cleanup_batch", mode="before")
+    @classmethod
+    def _validate_tailor_preview_cleanup_batch(cls, v: Any) -> int:
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return 1000
+        try:
+            value = int(float(str(v).strip()))
+        except (TypeError, ValueError, OverflowError):
+            return 1000
+        return max(1, min(10_000, value))
 
     # =====================================================================
     # P4 Resilience - streaming AI, offline support, advanced autosave

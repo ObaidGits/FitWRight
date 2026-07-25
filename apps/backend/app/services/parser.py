@@ -1,5 +1,6 @@
 """Document parsing service using markitdown and LLM."""
 
+import asyncio
 import logging
 import re
 import tempfile
@@ -128,17 +129,23 @@ async def parse_document(content: bytes, filename: str) -> str:
     """
     suffix = Path(filename).suffix.lower()
 
-    # Write to temp file for markitdown
-    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
-        tmp.write(content)
-        tmp_path = Path(tmp.name)
+    # markitdown is fully synchronous and CPU/IO-bound (PDF/DOCX parsing). On the
+    # single-worker event loop that would block every other in-flight request
+    # for the duration of a parse, so the whole conversion runs in a worker
+    # thread (audit B2). The temp-file lifecycle stays inside the thread so the
+    # file is created, consumed, and cleaned up without touching the loop.
+    def _convert() -> str:
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+            tmp.write(content)
+            tmp_path = Path(tmp.name)
+        try:
+            md = MarkItDown()
+            result = md.convert(str(tmp_path))
+            return result.text_content
+        finally:
+            tmp_path.unlink(missing_ok=True)
 
-    try:
-        md = MarkItDown()
-        result = md.convert(str(tmp_path))
-        return result.text_content
-    finally:
-        tmp_path.unlink(missing_ok=True)
+    return await asyncio.to_thread(_convert)
 
 
 async def parse_resume_to_json(markdown_text: str) -> dict[str, Any]:
@@ -166,6 +173,7 @@ async def parse_resume_to_json(markdown_text: str) -> dict[str, Any]:
         system_prompt="You are a JSON extraction engine. Output only valid JSON, no explanations.",
         max_tokens=get_safe_max_tokens(model_name),
         retries=3,
+        response_model=ResumeData,
     )
 
     # Patch dates: restore months the LLM may have dropped

@@ -7,6 +7,9 @@ path), SQLite keeps its PRAGMAs while Postgres does not, Postgres pooling honors
 audit finding C-1 - ``Database`` actually consumes ``effective_database_url``.
 """
 
+import logging
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -108,6 +111,7 @@ class TestPostgresEngine:
         """
         monkeypatch.setattr(settings, "db_use_pooler", True)
         monkeypatch.setattr(settings, "db_pool_size", 5)
+        monkeypatch.setattr(settings, "db_sync_pool_size", 2)
         async_engine = make_async_engine(self._URL)
         sync_engine = make_sync_engine(self._URL)
 
@@ -115,7 +119,11 @@ class TestPostgresEngine:
         assert not isinstance(async_engine.pool, NullPool)
         assert not isinstance(sync_engine.pool, NullPool)
         assert async_engine.pool.size() == 5
-        assert sync_engine.pool.size() == 5
+        # D1: the sync engine (encrypted api_keys) is a COLD path behind the
+        # decrypted-key cache, so it keeps a small idle pool while overflow rides
+        # up to db_pool_size for cold-cache bursts.
+        assert sync_engine.pool.size() == 2
+        assert db_engine._pg_sync_options()["max_overflow"] == 5
         assert async_engine.dialect.driver == "asyncpg"
         assert sync_engine.dialect.driver == "psycopg"
 
@@ -133,12 +141,15 @@ class TestPostgresEngine:
     def test_direct_mode_uses_sized_pool(self, monkeypatch):
         monkeypatch.setattr(settings, "db_use_pooler", False)
         monkeypatch.setattr(settings, "db_pool_size", 7)
+        monkeypatch.setattr(settings, "db_sync_pool_size", 3)
         async_engine = make_async_engine(self._URL)
         sync_engine = make_sync_engine(self._URL)
         assert isinstance(async_engine.pool, QueuePool)
         assert isinstance(sync_engine.pool, QueuePool)
         assert async_engine.pool.size() == 7
-        assert sync_engine.pool.size() == 7
+        # D1: sync engine keeps a small idle pool; overflow rides to db_pool_size.
+        assert sync_engine.pool.size() == 3
+        assert db_engine._pg_sync_options()["max_overflow"] == 7
 
 
 class TestDatabaseConsumesEffectiveUrl:
@@ -165,6 +176,153 @@ class TestDatabaseConsumesEffectiveUrl:
 
 
 class TestInitModelsSyncGuard:
+    def test_concurrent_sqlite_initializers_are_serialized(self, tmp_path):
+        db_path = tmp_path / "concurrent-init.db"
+        barrier = threading.Barrier(6)
+
+        def initialize() -> None:
+            engine = make_sync_engine(db_path)
+            try:
+                barrier.wait(timeout=5)
+                db_engine.init_models_sync(engine)
+            finally:
+                engine.dispose()
+
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            futures = [pool.submit(initialize) for _ in range(6)]
+            for future in futures:
+                future.result(timeout=20)
+
+        engine = make_sync_engine(db_path)
+        try:
+            with engine.connect() as conn:
+                tables = {
+                    row["name"]
+                    for row in conn.exec_driver_sql(
+                        "SELECT name FROM sqlite_master WHERE type = 'table'"
+                    ).mappings()
+                }
+            assert {"users", "resumes", "tailor_previews"} <= tables
+            assert db_path.with_name(f"{db_path.name}.schema.lock").is_file()
+        finally:
+            engine.dispose()
+
+    def test_repairs_all_non_unique_model_indexes_idempotently(self, tmp_path):
+        """Old local tables gain lookup indexes without risking new uniqueness.
+
+        ``create_all`` does not add indexes to an already-existing table. The
+        reconciler must preserve its rows, restore ordinary/model expression
+        indexes, skip unsafe unique indexes, and remain a no-op on a second run.
+        """
+        engine = make_sync_engine(tmp_path / "legacy-indexes.db")
+        try:
+            with engine.begin() as conn:
+                conn.exec_driver_sql(
+                    """
+                    CREATE TABLE users (
+                        id TEXT PRIMARY KEY,
+                        email TEXT NOT NULL,
+                        name TEXT NOT NULL
+                    )
+                    """
+                )
+                conn.exec_driver_sql(
+                    "INSERT INTO users (id, email, name) VALUES (?, ?, ?)",
+                    ("legacy-user", "legacy@example.com", "Legacy User"),
+                )
+
+            db_engine.init_models_sync(engine)
+            with engine.connect() as conn:
+                first_indexes = conn.exec_driver_sql(
+                    'PRAGMA index_list("users")'
+                ).mappings().all()
+                preserved = conn.exec_driver_sql(
+                    "SELECT id, email, name FROM users WHERE id = ?",
+                    ("legacy-user",),
+                ).one()
+
+            first_names = {row["name"] for row in first_indexes}
+            assert preserved == (
+                "legacy-user",
+                "legacy@example.com",
+                "Legacy User",
+            )
+            assert {
+                "ix_users_status",
+                "ix_users_role_status",
+                "ix_users_created_at_id",
+                "ix_users_name_lower",
+            } <= first_names
+            # Startup healing must not enforce uniqueness against unknown legacy
+            # data; explicit migrations own those constraints.
+            assert "ux_users_email" not in first_names
+
+            db_engine.init_models_sync(engine)
+            with engine.connect() as conn:
+                second_indexes = conn.exec_driver_sql(
+                    'PRAGMA index_list("users")'
+                ).mappings().all()
+                row_count = conn.exec_driver_sql(
+                    "SELECT COUNT(*) FROM users WHERE id = ?", ("legacy-user",)
+                ).scalar_one()
+
+            assert [row["name"] for row in second_indexes] == [
+                row["name"] for row in first_indexes
+            ]
+            assert row_count == 1
+        finally:
+            engine.dispose()
+
+    def test_warns_without_mutating_nonrepairable_sqlite_drift(
+        self, tmp_path, caplog
+    ):
+        engine = make_sync_engine(tmp_path / "legacy-drift.db")
+        try:
+            with engine.begin() as conn:
+                conn.exec_driver_sql(
+                    """
+                    CREATE TABLE resumes (
+                        resume_id INTEGER,
+                        user_id TEXT,
+                        content TEXT NOT NULL
+                    )
+                    """
+                )
+                conn.exec_driver_sql(
+                    "INSERT INTO resumes (resume_id, user_id, content) "
+                    "VALUES (1, 'owner', 'preserve me')"
+                )
+
+            with caplog.at_level(logging.WARNING, logger="app.db_engine"):
+                db_engine.init_models_sync(engine)
+
+            messages = [record.getMessage() for record in caplog.records]
+            resume_warning = next(
+                message for message in messages if "drift on resumes" in message
+            )
+            assert "primary_key" in resume_warning
+            assert "type resume_id" in resume_warning
+            assert "missing_unique_index=ux_resumes_single_master" in resume_warning
+            assert "missing_foreign_key=user_id->users.id" in resume_warning
+            assert "preserve me" not in resume_warning
+
+            with engine.connect() as conn:
+                preserved = conn.exec_driver_sql(
+                    "SELECT resume_id, user_id, content FROM resumes"
+                ).one()
+            assert preserved == (1, "owner", "preserve me")
+        finally:
+            engine.dispose()
+
+    def test_fresh_sqlite_schema_has_no_nonrepairable_drift(self, tmp_path, caplog):
+        engine = make_sync_engine(tmp_path / "fresh.db")
+        try:
+            with caplog.at_level(logging.WARNING, logger="app.db_engine"):
+                db_engine.init_models_sync(engine)
+            assert "non-repairable schema drift" not in caplog.text
+        finally:
+            engine.dispose()
+
     def test_init_models_sync_noop_on_non_sqlite(self):
         """On Postgres, schema is Alembic-owned; init_models_sync must not touch it."""
         engine = make_sync_engine(TestPostgresEngine._URL)

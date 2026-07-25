@@ -115,22 +115,10 @@ async def get_application_detail(
 
     Tolerates a deleted resume by returning ``resume: null`` rather than 500.
     """
-    application = await db.get_application(user_id, application_id)
+    application = await db.get_application_detail(user_id, application_id)
     if application is None:
         raise HTTPException(status_code=404, detail="Application not found")
-
-    job_content: str | None = None
-    resume: dict[str, Any] | None = None
-    try:
-        job = await db.get_job(user_id, application["job_id"])
-        if job:
-            job_content = job.get("content")
-        resume = await db.get_resume(user_id, application["resume_id"])
-    except Exception as e:
-        # Detail is best-effort beyond the card itself; never 500 the modal.
-        logger.warning("Failed to load detail context for %s: %s", application_id, e)
-
-    return ApplicationDetailResponse(**application, job_content=job_content, resume=resume)
+    return ApplicationDetailResponse(**application)
 
 
 @router.patch("/bulk", response_model=ApplicationActionResponse)

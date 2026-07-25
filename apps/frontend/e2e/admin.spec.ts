@@ -21,8 +21,8 @@ test.describe('FitWright - admin console smoke', () => {
     await expect(page.getByText(/New users today/i)).toBeVisible();
     await expect(page.getByText(/Error rate \(24h\)/i)).toBeVisible();
     // The former Analytics chart is folded into Overview: metric + window selectors.
-    await expect(page.getByLabel(/Metric/i)).toBeVisible();
-    await expect(page.getByLabel(/Time window/i)).toBeVisible();
+    await expect(page.getByRole('combobox', { name: 'Metric', exact: true })).toBeVisible();
+    await expect(page.getByRole('combobox', { name: 'Time window', exact: true })).toBeVisible();
   });
 
   test('users page loads the real list with search + filters', async ({ page }) => {
@@ -116,8 +116,8 @@ test.describe('FitWright - admin observability walkthrough (19.1)', () => {
     await expect(page.getByText(/Purge backlog/i)).toBeVisible();
 
     // Windowed usage chart selectors (metric + time window).
-    await expect(page.getByLabel(/Metric/i)).toBeVisible();
-    await expect(page.getByLabel(/Time window/i)).toBeVisible();
+    await expect(page.getByRole('combobox', { name: 'Metric', exact: true })).toBeVisible();
+    await expect(page.getByRole('combobox', { name: 'Time window', exact: true })).toBeVisible();
 
     // Refresh re-fetches without crashing; the KPI region stays present after.
     await page
@@ -164,7 +164,7 @@ test.describe('FitWright - admin observability walkthrough (19.1)', () => {
     // already-running / disabled outcome (all non-error). Be resilient: the
     // action re-invokes a real job, so assert on the outcome shape, not a value.
     await page.getByRole('button', { name: /Run rollup/i }).click();
-    const status = page.getByRole('status');
+    const status = page.getByRole('tabpanel', { name: 'Configuration' }).getByRole('status');
     await expect(status).toContainText(/started|already running|disabled/i, { timeout: 20_000 });
     await expect(status).not.toContainText(/failed/i);
   });
@@ -208,7 +208,9 @@ test.describe('FitWright - admin a11y + mobile + negative (19.2)', () => {
   test('usage chart exposes an accessible title and a data-table fallback', async ({ page }) => {
     await page.goto('/admin');
     // The metric/window controls anchor the usage chart region.
-    await expect(page.getByLabel(/Metric/i)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('combobox', { name: 'Metric', exact: true })).toBeVisible({
+      timeout: 15_000,
+    });
 
     // The UsageChart renders an SVG with role="img" + accessible title AND an
     // sr-only <table> fallback. With no data it shows an explicit empty state

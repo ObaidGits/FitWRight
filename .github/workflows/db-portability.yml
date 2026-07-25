@@ -69,8 +69,7 @@ jobs:
           python-version: "3.13"
 
       - name: Sync backend dependencies
-        # uv.lock is not committed (see .gitignore), so resolve from pyproject.
-        run: uv sync
+        run: uv sync --frozen
 
       - name: Migrate schema on DIRECT connection
         run: ALEMBIC_DATABASE_URL="$DIRECT_URL" uv run python -m alembic upgrade head

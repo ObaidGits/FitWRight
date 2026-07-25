@@ -61,14 +61,17 @@ describe('useStream', () => {
     expect(result.current.status).toBe('done');
   });
 
-  it('falls back transparently when the stream errors', async () => {
-    transportMock.mockReturnValue(transportFrom([{ event: 'error', data: { message: 'boom' } }]));
+  it('does not rerun after a terminal stream error event', async () => {
+    const transport = transportFrom([{ event: 'error', data: { message: 'boom' } }]);
+    transportMock.mockReturnValue(transport);
     const { result } = renderHook(() => useStream('r1', { streamingEnabled: true }));
     let final = '';
     await act(async () => {
       final = await result.current.start('outreach');
     });
-    expect(final).toBe('FALLBACK');
+    expect(final).toBe('');
+    expect(result.current.status).toBe('error');
+    expect(transport.fallback).not.toHaveBeenCalled();
   });
 });
 

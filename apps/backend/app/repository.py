@@ -40,6 +40,7 @@ from app.models import (
     Resume,
     ResumeVersion,
     SearchDocument,
+    TailorPreview,
     UserUnreadCount,
 )
 
@@ -74,6 +75,7 @@ class Repo:
             Profile.__tablename__,
             ProfileVersion.__tablename__,
             AnalysisArtifact.__tablename__,
+            TailorPreview.__tablename__,
         }
     )
 

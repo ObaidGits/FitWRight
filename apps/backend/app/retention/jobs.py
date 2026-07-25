@@ -1,6 +1,7 @@
 """Retention / archival worker (design §Retention, R17.4).
 
 Prunes unbounded growth on a slow cadence, single-flighted via the KVStore lock:
+- expired durable tailoring previews in a bounded batch;
 - read/dismissed **notifications** older than ``NOTIFICATION_RETENTION_DAYS``;
 - processed **outbox** rows older than ``OUTBOX_RETENTION_DAYS`` (dead-lettered
   rows are retained for the operator to inspect/replay);
@@ -52,6 +53,12 @@ async def run_retention_jobs(*, kvstore=None) -> dict:
         )
         outbox_pruned = await _prune_processed_outbox(_cutoff_iso(settings.outbox_retention_days))
 
+        from app import database
+
+        tailor_previews_pruned = await database.db.prune_expired_tailor_previews(
+            batch_size=settings.tailor_preview_cleanup_batch
+        )
+
         from app.scheduling.service import get_scheduling_service
 
         reminders_pruned = await get_scheduling_service().prune_fired_reminders_before(
@@ -62,6 +69,7 @@ async def run_retention_jobs(*, kvstore=None) -> dict:
             "status": "ok",
             "notifications_pruned": notifications_pruned,
             "outbox_pruned": outbox_pruned,
+            "tailor_previews_pruned": tailor_previews_pruned,
             "reminders_pruned": reminders_pruned,
             "avatars_reclaimed": avatars_reclaimed,
         }

@@ -74,14 +74,33 @@ export type ReachabilityListener = (reachable: boolean) => void;
  */
 export class ReachabilityMonitor {
   private reachable = true;
+  private consecutiveFailures = 0;
   private listeners = new Set<ReachabilityListener>();
   private intervalHandle: ReturnType<typeof setInterval> | null = null;
+  private retryHandle: ReturnType<typeof setTimeout> | null = null;
   private readonly opts: ReachabilityOptions;
   private readonly intervalMs: number;
+  private readonly failureThreshold: number;
+  private readonly retryDelayMs: number;
 
-  constructor(opts: ReachabilityOptions & { intervalMs?: number } = {}) {
-    this.opts = opts;
+  constructor(
+    opts: ReachabilityOptions & {
+      intervalMs?: number;
+      /** Consecutive failed probes required before flipping to offline. */
+      failureThreshold?: number;
+      /** Delay before the quick confirming re-probe after a sub-threshold miss. */
+      retryDelayMs?: number;
+    } = {}
+  ) {
+    // A more forgiving default timeout: the old 3s falsely reported "offline"
+    // whenever the (single-worker / cold) backend couldn't answer /health in
+    // time while it was busy with an AI/PDF request. Callers may still override.
+    this.opts = { timeoutMs: 6000, ...opts };
     this.intervalMs = opts.intervalMs ?? 20_000;
+    // Require TWO consecutive misses before declaring offline so a single slow
+    // probe (backend momentarily busy) never flips the banner.
+    this.failureThreshold = Math.max(1, opts.failureThreshold ?? 2);
+    this.retryDelayMs = Math.max(250, opts.retryDelayMs ?? 2500);
   }
 
   isReachable(): boolean {
@@ -99,11 +118,45 @@ export class ReachabilityMonitor {
     for (const l of this.listeners) l(value);
   }
 
-  /** Probe now and update state. Returns the fresh result. */
+  private clearRetry(): void {
+    if (this.retryHandle) {
+      clearTimeout(this.retryHandle);
+      this.retryHandle = null;
+    }
+  }
+
+  /** Probe now and update state. Returns the fresh result.
+   *
+   * Debounced offline: a single failed probe does NOT flip to offline; it
+   * schedules a quick confirming re-probe. Only after ``failureThreshold``
+   * consecutive misses do we report offline. A single success clears the
+   * counter and restores online immediately. */
   async check(): Promise<boolean> {
     const ok = await probeReachability(this.opts);
-    this.set(ok);
-    return ok;
+    if (ok) {
+      this.consecutiveFailures = 0;
+      this.clearRetry();
+      this.set(true);
+      return true;
+    }
+    this.consecutiveFailures += 1;
+    if (this.consecutiveFailures >= this.failureThreshold) {
+      this.set(false);
+    } else {
+      // Below threshold: re-verify quickly rather than waiting a full interval,
+      // so a genuine outage still surfaces within a few seconds.
+      this.scheduleRetry();
+    }
+    return false;
+  }
+
+  private scheduleRetry(): void {
+    if (typeof window === 'undefined') return;
+    this.clearRetry();
+    this.retryHandle = setTimeout(() => {
+      this.retryHandle = null;
+      void this.check();
+    }, this.retryDelayMs);
   }
 
   start(): void {
@@ -120,7 +173,10 @@ export class ReachabilityMonitor {
     void this.check();
   };
   private onOffline = () => {
-    this.set(false);
+    // Do NOT trust the browser's `offline` event outright - it false-fires on
+    // VPNs/proxies/OS hiccups. Confirm with a real probe (which, if genuinely
+    // offline, will fail and flip after the threshold).
+    void this.check();
   };
 
   stop(): void {
@@ -130,5 +186,6 @@ export class ReachabilityMonitor {
     }
     if (this.intervalHandle) clearInterval(this.intervalHandle);
     this.intervalHandle = null;
+    this.clearRetry();
   }
 }

@@ -58,10 +58,10 @@ import {
   generateCoverLetter,
   generateOutreachMessage,
   generateInterviewPrep,
-  fetchResume,
 } from '@/lib/api/resume';
 import { useFeatureConfig } from '@/features/settings/hooks';
 import { useSystemStatus } from '@/features/home/hooks';
+import { deriveAiAvailability } from '@/lib/ai-availability';
 import { useQueryClient } from '@tanstack/react-query';
 import { invalidateApplicationLists, queryKeys } from '@/lib/query/client';
 import type { InterviewPrepData } from '@/components/common/resume_previewer_context';
@@ -72,6 +72,30 @@ type Deliverable = {
   interviewPrep: InterviewPrepData | null;
 };
 
+function parseInterviewPrep(
+  value: string | Record<string, unknown> | null
+): InterviewPrepData | null {
+  let parsed: unknown = value;
+  if (typeof value === 'string') {
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  const candidate = parsed as Record<string, unknown>;
+  const arrayFields = [
+    'role_fit_analysis',
+    'resume_questions',
+    'project_follow_ups',
+    'skill_gaps',
+    'talking_points',
+  ] as const;
+  if (!arrayFields.every((field) => Array.isArray(candidate[field]))) return null;
+  return candidate as unknown as InterviewPrepData;
+}
+
 export default function ApplicationWorkspacePage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -81,7 +105,9 @@ export default function ApplicationWorkspacePage() {
   const notesMut = useUpdateApplicationNotes();
   const features = useFeatureConfig();
   const statusQuery = useSystemStatus();
-  const aiUnconfigured = statusQuery.data && !statusQuery.data.llm_configured;
+  const aiAvailability = deriveAiAvailability(statusQuery);
+  const aiUnconfigured = aiAvailability.state === 'unconfigured';
+  const aiBlocked = !aiAvailability.canUseAi;
   const { toast } = useToast();
   const qc = useQueryClient();
 
@@ -102,27 +128,19 @@ export default function ApplicationWorkspacePage() {
     if (app) setNotes(app.notes ?? '');
   }, [app]);
 
-  // Load existing deliverables from the tailored resume record.
+  // The application-detail endpoint already embeds this narrow deliverables
+  // projection. Reusing it avoids a second request and a full resume payload.
   React.useEffect(() => {
-    if (!app?.resume_id) return;
-    let active = true;
-    fetchResume(app.resume_id)
-      .then((r) => {
-        if (!active) return;
-        setDeliverable({
-          coverLetter: r.cover_letter ?? null,
-          outreach: r.outreach_message ?? null,
-          interviewPrep: r.interview_prep ?? null,
-        });
-      })
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, [app?.resume_id]);
+    const resume = app?.resume;
+    setDeliverable({
+      coverLetter: resume?.cover_letter ?? null,
+      outreach: resume?.outreach_message ?? null,
+      interviewPrep: parseInterviewPrep(resume?.interview_prep ?? null),
+    });
+  }, [app?.resume]);
 
   async function run(kind: 'cover' | 'outreach' | 'prep') {
-    if (!app?.resume_id) return;
+    if (aiBlocked || !app?.resume_id) return;
     setBusy(kind);
     try {
       if (kind === 'cover') {
@@ -306,7 +324,8 @@ export default function ApplicationWorkspacePage() {
               label="cover letter"
               value={deliverable.coverLetter}
               busy={busy === 'cover'}
-              disabled={Boolean(aiUnconfigured)}
+              disabled={aiBlocked}
+              unconfigured={aiUnconfigured}
               onGenerate={() => run('cover')}
               onCopy={() =>
                 deliverable.coverLetter && navigator.clipboard.writeText(deliverable.coverLetter)
@@ -338,7 +357,7 @@ export default function ApplicationWorkspacePage() {
                     size="sm"
                     variant="outline"
                     loading={busy === 'prep'}
-                    disabled={Boolean(aiUnconfigured)}
+                    disabled={aiBlocked}
                     onClick={() => run('prep')}
                   >
                     Regenerate
@@ -353,7 +372,9 @@ export default function ApplicationWorkspacePage() {
                 description={
                   aiUnconfigured
                     ? 'Add an AI provider key in settings to generate interview prep.'
-                    : 'Generate resume-grounded questions and talking points for this role.'
+                    : aiBlocked
+                      ? 'Checking AI availability before generation.'
+                      : 'Generate resume-grounded questions and talking points for this role.'
                 }
                 action={
                   aiUnconfigured ? (
@@ -361,7 +382,11 @@ export default function ApplicationWorkspacePage() {
                       <Link href="/settings">Open settings</Link>
                     </Button>
                   ) : (
-                    <Button loading={busy === 'prep'} onClick={() => run('prep')}>
+                    <Button
+                      loading={busy === 'prep'}
+                      disabled={aiBlocked}
+                      onClick={() => run('prep')}
+                    >
                       <Sparkles className="h-4 w-4" /> Generate interview prep
                     </Button>
                   )
@@ -377,7 +402,8 @@ export default function ApplicationWorkspacePage() {
               label="outreach message"
               value={deliverable.outreach}
               busy={busy === 'outreach'}
-              disabled={Boolean(aiUnconfigured)}
+              disabled={aiBlocked}
+              unconfigured={aiUnconfigured}
               onGenerate={() => run('outreach')}
               onCopy={() =>
                 deliverable.outreach && navigator.clipboard.writeText(deliverable.outreach)
@@ -395,6 +421,7 @@ function DeliverablePanel({
   value,
   busy,
   disabled = false,
+  unconfigured = false,
   onGenerate,
   onCopy,
   exportSlot,
@@ -403,6 +430,7 @@ function DeliverablePanel({
   value: string | null;
   busy: boolean;
   disabled?: boolean;
+  unconfigured?: boolean;
   onGenerate: () => void;
   onCopy: () => void;
   exportSlot?: React.ReactNode;
@@ -431,17 +459,19 @@ function DeliverablePanel({
         icon={Sparkles}
         title={`No ${label} yet`}
         description={
-          disabled
+          unconfigured
             ? `Add an AI provider key in settings to generate a ${label}.`
-            : `Generate a tailored ${label} grounded in your resume and the job.`
+            : disabled
+              ? 'Checking AI availability before generation.'
+              : `Generate a tailored ${label} grounded in your resume and the job.`
         }
         action={
-          disabled ? (
+          unconfigured ? (
             <Button asChild variant="outline">
               <Link href="/settings">Open settings</Link>
             </Button>
           ) : (
-            <Button loading={busy} onClick={onGenerate}>
+            <Button loading={busy} disabled={disabled} onClick={onGenerate}>
               <Sparkles className="h-4 w-4" /> Generate {label}
             </Button>
           )

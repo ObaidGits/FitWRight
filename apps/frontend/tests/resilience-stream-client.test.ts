@@ -59,16 +59,18 @@ describe('StreamController', () => {
     expect(ctrl.getStatus()).toBe('done');
   });
 
-  it('falls back to non-stream on a terminal error event, surfacing fallback text', async () => {
+  it('never reruns generation after a terminal error event', async () => {
+    const onError = vi.fn();
     const transport = transportFrom([
       { event: 'token', data: { text: 'partial' } },
       { event: 'error', data: { message: 'boom', text: 'partial' } },
     ]);
-    const ctrl = new StreamController(transport);
+    const ctrl = new StreamController(transport, { onError });
     const text = await ctrl.run();
-    expect(transport.fallback).toHaveBeenCalled();
-    expect(text).toBe('FALLBACK TEXT');
-    expect(ctrl.getStatus()).toBe('done');
+    expect(transport.fallback).not.toHaveBeenCalled();
+    expect(text).toBe('partial');
+    expect(ctrl.getStatus()).toBe('error');
+    expect(onError).toHaveBeenCalledWith('boom');
   });
 
   it('falls back when the stream throws (e.g. network drop)', async () => {
@@ -84,17 +86,37 @@ describe('StreamController', () => {
     expect(text).toBe('RECOVERED');
   });
 
-  it('surfaces an error when fallback also fails', async () => {
+  it('surfaces an error when a safe pre-event fallback also fails', async () => {
     const onError = vi.fn();
-    const transport = transportFrom([{ event: 'error', data: { message: 'boom' } }], {
+    const transport: StreamTransport = {
+      async *open() {
+        throw new Error('stream open failed');
+      },
+      cancel: vi.fn(async () => {}),
       fallback: vi.fn(async () => {
         throw new Error('fallback down');
       }),
-    });
+    };
     const ctrl = new StreamController(transport, { onError });
     await ctrl.run();
     expect(ctrl.getStatus()).toBe('error');
-    expect(onError).toHaveBeenCalled();
+    expect(transport.fallback).toHaveBeenCalledOnce();
+    expect(onError).toHaveBeenCalledWith('stream open failed');
+  });
+
+  it('does not fall back when transport fails after progress', async () => {
+    const transport: StreamTransport = {
+      async *open() {
+        yield { event: 'token', data: { text: 'partial' } };
+        throw new Error('connection reset');
+      },
+      cancel: vi.fn(async () => {}),
+      fallback: vi.fn(async () => 'DUPLICATE'),
+    };
+    const ctrl = new StreamController(transport);
+    expect(await ctrl.run()).toBe('partial');
+    expect(ctrl.getStatus()).toBe('error');
+    expect(transport.fallback).not.toHaveBeenCalled();
   });
 
   it('cancel aborts and signals the server; no fallback on cancel', async () => {

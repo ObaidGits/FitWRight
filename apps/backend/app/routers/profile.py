@@ -24,6 +24,7 @@ from pydantic import BaseModel, Field
 
 from app.auth import get_effective_user_id
 from app.config import settings
+from app.llm import llm_api_error
 from app.profile.schemas import (
     AiMemoryUpdateRequest,
     AiSuggestRequest,
@@ -387,6 +388,11 @@ async def ai_suggest(
         )
     except ProfileServiceError as exc:
         raise _svc_error(exc)
+    except Exception as exc:
+        if request.kind in {"summary", "experience_bullets"}:
+            logger.exception("Profile AI suggestion provider call failed")
+            raise llm_api_error(exc, stage=f"profile_{request.kind}") from exc
+        raise
     return AiSuggestResponse(**result)
 
 

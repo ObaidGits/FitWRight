@@ -147,10 +147,14 @@ async def generate_outreach_message(
     """
     prompt = build_outreach_prompt(resume_data, job_description, language)
 
+    # Budget parity with the cover letter (2048): a 1024 cap left no room for a
+    # reasoning model's hidden tokens on top of the visible message, yielding an
+    # empty response on such models. The message is still short; a larger cap
+    # never lengthens it.
     result = await complete(
         prompt=prompt,
         system_prompt=OUTREACH_SYSTEM_PROMPT,
-        max_tokens=1024,
+        max_tokens=2048,
     )
 
     return result.strip()
@@ -215,10 +219,14 @@ async def generate_resume_title(
         output_language=output_language,
     )
 
+    # Budget must leave room for a reasoning model's hidden reasoning tokens on
+    # top of the short visible title; 60 was consumed entirely by reasoning on
+    # such models, yielding empty content. The title is still trimmed in code
+    # below, so a larger budget never produces a longer title.
     result = await complete(
         prompt=prompt,
         system_prompt="You extract job titles and company names from job descriptions.",
-        max_tokens=60,
+        max_tokens=512,
         temperature=0.3,
     )
 

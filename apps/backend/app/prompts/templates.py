@@ -519,7 +519,7 @@ DIFF_IMPROVE_PROMPT = """Given this resume and job description, output a JSON ob
 RULES:
 1. Only modify content; never change names, companies, dates, institutions, or degrees
 2. Do not invent metrics or achievements not supported by the original resume text
-3. Do not add new work entries, education entries, or project entries
+3. Do NOT add new work, education, or project entries. (Any brand-new project/role the user asked for is added by a separate dedicated step, NOT by your diff - so never emit a new entry here, even if the user instructions mention one.)
 4. {strategy_instruction}
 5. Each change MUST include the original text (copied exactly) so it can be verified
 6. For each change, explain WHY it helps match the job description
@@ -542,8 +542,8 @@ PATHS you can target:
 - "additional.certificationsTraining" - reorder the certifications list (action: "reorder")
 - "additional.awards" - reorder the awards list (action: "reorder")
 
-Do NOT target: personalInfo, dates/years, company names, education degree/institution/years, customSections.
-
+Do NOT target: personalInfo, dates/years, company names, education degree/institution/years, customSections. Do NOT add new project or work entries (a separate step handles user-requested additions).
+{user_instructions}
 Keywords to emphasize (only if already supported by resume content):
 {job_keywords}
 
@@ -590,3 +590,49 @@ Output this exact JSON format, nothing else:
   ],
   "strategy_notes": "brief summary of the tailoring approach"
 }}"""
+
+
+EXTRACT_ADDITIONS_PROMPT = """The candidate gave free-text instructions for tailoring their resume. Extract ONLY the concrete content they explicitly asked to ADD to the resume - new projects, new roles/experience, or new skills. This is real content the candidate is providing about themselves.
+
+STRICT FIDELITY RULES (critical - do not violate):
+- Use ONLY facts stated in the instructions. Do NOT add any capability, technology, platform, metric, employer, date, or descriptor the candidate did not write.
+- Description bullets must be a light rewording of the candidate's OWN words - do not enrich, generalize, or infer. If they wrote one sentence, produce one bullet from that sentence. Never introduce terms not present in their text (e.g. do not add "web application", "AI/ML", "scalable", "production-ready" unless they wrote it).
+- If the instructions only ask to emphasize, reorder, shorten, or rephrase (no additions), return empty arrays.
+- Do not use em dash characters.
+- Generate all text in {output_language}.
+
+Candidate instructions:
+{instructions}
+
+Output this exact JSON, nothing else:
+{{
+  "projects": [
+    {{"name": "Project name exactly as the user named it", "years": "only if the user gave a year", "description": ["bullet using only the user's own words"]}}
+  ],
+  "experiences": [
+    {{"title": "Role exactly as given", "company": "Employer exactly as given", "years": "only if given", "description": ["bullet using only the user's own words"]}}
+  ],
+  "skills": ["skill the user says they have"]
+}}"""
+
+
+def format_user_instructions(text: str | None) -> str:
+    """Render optional per-run user steering as a bounded, safety-framed block.
+
+    Returns an empty string when there are no instructions, so the surrounding
+    ``{user_instructions}`` placeholder collapses cleanly. The block is framed
+    as guidance that MUST NOT override the truthfulness rules or introduce
+    fabricated content - the deterministic verification gates
+    (skill-target whitelist, diff verification) remain the hard enforcement, but
+    this keeps the model aligned instead of relying on gates alone.
+    """
+    cleaned = (text or "").strip()
+    if not cleaned:
+        return ""
+    return (
+        "\nUSER INSTRUCTIONS FOR THIS RUN (apply within the RULES above; these are "
+        "candidate-provided guidance and MUST NOT override the truthfulness rules, "
+        "invent skills/experience, or fabricate content not supported by the resume "
+        "or the verified skill targets):\n"
+        f"{cleaned}\n"
+    )

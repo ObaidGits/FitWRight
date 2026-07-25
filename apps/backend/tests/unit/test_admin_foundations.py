@@ -175,7 +175,9 @@ class TestNoRuntimeComposedKeys:
 # Fixed cardinality broken out by owning category (self-documenting). Bumping
 # any of these is an explicit, reviewed edit - never a runtime side effect.
 _EXPECTED_PER_CATEGORY = {
-    MetricCategory.AI: 12,
+    # Seven scalar AI aggregates plus one static call-count key for every member
+    # of the closed provider enum (including the residual ``other`` bucket).
+    MetricCategory.AI: 16,
     MetricCategory.ERRORS: 3,
     MetricCategory.SECURITY: 5,
     MetricCategory.STORAGE: 1,
@@ -183,7 +185,7 @@ _EXPECTED_PER_CATEGORY = {
     MetricCategory.FEATURE_USAGE: 8,
     MetricCategory.AUDIT_DOWNSAMPLE: 1,
 }
-_EXPECTED_TOTAL = sum(_EXPECTED_PER_CATEGORY.values())  # 34
+_EXPECTED_TOTAL = sum(_EXPECTED_PER_CATEGORY.values())  # 38
 
 
 class TestBoundedCardinality:

@@ -27,8 +27,10 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
 
 from app.main import app
+from app.models import Outbox
 from app.schemas.models import ResumeData
 
 
@@ -219,13 +221,13 @@ class TestTailoringPipeline:
     LLM-touching boundary imported into ``app.routers.resumes`` so the flow is
     deterministic, drive a real ``/improve/preview``, then echo the returned
     ``resume_preview`` back into ``/improve/confirm`` (exactly as the real
-    client does). Confirm re-hashes the payload and validates the preview_hash
-    persisted on the job, so a self-consistent round trip is what proves the
-    handshake + tailored-resume persistence actually wire together.
+    client does). Confirm re-hashes the payload and atomically consumes the
+    durable ``TailorPreview`` row returned by preview, so a self-consistent round
+    trip proves the capability handshake and all confirmation writes are wired.
 
     Refinement (``refine_resume``) is mocked to raise: the router explicitly
     catches refinement failures and falls back to the unrefined result, so the
-    preview_hash is computed on our canned ``improved_data`` and the
+    preview payload hash is computed on our canned ``improved_data`` and the
     brittle ``RefinementResult`` attribute surface never has to be faked.
     """
 
@@ -270,7 +272,7 @@ class TestTailoringPipeline:
 
         with (
             patch(
-                "app.routers.resumes.extract_job_keywords",
+                "app.routers.resumes.extract_job_keywords_cached",
                 new_callable=AsyncMock,
                 return_value={"keywords": ["Python", "FastAPI"], "required_skills": []},
             ),
@@ -287,10 +289,17 @@ class TestTailoringPipeline:
                 "app.routers.resumes.generate_resume_diffs",
                 new_callable=AsyncMock,
                 return_value=diff_result,
-            ),
+            ) as mock_diffs,
             patch(
                 "app.routers.resumes.apply_diffs",
                 return_value=(copy.deepcopy(improved), [], []),
+            ),
+            # The Extra-Instructions additions step is an LLM boundary; keep the
+            # flow hermetic (a separate test covers the add path).
+            patch(
+                "app.routers.resumes.extract_requested_additions",
+                new_callable=AsyncMock,
+                return_value={"projects": [], "experiences": [], "skills": []},
             ),
             patch("app.routers.resumes.verify_diff_result", return_value=[]),
             # Force the unrefined fallback path (handled gracefully by the router)
@@ -324,25 +333,44 @@ class TestTailoringPipeline:
             async with _new_client() as client:
                 preview_resp = await client.post(
                     "/api/v1/resumes/improve/preview",
-                    json={"resume_id": resume_id, "job_id": job_id},
+                    json={
+                        "resume_id": resume_id,
+                        "job_id": job_id,
+                        "custom_instructions": "Emphasize backend and system design.",
+                    },
                 )
             assert preview_resp.status_code == 200, preview_resp.text
             preview_data = preview_resp.json()["data"]
             assert preview_data["resume_id"] is None
             assert preview_data["job_id"] == job_id
+            # The per-run custom instructions from the request body are forwarded
+            # into the diff generator (end-to-end wiring).
+            assert (
+                mock_diffs.call_args.kwargs.get("custom_instructions")
+                == "Emphasize backend and system design."
+            )
             preview_resume = preview_data["resume_preview"]
             assert preview_resume["summary"] == improved["summary"]
+            assert preview_data["preview_id"]
             # Preview must NOT have persisted a tailored resume.
             assert (await isolated_db.get_stats(owner_id))["total_resumes"] == 1
-            # The preview_hash was persisted on the job for the confirm handshake.
+            # Confirmation state is durable and no longer stored in job metadata.
+            stored_preview = await isolated_db.get_tailor_preview(
+                owner_id, preview_data["preview_id"]
+            )
+            assert stored_preview is not None
+            assert stored_preview["resume_id"] == resume_id
+            assert stored_preview["job_id"] == job_id
             job_after_preview = await isolated_db.get_job(owner_id, job_id)
-            assert job_after_preview.get("preview_hash")
+            assert "preview_hash" not in job_after_preview
+            assert "preview_hashes" not in job_after_preview
 
             # --- Confirm (echo the preview back, exactly as the client does) ---
             async with _new_client() as client:
                 confirm_resp = await client.post(
                     "/api/v1/resumes/improve/confirm",
                     json={
+                        "preview_id": preview_data["preview_id"],
                         "resume_id": resume_id,
                         "job_id": job_id,
                         "improved_data": preview_resume,
@@ -380,6 +408,35 @@ class TestTailoringPipeline:
         assert improvement is not None
         assert improvement["original_resume_id"] == resume_id
         assert improvement["job_id"] == job_id
+
+        # Initial AI version, tracker card, and transactionally-enqueued events
+        # are each created exactly once by the same confirmation commit.
+        versions = await isolated_db.list_resume_versions(owner_id, tailored_id)
+        assert len(versions) == 1
+        assert versions[0]["source"] == "ai"
+        applications = await isolated_db.list_applications(owner_id)
+        assert len(applications) == 1
+        assert applications[0]["resume_id"] == tailored_id
+        async with isolated_db.session_factory() as session:
+            outbox = list(
+                (
+                    await session.execute(
+                        select(Outbox).where(Outbox.user_id == owner_id)
+                    )
+                ).scalars()
+            )
+        related = [
+            event.event_type
+            for event in outbox
+            if (event.payload or {}).get("resume_id") == tailored_id
+            or (event.payload or {}).get("node_id")
+            in {tailored_id, applications[0]["application_id"]}
+        ]
+        assert sorted(related) == [
+            "ai.generation_done",
+            "application.upserted",
+            "resume.upserted",
+        ]
 
         # Master + tailored both present; master unchanged.
         stats = await isolated_db.get_stats(owner_id)
@@ -435,7 +492,7 @@ class TestTailoringPipeline:
 
         with (
             patch(
-                "app.routers.resumes.extract_job_keywords",
+                "app.routers.resumes.extract_job_keywords_cached",
                 new_callable=AsyncMock,
                 return_value={"keywords": ["Python", "FastAPI"], "required_skills": []},
             ),
@@ -495,10 +552,15 @@ class TestTailoringPipeline:
                 confirm_resp = await client.post(
                     "/api/v1/resumes/improve/confirm",
                     json={
+                        "preview_id": preview_data["preview_id"],
                         "resume_id": resume_id,
                         "job_id": job_id,
                         "improved_data": preview_resume,
                         "improvements": preview_data["improvements"],
+                        # A photo template was chosen: confirm must still succeed
+                        # (hash validated on the UNMODIFIED preview) AND turn the
+                        # header photo on server-side.
+                        "include_photo": True,
                     },
                 )
             assert confirm_resp.status_code == 200, confirm_resp.text
@@ -506,7 +568,98 @@ class TestTailoringPipeline:
         # The tailored resume really persisted as a child of the master.
         tailored_id = confirm_resp.json()["data"]["resume_id"]
         assert tailored_id is not None and tailored_id != resume_id
-        assert await isolated_db.get_resume(owner_id, tailored_id) is not None
+        saved = await isolated_db.get_resume(owner_id, tailored_id)
+        assert saved is not None
+        # include_photo=True applied the canonical photo intent server-side, so
+        # the saved resume follows the chosen photo template.
+        saved_photo = saved["processed_data"]["personalInfo"].get("photo")
+        assert saved_photo and saved_photo["show"] is True
+        assert saved_photo["ref"] == "canonical"
+
+    async def test_extra_instructions_add_user_attested_project(
+        self, isolated_db, owner_id, sample_resume
+    ):
+        """End-to-end proof of the Extra Instructions "add my real content" path:
+        even when the diff pass adds nothing, a user-requested project is added
+        via the dedicated extraction + deterministic merge, and appears in the
+        preview."""
+        upload_resp = await _upload_resume(isolated_db, sample_resume)
+        resume_id = upload_resp.json()["resume_id"]
+        async with _new_client() as client:
+            jobs_resp = await client.post(
+                "/api/v1/jobs/upload",
+                json={"job_descriptions": ["Backend Engineer: Python, FastAPI."]},
+            )
+        job_id = jobs_resp.json()["job_id"][0]
+
+        instructions = (
+            "Add a project KRIA (Kernel Responsive Intelligent Assistant) that "
+            "automates daily tasks and controls the desktop over voice or mobile."
+        )
+
+        with (
+            patch(
+                "app.routers.resumes.extract_job_keywords_cached",
+                new_callable=AsyncMock,
+                return_value={"keywords": ["Python"], "required_skills": []},
+            ),
+            patch(
+                "app.routers.resumes.generate_skill_target_plan",
+                new_callable=AsyncMock,
+                return_value={"accepted": [], "rejected": []},
+            ),
+            patch(
+                "app.routers.resumes.verify_skill_target_plan",
+                return_value={"accepted": [], "rejected": []},
+            ),
+            # The diff pass adds NOTHING (simulates a weak model ignoring add_entry).
+            patch(
+                "app.routers.resumes.generate_resume_diffs",
+                new_callable=AsyncMock,
+                return_value=SimpleNamespace(changes=[]),
+            ),
+            patch(
+                "app.routers.resumes.apply_diffs",
+                return_value=(copy.deepcopy(sample_resume), [], []),
+            ),
+            patch("app.routers.resumes.verify_diff_result", return_value=[]),
+            # Force the unrefined path (no master alignment needed for the assert).
+            patch(
+                "app.routers.resumes.refine_resume",
+                new_callable=AsyncMock,
+                side_effect=RuntimeError("refinement disabled for test"),
+            ),
+            # The dedicated additions extraction reliably returns the KRIA project.
+            patch(
+                "app.routers.resumes.extract_requested_additions",
+                new_callable=AsyncMock,
+                return_value={
+                    "projects": [
+                        {
+                            "name": "KRIA",
+                            "years": "2025",
+                            "description": ["Automates daily tasks; voice/desktop control."],
+                        }
+                    ],
+                    "experiences": [],
+                    "skills": [],
+                },
+            ),
+        ):
+            async with _new_client() as client:
+                preview_resp = await client.post(
+                    "/api/v1/resumes/improve/preview",
+                    json={
+                        "resume_id": resume_id,
+                        "job_id": job_id,
+                        "custom_instructions": instructions,
+                    },
+                )
+
+        assert preview_resp.status_code == 200, preview_resp.text
+        projects = preview_resp.json()["data"]["resume_preview"]["personalProjects"]
+        names = [p.get("name") for p in projects]
+        assert "KRIA" in names, f"KRIA not added; got {names}"
 
 
 class TestConfigurableImproveTimeout:

@@ -17,6 +17,7 @@ import { useRotatingMessages } from '@/lib/hooks/use-ai-progress';
 import { EXPORT_MESSAGES } from '@/lib/ai-progress-copy';
 import { downloadResumePdf, downloadCoverLetterPdf } from '@/lib/api/resume';
 import type { TemplateSettings } from '@/lib/types/template-settings';
+import { buildResumeFilename } from '@/lib/resume/filename';
 
 type ExportKind =
   | { kind: 'resume'; resumeId: string; settings?: TemplateSettings; filename?: string }
@@ -27,6 +28,11 @@ type ExportButtonProps = ExportKind & {
   variant?: ButtonProps['variant'];
   size?: ButtonProps['size'];
   className?: string;
+  // Optional identity used to build a meaningful download name when `filename`
+  // isn't supplied (e.g. "Obaid_Zeeshan_Resume.pdf" instead of a UUID).
+  name?: string | null;
+  company?: string | null;
+  role?: string | null;
 };
 
 function saveBlob(blob: Blob, filename: string) {
@@ -55,10 +61,26 @@ export function ExportButton(props: ExportButtonProps) {
       let filename: string;
       if (props.kind === 'resume') {
         blob = await downloadResumePdf(props.resumeId, props.settings);
-        filename = props.filename ?? `resume-${props.resumeId}.pdf`;
+        filename =
+          props.filename ??
+          buildResumeFilename({
+            name: props.name,
+            company: props.company,
+            role: props.role,
+            id: props.resumeId,
+            kind: 'resume',
+          });
       } else {
         blob = await downloadCoverLetterPdf(props.resumeId, props.pageSize ?? 'A4');
-        filename = props.filename ?? `cover-letter-${props.resumeId}.pdf`;
+        filename =
+          props.filename ??
+          buildResumeFilename({
+            name: props.name,
+            company: props.company,
+            role: props.role,
+            id: props.resumeId,
+            kind: 'cover-letter',
+          });
       }
       saveBlob(blob, filename);
       toast({

@@ -381,7 +381,7 @@ class TestDbSizeStaleness:
 
 
 class TestObjectStorageStaleness:
-    """Validates: Requirements 7.7"""
+    """Validates independent count availability/freshness and object status."""
 
     async def test_snapshot_flag_propagates_stale(self):
         store = _FakeStore(
@@ -398,20 +398,23 @@ class TestObjectStorageStaleness:
         )
         panel = await StorageMetricsService(metric_store=store).panel()
         assert panel.objectStorageStale is True
+        assert panel.countsUnavailable is False
+        assert panel.countsStale is False
 
-    async def test_missing_snapshot_none_bytes_and_stale(self):
+    async def test_missing_snapshot_marks_counts_unavailable(self):
         store = _FakeStore()  # no "storage" snapshot
         panel = await StorageMetricsService(metric_store=store).panel()
         assert panel.objectStorageBytes is None
         assert panel.objectStorageStale is True
-        # Missing snapshot -> counts default to zero.
+        assert panel.countsUnavailable is True
+        assert panel.countsStale is False
+        assert panel.snapshotAt is None
         assert panel.avatarCount == 0
         assert panel.resumeCount == 0
         assert panel.resumeVersionCount == 0
 
-    async def test_old_sampled_at_forces_stale(self):
-        # sampledAt older than the 2-day snapshot-stale threshold -> stale even
-        # though the snapshot's own flag says fresh.
+    async def test_old_sampled_at_only_marks_counts_stale(self):
+        sampled_at = _iso(_now() - timedelta(days=3))
         store = _FakeStore(
             snapshots={
                 _STORAGE_SNAPSHOT: {
@@ -420,12 +423,39 @@ class TestObjectStorageStaleness:
                     "resumeVersionCount": 3,
                     "objectStorageBytes": 100,
                     "objectStorageStale": False,
-                    "sampledAt": _iso(_now() - timedelta(days=3)),
+                    "sampledAt": sampled_at,
                 }
             }
         )
         panel = await StorageMetricsService(metric_store=store).panel()
-        assert panel.objectStorageStale is True
+        assert panel.countsUnavailable is False
+        assert panel.countsStale is True
+        assert panel.snapshotAt == sampled_at
+        assert panel.objectStorageStale is False
+
+    async def test_valid_zero_snapshot_is_available(self):
+        sampled_at = _iso(_now())
+        store = _FakeStore(
+            snapshots={
+                _STORAGE_SNAPSHOT: {
+                    "avatarCount": 0,
+                    "resumeCount": 0,
+                    "resumeVersionCount": 0,
+                    "objectStorageBytes": 0,
+                    "objectStorageStale": False,
+                    "sampledAt": sampled_at,
+                }
+            }
+        )
+        panel = await StorageMetricsService(metric_store=store).panel()
+        assert panel.avatarCount == 0
+        assert panel.resumeCount == 0
+        assert panel.resumeVersionCount == 0
+        assert panel.countsUnavailable is False
+        assert panel.countsStale is False
+        assert panel.snapshotAt == sampled_at
+        assert panel.objectStorageBytes == 0
+        assert panel.objectStorageStale is False
 
 
 # ===========================================================================

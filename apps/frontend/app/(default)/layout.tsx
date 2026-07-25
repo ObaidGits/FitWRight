@@ -2,7 +2,6 @@ import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 import { ResumePreviewProvider } from '@/components/common/resume_previewer_context';
-import { StatusCacheProvider } from '@/lib/context/status-cache';
 import { LanguageProvider } from '@/lib/context/language-context';
 import { LocalizedErrorBoundary } from '@/components/common/error-boundary';
 import { getServerSession } from '@/lib/api/session-server';
@@ -32,20 +31,18 @@ export default async function DefaultLayout({ children }: { children: React.Reac
   }
 
   return (
-    <StatusCacheProvider>
-      <LanguageProvider>
-        <ResumePreviewProvider>
-          <LocalizedErrorBoundary>
-            {/* The builder (the only (default) route) is fully migrated to the
-                Atelier design system, whose tokens are scoped under `.atelier`
-                (see styles/atelier.css). Wrapping here provides those tokens -
-                matching the (app) group - so light/dark render correctly. */}
-            <main className="atelier flex min-h-screen flex-col bg-[var(--background)] text-[var(--foreground)]">
-              {children}
-            </main>
-          </LocalizedErrorBoundary>
-        </ResumePreviewProvider>
-      </LanguageProvider>
-    </StatusCacheProvider>
+    <LanguageProvider>
+      <ResumePreviewProvider>
+        <LocalizedErrorBoundary>
+          {/* The builder (the only (default) route) is fully migrated to the
+              Atelier design system, whose tokens are scoped under `.atelier`
+              (see styles/atelier.css). Wrapping here provides those tokens -
+              matching the (app) group - so light/dark render correctly. */}
+          <main className="atelier flex min-h-screen flex-col bg-[var(--background)] text-[var(--foreground)]">
+            {children}
+          </main>
+        </LocalizedErrorBoundary>
+      </ResumePreviewProvider>
+    </LanguageProvider>
   );
 }

@@ -412,6 +412,30 @@ class TestOrchestrator:
         assert len(result.explanation.suggestions) > 0
 
     @pytest.mark.asyncio
+    async def test_indeed_upstream_403_is_classified_as_waf(self, monkeypatch):
+        """Indeed bot protection is not mislabeled as user authentication."""
+        from app.jd import orchestrator
+        from app.jd.ssrf import UpstreamHttpError
+
+        async def mock_fetch(url, **kwargs):
+            raise UpstreamHttpError(
+                403,
+                "<html><title>Just a moment...</title>Checking your browser</html>",
+            )
+
+        monkeypatch.setattr(orchestrator, "fetch_url_safely", mock_fetch)
+
+        result = await orchestrator.orchestrate_v2(
+            "test-user",
+            "https://www.indeed.com/viewjob?jk=abcdef1234",
+        )
+
+        assert result.confidence.level == "LOW"
+        assert result.error_code == "waf_blocked"
+        assert "firewall" in result.explanation.summary.lower()
+        assert all("403" not in item for item in result.explanation.warnings)
+
+    @pytest.mark.asyncio
     async def test_timeout_envelope(self, monkeypatch):
         """Global timeout prevents infinite hangs."""
         import asyncio
@@ -502,9 +526,16 @@ class TestPageClassifier:
         from app.jd.classify import classify_page, PageClass
         assert classify_page("<html></html>", http_status=404) == PageClass.EXPIRED_JOB
 
-    def test_http_403_is_login(self):
+    def test_http_403_without_login_signal_is_waf(self):
         from app.jd.classify import classify_page, PageClass
-        assert classify_page("<html></html>", http_status=403) == PageClass.LOGIN_REQUIRED
+        assert classify_page("<html></html>", http_status=403) == PageClass.WAF_BLOCKED
+
+    def test_http_403_login_body_is_login(self):
+        from app.jd.classify import classify_page, PageClass
+        assert (
+            classify_page("<html>Please log in to view this job</html>", http_status=403)
+            == PageClass.LOGIN_REQUIRED
+        )
 
 
 # ============================================================

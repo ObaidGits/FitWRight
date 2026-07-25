@@ -17,12 +17,13 @@
 **/.venv
 **/venv
 
-# Environment files (use UI to configure in Docker)
-**/.env
-**/.env.local
-**/.env.*.local
+# Environment files never belong in the build context. Runtime configuration
+# must be injected by the deployment platform or mounted as *_FILE secrets.
+**/.env*
 
-# IDE
+# VCS and IDE metadata
+.git
+.github
 .vscode
 .idea
 *.swp
@@ -34,8 +35,20 @@
 docs/
 assets/
 
-# Build artifacts
+# Build and test artifacts
+**/coverage
+**/htmlcov
+**/test-results
+**/*.tsbuildinfo
 dist/
+
+# Local runtime data and credentials are mounted/injected at runtime
+**/data/.secret_key
+**/data/config.json
+**/config.json
+**/*.db
+**/*.db-wal
+**/*.db-shm
 build/
 
 # Test files

@@ -159,8 +159,9 @@ async def rebuild_user_index(user_id: str) -> dict[str, int]:
     repo = get_search_repo()
     await repo.clear_user(user_id)
     counts = {"resume": 0, "job": 0, "application": 0}
-    for r in await db.list_resumes(user_id):
-        await index_node(user_id, "resume", r["resume_id"])
+    resume_ids = await db.list_resume_ids(user_id)
+    for resume_id in resume_ids:
+        await index_node(user_id, "resume", resume_id)
         counts["resume"] += 1
     for j in await db.list_jobs(user_id):
         await index_node(user_id, "job", j["job_id"])
@@ -176,8 +177,8 @@ async def search_drift(user_id: str) -> dict[str, Any]:
     db = _db()
     repo = get_search_repo()
     source: set[tuple[str, str]] = set()
-    for r in await db.list_resumes(user_id):
-        source.add(("resume", r["resume_id"]))
+    for resume_id in await db.list_resume_ids(user_id):
+        source.add(("resume", resume_id))
     for j in await db.list_jobs(user_id):
         source.add(("job", j["job_id"]))
     for a in await db.list_applications(user_id):

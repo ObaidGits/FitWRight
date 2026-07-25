@@ -18,8 +18,9 @@
  *
  * On fetch failure it shows an explicit error state with a working retry control
  * (Req 11.4); loading shows a skeleton. Results are announced via `aria-live`
- * without stealing focus, and "As of <computedAt>" renders in local time with a
- * UTC tooltip.
+ * without stealing focus. Resource-count freshness is rendered from the
+ * backend's explicit `countsUnavailable`/`countsStale` flags, and the count
+ * timestamp uses `snapshotAt` rather than panel computation time.
  */
 import * as React from 'react';
 import RefreshCw from 'lucide-react/dist/esm/icons/refresh-cw';
@@ -54,10 +55,12 @@ function formatBytes(bytes?: number | null): string | null {
   return `${value.toFixed(digits)} ${BYTE_UNITS[i]}`;
 }
 
-/** `bytes/day -> "1.2 GB / day"`; `null` when the estimate is unavailable. */
+/** `bytes/day -> "1.2 GB/day"`; preserves a negative sign for shrinkage. */
 function formatGrowth(bytesPerDay?: number | null): string | null {
-  const formatted = formatBytes(bytesPerDay);
-  return formatted == null ? null : `${formatted} / day`;
+  if (bytesPerDay == null || !Number.isFinite(bytesPerDay)) return null;
+  const formatted = formatBytes(Math.abs(bytesPerDay));
+  if (formatted == null) return null;
+  return `${bytesPerDay < 0 ? '-' : ''}${formatted}/day`;
 }
 
 // ---------------------------------------------------------------------------
@@ -114,25 +117,57 @@ function SizeCard({
   );
 }
 
-/** One count card: a formatted integer resource count. */
-function CountCard({ label, value }: { label: string; value: number }) {
+/** One count card: a sampled count, with explicit stale/unavailable treatment. */
+function CountCard({
+  label,
+  value,
+  stale,
+  unavailable,
+}: {
+  label: string;
+  value: number;
+  stale: boolean;
+  unavailable: boolean;
+}) {
   return (
     <Card className="p-5">
-      <p className="text-sm text-[var(--muted-foreground)]">{label}</p>
-      <p className="mt-1 text-2xl font-semibold tabular-nums">{value.toLocaleString()}</p>
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-sm text-[var(--muted-foreground)]">{label}</p>
+        {!unavailable && stale && (
+          <Badge variant="warning" aria-label={`${label} count may be stale`}>
+            Stale
+          </Badge>
+        )}
+      </div>
+      <p className="mt-1 text-2xl font-semibold tabular-nums">
+        {unavailable ? <UnavailableBadge label={`${label} count`} /> : value.toLocaleString()}
+      </p>
+      <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+        {unavailable
+          ? 'No storage snapshot is available.'
+          : stale
+            ? 'Cached count; the storage snapshot may be out of date.'
+            : 'From the latest periodic storage snapshot.'}
+      </p>
     </Card>
   );
 }
 
-/** Estimated growth card: a bytes/day rate, or "Unavailable" with the reason. */
+/** Estimated DB-size change: growth, shrinkage, or unavailable with the reason. */
 function GrowthCard({ data }: { data: StoragePanel }) {
   const formatted = data.growthUnavailable ? null : formatGrowth(data.growthBytesPerDay);
   const unavailable = data.growthUnavailable || formatted == null;
+  const shrinking = !unavailable && (data.growthBytesPerDay ?? 0) < 0;
+  const label = shrinking ? 'Estimated shrinkage' : 'Estimated growth';
+
   return (
     <Card className="p-5">
       <div className="flex items-center gap-2">
-        <TrendingUp className="h-4 w-4 text-[var(--muted-foreground)]" aria-hidden />
-        <p className="text-sm text-[var(--muted-foreground)]">Estimated growth</p>
+        <TrendingUp
+          className={`h-4 w-4 text-[var(--muted-foreground)] ${shrinking ? 'rotate-180' : ''}`}
+          aria-hidden
+        />
+        <p className="text-sm text-[var(--muted-foreground)]">{label}</p>
       </div>
       <p className="mt-2 text-2xl font-semibold tabular-nums">
         {unavailable ? <UnavailableBadge label="Estimated growth" /> : formatted}
@@ -143,28 +178,32 @@ function GrowthCard({ data }: { data: StoragePanel }) {
         </p>
       ) : (
         <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-          Based on recent sampled sizes.
+          {shrinking ? 'Database size decreased' : 'Database size increased'} based on recent
+          samples.
         </p>
       )}
     </Card>
   );
 }
 
-/** Retention status: a coarse text label, or an explicit "Unknown" indicator. */
+/** Configured retention policy text; this is not a measurement of cleanup health. */
 function RetentionCard({ status }: { status?: string | null }) {
   const has = !!status && status.trim().length > 0;
   return (
     <Card className="p-5">
-      <p className="text-sm text-[var(--muted-foreground)]">Retention status</p>
+      <p className="text-sm text-[var(--muted-foreground)]">Configured retention policy</p>
       <div className="mt-2">
         {has ? (
           <span className="text-lg font-semibold">{status}</span>
         ) : (
-          <Badge variant="outline" aria-label="Retention status: unknown">
+          <Badge variant="outline" aria-label="Configured retention policy: unknown">
             Unknown
           </Badge>
         )}
       </div>
+      <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+        Configuration only; not a measurement of cleanup health.
+      </p>
     </Card>
   );
 }
@@ -202,9 +241,19 @@ export default function AdminStoragePage() {
           <LoadingSkeleton rows={3} />
         ) : (
           <>
-            <p className="flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
-              As of <LocalTime iso={data.computedAt} />
-            </p>
+            {data.countsUnavailable ? (
+              <p className="text-sm text-[var(--muted-foreground)]">
+                Resource count snapshot unavailable.
+              </p>
+            ) : data.snapshotAt ? (
+              <p className="flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
+                Resource counts as of <LocalTime iso={data.snapshotAt} />
+              </p>
+            ) : (
+              <p className="text-sm text-[var(--muted-foreground)]">
+                Resource count snapshot time unavailable.
+              </p>
+            )}
 
             {/* Sampled sizes - DB + object storage (stale/unavailable aware). */}
             <section aria-label="Storage usage">
@@ -226,16 +275,31 @@ export default function AdminStoragePage() {
               </div>
             </section>
 
-            {/* Resource counts. */}
+            {/* Counts use the storage snapshot's own availability and freshness signals. */}
             <section aria-label="Resource counts">
               <div className="grid gap-4 sm:grid-cols-3">
-                <CountCard label="Avatars" value={data.avatarCount} />
-                <CountCard label="Resumes" value={data.resumeCount} />
-                <CountCard label="Resume versions" value={data.resumeVersionCount} />
+                <CountCard
+                  label="Avatars"
+                  value={data.avatarCount}
+                  stale={data.countsStale}
+                  unavailable={data.countsUnavailable}
+                />
+                <CountCard
+                  label="Resumes"
+                  value={data.resumeCount}
+                  stale={data.countsStale}
+                  unavailable={data.countsUnavailable}
+                />
+                <CountCard
+                  label="Resume versions"
+                  value={data.resumeVersionCount}
+                  stale={data.countsStale}
+                  unavailable={data.countsUnavailable}
+                />
               </div>
             </section>
 
-            {/* Growth estimate + retention status. */}
+            {/* Growth estimate + configured retention policy. */}
             <section aria-label="Growth and retention">
               <div className="grid gap-4 sm:grid-cols-2">
                 <GrowthCard data={data} />

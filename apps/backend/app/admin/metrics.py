@@ -1,60 +1,76 @@
-"""In-process admin metrics registry (R12.1).
+"""Bounded, in-process admin instrumentation (R12.1).
 
-Mirrors :mod:`app.auth.metrics`: a tiny, dependency-free, process-wide counter
-sink the admin services/router call, readable via :meth:`AdminMetrics.snapshot`
-(exposed through the internal metrics endpoint). It carries exactly the signals
-the design's "Observability & operations" section (R12.1) requires:
-
-- ``admin_action_total{action,result}`` - every admin mutation, labelled by
-  action (disable/enable/role_change/delete/restore/bulk_disable/purge) and
-  result (ok/no_op/denied/error/last_active_admin).
-- admin API latency (sum/count per route-class -> derived average) and error rate
-  (``admin_request_total`` split by 2xx/4xx/5xx).
-- dashboard cache hit ratio + staleness age, rollup lag, purge backlog gauge,
-  and the ``authz.denied`` counter (compromised-admin / scraping signal).
-
-Gauges (purge backlog, staleness, rollup lag) are last-write-wins; everything
-else is a monotonic counter. Mutation is lock-guarded so concurrent workers in
-one process do not race.
+Request latency keeps lifetime sum/count plus the latest 512 observations for
+an exact nearest-rank p95 within that bounded sample. Route classes are capped,
+with excess classes coalesced into ``_other``, so both memory and label
+cardinality stay bounded. Per-class failures count responses with status >= 400.
+All values are current-process signals and every mutation/snapshot is protected
+by one lock.
 """
 
 from __future__ import annotations
 
+import math
 import threading
-from collections import defaultdict
+from collections import defaultdict, deque
+from dataclasses import dataclass, field
 
 __all__ = ["AdminMetrics", "get_admin_metrics", "reset_admin_metrics"]
 
+_LATENCY_SAMPLE_LIMIT = 512
+_MAX_ROUTE_CLASSES = 64
+_OVERFLOW_ROUTE_CLASS = "_other"
+
+
+@dataclass
+class _RouteMetrics:
+    total_ms: float = 0.0
+    observation_count: int = 0
+    failure_count: int = 0
+    samples_ms: deque[float] = field(
+        default_factory=lambda: deque(maxlen=_LATENCY_SAMPLE_LIMIT)
+    )
+
 
 class AdminMetrics:
-    """Process-wide counters + gauges for the admin surface (R12.1)."""
+    """Process-wide counters, bounded route metrics, and gauges."""
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._counters: dict[str, int] = defaultdict(int)
-        # action -> result -> count
         self._actions: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
-        # route-class -> [sum_ms, count]
-        self._latency: dict[str, list[float]] = defaultdict(lambda: [0.0, 0])
+        self._latency: dict[str, _RouteMetrics] = {}
         self._gauges: dict[str, float] = {}
-
-    # -- mutators ------------------------------------------------------------
 
     def incr(self, name: str, amount: int = 1) -> None:
         with self._lock:
             self._counters[name] = max(0, self._counters[name] + amount)
 
     def record_action(self, action: str, result: str) -> None:
-        """One admin mutation, labelled by ``action`` and ``result`` (R12.1)."""
+        """Record one admin mutation labelled by action and result."""
         with self._lock:
             self._actions[action][result] += 1
 
+    def _bounded_route_class(self, route_class: str) -> str:
+        route_class = str(route_class) or "root"
+        if route_class in self._latency:
+            return route_class
+        # Reserve the final cardinality slot for all excess/unknown classes.
+        if len(self._latency) < _MAX_ROUTE_CLASSES - 1:
+            return route_class
+        return _OVERFLOW_ROUTE_CLASS
+
     def record_request(self, route_class: str, status_code: int, duration_ms: float) -> None:
-        """One admin API call: latency (per route-class) + status bucket."""
+        """Record latency and status for one bounded admin route class."""
+        duration = max(0.0, float(duration_ms))
         with self._lock:
-            bucket = self._latency[route_class]
-            bucket[0] += max(0.0, duration_ms)
-            bucket[1] += 1
+            bounded_class = self._bounded_route_class(route_class)
+            bucket = self._latency.setdefault(bounded_class, _RouteMetrics())
+            bucket.total_ms += duration
+            bucket.observation_count += 1
+            bucket.samples_ms.append(duration)
+            if status_code >= 400:
+                bucket.failure_count += 1
             if status_code >= 500:
                 self._counters["request_5xx"] += 1
             elif status_code >= 400:
@@ -81,8 +97,6 @@ class AdminMetrics:
     def set_rollup_lag_days(self, days: float) -> None:
         self.set_gauge("rollup_lag_days", float(days))
 
-    # -- read ----------------------------------------------------------------
-
     @property
     def dashboard_cache_hit_ratio(self) -> float:
         with self._lock:
@@ -92,27 +106,37 @@ class AdminMetrics:
         return (hits / total) if total else 0.0
 
     def snapshot(self) -> dict[str, object]:
-        """JSON-serializable copy of all counters, action labels, and gauges."""
+        """Return a consistent JSON-serializable current-process snapshot."""
         with self._lock:
             counters = dict(self._counters)
-            actions = {a: dict(r) for a, r in self._actions.items()}
-            latency = {
-                rc: {
-                    "count": int(v[1]),
-                    "avg_ms": round(v[0] / v[1], 2) if v[1] else 0.0,
+            actions = {action: dict(results) for action, results in self._actions.items()}
+            latency: dict[str, dict[str, float | int]] = {}
+            for route_class, bucket in self._latency.items():
+                samples = sorted(bucket.samples_ms)
+                rank = math.ceil(0.95 * len(samples))
+                p95_ms = samples[rank - 1] if rank else 0.0
+                latency[route_class] = {
+                    "count": bucket.observation_count,  # backward-compatible alias
+                    "observation_count": bucket.observation_count,
+                    "failure_count": bucket.failure_count,
+                    "avg_ms": round(bucket.total_ms / bucket.observation_count, 2),
+                    "p95_ms": p95_ms,
                 }
-                for rc, v in self._latency.items()
-            }
             gauges = dict(self._gauges)
+
         hits = counters.get("dashboard_cache_hit", 0)
         misses = counters.get("dashboard_cache_miss", 0)
-        total = hits + misses
-        counters["dashboard_cache_hit_ratio"] = round((hits / total) if total else 0.0, 4)
+        cache_observations = hits + misses
+        counters["dashboard_cache_hit_ratio"] = round(
+            (hits / cache_observations) if cache_observations else 0.0, 4
+        )
+        counters["dashboard_cache_observation_count"] = cache_observations
         return {
             "counters": counters,
             "admin_action_total": actions,
             "latency": latency,
             "gauges": gauges,
+            "cache_observation_count": cache_observations,
         }
 
 

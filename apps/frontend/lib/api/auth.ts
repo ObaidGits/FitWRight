@@ -155,11 +155,19 @@ export async function signup(input: {
   email: string;
   password: string;
   name: string;
+  /** Optional admin-invite token (Option B). The role is decided server-side
+   *  from the invite; this only carries the redemption token. */
+  inviteToken?: string;
 }): Promise<SignupResult> {
   await fetchCsrf();
   const res = await apiPost(
     '/auth/signup',
-    { email: input.email, password: input.password, name: input.name },
+    {
+      email: input.email,
+      password: input.password,
+      name: input.name,
+      ...(input.inviteToken ? { invite_token: input.inviteToken } : {}),
+    },
     undefined,
     INLINE
   );

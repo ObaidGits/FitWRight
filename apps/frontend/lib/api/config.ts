@@ -50,9 +50,14 @@ export interface SetupStatus {
 export interface SystemStatus {
   status: 'ready' | 'setup_required';
   llm_configured: boolean;
-  llm_healthy: boolean;
+  /** Null means the public status endpoint made no live provider check. */
+  llm_healthy: boolean | null;
   has_master_resume: boolean;
   database_stats: DatabaseStats;
+  /** True when the backend runs in local single-user mode. Used to detect a
+   *  frontend/backend mode mismatch (hosted UI against a single-user backend,
+   *  or vice-versa). */
+  single_user?: boolean;
 }
 
 export interface LLMHealthCheck {
@@ -61,6 +66,8 @@ export interface LLMHealthCheck {
   model: string;
   error?: string;
   error_code?: string;
+  // Human-readable server message (e.g. empty-content explanation).
+  message?: string;
   response_model?: string;
   warning?: string;
   warning_code?: string;
@@ -68,6 +75,14 @@ export interface LLMHealthCheck {
   model_output?: string;
   reasoning_content?: string | null;
   error_detail?: string;
+  // Structured-output capability verdict (predicts whether JSON-dependent
+  // features like resume tailoring will work on this model).
+  structured_ok?: boolean | null;
+  structured_verdict?: 'reliable' | 'flaky' | 'unsupported' | 'unknown';
+  structured_message?: string;
+  structured_attempts?: number;
+  structured_successes?: number;
+  structured_error_code?: string;
 }
 
 // Fetch full LLM configuration
@@ -122,7 +137,7 @@ export async function fetchSetupStatus(): Promise<SetupStatus> {
   return readJson<SetupStatus>(res, 'Failed to fetch setup status.');
 }
 
-// Fetch operational system status (includes live/cached provider health).
+// Fetch persisted setup/system facts. The public endpoint does not probe the provider.
 export async function fetchSystemStatus(): Promise<SystemStatus> {
   const res = await apiFetch('/status', { credentials: 'include' });
   return readJson<SystemStatus>(res, 'Failed to fetch system status.');

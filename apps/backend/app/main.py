@@ -5,7 +5,9 @@ import logging
 import sys
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from starlette.middleware.gzip import GZipMiddleware
 
 # Fix for Windows: Use ProactorEventLoop for subprocess support (Playwright)
 if sys.platform == "win32":
@@ -20,7 +22,7 @@ from app.config import settings
 from app.observability import RequestContextMiddleware, configure_json_logging
 from app.database import db
 from app.pdf import close_pdf_renderer, init_pdf_renderer
-from app.errors import install_error_handlers
+from app.errors import error_envelope, install_error_handlers
 from app.routers import (
     admin_router,
     agenda_router,
@@ -120,10 +122,24 @@ async def lifespan(app: FastAPI):
 
         try:
             await ensure_owner()
-        except Exception as e:
-            logger.error("Failed to ensure bootstrap owner: %s", e)
-    # PDF renderer uses lazy initialization - will initialize on first use
-    # await init_pdf_renderer()
+        except Exception:
+            logger.exception("Failed to ensure bootstrap owner")
+            raise
+    # PDF renderer is lazily initialized on first use. Optionally warm Chromium
+    # in the BACKGROUND now so the first export doesn't pay the browser
+    # cold-start (~1-3s). Fire-and-forget: never blocks boot and a failure here
+    # is non-fatal (the lazy path still initializes on the first real render).
+    prewarm_task = None
+    if getattr(settings, "pdf_prewarm_enabled", True):
+
+        async def _prewarm_pdf() -> None:
+            try:
+                await init_pdf_renderer()
+                logger.info("PDF renderer pre-warmed (Chromium ready)")
+            except Exception as exc:  # pragma: no cover - best-effort warmup
+                logger.info("PDF renderer pre-warm skipped: %s", exc)
+
+        prewarm_task = asyncio.create_task(_prewarm_pdf())
     # Session reaper (ADR-15). In ``internal`` (premium) mode a background loop
     # runs the single-flighted reaper on an interval; ``external_cron`` (free
     # tier default) instead relies on POST /api/v1/internal/run-jobs, so nothing
@@ -156,6 +172,13 @@ async def lifespan(app: FastAPI):
         logger.error(f"Error stopping scheduled jobs: {e}")
 
     try:
+        # Ensure the background pre-warm isn't mid-launch while we tear down.
+        if prewarm_task is not None:
+            prewarm_task.cancel()
+            try:
+                await prewarm_task
+            except (asyncio.CancelledError, Exception):
+                pass
         await close_pdf_renderer()
     except Exception as e:
         logger.error(f"Error closing PDF renderer: {e}")
@@ -189,6 +212,57 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Maintenance mode is a conservative product-traffic gate, not an operator
+# lockout. Keep this allowlist explicit and narrow: root/API documentation,
+# liveness/readiness/status, every admin route, and only the auth endpoints an
+# operator needs to establish/inspect/end a session. OAuth login paths are also
+# admitted for deployments where administrators do not use passwords. OPTIONS
+# remains available so browser CORS preflights do not hide the 503 response.
+_MAINTENANCE_EXACT_ALLOWLIST = frozenset(
+    {
+        "/",
+        "/openapi.json",
+        "/redoc",
+        "/api/v1/health",
+        "/api/v1/health/ready",
+        "/api/v1/status",
+        "/api/v1/auth/csrf",
+        "/api/v1/auth/login",
+        "/api/v1/auth/logout",
+        "/api/v1/auth/logout-all",
+        "/api/v1/auth/session",
+    }
+)
+_MAINTENANCE_PREFIX_ALLOWLIST = (
+    "/docs/",
+    "/api/v1/admin/",
+    "/api/v1/auth/oauth/",
+)
+
+
+@app.middleware("http")
+async def maintenance_gate(request: Request, call_next):
+    """Return the normal API envelope for blocked product traffic; never mutate DB."""
+    path = request.url.path.rstrip("/") or "/"
+    allowed = (
+        request.method == "OPTIONS"
+        or path in _MAINTENANCE_EXACT_ALLOWLIST
+        or any(
+            path == prefix.rstrip("/") or path.startswith(prefix)
+            for prefix in _MAINTENANCE_PREFIX_ALLOWLIST
+        )
+    )
+    if settings.maintenance_mode and not allowed:
+        return JSONResponse(
+            status_code=503,
+            content=error_envelope(
+                "maintenance_mode",
+                "The service is temporarily unavailable for maintenance.",
+            ),
+            headers={"Retry-After": "60"},
+        )
+    return await call_next(request)
+
 # Auth + security middleware (P1 Multi-User Foundation).
 #
 # Order matters: Starlette runs the LAST-added middleware OUTERMOST. From the
@@ -206,6 +280,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# Response compression (audit B5). The tailor JSON responses are large
+# (resume_preview + markdownOriginal + markdownImproved + diff), and gzip cuts
+# the transferred bytes substantially over the Heroku router hop. Starlette's
+# GZipMiddleware auto-excludes ``text/event-stream``, so the SSE tailor stream
+# (and every other stream) is never buffered/compressed. ``minimum_size`` avoids
+# spending CPU on tiny bodies. Added here so it sits just outside CORS and
+# compresses the route/body output before the outer auth/observability layers.
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 app.add_middleware(AuthMiddleware, config=settings)
 app.add_middleware(RequestContextMiddleware)
 app.add_middleware(SecurityHeadersMiddleware, config=settings)

@@ -11,7 +11,8 @@
  * KPI cards (Req 13) read `GET /admin/kpis` via {@link useKpis}. Each card is a
  * labeled value (Req 13.8); a KPI the backend reports as `unavailable` (or a
  * null value) renders an explicit "Unavailable" indicator instead of a bogus
- * number (Req 13.10); `errorRate24h` renders as a percentage ("1.25%"). While
+ * number (Req 13.10); `errorRate24h` renders as a percentage ("1.25%") with
+ * the backend-provided label describing its actual UTC daily buckets. While
  * the snapshot's age exceeds 60 seconds - or the backend `stale` flag is set -
  * every card shows a "Stale" badge and the page offers a working refresh control
  * that re-fetches and clears the indicator on success (Req 13.9 / 11.9 / 11.10).
@@ -240,27 +241,23 @@ function featureLabel(feature: string): string {
 // resumes come from), the most-used templates, and a compact growth summary.
 // ---------------------------------------------------------------------------
 
-/** The four resume origins, in display order, with human-readable labels. */
-const RESUME_SOURCES: { key: 'generated' | 'imported' | 'tailored' | 'deleted'; label: string }[] =
-  [
-    { key: 'generated', label: 'Generated' },
-    { key: 'imported', label: 'Imported' },
-    { key: 'tailored', label: 'Tailored' },
-    { key: 'deleted', label: 'Deleted' },
-  ];
+/** The three mutually exclusive current resume inventory origins. */
+const RESUME_SOURCES: { key: 'generated' | 'imported' | 'tailored'; label: string }[] = [
+  { key: 'generated', label: 'Generated' },
+  { key: 'imported', label: 'Imported' },
+  { key: 'tailored', label: 'Tailored' },
+];
 
 /**
- * Resume analytics panel (Req 14): a source split (count + % for each origin),
- * the most-used templates, and a growth total over the selected window. Reuses
- * the section primitives (Card / Select / LoadingSkeleton / ErrorState) and has
- * its own window selector + `aria-live` region so it loads/errors/refreshes
+ * Resume analytics panel (Req 14): current inventory snapshots plus deletion and
+ * net inventory activity over the selected window. Reuses the section primitives
+ * and has its own window selector + `aria-live` region so it loads/errors/refreshes
  * independently of the feature-usage table above it.
  */
 function ResumeAnalyticsPanel() {
   const [window, setWindowState] = React.useState<MetricWindow>(30);
-  const { data, isLoading, isError, error, isFetching, refetch } = useResumeAnalytics(window);
-
-  const growthTotal = data ? data.growth.reduce((sum, p) => sum + p.value, 0) : 0;
+  const { data, isLoading, isError, error, isFetching, isPlaceholderData, refetch } =
+    useResumeAnalytics(window);
 
   return (
     <Card className="p-5">
@@ -268,10 +265,15 @@ function ResumeAnalyticsPanel() {
         <div>
           <h3 className="text-base font-semibold">Resume analytics</h3>
           <p className="text-sm text-[var(--muted-foreground)]">
-            Where resumes come from and which templates lead.
+            Current resume inventory and selected-window inventory changes.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {isPlaceholderData && (
+            <Badge variant="outline" aria-label="Updating; showing the previous window">
+              Updating… / Showing previous window
+            </Badge>
+          )}
           <div className="w-36">
             <Select
               value={String(window)}
@@ -303,12 +305,15 @@ function ResumeAnalyticsPanel() {
           <LoadingSkeleton rows={2} />
         ) : (
           <div className="space-y-6">
-            {/* Source split - counts + percentages for each origin. */}
+            {/* Current source split - deletion activity is intentionally separate. */}
             <div>
-              <h4 className="mb-2 text-xs font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
-                Source split
+              <h4 className="text-xs font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
+                Current resume inventory
               </h4>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <p className="mb-2 text-xs text-[var(--muted-foreground)]">
+                Inventory as of <LocalTime iso={data.inventoryAsOf} />
+              </p>
+              <div className="grid gap-3 sm:grid-cols-3">
                 {RESUME_SOURCES.map((s) => {
                   const count = data.sourceSplit[s.key];
                   const pct = data.sourceSplit[`${s.key}Pct` as const];
@@ -329,25 +334,48 @@ function ResumeAnalyticsPanel() {
               </div>
             </div>
 
-            {/* Popular templates - name + usage count, or an empty state. */}
+            {/* Selected-window activity, kept separate from current inventory. */}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-md border border-[var(--border)] p-3">
+                <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
+                  Deleted in selected window
+                </p>
+                <p className="mt-1 text-2xl font-semibold tabular-nums">
+                  {data.deletedInWindow.toLocaleString()}
+                </p>
+              </div>
+              <div className="rounded-md border border-[var(--border)] p-3">
+                <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
+                  Net resume inventory change
+                </p>
+                <p className="mt-1 text-2xl font-semibold tabular-nums">
+                  {data.netChange.toLocaleString()}
+                </p>
+              </div>
+            </div>
+
+            {/* Popular templates are a timestamped current-inventory snapshot. */}
             <div>
-              <h4 className="mb-2 text-xs font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
-                Popular templates
+              <h4 className="text-xs font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
+                Popular templates in current inventory
               </h4>
+              <p className="mb-2 text-xs text-[var(--muted-foreground)]">
+                Template inventory as of <LocalTime iso={data.templatesAsOf} />
+              </p>
               {data.topTemplates.length === 0 ? (
                 <p className="py-4 text-center text-sm text-[var(--muted-foreground)]">
-                  No template usage recorded in this window yet.
+                  No templates in the current resume inventory.
                 </p>
               ) : (
                 <div className="overflow-x-auto">
                   <table
                     className="w-full text-sm"
-                    aria-label={`Popular templates over the last ${window} days`}
+                    aria-label="Popular templates in current resume inventory"
                   >
                     <thead>
                       <tr className="border-b text-left text-xs font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
                         <th className="pb-2 pr-4">Template</th>
-                        <th className="pb-2 text-right">Uses</th>
+                        <th className="pb-2 text-right">Current resumes</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -364,14 +392,6 @@ function ResumeAnalyticsPanel() {
                 </div>
               )}
             </div>
-
-            {/* Compact growth summary - total new resumes over the window. */}
-            <p className="text-sm text-[var(--muted-foreground)]">
-              <span className="font-semibold tabular-nums text-[var(--foreground)]">
-                {growthTotal.toLocaleString()}
-              </span>{' '}
-              resumes created in the last {window} days.
-            </p>
           </div>
         )}
       </div>
@@ -530,7 +550,7 @@ export default function AdminOverviewPage() {
             />
             <KpiCard
               icon={TriangleAlert}
-              label="Error rate (24h)"
+              label={`Error rate — ${data.errorRateWindowLabel}`}
               kpi={data.errorRate24h}
               format={formatPercent}
               stale={isStale}

@@ -121,7 +121,12 @@ def _rate_limited(retry_after: int) -> ApiError:
 
 
 async def _enforce_captcha(
-    limiter, failures: int, token: str | None, *, remote_ip: str | None
+    request: Request,
+    limiter,
+    failures: int,
+    token: str | None,
+    *,
+    remote_ip: str | None,
 ) -> None:
     """Require + verify a CAPTCHA once past the soft threshold (R13.2).
 
@@ -135,6 +140,12 @@ async def _enforce_captcha(
     result = await limiter.captcha_gate(failures, token, remote_ip=remote_ip)
     if not result.allowed:
         get_metrics().record_captcha_required()
+        # Record exactly once at the enforcement point. AuditService is fail-soft;
+        # no token, IP, email, or other request payload is persisted.
+        await get_audit_service().record(
+            AuditEvent.CAPTCHA_DENIED,
+            request_id=getattr(request.state, "request_id", None),
+        )
         raise ApiError(
             403,
             "captcha_required",
@@ -204,6 +215,84 @@ async def _dispatch_verification_email(user_id: str, email: str) -> None:
 # ---------------------------------------------------------------------------
 
 
+async def _signup_with_invite(
+    request: Request,
+    response: Response,
+    payload: SignupRequest,
+    existing,
+    passwords,
+    audit,
+    ip: str | None,
+    ip_hash: str | None,
+) -> SafeUser:
+    """Create an account by redeeming an admin invite (Option B).
+
+    Security invariants:
+    - the role comes ONLY from the server-validated invite, never the payload;
+    - the invite is single-use and consumed ATOMICALLY before the account is
+      created (a spent invite can never mint two admins);
+    - the invited email must match the signup email (inbox-control proof, so the
+      account is created already verified + active and signed in).
+    """
+    from datetime import datetime, timezone
+
+    from app.auth.admin_invites import claim_invite, record_invite_redeemer
+
+    # An existing account cannot be "signed up" - direct the operator to promote
+    # it instead. We do NOT consume the invite here, so the link stays valid.
+    if existing is not None:
+        raise ApiError(
+            409,
+            "email_unavailable",
+            "An account with that email already exists. Ask an admin to promote it instead.",
+        )
+
+    # Atomically validate + consume the invite bound to this exact email.
+    status, role = await claim_invite(
+        raw_token=payload.invite_token or "", email=str(payload.email)
+    )
+    if status != "ok":
+        # Uniform, non-enumerating rejection for every invalid case.
+        raise ApiError(
+            400,
+            "invite_invalid",
+            "This admin invite link is invalid, already used, or has expired.",
+        )
+
+    hashed = passwords.hash_password(payload.password)
+    try:
+        record = await create_user(
+            email=str(payload.email),
+            name=payload.name,
+            password_hash=hashed,
+            status="active",
+            role=role or "admin",
+            email_verified_at=datetime.now(timezone.utc).isoformat(),
+        )
+    except IntegrityError:
+        # Extremely rare: a concurrent signup won the unique-email race after our
+        # existing-check. The invite is already consumed (fail-closed); an admin
+        # can reissue. Surface the same 409 the pre-check would have.
+        raise ApiError(409, "email_unavailable", "That email is unavailable.")
+
+    await record_invite_redeemer(raw_token=payload.invite_token or "", used_by=record.id)
+
+    session_service = get_session_service()
+    raw_token, info = await session_service.create_session(
+        record.id, remember_me=False, ip=ip, user_agent=request.headers.get("user-agent")
+    )
+    _set_cookies(response, raw_token, info, remember_me=False)
+    await audit.record(AuditEvent.SIGNUP, actor_user_id=record.id, ip_hash=ip_hash)
+    await audit.record(
+        AuditEvent.ADMIN_INVITE_REDEEMED,
+        actor_user_id=record.id,
+        ip_hash=ip_hash,
+        meta={"role": role or "admin"},
+    )
+    get_metrics().record_signup()
+    return _safe_user(record, aal=info.aal)
+
+
 @router.post("/signup", response_model=None)
 async def signup(
     request: Request,
@@ -222,7 +311,7 @@ async def signup(
 
     # Past a soft threshold of signup attempts from this IP, require a CAPTCHA
     # (when a provider is configured; fail-open otherwise) - abuse control R13.2.
-    await _enforce_captcha(limiter, rl.count, payload.captcha_token, remote_ip=ip)
+    await _enforce_captcha(request, limiter, rl.count, payload.captcha_token, remote_ip=ip)
 
     passwords = get_password_service()
     # Password policy is evaluated first: it depends only on the *submitted*
@@ -241,6 +330,13 @@ async def signup(
     existing = await get_by_email(str(payload.email))
     audit = get_audit_service()
     ip_hash = get_session_service().hash_ip(ip)
+
+    # Admin-invite redemption (Option B): a distinct, token-authenticated path.
+    # The role is taken from the server-validated invite - never the request.
+    if payload.invite_token:
+        return await _signup_with_invite(
+            request, response, payload, existing, passwords, audit, ip, ip_hash
+        )
 
     if settings.email_verification_enabled:
         # Hosted: never disclose existence. Both branches do exactly one Argon2
@@ -333,7 +429,9 @@ async def login(request: Request, response: Response, payload: LoginRequest) -> 
     # provider is configured; fail-open otherwise). The failure count is keyed on
     # the normalized email whether or not the account exists, so this stays
     # enumeration-safe (R13.2/13.4).
-    await _enforce_captcha(limiter, lock.failures, payload.captcha_token, remote_ip=ip)
+    await _enforce_captcha(
+        request, limiter, lock.failures, payload.captcha_token, remote_ip=ip
+    )
 
     existing = await get_by_email(normalized)
     passwords = get_password_service()

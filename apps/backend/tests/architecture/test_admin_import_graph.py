@@ -41,6 +41,7 @@ DOMAIN_SERVICES: dict[str, str] = {
     "app.admin.overview": "OverviewService",
     "app.admin.config_diag": "ConfigService",
     "app.admin.maintenance": "MaintenanceService",
+    "app.admin.jobs_panel": "JobsPanelService",
     # Product Analytics bounded context
     "app.analytics.feature_usage": "FeatureUsageService",
     "app.analytics.resume_metrics": "ResumeMetricsService",

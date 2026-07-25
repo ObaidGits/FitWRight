@@ -39,6 +39,8 @@ import {
   PROVIDER_INFO,
   llmProviderToKeyProvider,
   type LLMProvider,
+  type LLMHealthCheck,
+  type ReasoningEffort,
   type SupportedLanguage,
 } from '@/lib/api/config';
 import { resetDatabase } from '@/lib/api/config';
@@ -144,6 +146,47 @@ function ProfileSection() {
   );
 }
 
+// Actionable hints for the backend health-check error codes so a failed
+// "Test connection" always explains WHY (fixes the old bare "Connection
+// failed" with no reason). The backend never sets a bare `error` field - it
+// returns error_code / message / error_detail - so we derive text from those.
+const HEALTH_ERROR_HINTS: Record<string, string> = {
+  api_key_missing: 'No API key is saved for this provider. Enter your key above, then Save.',
+  empty_content:
+    'The model returned an empty response. Try another model, or check the endpoint/Base URL.',
+  duplicate_v1_path: 'The Base URL has a duplicated /v1 segment - remove the extra /v1.',
+  not_found_404: 'The endpoint returned 404. Check the Base URL and the model name.',
+  html_response:
+    'The endpoint returned a web page, not an API response. Check the Base URL (missing /v1?).',
+  health_check_failed:
+    'The provider rejected the request. Verify the API key, model name, and Base URL.',
+};
+
+function stripCodeFence(text?: string): string | undefined {
+  if (!text) return undefined;
+  const cleaned = text
+    .replace(/^```[a-zA-Z]*\n?/, '')
+    .replace(/\n?```$/, '')
+    .trim();
+  return cleaned || undefined;
+}
+
+// Build a human-readable reason for a failed connection test from whatever the
+// backend provided (fix 5). Prefers an actionable hint for known codes, then
+// the server message, then the (secret-scrubbed) detail, then the raw code.
+function describeHealthFailure(res: LLMHealthCheck): string {
+  if (res.error_code && HEALTH_ERROR_HINTS[res.error_code]) {
+    return HEALTH_ERROR_HINTS[res.error_code];
+  }
+  return (
+    res.message ||
+    stripCodeFence(res.error_detail) ||
+    res.error ||
+    res.error_code ||
+    'Unknown error. Check the provider, model, API key, and Base URL.'
+  );
+}
+
 function AiSection() {
   const cfg = useLlmConfig();
   const keyStatus = useApiKeyStatus();
@@ -156,12 +199,18 @@ function AiSection() {
   const [model, setModel] = React.useState('');
   const [apiBase, setApiBase] = React.useState('');
   const [apiKey, setApiKey] = React.useState('');
+  // Reasoning effort. Radix <SelectItem> forbids an empty value, so 'default'
+  // is the sentinel for "unset" and maps to '' (clear) on save/test.
+  const [reasoningEffort, setReasoningEffort] = React.useState<ReasoningEffort | 'default'>(
+    'default'
+  );
 
   React.useEffect(() => {
     if (cfg.data) {
       setProvider(cfg.data.provider);
       setModel(cfg.data.model ?? '');
       setApiBase(cfg.data.api_base ?? '');
+      setReasoningEffort(cfg.data.reasoning_effort ?? 'default');
     }
   }, [cfg.data]);
 
@@ -173,10 +222,14 @@ function AiSection() {
   const keyProvider = llmProviderToKeyProvider(provider);
   const savedKey = keyStatus.data?.providers.find((p) => p.provider === keyProvider);
 
+  // Map the 'default' sentinel to '' (the backend's explicit-clear value).
+  const reasoningValue: ReasoningEffort | '' = reasoningEffort === 'default' ? '' : reasoningEffort;
+
   function buildConfig() {
     return {
       provider,
       model,
+      reasoning_effort: reasoningValue,
       ...(needsBase ? { api_base: apiBase.trim() || null } : {}),
       ...(apiKey ? { api_key: apiKey } : {}),
     };
@@ -184,10 +237,12 @@ function AiSection() {
 
   async function onSave() {
     try {
-      // 1) provider / model / base URL (key is NOT persisted by this endpoint).
+      // 1) provider / model / base URL / reasoning effort (key is NOT persisted
+      //    by this endpoint - it lives in the encrypted per-provider store).
       await update.mutateAsync({
         provider,
         model,
+        reasoning_effort: reasoningValue,
         ...(needsBase ? { api_base: apiBase.trim() || null } : {}),
       });
       // 2) the API key persists in the encrypted per-provider key store.
@@ -203,11 +258,35 @@ function AiSection() {
   async function onTest() {
     try {
       const res = await test.mutateAsync(buildConfig());
-      toast({
-        title: res.healthy ? 'Connection OK' : 'Connection failed',
-        description: res.healthy ? undefined : res.error,
-        variant: res.healthy ? 'success' : 'error',
-      });
+      if (res.healthy) {
+        if (res.structured_verdict === 'unsupported') {
+          toast({
+            title: 'Connected, but this model may not work for tailoring',
+            description:
+              res.structured_message ??
+              'It failed to return valid structured output. Try another model.',
+            variant: 'error',
+          });
+        } else if (res.structured_verdict === 'flaky') {
+          toast({
+            title: 'Connection OK (structured output is a bit flaky)',
+            description: 'Resume tailoring may occasionally need a retry on this model.',
+            variant: 'info',
+          });
+        } else {
+          toast({
+            title: 'Connection OK',
+            description: res.warning || undefined,
+            variant: 'success',
+          });
+        }
+      } else {
+        toast({
+          title: 'Connection failed',
+          description: describeHealthFailure(res),
+          variant: 'error',
+        });
+      }
     } catch {
       toast({ title: 'Connection test failed', variant: 'error' });
     }
@@ -244,6 +323,16 @@ function AiSection() {
           onChange={(e) => setModel(e.target.value)}
           placeholder={PROVIDER_INFO[provider]?.defaultModel}
         />
+        <p className="text-xs text-[var(--muted-foreground)]">
+          Enter the exact model ID from your provider. The greyed text is only an example
+          {PROVIDER_INFO[provider]?.defaultModel ? (
+            <>
+              {' '}
+              (e.g. <code>{PROVIDER_INFO[provider].defaultModel}</code>)
+            </>
+          ) : null}
+          , not a saved value - always confirm the current ID in your provider&apos;s docs.
+        </p>
       </div>
       {needsBase && (
         <div className="space-y-1.5">
@@ -285,16 +374,75 @@ function AiSection() {
             : 'Stored encrypted. Your key is never shown again after saving.'}
         </p>
       </div>
-      {test.data && (
-        <div
-          className={`flex items-center gap-2 text-sm ${test.data.healthy ? 'text-[var(--at-success)]' : 'text-[var(--destructive)]'}`}
+      <div className="space-y-1.5">
+        <Label>Reasoning effort</Label>
+        <Select
+          value={reasoningEffort}
+          onValueChange={(v) => setReasoningEffort(v as ReasoningEffort | 'default')}
         >
-          {test.data.healthy ? (
-            <CheckCircle className="h-4 w-4" />
-          ) : (
-            <XCircle className="h-4 w-4" />
+          <SelectTrigger aria-label="Reasoning effort">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="default">Default (let the model decide)</SelectItem>
+            <SelectItem value="minimal">Minimal</SelectItem>
+            <SelectItem value="low">Low</SelectItem>
+            <SelectItem value="medium">Medium</SelectItem>
+            <SelectItem value="high">High</SelectItem>
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-[var(--muted-foreground)]">
+          Only used by reasoning-capable models (e.g. OpenAI gpt-5, DeepSeek R1). It is safely
+          ignored by models that don&apos;t support it. Choose Default to leave it unset.
+        </p>
+      </div>
+      {test.data && (
+        <div className="space-y-1.5">
+          <div
+            className={`flex items-start gap-2 text-sm ${test.data.healthy ? 'text-[var(--at-success)]' : 'text-[var(--destructive)]'}`}
+          >
+            {test.data.healthy ? (
+              <CheckCircle className="mt-0.5 h-4 w-4 shrink-0" />
+            ) : (
+              <XCircle className="mt-0.5 h-4 w-4 shrink-0" />
+            )}
+            <span>
+              {test.data.healthy ? 'Connected successfully' : describeHealthFailure(test.data)}
+            </span>
+          </div>
+          {/* Structured-output verdict: the signal that predicts whether resume
+              tailoring will actually work on this model. Shown only after a
+              successful connection. */}
+          {test.data.healthy && test.data.structured_verdict && (
+            <div
+              className={`flex items-start gap-2 text-xs ${
+                test.data.structured_verdict === 'unsupported'
+                  ? 'text-[var(--destructive)]'
+                  : test.data.structured_verdict === 'flaky'
+                    ? 'text-[var(--at-warning)]'
+                    : test.data.structured_verdict === 'reliable'
+                      ? 'text-[var(--at-success)]'
+                      : 'text-[var(--muted-foreground)]'
+              }`}
+            >
+              {test.data.structured_verdict === 'unsupported' ? (
+                <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              ) : test.data.structured_verdict === 'reliable' ? (
+                <CheckCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              ) : null}
+              <span>
+                {test.data.structured_verdict === 'reliable' &&
+                  'Structured output: reliable - resume tailoring should work well.'}
+                {test.data.structured_verdict === 'flaky' &&
+                  'Structured output: occasionally invalid - tailoring may need a retry now and then.'}
+                {test.data.structured_verdict === 'unsupported' &&
+                  (test.data.structured_message ??
+                    'This model failed to return valid structured output; resume tailoring may fail. Try another model.')}
+                {test.data.structured_verdict === 'unknown' &&
+                  'Could not verify structured output (a provider error interrupted the check).'}
+              </span>
+            </div>
           )}
-          {test.data.healthy ? 'Connected successfully' : 'Could not connect'}
         </div>
       )}
       <div className="flex gap-2">

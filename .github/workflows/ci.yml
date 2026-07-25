@@ -31,9 +31,8 @@ jobs:
         with:
           python-version: "3.13"
       - name: Sync dependencies
-        # `uv.lock` is not committed (see .gitignore), so `--frozen` cannot be
-        # used here - uv resolves from the pinned versions in pyproject.toml.
-        run: uv sync --extra dev
+        # Resolve exactly the reviewed dependency graph committed in uv.lock.
+        run: uv sync --frozen --extra dev
       - name: Run backend test suite
         # LLM evals are excluded via pyproject addopts (`-m "not eval"`). The
         # PDF/Playwright tests skip cleanly when Chromium is absent, so no
@@ -55,10 +54,8 @@ jobs:
           cache: npm
           cache-dependency-path: apps/frontend/package-lock.json
       - name: Install dependencies
-        # `npm install` (not `npm ci`) so platform-specific optional deps
-        # (sharp's @emnapi/*) resolve correctly regardless of the runner's npm
-        # version - the same approach the Dockerfile uses. Keeps CI reliable.
-        run: npm install --no-audit --no-fund
+        # Install exactly the reviewed graph committed in package-lock.json.
+        run: npm ci --no-audit --no-fund
       - name: Lint
         run: npm run lint
       - name: Unit tests

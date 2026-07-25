@@ -5,6 +5,7 @@ the SSE framing, flag gate, capability probe, per-user concurrency cap, cancel
 signalling, and cost-accounting `done` event.
 """
 
+import asyncio
 import json
 
 import pytest
@@ -193,7 +194,7 @@ class TestImprovePreviewStream:
         """Replace the pipeline with a fake that emits every real stage boundary."""
         from unittest.mock import MagicMock
 
-        async def _fake_flow(*, emit_stage, cancel_check, **kwargs):
+        async def _fake_flow(*, emit_stage, cancel_check, request_id, **kwargs):
             for stage in ("keywords", "plan", "rewrite", "refine", "score"):
                 if await cancel_check():
                     raise resumes_mod._TailorStreamCancelled()
@@ -201,8 +202,8 @@ class TestImprovePreviewStream:
                 await emit_stage(stage, "done")
             result = MagicMock()
             result.model_dump.return_value = {
-                "request_id": "rid-1",
-                "data": {"job_id": "job-1", "resume_id": None},
+                "request_id": request_id,
+                "data": {"request_id": request_id, "job_id": "job-1", "resume_id": None},
             }
             return result
 
@@ -272,6 +273,39 @@ class TestImprovePreviewStream:
             )
         assert resp.status_code == 404
 
+    async def test_recovers_completed_result_by_client_request_id(
+        self, client, stub_db
+    ):
+        stub_db.get_tailor_preview_result.return_value = {
+            "request_id": "tailor-12345678",
+            "data": {
+                "request_id": "tailor-12345678",
+                "preview_id": "preview-1",
+                "resume_id": None,
+                "job_id": "job-1",
+                "resume_preview": {},
+                "improvements": [],
+            },
+        }
+        async with client:
+            response = await client.get(
+                "/api/v1/resumes/improve/preview/result/tailor-12345678"
+            )
+        assert response.status_code == 200
+        assert response.headers["cache-control"] == "no-store"
+        assert response.json()["data"]["preview_id"] == "preview-1"
+        stub_db.get_tailor_preview_result.assert_awaited_once()
+
+    async def test_missing_recovery_result_is_retryable_404(self, client, stub_db):
+        stub_db.get_tailor_preview_result.return_value = None
+        async with client:
+            response = await client.get(
+                "/api/v1/resumes/improve/preview/result/tailor-12345678"
+            )
+        assert response.status_code == 404
+        assert response.json()["error"]["code"] == "preview_result_not_ready"
+        assert response.json()["error"]["details"]["retryable"] is True
+
     async def test_precancelled_stream_emits_cancelled_done(
         self, client, enable_streaming, fresh_registry, stub_db, stub_flow
     ):
@@ -287,6 +321,42 @@ class TestImprovePreviewStream:
         events = _parse_sse(resp.text)
         done = [d for e, d in events if e == "done"][0]
         assert done.get("cancelled") is True
+
+    async def test_cancel_during_structured_provider_call_stops_without_preview(
+        self, client, enable_streaming, fresh_registry, stub_db, monkeypatch
+    ):
+        """A registry cancel interrupts the active LLM stage, not just the next stage."""
+        started = asyncio.Event()
+
+        async def blocking_keywords(_user_id, _content, *, cancel_check=None):
+            assert cancel_check is not None
+            started.set()
+            while True:
+                if await cancel_check():
+                    raise resumes_mod.LLMRequestCancelled()
+                await asyncio.sleep(0.01)
+
+        monkeypatch.setattr(
+            resumes_mod, "extract_job_keywords_cached", blocking_keywords
+        )
+        owner = await _owner_id()
+        request_id = "tailor-midcall99"
+
+        async with client:
+            response_task = asyncio.create_task(
+                client.post(
+                    f"/api/v1/resumes/improve/preview/stream?request_id={request_id}",
+                    json={"resume_id": "res-1", "job_id": "job-1"},
+                )
+            )
+            await asyncio.wait_for(started.wait(), timeout=1)
+            await fresh_registry.request_cancel(owner, request_id)
+            response = await asyncio.wait_for(response_task, timeout=2)
+
+        events = _parse_sse(response.text)
+        done = [data for event, data in events if event == "done"]
+        assert done and done[0].get("cancelled") is True
+        stub_db.create_tailor_preview.assert_not_awaited()
 
 
 class TestStreamingUpload:

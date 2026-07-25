@@ -60,6 +60,7 @@ class ResumeMetricsService:
     async def analytics(self, window: int):
         """Return :class:`ResumeAnalytics` for the given window (7/30/90)."""
         from app.admin.metric_registry import (
+            RESUMES_DELETED,
             RESUMES_GENERATED,
             RESUMES_IMPORTED,
             RESUMES_TAILORED,
@@ -76,55 +77,105 @@ class ResumeMetricsService:
 
         store = self._get_metric_store()
 
-        # Source split from snapshot (pre-computed by the rollup writer)
+        # Read each durable event series once. The deletion series serves two
+        # purposes below: it supplies the selected-window deleted event total
+        # (hard-deleted rows cannot appear in the snapshot), and it makes the
+        # fixed ``growth`` field a true net-change series.
+        event_keys = (
+            RESUMES_GENERATED,
+            RESUMES_IMPORTED,
+            RESUMES_TAILORED,
+            RESUMES_DELETED,
+        )
+        event_series = {key: await store.series(key, window) for key in event_keys}
+
+        # The snapshot is a current-inventory view. Its source counts are a
+        # mutually exclusive partition of live resume rows, so deletion events
+        # are deliberately excluded from both the split and its denominator.
+        computed_at = _now().isoformat(timespec="seconds")
         snapshot = await store.snapshot_get(_RESUME_SNAPSHOT) or {}
+        if not isinstance(snapshot, dict):
+            snapshot = {}
         source_counts = snapshot.get("sourceCounts", {})
+        if not isinstance(source_counts, dict):
+            source_counts = {}
 
         generated = int(source_counts.get("generated", 0))
         imported = int(source_counts.get("imported", 0))
         tailored = int(source_counts.get("tailored", 0))
-        deleted = int(source_counts.get("deleted", 0))
-        total = generated + imported + tailored + deleted
+        inventory_total = generated + imported + tailored
 
         def pct(n: int) -> float:
-            return round(n / total * 100, 1) if total > 0 else 0.0
+            return round(n / inventory_total * 100, 1) if inventory_total > 0 else 0.0
 
         source_split = ResumeSourceSplit(
             generated=generated,
             imported=imported,
             tailored=tailored,
-            deleted=deleted,
             generatedPct=pct(generated),
             importedPct=pct(imported),
             tailoredPct=pct(tailored),
-            deletedPct=pct(deleted),
         )
 
-        # Popular templates from snapshot (top 10, already sorted by the writer)
+        # Both inventory sections describe the same current snapshot. Preserve a
+        # valid, timezone-aware sampling timestamp; malformed/legacy snapshots
+        # fall back to this response's computation time rather than emitting an
+        # unusable date.
+        sampled_at = snapshot.get("sampledAt")
+        try:
+            if not isinstance(sampled_at, str) or not sampled_at.strip():
+                raise ValueError("missing sampledAt")
+            parsed_sampled_at = datetime.fromisoformat(
+                sampled_at.replace("Z", "+00:00")
+            )
+            if parsed_sampled_at.tzinfo is None or parsed_sampled_at.utcoffset() is None:
+                raise ValueError("sampledAt must include a UTC offset")
+            snapshot_as_of = sampled_at
+        except (TypeError, ValueError):
+            snapshot_as_of = computed_at
+
+        # Sort defensively at the response boundary: old/manually populated
+        # snapshots are not guaranteed to have been ordered by the writer.
+        # These counts are current resume inventory by template, not selected-
+        # window usage. Apply the top-10 cut after the deterministic tie-break.
         popular_raw = snapshot.get("popularTemplates", [])
+        popular_sorted = sorted(
+            popular_raw,
+            key=lambda item: (-int(item["count"]), str(item["template"])),
+        )
         top_templates = [
-            TemplateCount(name=t["template"], count=int(t["count"]))
-            for t in popular_raw[:10]
+            TemplateCount(name=str(item["template"]), count=int(item["count"]))
+            for item in popular_sorted[:10]
         ]
 
-        # Resume-growth series (Req 14.3): resumes *created* per calendar day
-        # = generated + imported + tailored. Deletions are not growth, so
-        # RESUMES_DELETED is intentionally excluded here.
-        keys = [RESUMES_GENERATED, RESUMES_IMPORTED, RESUMES_TAILORED]
-        all_series: dict[str, int] = {}
-        for key in keys:
-            raw = await store.series(key, window)
-            for day, val in raw:
-                all_series[day] = all_series.get(day, 0) + val
+        # Net resume inventory change per UTC day. Successful creation events add
+        # inventory and successful hard deletions remove it, so daily values and
+        # the selected-window total may legitimately be negative.
+        growth_by_day: dict[str, int] = {}
+        for key in event_keys:
+            direction = -1 if key == RESUMES_DELETED else 1
+            for day, value in event_series[key]:
+                growth_by_day[day] = growth_by_day.get(day, 0) + direction * int(value)
 
-        growth = [SeriesPoint(date=d, value=v) for d, v in sorted(all_series.items())]
+        growth = [
+            SeriesPoint(date=day, value=value)
+            for day, value in sorted(growth_by_day.items())
+        ]
+        deleted_in_window = sum(
+            int(value) for _, value in event_series[RESUMES_DELETED]
+        )
+        net_change = sum(point.value for point in growth)
 
         return ResumeAnalytics(
             window=window,
             sourceSplit=source_split,
             topTemplates=top_templates,
+            deletedInWindow=deleted_in_window,
+            netChange=net_change,
+            inventoryAsOf=snapshot_as_of,
+            templatesAsOf=snapshot_as_of,
             growth=growth,
-            computedAt=_now().isoformat(timespec="seconds"),
+            computedAt=computed_at,
         )
 
 

@@ -17,6 +17,16 @@
 export const SINGLE_USER_MODE: boolean =
   (process.env.NEXT_PUBLIC_SINGLE_USER_MODE ?? 'true').toLowerCase() !== 'false';
 
+/**
+ * Where a marketing "get started / enter the app" CTA should point, resolved by
+ * deployment mode:
+ * - single-user (local): straight into the workspace (`/home`) - there is no
+ *   login wall, so no reason to detour a visitor through signup.
+ * - hosted (multi-user): signup, the natural first step for a new visitor
+ *   (going to `/home` would just bounce through the login guard).
+ */
+export const APP_ENTRY_HREF: string = SINGLE_USER_MODE ? '/home' : '/signup';
+
 /** Name of the JS-readable CSRF cookie set by the backend (`csrf`). */
 export const CSRF_COOKIE_NAME = 'csrf';
 

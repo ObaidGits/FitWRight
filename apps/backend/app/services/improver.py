@@ -5,23 +5,27 @@ import json
 import logging
 import re
 from difflib import SequenceMatcher
+from collections.abc import Awaitable
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from app.llm import complete_json
+from app.llm import classify_llm_error, complete_json
 from app.prompts import (
     CRITICAL_TRUTHFULNESS_RULES,
     DEFAULT_IMPROVE_PROMPT_ID,
     DIFF_IMPROVE_PROMPT,
     DIFF_STRATEGY_INSTRUCTIONS,
+    EXTRACT_ADDITIONS_PROMPT,
     EXTRACT_KEYWORDS_PROMPT,
     IMPROVE_RESUME_PROMPTS,
     SKILL_TARGET_PLAN_PROMPT,
+    format_user_instructions,
     get_language_name,
 )
 from app.prompts.templates import IMPROVE_SCHEMA_EXAMPLE
 from app.schemas import ResumeData, ResumeFieldDiff, ResumeDiffSummary
-from app.schemas.models import ImproveDiffResult, ResumeChange
+from app.schemas.models import ImproveDiffResult, JobAnalyzeKeywords, ResumeChange
+from app.schemas.llm_outputs import SkillTargetPlanOutput, UserAdditionsOutput
 
 logger = logging.getLogger(__name__)
 
@@ -223,6 +227,141 @@ def _verify_original_matches(actual: Any, expected: str | list[str] | None) -> b
     return actual.strip().casefold() == expected.strip().casefold()
 
 
+def _normalize_instructions_text(user_instructions: str | None) -> str:
+    """Sanitized, casefolded instruction text used to ground user-attested adds."""
+    if not user_instructions:
+        return ""
+    return _sanitize_user_input(user_instructions).casefold()
+
+
+def _term_is_attested(term: str, instructions_norm: str) -> bool:
+    """True when ``term`` (a project name / role title / company / skill) appears
+    in the user's own instructions - i.e. the addition is user-attested, not
+    model-invented. Deterministic containment check; empty term/instructions is
+    never attested."""
+    t = (term or "").strip().casefold()
+    if not t or not instructions_norm:
+        return False
+    return t in instructions_norm
+
+
+def _clean_str(value: Any) -> str:
+    return value.strip() if isinstance(value, str) else ""
+
+
+def _clean_str_list(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return [s.strip() for s in value if isinstance(s, str) and s.strip()]
+    if isinstance(value, str) and value.strip():
+        return [value.strip()]
+    return []
+
+
+_ENTRY_NAME_STOPWORDS = frozenset(
+    {"project", "projects", "the", "a", "an", "role", "experience", "at", "and", "of", "for"}
+)
+_ENTRY_LEADING_FILLER = re.compile(
+    r"^(?:the\s+|a\s+|an\s+|project\s+|projects\s+|role\s+|experience\s+)+",
+    re.IGNORECASE,
+)
+
+
+def _clean_entry_name(name: str) -> str:
+    """Strip leading filler ("Project ", "Role ", "The ") so an add reads as
+    "KRIA", not "Project KRIA"."""
+    cleaned = _ENTRY_LEADING_FILLER.sub("", (name or "").strip()).strip()
+    return cleaned or (name or "").strip()
+
+
+def _entry_name_tokens(name: str) -> frozenset[str]:
+    """Significant lowercase tokens of an entry name (stopwords removed) used for
+    fuzzy duplicate detection across differently-worded variants, e.g.
+    'Project KRIA (Kernel ...)' vs 'KRIA' both contain the token 'kria'."""
+    words = re.findall(r"[a-z0-9]+", (name or "").lower())
+    return frozenset(w for w in words if w not in _ENTRY_NAME_STOPWORDS)
+
+
+_BULLET_STOPWORDS = frozenset(
+    {
+        "the", "a", "an", "and", "or", "of", "to", "in", "on", "for", "with", "as",
+        "at", "by", "from", "that", "this", "it", "its", "was", "were", "is", "are",
+        "be", "been", "being", "using", "used", "via", "over", "into", "which",
+        "also", "built", "build", "developed", "created", "made", "project",
+    }
+)
+
+
+def _significant_tokens(text: str) -> set[str]:
+    """Content words (>=3 chars, stopwords removed) for grounding comparisons."""
+    return {
+        w
+        for w in re.findall(r"[a-z0-9][a-z0-9+.#]*", (text or "").lower())
+        if len(w) >= 3 and w not in _BULLET_STOPWORDS
+    }
+
+
+def _filter_bullets_to_grounded(
+    bullets: list[str],
+    instruction_tokens: set[str],
+    instructions_norm: str = "",
+    threshold: float = 0.5,
+) -> list[str]:
+    """Keep only bullets whose content is substantially grounded in the user's
+    own words (anti-embellishment) AND contain no invented metric.
+
+    - A bullet that introduces mostly new terms the user never wrote (e.g.
+      "web application integrating AI/ML") falls below the threshold -> dropped.
+    - A bullet containing a metric (e.g. "increased by 30%", "$2M", "3x") that
+      the user did not write is dropped (metric fabrication guard, mirroring
+      verify_diff_result for edited bullets).
+    - Bullets with no significant tokens are kept (harmless connective text)."""
+    if not instruction_tokens:
+        return []
+    kept: list[str] = []
+    for bullet in bullets:
+        metrics = _METRIC_RE.findall(bullet or "")
+        if any(m.lower() not in instructions_norm for m in metrics):
+            logger.info("Dropped addition bullet with invented metric: %r", bullet)
+            continue
+        toks = _significant_tokens(bullet)
+        if not toks:
+            continue
+        grounded = len(toks & instruction_tokens)
+        if grounded / len(toks) >= threshold:
+            kept.append(bullet)
+        else:
+            logger.info(
+                "Dropped embellished addition bullet (grounded %d/%d): %r",
+                grounded,
+                len(toks),
+                bullet,
+            )
+    return kept
+
+
+def _is_duplicate_entry(candidate: frozenset[str], existing: list[frozenset[str]]) -> bool:
+    """True when the candidate's token set is contained in (or contains) an
+    existing entry's tokens - catches 'KRIA' vs 'Project KRIA (Kernel ...)'."""
+    if not candidate:
+        return False
+    for ex in existing:
+        if not ex:
+            continue
+        if candidate <= ex or ex <= candidate:
+            return True
+    return False
+
+
+def _next_entry_id(entries: list[Any]) -> int:
+    """Next integer id for a section list (max existing + 1, else 0)."""
+    ids = [
+        e["id"]
+        for e in entries
+        if isinstance(e, dict) and isinstance(e.get("id"), int)
+    ]
+    return (max(ids) + 1) if ids else 0
+
+
 def apply_diffs(
     original: dict[str, Any],
     changes: list[ResumeChange],
@@ -245,6 +384,10 @@ def apply_diffs(
 
     Returns:
         (result_dict, applied_changes, rejected_changes)
+
+    Note: the diff engine is edit-only. Brand-new entries (projects/roles the
+    user asked to add) are handled separately and deterministically by
+    :func:`merge_user_additions`, never here.
     """
     result = copy.deepcopy(original)
     applied: list[ResumeChange] = []
@@ -445,7 +588,9 @@ def verify_diff_result(
         warnings.append("No changes were applied - resume returned unchanged")
         return warnings
 
-    # Check 2: Section counts preserved
+    # Check 2: Section counts preserved. The diff engine is edit-only, so any
+    # count change here signals a dropped/duplicated entry. (User-requested new
+    # entries are added later by merge_user_additions, after this check.)
     for key, label in [
         ("workExperience", "work experience"),
         ("education", "education"),
@@ -511,6 +656,8 @@ async def generate_resume_diffs(
     prompt_id: str | None = None,
     original_resume_data: dict[str, Any] | None = None,
     skill_targets: list[dict[str, Any]] | None = None,
+    custom_instructions: str | None = None,
+    cancel_check: Callable[[], Awaitable[bool]] | None = None,
 ) -> ImproveDiffResult:
     """Generate targeted resume diffs via LLM.
 
@@ -554,6 +701,12 @@ async def generate_resume_diffs(
     else:
         resume_input = original_resume
 
+    # Optional per-run user steering (sanitized + bounded). Injected as a
+    # lower-priority block that cannot override the truthfulness rules.
+    user_instructions = format_user_instructions(
+        _sanitize_user_input(custom_instructions) if custom_instructions else None
+    )
+
     prompt = DIFF_IMPROVE_PROMPT.format(
         strategy_instruction=strategy_instruction,
         output_language=output_language,
@@ -561,6 +714,7 @@ async def generate_resume_diffs(
         skill_targets=_prepare_skill_targets_for_prompt(skill_targets),
         job_description=sanitized_jd,
         original_resume=resume_input,
+        user_instructions=user_instructions,
     )
 
     result = await complete_json(
@@ -568,6 +722,8 @@ async def generate_resume_diffs(
         system_prompt="You are an expert resume editor. Output only valid JSON with targeted changes.",
         max_tokens=4096,
         schema_type="diff",
+        response_model=ImproveDiffResult,
+        cancel_check=cancel_check,
     )
 
     # Parse result - handle LLM ignoring diff format gracefully
@@ -601,7 +757,59 @@ async def generate_resume_diffs(
     return ImproveDiffResult(changes=changes, strategy_notes=strategy_notes)
 
 
-async def extract_job_keywords(job_description: str) -> dict[str, Any]:
+# Curated technical/skill vocabulary for the deterministic keyword fallback.
+# Not exhaustive - just enough to seed the tailoring prompt so the pipeline
+# never hard-fails at its first step when a weak/free model returns invalid
+# structured output. Matched as whole, case-insensitive terms.
+_COMMON_JD_TERMS: tuple[str, ...] = (
+    "python", "java", "javascript", "typescript", "go", "golang", "rust", "c++",
+    "c#", "ruby", "php", "kotlin", "swift", "scala", "sql", "nosql",
+    "react", "next.js", "vue", "angular", "svelte", "node.js", "node", "express",
+    "fastapi", "django", "flask", "spring", "rails", ".net", "graphql", "rest",
+    "grpc", "postgresql", "postgres", "mysql", "mongodb", "redis", "elasticsearch",
+    "kafka", "rabbitmq", "spark", "hadoop", "airflow", "snowflake",
+    "docker", "kubernetes", "terraform", "ansible", "aws", "gcp", "azure",
+    "ci/cd", "jenkins", "github actions", "gitlab", "linux", "bash",
+    "microservices", "serverless", "lambda", "s3", "ec2", "rds",
+    "machine learning", "ml", "deep learning", "pytorch", "tensorflow", "pandas",
+    "numpy", "nlp", "llm", "data pipeline", "etl", "observability", "datadog",
+    "grafana", "prometheus", "agile", "scrum", "tdd", "oop", "html", "css",
+)
+
+
+def extract_keywords_heuristic(job_description: str) -> dict[str, Any]:
+    """Deterministic (no-LLM) keyword extraction used as a resilience fallback.
+
+    Scans the job description for a curated vocabulary of technical terms. The
+    result is intentionally conservative and never fabricated - it only reports
+    terms literally present in the JD, so it is safe to feed into the tailoring
+    prompt (which is anti-fabrication gated downstream). Purpose: keep the whole
+    tailoring pipeline working when the model intermittently returns invalid
+    structured output for the keyword step, instead of hard-failing with a 422.
+    """
+    lower = (job_description or "").lower()
+    found: list[str] = []
+    seen: set[str] = set()
+    for term in _COMMON_JD_TERMS:
+        if re.search(rf"(?<!\w){re.escape(term)}(?!\w)", lower):
+            key = term.casefold()
+            if key not in seen:
+                seen.add(key)
+                found.append(term)
+    return {
+        "required_skills": found,
+        "preferred_skills": [],
+        "keywords": found,
+        "experience_requirements": [],
+        "seniority_level": None,
+        "experience_years": None,
+    }
+
+
+async def extract_job_keywords(
+    job_description: str,
+    cancel_check: Callable[[], Awaitable[bool]] | None = None,
+) -> dict[str, Any]:
     """Extract keywords and requirements from job description.
 
     Args:
@@ -609,16 +817,365 @@ async def extract_job_keywords(job_description: str) -> dict[str, Any]:
 
     Returns:
         Structured keywords and requirements
+
+    Resilience: if the model returns *invalid structured content* (the
+    intermittent free-model failure that surfaced as a 422 ``llm_response_invalid``
+    at the ``keywords`` stage), fall back to a deterministic heuristic so the
+    tailoring pipeline proceeds instead of hard-failing on step one. Genuine
+    provider errors (auth, rate limit, timeout, cancellation) are NOT masked -
+    they still propagate so the caller can surface an actionable error.
     """
     # LLM-011: Sanitize job description before using in prompt
     sanitized_jd = _sanitize_user_input(job_description)
     prompt = EXTRACT_KEYWORDS_PROMPT.format(job_description=sanitized_jd)
 
-    return await complete_json(
-        prompt=prompt,
-        system_prompt="You are an expert job description analyzer.",
-        schema_type="keywords",
+    try:
+        return await complete_json(
+            prompt=prompt,
+            system_prompt="You are an expert job description analyzer.",
+            schema_type="keywords",
+            response_model=JobAnalyzeKeywords,
+            cancel_check=cancel_check,
+        )
+    except Exception as exc:  # noqa: BLE001 - classified below; non-content errors re-raise
+        _status, code, _message, _retryable = classify_llm_error(exc)
+        if code != "llm_response_invalid":
+            raise  # auth / rate limit / timeout / provider down / cancellation
+        logger.warning(
+            "Keyword extraction returned invalid structured content; using "
+            "deterministic heuristic fallback so tailoring can proceed."
+        )
+        return extract_keywords_heuristic(job_description)
+
+
+async def extract_job_keywords_cached(
+    user_id: str,
+    job_description: str,
+    cancel_check: Callable[[], Awaitable[bool]] | None = None,
+) -> dict[str, Any]:
+    """Keyword extraction that reuses the shared, content-addressed analysis cache.
+
+    Both the pre-generation "Analyze fit" endpoint (``POST /jobs/analyze``) and
+    the tailoring pipeline (``_improve_preview_flow``) need the same JD keyword
+    breakdown. Routing both through :mod:`app.analysis_cache` under the same
+    ``ARTIFACT_JOB_ANALYSIS`` reuse key means clicking *Analyze* and then
+    *Generate* on an identical JD costs a single LLM extraction, not two - the
+    second call resolves to the stored artifact (token-waste fix).
+
+    The cache is keyed by the JD checksum + algorithm/model version, so a
+    provider/model switch or a JD edit correctly misses and recomputes. A cache
+    read/write failure never breaks tailoring - it degrades to a direct
+    extraction (see :func:`app.analysis_cache.get_or_compute`).
+    """
+    # Local imports avoid any import-order coupling between the service layer
+    # and the cache/LLM-config modules (which pull in the DB facade).
+    from app import analysis_cache
+    from app.llm import get_llm_config, get_model_name
+
+    try:
+        model_name = get_model_name(get_llm_config())
+    except Exception:  # noqa: BLE001 - only used to key the cache
+        model_name = None
+
+    checksum = analysis_cache.checksum_text(job_description)
+    keywords, _from_cache = await analysis_cache.get_or_compute(
+        user_id=user_id,
+        artifact_type=analysis_cache.ARTIFACT_JOB_ANALYSIS,
+        source_id=checksum,
+        checksum=checksum,
+        version=analysis_cache.version_key(
+            analysis_cache.ARTIFACT_JOB_ANALYSIS, model_name
+        ),
+        compute=lambda: extract_job_keywords(
+            job_description, cancel_check=cancel_check
+        ),
     )
+    return keywords
+
+
+_ADDITION_INTENT_RE = re.compile(
+    r"\b(add|adds|adding|include|includes|including|insert|append|"
+    r"new\s+(?:project|role|experience|job|position)|"
+    r"(?:my|another|a)\s+(?:project|role|experience)|"
+    r"i\s+(?:also\s+)?(?:have|know|built|made|created|developed|worked|led|used)|"
+    r"also\s+have|put\s+in|list)\b",
+    re.IGNORECASE,
+)
+
+
+def has_addition_intent(custom_instructions: str | None) -> bool:
+    """Cheap, deterministic gate: does the text plausibly ask to ADD content?
+
+    Pure steering ("emphasize backend", "reorder", "shorten") contains no add
+    verb, so we skip the extraction LLM call entirely - this both avoids the
+    latency/cost of a needless call and prevents the extractor from
+    misclassifying steering as an addition.
+    """
+    text = (custom_instructions or "").strip()
+    if not text:
+        return False
+    return bool(_ADDITION_INTENT_RE.search(text))
+
+
+async def extract_requested_additions(
+    custom_instructions: str | None,
+    language: str = "en",
+    cancel_check: Callable[[], Awaitable[bool]] | None = None,
+) -> dict[str, Any]:
+    """Extract ONLY the content the user explicitly asked to add.
+
+    The main diff pass (a large, complex prompt) is unreliable at emitting a
+    nested-object ``add_entry`` change on weak/free models, so a user's
+    legitimate "add project X" request would silently no-op. This dedicated,
+    single-purpose call (simple schema, short prompt) reliably converts the
+    request into structured entries which are then merged deterministically via
+    :func:`merge_user_additions`.
+
+    Returns ``{"projects": [], "experiences": [], "skills": []}`` when there is
+    nothing to add or on any provider/content failure - it must never break the
+    tailoring pipeline (additions are best-effort enhancement, not core).
+    """
+    empty: dict[str, Any] = {"projects": [], "experiences": [], "skills": []}
+    cleaned = (custom_instructions or "").strip()
+    if not cleaned:
+        return empty
+    # Skip the extra LLM call for pure-steering instructions (no add intent):
+    # cheaper, and it can't misclassify steering as an addition.
+    if not has_addition_intent(cleaned):
+        logger.info("No addition intent in instructions; skipping additions extraction.")
+        return empty
+
+    sanitized = _sanitize_user_input(cleaned)
+    prompt = EXTRACT_ADDITIONS_PROMPT.format(
+        output_language=get_language_name(language),
+        instructions=sanitized,
+    )
+    try:
+        result = await complete_json(
+            prompt=prompt,
+            system_prompt=(
+                "You extract only the resume additions the candidate explicitly "
+                "requested. Output only valid JSON."
+            ),
+            max_tokens=1024,
+            schema_type="diff",
+            response_model=UserAdditionsOutput,
+            cancel_check=cancel_check,
+        )
+    except Exception as exc:  # noqa: BLE001 - additions are best-effort
+        _status, code, _msg, _retryable = classify_llm_error(exc)
+        if code not in ("llm_response_invalid",):
+            # Genuine provider errors (auth/rate limit/timeout/cancellation) must
+            # still surface via the main pipeline; here we simply skip additions.
+            logger.info("Additions extraction skipped (provider error: %s)", code)
+        else:
+            logger.info("Additions extraction returned invalid content; skipping.")
+        return empty
+
+    if not isinstance(result, dict):
+        return empty
+    return {
+        "projects": result.get("projects") or [],
+        "experiences": result.get("experiences") or [],
+        "skills": result.get("skills") or [],
+    }
+
+
+def _skill_dedup_key(skill: str) -> str:
+    """Conservative normalization key for near-duplicate skill detection.
+
+    Collapses punctuation/whitespace and a trailing ``js`` so common variants
+    map together ("React" / "React.js" / "React JS" -> "react", "Node"/"Node.js"
+    -> "node") WITHOUT merging genuinely different skills ("Java" vs
+    "JavaScript" stay distinct; "JWT/OAuth" vs "JWT/OAuth Authentication" stay
+    distinct - substring merging is intentionally avoided as too risky)."""
+    key = re.sub(r"[^a-z0-9]", "", (skill or "").lower())
+    if len(key) > 2 and key.endswith("js"):
+        key = key[:-2]
+    return key
+
+
+def dedupe_resume_skills(resume_data: dict[str, Any]) -> dict[str, Any]:
+    """Remove near-duplicate technical skills, keeping the first occurrence (so
+    ordering and the tailoring's chosen form are preserved). Only ever removes
+    entries - never adds - so it is anti-fabrication safe. Applied at the end of
+    tailoring to stop lists from accumulating "React" + "React.js" etc."""
+    additional = resume_data.get("additional")
+    if not isinstance(additional, dict):
+        return resume_data
+    skills = additional.get("technicalSkills")
+    if not isinstance(skills, list) or len(skills) < 2:
+        return resume_data
+    seen: set[str] = set()
+    deduped: list[str] = []
+    removed = 0
+    for s in skills:
+        if not isinstance(s, str) or not s.strip():
+            continue
+        key = _skill_dedup_key(s)
+        if not key:
+            deduped.append(s.strip())
+            continue
+        if key in seen:
+            removed += 1
+            continue
+        seen.add(key)
+        deduped.append(s.strip())
+    if removed:
+        additional["technicalSkills"] = deduped
+        logger.info("Deduped %d near-duplicate skill(s).", removed)
+    return resume_data
+
+
+def merge_user_additions(
+    resume_data: dict[str, Any],
+    additions: dict[str, Any] | None,
+    custom_instructions: str | None,
+) -> tuple[dict[str, Any], int, list[str]]:
+    """Deterministically merge user-attested additions into the resume.
+
+    Every addition is re-gated against the user's own instructions (the same
+    ``_term_is_attested`` grounding used by ``apply_diffs``) so a hallucinated
+    extraction can never inject content the user did not actually name. Existing
+    entries/skills (e.g. one the diff pass already added) are de-duplicated.
+
+    Returns ``(updated_resume, added_count, notes)`` where ``notes`` are
+    human-readable messages (added / already-present / could-not-add) surfaced
+    to the user so an addition is never silently dropped.
+    """
+    if not additions:
+        return resume_data, 0, []
+    instructions_norm = _normalize_instructions_text(custom_instructions)
+    if not instructions_norm:
+        return resume_data, 0, []
+
+    result = copy.deepcopy(resume_data)
+    added = 0
+    notes: list[str] = []
+    # Anti-embellishment: bullets may only reuse the candidate's own words.
+    instruction_tokens = _significant_tokens(instructions_norm)
+
+    # Projects. Fuzzy dedup against existing names (including any the diff pass
+    # may have added under a differently-worded name) so KRIA is never doubled.
+    # A user-added project is being added FOR this job, so it is relevance-first:
+    # placed at the TOP of the section rather than buried at the end.
+    projects = result.setdefault("personalProjects", [])
+    if isinstance(projects, list):
+        existing_tokens = [
+            _entry_name_tokens(_clean_str(p.get("name")))
+            for p in projects
+            if isinstance(p, dict)
+        ]
+        next_id = _next_entry_id(projects)
+        new_projects: list[dict[str, Any]] = []
+        for raw in additions.get("projects", []):
+            if not isinstance(raw, dict):
+                continue
+            raw_name = _clean_str(raw.get("name"))
+            name = _clean_entry_name(raw_name)
+            if not name or not _term_is_attested(name, instructions_norm):
+                if raw_name:
+                    notes.append(
+                        f"Couldn't add project \"{raw_name}\" automatically - it wasn't "
+                        "clearly described in your instructions. Add it in the editor."
+                    )
+                continue
+            cand = _entry_name_tokens(name)
+            if _is_duplicate_entry(cand, existing_tokens):
+                notes.append(f"Project \"{name}\" is already in your resume; not added again.")
+                continue
+            new_projects.append(
+                {
+                    "id": next_id,
+                    "name": name,
+                    "role": "",
+                    "years": _clean_str(raw.get("years")),
+                    "tech": [],
+                    "description": _filter_bullets_to_grounded(
+                        _clean_str_list(raw.get("description")),
+                        instruction_tokens,
+                        instructions_norm,
+                    ),
+                }
+            )
+            next_id += 1
+            existing_tokens.append(cand)
+            added += 1
+            notes.append(f"Added project \"{name}\" from your instructions.")
+        if new_projects:
+            # Relevance-first: newly added, JD-targeted projects lead the section.
+            result["personalProjects"] = new_projects + projects
+
+    # Experiences (fuzzy dedup on title+company tokens).
+    experiences = result.setdefault("workExperience", [])
+    if isinstance(experiences, list):
+        existing_exp_tokens = [
+            _entry_name_tokens(
+                f"{_clean_str(e.get('title'))} {_clean_str(e.get('company'))}"
+            )
+            for e in experiences
+            if isinstance(e, dict)
+        ]
+        for raw in additions.get("experiences", []):
+            if not isinstance(raw, dict):
+                continue
+            title = _clean_entry_name(_clean_str(raw.get("title")))
+            company = _clean_str(raw.get("company"))
+            label = " at ".join([p for p in (title, company) if p]) or title or company
+            if not (title or company):
+                continue
+            if not (
+                _term_is_attested(title, instructions_norm)
+                or _term_is_attested(company, instructions_norm)
+            ):
+                notes.append(
+                    f"Couldn't add role \"{label}\" automatically - it wasn't clearly "
+                    "described in your instructions. Add it in the editor."
+                )
+                continue
+            cand = _entry_name_tokens(f"{title} {company}")
+            if _is_duplicate_entry(cand, existing_exp_tokens):
+                notes.append(f"Role \"{label}\" is already in your resume; not added again.")
+                continue
+            experiences.append(
+                {
+                    "id": _next_entry_id(experiences),
+                    "title": title,
+                    "company": company,
+                    "location": None,
+                    "years": _clean_str(raw.get("years")),
+                    "tech": [],
+                    "description": _filter_bullets_to_grounded(
+                        _clean_str_list(raw.get("description")),
+                        instruction_tokens,
+                        instructions_norm,
+                    ),
+                }
+            )
+            existing_exp_tokens.append(cand)
+            added += 1
+            notes.append(f"Added role \"{label}\" from your instructions.")
+
+    # Skills
+    additional = result.setdefault("additional", {})
+    if isinstance(additional, dict):
+        skills = additional.setdefault("technicalSkills", [])
+        if isinstance(skills, list):
+            existing_skills = {
+                s.casefold() for s in skills if isinstance(s, str)
+            }
+            for raw in additions.get("skills", []):
+                skill = _clean_str(raw)
+                if not skill or not _term_is_attested(skill, instructions_norm):
+                    continue
+                if skill.casefold() in existing_skills:
+                    continue
+                skills.append(skill)
+                existing_skills.add(skill.casefold())
+                added += 1
+                notes.append(f"Added skill \"{skill}\" from your instructions.")
+
+    return result, added, notes
 
 
 MONTH_PATTERN = re.compile(
@@ -931,6 +1488,7 @@ async def generate_skill_target_plan(
         ),
         max_tokens=2048,
         schema_type="diff",
+        response_model=SkillTargetPlanOutput,
     )
 
     raw_targets = result.get("target_skills", [])
@@ -981,6 +1539,8 @@ async def improve_resume(
     language: str = "en",
     prompt_id: str | None = None,
     original_resume_data: dict[str, Any] | None = None,
+    custom_instructions: str | None = None,
+    cancel_check: Callable[[], Awaitable[bool]] | None = None,
 ) -> dict[str, Any]:
     """Improve resume to better match job description.
 
@@ -1042,10 +1602,21 @@ async def improve_resume(
         critical_truthfulness_rules=truthfulness_rules,
     )
 
+    # Optional per-run user steering, appended to the system prompt so it stays
+    # subordinate to the truthfulness rules baked into the user prompt template.
+    system_prompt = "You are an expert resume editor. Output only valid JSON."
+    user_instructions = format_user_instructions(
+        _sanitize_user_input(custom_instructions) if custom_instructions else None
+    )
+    if user_instructions:
+        system_prompt = f"{system_prompt}\n{user_instructions}"
+
     result = await complete_json(
         prompt=prompt,
-        system_prompt="You are an expert resume editor. Output only valid JSON.",
+        system_prompt=system_prompt,
         max_tokens=8192,
+        response_model=ResumeData,
+        cancel_check=cancel_check,
     )
 
     # LLM-006: Pre-validation check for truncation signs

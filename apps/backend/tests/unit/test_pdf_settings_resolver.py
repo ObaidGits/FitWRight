@@ -61,3 +61,18 @@ def test_malformed_stored_falls_back_and_clamps():
 def test_non_dict_stored_is_safe():
     assert _resolve_pdf_settings("garbage", {})["template"] == "swiss-single"
     assert _resolve_pdf_settings(["x"], {})["pageSize"] == "A4"
+
+
+def test_boolean_settings_require_actual_json_booleans():
+    malformed = {
+        "compactMode": "false",
+        "showContactIcons": 1,
+    }
+    resolved = _resolve_pdf_settings(malformed, {})
+    assert resolved["compactMode"] is False
+    assert resolved["showContactIcons"] is False
+
+    overridden = _resolve_pdf_settings(
+        {"compactMode": False}, {"compactMode": True}
+    )
+    assert overridden["compactMode"] is True

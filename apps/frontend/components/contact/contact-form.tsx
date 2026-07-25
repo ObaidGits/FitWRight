@@ -283,7 +283,7 @@ export function ContactForm({ defaultPurpose = 'general' }: { defaultPurpose?: s
 
         <div className="grid gap-5 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label htmlFor="contact-purpose">What's this about?</Label>
+            <Label htmlFor="contact-purpose">What&apos;s this about?</Label>
             <Select value={values.purpose} onValueChange={(v) => set('purpose', v)}>
               <SelectTrigger id="contact-purpose" aria-label="Purpose of your message">
                 <SelectValue />
@@ -419,7 +419,7 @@ export function ContactForm({ defaultPurpose = 'general' }: { defaultPurpose?: s
 
         <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
           <p className="text-xs text-[var(--muted-foreground)]">
-            I'll never share your details. Typically reply within 1-2 business days.
+            I&apos;ll never share your details. Typically reply within 1-2 business days.
           </p>
           <Button type="submit" size="lg" loading={submitting} disabled={submitting}>
             <Send className="h-4 w-4" /> Send message
@@ -490,7 +490,7 @@ function SuccessCard({ result, onReset }: { result: ContactResult; onReset: () =
         </h2>
         <p className="mx-auto mt-2 max-w-md text-[var(--muted-foreground)]">
           Your note landed safely. I read every message and reply {result.estimated_response}. If
-          it's time-sensitive, just reply to the confirmation email.
+          it&apos;s time-sensitive, just reply to the confirmation email.
         </p>
         <p className="mt-4 inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--at-surface-2)] px-3 py-1 text-xs text-[var(--muted-foreground)]">
           Reference <span className="font-mono text-[var(--foreground)]">{result.reference}</span>

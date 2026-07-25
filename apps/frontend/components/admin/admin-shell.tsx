@@ -13,6 +13,7 @@ import { usePathname } from 'next/navigation';
 import Gauge from 'lucide-react/dist/esm/icons/gauge';
 import HeartPulse from 'lucide-react/dist/esm/icons/heart-pulse';
 import Users from 'lucide-react/dist/esm/icons/users';
+import UserPlus from 'lucide-react/dist/esm/icons/user-plus';
 import Sparkles from 'lucide-react/dist/esm/icons/sparkles';
 import Database from 'lucide-react/dist/esm/icons/database';
 import ScrollText from 'lucide-react/dist/esm/icons/scroll-text';
@@ -25,6 +26,7 @@ const NAV = [
   { href: '/admin', label: 'Overview', icon: Gauge },
   { href: '/admin/health', label: 'Health', icon: HeartPulse },
   { href: '/admin/users', label: 'Users', icon: Users },
+  { href: '/admin/invites', label: 'Invites', icon: UserPlus },
   { href: '/admin/ai', label: 'AI', icon: Sparkles },
   { href: '/admin/storage', label: 'Storage', icon: Database },
   { href: '/admin/audit', label: 'Audit', icon: ScrollText },

@@ -11,9 +11,40 @@
  * Every shape here mirrors a backend Pydantic response model exactly (camelCase,
  * allowlisted). No secrets/content ever cross this boundary.
  */
-import { apiFetch, apiPatch, apiPost } from './client';
+import { apiDelete, apiFetch, apiPatch, apiPost } from './client';
 
 export type AdminUserRole = 'user' | 'admin';
+
+/** An admin invite lifecycle record. Never carries the raw invite value;
+ *  `id` is the safe handle for revoke. Nullable lifecycle fields are always
+ *  present so clients can distinguish absence from an older response shape. */
+export interface AdminInviteView {
+  id: string;
+  email: string;
+  role: string;
+  createdBy: string | null;
+  createdAt: string;
+  expiresAt: string;
+  status: 'active' | 'used' | 'expired' | 'revoked' | 'superseded';
+  usedAt: string | null;
+  usedBy: string | null;
+  revokedAt: string | null;
+  revokedBy: string | null;
+  revokeReason: string | null;
+}
+
+export interface AdminInviteList {
+  items: AdminInviteView[];
+}
+
+/** Returned ONCE at creation - `inviteUrl` embeds the single-use token. */
+export interface CreatedInvite {
+  id: string;
+  email: string;
+  role: string;
+  expiresAt: string;
+  inviteUrl: string;
+}
 export type AdminUserStatus = 'active' | 'disabled' | 'pending_verification';
 export type MetricName = 'signups' | 'active_users' | 'resumes_tailored';
 export type MetricWindow = 7 | 30 | 90;
@@ -72,7 +103,9 @@ export interface AuditList {
 export interface AdminUserDetail extends AdminUserRow {
   updatedAt: string;
   tailoredCount: number;
+  /** `password`, `oauth:<providers>`, `password+oauth:<providers>`, or `unknown`. */
   signupMethod: string;
+  /** Whether saved AI credentials exist; this does not verify they work. */
   aiConfigured: boolean;
   recentAudit: AuditEntry[];
 }
@@ -118,8 +151,7 @@ export interface ReleaseInfo {
   env: string;
 }
 
-/** One background-job row, shared by `AdminHealth` and the Jobs panel (Req 8).
- *  Defined in full now; the jobs table that consumes it lands in task 7.2. */
+/** One background-job row, shared by `AdminHealth` and the Jobs panel (Req 8). */
 export interface JobRow {
   name: string;
   lastRun?: string | null;
@@ -146,15 +178,17 @@ export interface AdminHealth {
 
 /** `GET /admin/jobs` - per-job status table + worker-independent gauges (Req 8).
  *
- * Mirrors the backend `JobsPanel`. The queue/purge gauges are optional and each
- * carries an explicit `*Unavailable` flag so the UI can distinguish "zero" from
- * "couldn't be read" and render an unavailable indicator rather than a bogus 0. */
+ * The queue, dead-letter, and purge gauges are optional and each carries an
+ * explicit `*Unavailable` flag so the UI can distinguish zero from a failed
+ * read and render an unavailable indicator rather than a bogus 0. */
 export interface JobsPanel {
   jobs: JobRow[];
   queueLength?: number | null;
   queueLengthUnavailable: boolean;
   purgeBacklog?: number | null;
   purgeBacklogUnavailable: boolean;
+  deadLetterCount?: number | null;
+  deadLetterCountUnavailable: boolean;
   computedAt: string;
   stale: boolean;
 }
@@ -168,10 +202,9 @@ export interface BulkDisableResult {
 // ---------------------------------------------------------------------------
 // Observability: AI analytics (Req 4) - mirrors backend `AiAnalytics`.
 //
-// Allowlisted, secret-free call aggregates + a closed per-provider breakdown +
-// a truncated whole-dollar cost estimate. No prompt/model/temperature/id fields
-// ever cross this boundary. `daily` is the AI-calls series for an optional chart
-// / data table; the current day is "live" (folds in not-yet-flushed activity).
+// Allowlisted, secret-free call aggregates + a per-provider breakdown + a
+// nullable decimal-dollar estimate. `daily` is the AI-calls series for an
+// optional chart / data table; `dataScope` defines what observations contributed.
 // ---------------------------------------------------------------------------
 
 /** One point in a daily aggregate series (UTC day -> integer value). */
@@ -199,8 +232,11 @@ export interface AiAnalytics {
   avgUnitsPerCall: number;
   timeouts: number;
   retries: number;
-  /** Whole dollars: microdollars / 1,000,000, truncated. */
-  estimatedCostDollars: number;
+  /** Decimal-dollar estimate; `null` when pricing cannot cover the data. */
+  estimatedCostDollars: number | null;
+  costUnavailable: boolean;
+  costUnavailableReason?: string | null;
+  dataScope: string;
   providers: ProviderCount[];
   daily?: SeriesPoint[] | null;
   computedAt: string;
@@ -229,17 +265,22 @@ export interface ErrorsBySource {
   ai: number;
 }
 
-/** `GET /admin/errors?window=` - grouped 4xx/5xx counts + by-source + trend. */
+/** `GET /admin/errors?window=` - grouped UTC-date-bucket errors and trend. */
 export interface ErrorsSummary {
   window: number;
+  /** Inclusive UTC calendar-date boundaries (`YYYY-MM-DD`). */
+  windowStartDate: string;
+  windowEndDate: string;
+  granularity: 'utc_day';
+  dataScope: string;
   counts4xx: number;
   counts5xx: number;
   topRouteClasses: RouteClassFailures[];
   bySource: ErrorsBySource;
   trend: SeriesPoint[];
-  /** Field paths with no durable source (e.g. `topRouteClasses`,
-   *  `bySource.job`, `bySource.storage`) - render "Not instrumented" for these
-   *  instead of a misleading empty list / zero. */
+  /** Field paths without instrumentation (`bySource.job` and
+   *  `bySource.storage`) - render "Not instrumented" instead of a misleading
+   *  zero. Route classes are current-process observations and are not listed. */
   notInstrumented: string[];
   computedAt: string;
 }
@@ -247,14 +288,13 @@ export interface ErrorsSummary {
 // ---------------------------------------------------------------------------
 // Observability: Performance signals (Req 6) - mirrors backend `PerformanceSignals`.
 //
-// Latency/cache aggregates the backend ALREADY produces - no new instrumentation
-// (Req 21.4). The optional host metrics (memory/cpu/disk) are a Non-Goal and are
-// omitted server-side via `exclude_none`, so they arrive as `undefined` and are
-// simply not rendered. `dbQueryTimeMs` is likewise omitted when there is no
-// source; its field name then appears in `unavailable` so the client can show an
-// explicit "unavailable" indicator (Req 6.7) rather than a bogus value. `p95Ms`
-// is optional per route-class (only present where the stored aggregate supports
-// it - Req 6.2).
+// Latency/cache aggregates come from bounded current-process instrumentation.
+// Host metrics are omitted server-side via `exclude_none`, so they arrive as
+// `undefined` and are simply not rendered. `dbQueryTimeMs` is likewise omitted
+// when there is no source; its field name then appears in `unavailable` so the
+// client can show an explicit "unavailable" indicator (Req 6.7) rather than a
+// bogus value. `p95Ms` is optional per route-class (only present where the
+// stored aggregate supports it - Req 6.2).
 // ---------------------------------------------------------------------------
 
 /** Average (and optional p95) latency for one route class (Req 6.1/6.2). */
@@ -285,6 +325,10 @@ export interface PerformanceSignals {
   dbQueryTimeMs?: number | null;
   /** Dashboard cache hit ratio in `[0.0, 1.0]`; `0.0` is a valid reading. */
   cacheHitRatio?: number | null;
+  /** Number of observations used to compute `cacheHitRatio`. */
+  cacheObservationCount: number;
+  /** Aggregate population represented by these performance signals. */
+  dataScope: string;
   memoryBytes?: number | null;
   cpuPercent?: number | null;
   diskBytes?: number | null;
@@ -299,11 +343,9 @@ export interface PerformanceSignals {
 // A cheap, cached storage snapshot: an approximate DB size + object-storage
 // usage (each optionally stale - read from a periodic sample, never live-queried
 // on request), the resource counts (avatars / resumes / resume versions), a
-// coarse retention status string, and an estimated daily growth. Size and growth
-// fields are optional: when a sample is missing the byte value is `null` and the
-// paired `*Stale` flag (size) or `growthUnavailable` + `growthUnavailableReason`
-// (growth) lets the UI show an explicit "stale"/"unavailable" indicator rather
-// than a misleading zero.
+// coarse retention status string, and an estimated daily growth. Size, count,
+// and growth availability are explicit so the UI never substitutes a misleading
+// zero; `snapshotAt` identifies the cached count snapshot when one exists.
 // ---------------------------------------------------------------------------
 
 /** `GET /admin/storage` - cached DB size + object storage + counts + growth (Req 7). */
@@ -319,6 +361,12 @@ export interface StoragePanel {
   avatarCount: number;
   resumeCount: number;
   resumeVersionCount: number;
+  /** `true` when resource counts could not be read. */
+  countsUnavailable: boolean;
+  /** `true` when resource counts came from a stale snapshot. */
+  countsStale: boolean;
+  /** Timestamp of the cached resource-count snapshot, if available. */
+  snapshotAt?: string | null;
   /** Coarse retention status text (e.g. "healthy", "backlog"); `null` when unknown. */
   retentionStatus?: string | null;
   /** Estimated growth in bytes/day; `null` when there are insufficient samples. */
@@ -333,18 +381,24 @@ export interface StoragePanel {
 // ---------------------------------------------------------------------------
 // Observability: Security view (Req 9) - mirrors backend `SecurityView`.
 //
-// A trailing-window (24h) aggregate of security-relevant counts read from the
-// `SEC_*` daily aggregates ONLY: failed logins, admin logins, authorization
-// denials, rate-limited requests and a coarse "suspicious" bucket. Counts are
-// zero (never null) when no data exists for the window, so the UI always renders
-// a real number. Aggregate-only and secret-free - never a raw event, IP, actor
-// id or log line.
+// An explicitly bounded aggregate of security-relevant counts read directly
+// from indexed audit events over the exact trailing 24-hour interval: failed
+// logins, current-role admin logins, authorization denials, rate-limit denials,
+// and CAPTCHA enforcement denials. Counts are zero (never null) when no matching
+// audit event exists. Aggregate-only and secret-free - never a raw event, IP,
+// actor id, or log line.
 // ---------------------------------------------------------------------------
 
-/** `GET /admin/security` - trailing-window security aggregate counts (Req 9). */
+/** `GET /admin/security` - bounded security aggregate counts (Req 9). */
 export interface SecurityView {
-  /** Trailing window the counts cover, in hours (24h). */
+  /** Nominal window size in hours. */
   windowHours: number;
+  /** Exact UTC interval boundaries and their aggregation semantics. */
+  windowStart: string;
+  windowEnd: string;
+  windowKind: string;
+  /** Basis used to classify an authentication as an admin login. */
+  adminLoginRoleBasis: string;
   loginFailed: number;
   adminLogin: number;
   authzDenied: number;
@@ -366,7 +420,9 @@ export interface SecurityView {
 /** `GET /admin/config` - secret-free, read-only configuration snapshot (Req 10). */
 export interface ConfigDiagnostics {
   env: string;
+  /** Compatibility list; `providersSource` explains how it was derived. */
   activeAiProviders: string[];
+  providersSource: string;
   storageProvider: string;
   emailProvider: string;
   featureFlags: Record<string, boolean>;
@@ -388,7 +444,8 @@ export interface ConfigDiagnostics {
 // KPI is a `KpiValue`: a numeric `value` plus an explicit `unavailable` marker,
 // so a source that cannot be computed degrades to an explicit "Unavailable"
 // indicator (Req 13.10) instead of a misleading zero. `errorRate24h.value` is a
-// percentage bounded 0.00-100.00; the count KPIs are non-negative integers.
+// percentage bounded 0.00-100.00, and `errorRateWindowLabel` states the actual
+// date-bucket semantics; the count KPIs are non-negative integers.
 // ---------------------------------------------------------------------------
 
 /** One KPI card value + an explicit unavailability marker (Req 13.7/13.10). */
@@ -406,6 +463,8 @@ export interface OverviewKpis {
   aiCallsToday: KpiValue;
   /** Percentage bounded 0.00-100.00 (two decimal places). */
   errorRate24h: KpiValue;
+  /** Label describing the date buckets used for `errorRate24h`. */
+  errorRateWindowLabel: string;
   purgeBacklog: KpiValue;
   computedAt: string;
   stale: boolean;
@@ -643,6 +702,31 @@ export async function bulkDisable(ids: string[]): Promise<BulkDisableResult> {
   return json<BulkDisableResult>(await apiPost('/admin/users/bulk-disable', { ids }));
 }
 
+// ---------------------------------------------------------------------------
+// Admin invites (secure admin signup - Option B)
+// ---------------------------------------------------------------------------
+
+/** List bounded recent admin-invite lifecycle history. Never returns a token. */
+export async function listInvites(): Promise<AdminInviteList> {
+  return json<AdminInviteList>(await apiFetch('/admin/invites'));
+}
+
+/** Issue an email-bound, single-use admin invite; returns the shareable URL
+ *  (shown only once). `ttlHours` optionally overrides the configured default. */
+export async function createInvite(email: string, ttlHours?: number): Promise<CreatedInvite> {
+  return json<CreatedInvite>(
+    await apiPost('/admin/invites', {
+      email,
+      ...(typeof ttlHours === 'number' ? { ttlHours } : {}),
+    })
+  );
+}
+
+/** Revoke an outstanding invite by id (idempotent). */
+export async function revokeInvite(id: string): Promise<MutationResult> {
+  return json<MutationResult>(await apiDelete(`/admin/invites/${encodeURIComponent(id)}`));
+}
+
 /**
  * Observability maintenance write (Req 18) - re-invoke one of the fixed, safe,
  * idempotent jobs. `admin.manage` + CSRF are enforced server-side; the CSRF
@@ -684,11 +768,8 @@ export type AdminApi = typeof adminApi;
 //   - `analyticsApi` - product analytics: feature usage, resume analytics and
 //     user growth.
 //
-// The individual endpoint methods are added by later frontend tasks (6.4 health,
-// 7.2 jobs, 8.3 config/maintenance, 9.4 ai-analytics, 12.3 storage, 13.3
-// security, 14.2 kpis, 16.3 feature-usage, 17.3 resumes). These groupings reuse
-// the shared helpers already defined above (`apiFetch`, `json`, `qs`,
-// `AdminApiError`, `apiPost`/`apiPatch`) - nothing is duplicated.
+// All endpoint methods below reuse the shared helpers (`apiFetch`, `json`, `qs`,
+// `AdminApiError`, and the mutation helpers); no request machinery is duplicated.
 //
 // Back-compat: the flat `adminApi` export is intentionally left unchanged so the
 // existing user-management/audit/stats hooks keep working.
@@ -697,13 +778,9 @@ export type AdminApi = typeof adminApi;
 /**
  * Observability context client.
  *
- * Seeded with the overview reads that are observability in nature and already
- * implemented (`getStats`, `getUsageSeries` - Overview KPIs / usage series,
- * Req 13). These remain on {@link adminApi} for back-compat and are re-exposed
- * here so callers in the observability context have a single, correctly-scoped
- * namespace. `getSystemHealth` (Req 3, task 6.4) is wired below. Later tasks
- * add: `getJobs`, `getErrors`, `getPerformance`, `getStorage`, `getSecurity`,
- * `getAiAnalytics`, `getConfig`, `getKpis`, and the maintenance mutations.
+ * Re-exposes the complete operational read surface and the bounded maintenance
+ * write surface under one correctly scoped namespace. `getStats` and
+ * `getUsageSeries` remain on {@link adminApi} for backward compatibility.
  */
 export const observabilityApi = {
   getStats,
@@ -754,22 +831,20 @@ export async function getFeatureUsage(window: MetricWindow = 30): Promise<Featur
 // ---------------------------------------------------------------------------
 // Product Analytics: Resume Analytics (Req 14, task 17.3)
 //
-// Source split (generated / imported / tailored / deleted) with counts +
-// percentages, up to ten popular templates, and a daily growth series. Reuses
-// the shared {@link SeriesPoint} for growth points (matches the backend, whose
-// `growth` is a `list[SeriesPoint]`).
+// Current source split (generated / imported / tailored) with counts and
+// percentages, up to ten popular templates, explicit window deletion/net-change
+// totals, and snapshot timestamps. Reuses the shared {@link SeriesPoint} for the
+// daily net inventory change (matching backend `list[SeriesPoint]`).
 // ---------------------------------------------------------------------------
 
-/** Resume source split: counts + percentages for each origin. */
+/** Current resume inventory split: counts + percentages for each origin. */
 export interface ResumeSourceSplit {
   generated: number;
   imported: number;
   tailored: number;
-  deleted: number;
   generatedPct: number;
   importedPct: number;
   tailoredPct: number;
-  deletedPct: number;
 }
 
 /** One popular-template row (name + usage count). */
@@ -778,13 +853,17 @@ export interface TemplateCount {
   count: number;
 }
 
-/** `GET /admin/analytics/resumes?window=` - source split, top templates, growth. */
+/** `GET /admin/analytics/resumes?window=` - inventory and window activity. */
 export interface ResumeAnalytics {
   window: number;
   sourceSplit: ResumeSourceSplit;
   /** Up to ten most-used templates (ties broken by name). */
   topTemplates: TemplateCount[];
-  /** Daily resume-growth series over the window (reuses {@link SeriesPoint}). */
+  deletedInWindow: number;
+  netChange: number;
+  inventoryAsOf: string;
+  templatesAsOf: string;
+  /** Daily net inventory change over the window (reuses {@link SeriesPoint}). */
   growth: SeriesPoint[];
   computedAt: string;
 }

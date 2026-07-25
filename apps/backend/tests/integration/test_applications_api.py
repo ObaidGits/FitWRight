@@ -88,7 +88,13 @@ class TestManualAdd:
 
 class TestDetail:
     async def test_detail_embeds_job_and_resume(self, isolated_db, owner_id):
-        resume = await isolated_db.create_resume(owner_id, content="# Resume")
+        resume = await isolated_db.create_resume(
+            owner_id,
+            content="# Resume",
+            cover_letter="Saved letter",
+            outreach_message="Saved outreach",
+            interview_prep='{"role_fit_analysis": []}',
+        )
         job = await isolated_db.create_job(owner_id, content="JD body text")
         card = await _seed_card(isolated_db, owner_id, job_id=job["job_id"], resume_id=resume["resume_id"])
         async with _client() as client:
@@ -96,7 +102,13 @@ class TestDetail:
         assert resp.status_code == 200
         body = resp.json()
         assert body["job_content"] == "JD body text"
-        assert body["resume"]["resume_id"] == resume["resume_id"]
+        assert body["resume"] == {
+            "resume_id": resume["resume_id"],
+            "cover_letter": "Saved letter",
+            "outreach_message": "Saved outreach",
+            "interview_prep": '{"role_fit_analysis": []}',
+        }
+        assert "content" not in body["resume"]
 
     async def test_detail_tolerates_deleted_resume(self, isolated_db, owner_id):
         job = await isolated_db.create_job(owner_id, content="JD")

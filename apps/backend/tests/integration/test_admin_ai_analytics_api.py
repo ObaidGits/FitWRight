@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import pytest
 
+from app.admin.metric_registry import AiProvider
 from app.admin.schemas import assert_no_forbidden_fields
 
 # Reuse the admin-API integration harness verbatim (client + login + fixtures).
@@ -48,13 +49,16 @@ class TestAiAnalyticsAuthz:
         body = resp.json()
         # No secret ever serializes (Property 3 / Req 15.8).
         assert_no_forbidden_fields(body)
-        # Shape: allowlisted aggregates + all five providers.
+        # Shape: allowlisted aggregates + the closed provider enumeration.
         assert body["window"] == 30
         assert body["totalCalls"] >= 0
         assert 0.0 <= body["successRate"] <= 1.0
         assert 0.0 <= body["failureRate"] <= 1.0
-        assert len(body["providers"]) == 5
-        assert "estimatedCostDollars" in body
+        assert len(body["providers"]) == len(AiProvider)
+        assert body["estimatedCostDollars"] is None
+        assert body["costUnavailable"] is True
+        assert body["costUnavailableReason"] == "Selected-window cost tracking is not instrumented."
+        assert body["dataScope"] == "durable_daily_plus_current_process"
 
 
 class TestAiAnalyticsWindowValidation:

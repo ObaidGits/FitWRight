@@ -39,7 +39,12 @@ from app.jd.models import (
 )
 from app.jd.monitoring.cost import CostMonitor, OperationCost
 from app.jd.robots import RobotsChecker
-from app.jd.ssrf import SsrfError, fetch_raw_safely, fetch_url_safely
+from app.jd.ssrf import (
+    SsrfError,
+    UpstreamHttpError,
+    fetch_raw_safely,
+    fetch_url_safely,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -199,31 +204,42 @@ async def _enforce_crawl_delay(host: str, delay: float) -> None:
         logger.debug("JD crawl-delay enforcement failed", exc_info=True)
 
 
-async def _extract_pdf_stage(url, canonical, traces, settings) -> ExtractionResult | None:
-    """Fetch a PDF via the raw SSRF-safe fetcher and extract text (§20).
+async def _extract_pdf_stage(
+    url,
+    canonical,
+    traces,
+    settings,
+    *,
+    data: bytes | None = None,
+    content_type: str = "",
+) -> ExtractionResult | None:
+    """Extract a PDF from supplied bytes or one SSRF-safe binary fetch (§20).
 
-    Returns an ExtractionResult (success or classified failure), or None if the
-    payload turned out not to be a PDF (caller should continue the HTML cascade).
+    ``data`` is supplied for extensionless PDFs discovered by the static fetch,
+    so those responses are downloaded exactly once.
     """
     t0 = time.perf_counter()
-    try:
-        data, content_type = await fetch_raw_safely(url, accept="application/pdf,*/*")
-    except SsrfError as exc:
-        traces.append(StageTrace(
-            stage="pdf_fetch", duration_ms=(time.perf_counter() - t0) * 1000,
-            status="failed", detail=exc.reason,
-        ))
-        logger.info("JD v2: PDF fetch blocked/failed for %s: %s", redact_url(canonical), exc.reason)
-        return ExtractionResult(
-            content="",
-            confidence=ConfidenceResult(level="LOW", score=0, reasons=["Could not download the PDF"]),
-            explanation=ExtractionExplanation(
-                summary="Could not download the PDF.",
-                pipeline_trace=traces,
-                suggestions=["Check the URL, or paste the job description text directly."],
-            ),
-            submitted_url=url, canonical_url=canonical, error_code="fetch_failed",
-        )
+    if data is None:
+        try:
+            data, content_type = await fetch_raw_safely(
+                url, accept="application/pdf,*/*"
+            )
+        except SsrfError as exc:
+            traces.append(StageTrace(
+                stage="pdf_fetch", duration_ms=(time.perf_counter() - t0) * 1000,
+                status="failed", detail=exc.reason,
+            ))
+            logger.info("JD v2: PDF fetch blocked/failed for %s: %s", redact_url(canonical), exc.reason)
+            return ExtractionResult(
+                content="",
+                confidence=ConfidenceResult(level="LOW", score=0, reasons=["Could not download the PDF"]),
+                explanation=ExtractionExplanation(
+                    summary="Could not download the PDF.",
+                    pipeline_trace=traces,
+                    suggestions=["Check the URL, or paste the job description text directly."],
+                ),
+                submitted_url=url, canonical_url=canonical, error_code="fetch_failed",
+            )
 
     unsupported = detect_unsupported_source(url, content_type)
     if unsupported:
@@ -290,7 +306,7 @@ async def orchestrate_v2(
             content="",
             confidence=ConfidenceResult(level="LOW", score=0, reasons=["Global timeout exceeded"]),
             explanation=ExtractionExplanation(
-                summary="Extraction timed out after 20 seconds.",
+                summary=f"Extraction timed out after {timeout:g} seconds.",
                 warnings=["The page took too long to process."],
                 suggestions=["Paste the job description text directly."],
             ),
@@ -460,6 +476,7 @@ async def _run_cascade(user_id: str, url: str, *, use_ai: bool = False, force_re
 
     # --- Stage 2: Fetch static HTML ---
     t0 = time.perf_counter()
+    upstream_status = 200
     try:
         html = await fetch_url_safely(url)
         await _get_cost().record(user_id, OperationCost.STATIC_FETCH)
@@ -467,6 +484,20 @@ async def _run_cascade(user_id: str, url: str, *, use_ai: bool = False, force_re
             stage="fetch_static", duration_ms=(time.perf_counter() - t0) * 1000,
             status="success", detail=f"{len(html)} bytes"
         ))
+    except UpstreamHttpError as exc:
+        # Preserve only bounded internal classification signals. Neither the
+        # upstream status nor body is exposed verbatim to the API response.
+        html = exc.body
+        upstream_status = exc.status_code
+        traces.append(StageTrace(
+            stage="fetch_static", duration_ms=(time.perf_counter() - t0) * 1000,
+            status="failed", detail=f"upstream_http_{upstream_status}"
+        ))
+        logger.info(
+            "JD v2: upstream denied static fetch for %s with status %d",
+            redact_url(canonical),
+            upstream_status,
+        )
     except SsrfError as exc:
         traces.append(StageTrace(
             stage="fetch_static", duration_ms=(time.perf_counter() - t0) * 1000,
@@ -493,7 +524,18 @@ async def _run_cascade(user_id: str, url: str, *, use_ai: bool = False, force_re
 
     # --- Stage 2.2: Content-type PDF detection (URLs without a .pdf suffix) ---
     if settings.jd_pdf_enabled and html[:5] == "%PDF-":
-        pdf_result = await _extract_pdf_stage(url, canonical, traces, settings)
+        raw_pdf = getattr(html, "raw_bytes", None)
+        raw_content_type = getattr(html, "content_type", "")
+        pdf_result = await _extract_pdf_stage(
+            url,
+            canonical,
+            traces,
+            settings,
+            data=raw_pdf if isinstance(raw_pdf, bytes) else None,
+            content_type=(
+                raw_content_type if isinstance(raw_content_type, str) else ""
+            ),
+        )
         if pdf_result is not None:
             if pdf_result.content:
                 await cache.set_result(canonical, pdf_result)
@@ -506,7 +548,7 @@ async def _run_cascade(user_id: str, url: str, *, use_ai: bool = False, force_re
     page_lang = detect_language(html=html) if settings.jd_i18n_enabled else ""
 
     # --- Stage 2.5: Page Classification (fast, < 1ms) ---
-    page_class = classify_page(html)
+    page_class = classify_page(html, http_status=upstream_status)
     if page_class == PageClass.CAPTCHA:
         traces.append(StageTrace(stage="classify", duration_ms=0, status="failed", detail="CAPTCHA detected"))
         return ExtractionResult(
@@ -517,7 +559,7 @@ async def _run_cascade(user_id: str, url: str, *, use_ai: bool = False, force_re
                 warnings=["CAPTCHA or bot challenge detected."],
                 suggestions=["Paste the job description text directly."],
             ),
-            submitted_url=url, canonical_url=canonical,
+            submitted_url=url, canonical_url=canonical, error_code="captcha_blocked",
         )
     elif page_class == PageClass.WAF_BLOCKED:
         traces.append(StageTrace(stage="classify", duration_ms=0, status="failed", detail="WAF blocked"))
@@ -529,7 +571,7 @@ async def _run_cascade(user_id: str, url: str, *, use_ai: bool = False, force_re
                 warnings=["Web Application Firewall detected."],
                 suggestions=["Paste the job description text directly."],
             ),
-            submitted_url=url, canonical_url=canonical,
+            submitted_url=url, canonical_url=canonical, error_code="waf_blocked",
         )
     elif page_class == PageClass.LOGIN_REQUIRED:
         traces.append(StageTrace(stage="classify", duration_ms=0, status="failed", detail="Login required"))
@@ -541,7 +583,7 @@ async def _run_cascade(user_id: str, url: str, *, use_ai: bool = False, force_re
                 warnings=["Login wall detected."],
                 suggestions=["Sign in to the job page, then paste the description text."],
             ),
-            submitted_url=url, canonical_url=canonical,
+            submitted_url=url, canonical_url=canonical, error_code="login_required",
         )
     elif page_class == PageClass.EXPIRED_JOB:
         traces.append(StageTrace(stage="classify", duration_ms=0, status="failed", detail="Job expired"))
@@ -553,7 +595,7 @@ async def _run_cascade(user_id: str, url: str, *, use_ai: bool = False, force_re
                 warnings=["The job appears to have been removed or expired."],
                 suggestions=["Check if the job is still posted.", "Look for the same role on the company's careers page."],
             ),
-            submitted_url=url, canonical_url=canonical,
+            submitted_url=url, canonical_url=canonical, error_code="job_expired",
         )
     else:
         traces.append(StageTrace(stage="classify", duration_ms=0, status="success", detail=page_class))

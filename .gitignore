@@ -28,22 +28,32 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
-uv.lock
+.mypy_cache/
+.ruff_cache/
 
 # SQLite databases
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
 *.sqlite3
+*.sqlite3-journal
+*.sqlite3-wal
+*.sqlite3-shm
 *.db
+*.db-journal
 *.db-wal
 *.db-shm
 
 # Encryption secret for API keys at rest - NEVER COMMIT
 **/data/.secret_key
 
-# Test artifacts
+# Test artifacts and local logs
 .pytest_cache/
 .coverage
 coverage.xml
 htmlcov/
+*.log
 
 # Local instance or config files specific to backend
 instance/
@@ -113,8 +123,12 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# Environment templates are safe, placeholder-only deployment documentation.
+# Real environment files remain ignored by the broad rule below.
 .env*
+!**/.env.example
+!**/.env.sample
+!**/.env.*.example
 
 # vercel
 .vercel

@@ -5,6 +5,7 @@ from app.prompts.templates import (
     DEFAULT_IMPROVE_PROMPT_ID,
     DIFF_IMPROVE_PROMPT,
     DIFF_STRATEGY_INSTRUCTIONS,
+    EXTRACT_ADDITIONS_PROMPT,
     EXTRACT_KEYWORDS_PROMPT,
     GENERATE_TITLE_PROMPT,
     IMPROVE_PROMPT_OPTIONS,
@@ -13,6 +14,7 @@ from app.prompts.templates import (
     INTERVIEW_PREP_PROMPT,
     PARSE_RESUME_PROMPT,
     SKILL_TARGET_PLAN_PROMPT,
+    format_user_instructions,
     get_language_name,
 )
 
@@ -50,6 +52,8 @@ __all__ = [
     "CRITICAL_TRUTHFULNESS_RULES",
     "DIFF_IMPROVE_PROMPT",
     "DIFF_STRATEGY_INSTRUCTIONS",
+    "EXTRACT_ADDITIONS_PROMPT",
+    "format_user_instructions",
     "SKILL_TARGET_PLAN_PROMPT",
     "GENERATE_TITLE_PROMPT",
     "INTERVIEW_PREP_PROMPT",

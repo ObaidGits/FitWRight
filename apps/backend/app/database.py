@@ -20,12 +20,14 @@ import asyncio
 import json
 import logging
 import shutil
-from datetime import datetime, timezone
+import weakref
+from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, AsyncIterator
 from uuid import uuid4
 
-from sqlalchemy import delete, func, select, update as sa_update
+from sqlalchemy import and_, delete, func, select, text, update as sa_update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import Session, sessionmaker
@@ -54,6 +56,7 @@ from app.models import (
     Resume,
     ResumeVersion,
     SearchDocument,
+    TailorPreview,
     User,
     UserUnreadCount,
 )
@@ -80,6 +83,21 @@ APPLICATION_STATUSES: tuple[str, ...] = (
 def _now() -> str:
     """Current UTC time as an ISO-8601 string (TinyDB-era format)."""
     return datetime.now(timezone.utc).isoformat()
+
+
+def _invalidate_api_key_cache(user_id: str) -> None:
+    """Drop the process-level decrypted-key cache for ``user_id`` after a write.
+
+    Hooked into every key mutation so the LLM hot-path cache (app.config) never
+    serves a rotated/cleared key. Lazy import + defensive: cache invalidation
+    must never break a key write.
+    """
+    try:
+        from app.config import invalidate_api_key_cache
+
+        invalidate_api_key_cache(user_id)
+    except Exception:  # pragma: no cover - invalidation must never break a write
+        pass
 
 
 class Database:
@@ -118,22 +136,53 @@ class Database:
         self._sync_engine = None
         self._sync_session_factory: sessionmaker[Session] | None = None
         self._initialized = False
-        # Per-user master-resume promotion locks. The single-master invariant is
-        # now **per user** (R10.4), so serialization is per user rather than a
-        # single global lock. Instance-scoped so isolated test databases never
-        # share lock state. The partial unique ``(user_id, is_master)`` index is
-        # the storage-level backstop.
-        self._master_locks: dict[str, asyncio.Lock] = {}
+        # Per-owner in-process locks avoid needless local contention; weak
+        # values disappear after the last waiter releases its lock, so this map
+        # cannot grow forever with historical user IDs. Correctness does not
+        # depend on these locks: `_master_transaction` acquires a database-level
+        # owner/write lock for cross-worker serialization.
+        self._master_locks: weakref.WeakValueDictionary[str, asyncio.Lock] = (
+            weakref.WeakValueDictionary()
+        )
         self._master_locks_guard = asyncio.Lock()
 
     async def _master_lock(self, user_id: str) -> asyncio.Lock:
-        """Return the promotion lock for ``user_id`` (created on first use)."""
+        """Return a self-evicting local contention lock for ``user_id``."""
         async with self._master_locks_guard:
             lock = self._master_locks.get(user_id)
             if lock is None:
                 lock = asyncio.Lock()
                 self._master_locks[user_id] = lock
             return lock
+
+    @asynccontextmanager
+    async def _master_transaction(
+        self, user_id: str
+    ) -> AsyncIterator[AsyncSession]:
+        """Serialize one owner's master mutation at the storage layer.
+
+        PostgreSQL locks the durable owner row, which coordinates every Uvicorn
+        worker. SQLite uses ``BEGIN IMMEDIATE`` because ``FOR UPDATE`` is ignored
+        there; acquiring the write lock before reading prevents two processes
+        from both observing an empty master slot.
+        """
+        async with self._session() as session:
+            dialect = session.bind.dialect.name if session.bind is not None else ""
+            if dialect == "sqlite":
+                await session.execute(text("BEGIN IMMEDIATE"))
+                try:
+                    yield session
+                    await session.commit()
+                except BaseException:
+                    await session.rollback()
+                    raise
+                return
+
+            async with session.begin():
+                await session.execute(
+                    select(User.id).where(User.id == user_id).with_for_update()
+                )
+                yield session
 
     # -- engine / session plumbing ------------------------------------------
 
@@ -372,47 +421,104 @@ class Database:
         interview_prep: str | None = None,
         template_settings: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Create a new resume with atomic master assignment for ``user_id``.
+        """Create a resume and assign master status transactionally per owner.
 
-        Uses a **per-user** asyncio.Lock to prevent race conditions when multiple
-        uploads for the same user happen concurrently and both try to become
-        master (the single-master invariant is per user - R10.4).
+        The local lock reduces contention, while ``_master_transaction`` is the
+        cross-worker correctness boundary. A failed/processing master is
+        demoted and the replacement inserted in the same transaction, so no
+        observer can see a committed half-transition.
         """
         lock = await self._master_lock(user_id)
         async with lock:
-            current_master = await self.get_master_resume(user_id)
-            is_master = current_master is None
-
-            # Recovery: if the current master is stuck failed/processing, demote
-            # it so this upload can become the new master.
-            if current_master and current_master.get("processing_status") in (
-                "failed",
-                "processing",
-            ):
-                async with self._session() as session:
-                    row = await self._get_owned_resume(
-                        session, user_id, current_master["resume_id"]
+            resume_id = str(uuid4())
+            now = _now()
+            is_master = False
+            try:
+                async with self._master_transaction(user_id) as session:
+                    current_result = await session.execute(
+                        Repo.scoped(
+                            select(Resume).where(Resume.is_master.is_(True)),
+                            Resume,
+                            user_id,
+                        )
                     )
-                    if row is not None:
-                        row.is_master = False
-                        await session.commit()
-                is_master = True
+                    current = current_result.scalars().first()
+                    is_master = current is None
+                    if current is not None and current.processing_status in (
+                        "failed",
+                        "processing",
+                    ):
+                        current.is_master = False
+                        await session.flush()
+                        is_master = True
 
-            return await self.create_resume(
-                user_id,
-                content=content,
-                content_type=content_type,
-                filename=filename,
-                is_master=is_master,
-                processed_data=processed_data,
-                processing_status=processing_status,
-                cover_letter=cover_letter,
-                outreach_message=outreach_message,
-                interview_prep=interview_prep,
-                original_markdown=original_markdown,
-                title=title,
-                template_settings=template_settings,
-            )
+                    session.add(
+                        Resume(
+                            resume_id=resume_id,
+                            user_id=user_id,
+                            content=content,
+                            content_type=content_type,
+                            filename=filename,
+                            is_master=is_master,
+                            processed_data=processed_data,
+                            processing_status=processing_status,
+                            cover_letter=cover_letter,
+                            outreach_message=outreach_message,
+                            interview_prep=interview_prep,
+                            title=title,
+                            original_markdown=original_markdown,
+                            template_settings=template_settings,
+                            created_at=now,
+                            updated_at=now,
+                        )
+                    )
+                    await self._adjust_user_counter(session, user_id, "resume_count", +1)
+                    self._emit_search_event(
+                        session, "resume.upserted", user_id, resume_id
+                    )
+            except IntegrityError:
+                # The partial unique index is the final backstop if an owner row
+                # was missing/legacy and therefore could not be locked. Recover
+                # only when another committed master proves this was that race;
+                # unrelated integrity failures must remain visible.
+                if not is_master or await self.get_master_resume(user_id) is None:
+                    raise
+                return await self.create_resume(
+                    user_id,
+                    content=content,
+                    content_type=content_type,
+                    filename=filename,
+                    is_master=False,
+                    processed_data=processed_data,
+                    processing_status=processing_status,
+                    cover_letter=cover_letter,
+                    outreach_message=outreach_message,
+                    interview_prep=interview_prep,
+                    original_markdown=original_markdown,
+                    title=title,
+                    template_settings=template_settings,
+                )
+
+            doc: dict[str, Any] = {
+                "resume_id": resume_id,
+                "content": content,
+                "content_type": content_type,
+                "filename": filename,
+                "is_master": is_master,
+                "parent_id": None,
+                "processed_data": processed_data,
+                "processing_status": processing_status,
+                "cover_letter": cover_letter,
+                "outreach_message": outreach_message,
+                "interview_prep": interview_prep,
+                "title": title,
+                "template_settings": template_settings,
+                "created_at": now,
+                "updated_at": now,
+            }
+            if original_markdown is not None:
+                doc["original_markdown"] = original_markdown
+            return doc
 
     async def get_resume(self, user_id: str, resume_id: str) -> dict[str, Any] | None:
         """Get a resume by ID, scoped to ``user_id`` (None if absent/foreign)."""
@@ -546,39 +652,71 @@ class Database:
             return True
 
     async def list_resumes(self, user_id: str) -> list[dict[str, Any]]:
-        """List all resumes owned by ``user_id``."""
+        """List full resume records owned by ``user_id``."""
         async with self._session() as session:
             result = await session.execute(
                 Repo.scoped(select(Resume), Resume, user_id).order_by(Resume.created_at)
             )
             return [self._resume_to_dict(row) for row in result.scalars().all()]
 
-    async def set_master_resume(self, user_id: str, resume_id: str) -> bool:
-        """Set the user's master resume, unsetting their existing master.
-
-        Returns False if the resume doesn't exist for this user. Demote-then-
-        promote happens in a single transaction so the per-user partial unique
-        index is never violated.
-        """
+    async def list_resume_summaries(
+        self, user_id: str, *, include_master: bool = False
+    ) -> list[dict[str, Any]]:
+        """List only fields required by the resume picker/list response."""
+        stmt = Repo.scoped(
+            select(
+                Resume.resume_id,
+                Resume.filename,
+                Resume.is_master,
+                Resume.parent_id,
+                Resume.processing_status,
+                Resume.created_at,
+                Resume.updated_at,
+                Resume.title,
+            ),
+            Resume,
+            user_id,
+        )
+        if not include_master:
+            stmt = stmt.where(Resume.is_master.is_(False))
         async with self._session() as session:
-            target = await self._get_owned_resume(session, user_id, resume_id)
-            if target is None:
-                logger.warning("Cannot set master: resume %s not found", resume_id)
-                return False
+            result = await session.execute(stmt.order_by(Resume.updated_at.desc()))
+            return [dict(row) for row in result.mappings().all()]
 
-            current = await session.execute(
-                Repo.scoped(
-                    select(Resume).where(Resume.is_master.is_(True)), Resume, user_id
+    async def list_resume_ids(self, user_id: str) -> list[str]:
+        """Return owned resume IDs without hydrating document/blob columns."""
+        async with self._session() as session:
+            result = await session.execute(
+                Repo.scoped(select(Resume.resume_id), Resume, user_id).order_by(
+                    Resume.resume_id
                 )
             )
-            for row in current.scalars().all():
-                if row.resume_id != resume_id:
-                    row.is_master = False
-            # Flush the demotions before promoting to satisfy the unique index.
-            await session.flush()
-            target.is_master = True
-            await session.commit()
-            return True
+            return list(result.scalars().all())
+
+    async def set_master_resume(self, user_id: str, resume_id: str) -> bool:
+        """Set one owned resume as master under a cross-worker owner lock."""
+        lock = await self._master_lock(user_id)
+        async with lock:
+            async with self._master_transaction(user_id) as session:
+                target = await self._get_owned_resume(session, user_id, resume_id)
+                if target is None:
+                    logger.warning("Cannot set master: resume %s not found", resume_id)
+                    return False
+
+                current = await session.execute(
+                    Repo.scoped(
+                        select(Resume).where(Resume.is_master.is_(True)),
+                        Resume,
+                        user_id,
+                    )
+                )
+                for row in current.scalars().all():
+                    if row.resume_id != resume_id:
+                        row.is_master = False
+                # Flush demotions before promotion for the partial unique index.
+                await session.flush()
+                target.is_master = True
+                return True
 
     # -- Resume version history (P3 §A, R1-R3) ------------------------------
 
@@ -1345,9 +1483,9 @@ class Database:
         """Update a job owned by ``user_id``.
 
         Core columns are set directly; every other key is merged into
-        ``metadata_json`` so dynamic pipeline fields (``preview_hash``,
-        ``job_keywords``, ``company``/``role``, ...) round-trip through
-        ``get_job`` as top-level keys.
+        ``metadata_json`` so dynamic analysis fields (``job_keywords``,
+        ``company``/``role``, ...) round-trip through ``get_job`` as top-level
+        keys. Tailoring confirmation state lives in ``tailor_previews``.
         """
         async with self._session() as session:
             row = await self._get_owned_job(session, user_id, job_id)
@@ -1383,6 +1521,291 @@ class Database:
                 Repo.scoped(select(Job), Job, user_id).order_by(Job.created_at)
             )
             return [self._job_to_dict(row) for row in result.scalars().all()]
+
+    # -- Durable tailoring preview/confirmation -----------------------------
+
+    async def create_tailor_preview(
+        self,
+        user_id: str,
+        *,
+        resume_id: str,
+        job_id: str,
+        prompt_id: str,
+        payload_hash: str,
+        ttl_seconds: int = 30 * 60,
+        request_id: str | None = None,
+        preview_id: str | None = None,
+        result_payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
+        """Persist an unconsumed preview after scoped ownership validation.
+
+        Every preview gets independent UUID capability and request identifiers,
+        so concurrent previews for the same resume/job/prompt coexist instead of
+        overwriting shared job metadata. ``None`` means the source resume or job
+        disappeared (or belongs to another user).
+        """
+        now_dt = datetime.now(timezone.utc)
+        now = now_dt.isoformat()
+        preview_id = preview_id or str(uuid4())
+        request_id = request_id or str(uuid4())
+        expires_at = (now_dt + timedelta(seconds=ttl_seconds)).isoformat()
+        async with self._session() as session:
+            async with session.begin():
+                source = await self._get_owned_resume(session, user_id, resume_id)
+                job = await self._get_owned_job(session, user_id, job_id)
+                if source is None or job is None:
+                    return None
+                session.add(
+                    TailorPreview(
+                        preview_id=preview_id,
+                        request_id=request_id,
+                        user_id=user_id,
+                        resume_id=resume_id,
+                        job_id=job_id,
+                        prompt_id=prompt_id,
+                        payload_hash=payload_hash,
+                        result_payload=result_payload,
+                        created_at=now,
+                        expires_at=expires_at,
+                    )
+                )
+        return {
+            "preview_id": preview_id,
+            "request_id": request_id,
+            "user_id": user_id,
+            "resume_id": resume_id,
+            "job_id": job_id,
+            "prompt_id": prompt_id,
+            "payload_hash": payload_hash,
+            "result_payload": result_payload,
+            "created_at": now,
+            "expires_at": expires_at,
+            "consumed_at": None,
+        }
+
+    async def get_tailor_preview(
+        self, user_id: str, preview_id: str
+    ) -> dict[str, Any] | None:
+        """Return one owned preview (test/diagnostic helper; never consumes it)."""
+        async with self._session() as session:
+            result = await session.execute(
+                Repo.scoped(
+                    select(TailorPreview).where(TailorPreview.preview_id == preview_id),
+                    TailorPreview,
+                    user_id,
+                )
+            )
+            row = result.scalars().first()
+            if row is None:
+                return None
+            return {
+                "preview_id": row.preview_id,
+                "request_id": row.request_id,
+                "user_id": row.user_id,
+                "resume_id": row.resume_id,
+                "job_id": row.job_id,
+                "prompt_id": row.prompt_id,
+                "payload_hash": row.payload_hash,
+                "result_payload": row.result_payload,
+                "created_at": row.created_at,
+                "expires_at": row.expires_at,
+                "consumed_at": row.consumed_at,
+            }
+
+    async def get_tailor_preview_result(
+        self, user_id: str, request_id: str
+    ) -> dict[str, Any] | None:
+        """Recover one completed, live, unconsumed preview by client request ID."""
+        async with self._session() as session:
+            result = await session.execute(
+                Repo.scoped(
+                    select(TailorPreview).where(
+                        TailorPreview.request_id == request_id,
+                        TailorPreview.expires_at > _now(),
+                        TailorPreview.consumed_at.is_(None),
+                        TailorPreview.result_payload.is_not(None),
+                    ),
+                    TailorPreview,
+                    user_id,
+                )
+            )
+            row = result.scalars().first()
+            if row is None or not isinstance(row.result_payload, dict):
+                return None
+            return row.result_payload
+
+    async def prune_expired_tailor_previews(
+        self, *, now_iso: str | None = None, batch_size: int = 1000
+    ) -> int:
+        """Delete at most ``batch_size`` expired preview capabilities.
+
+        The ordered ID subquery is portable across SQLite/PostgreSQL and avoids
+        an unbounded DELETE transaction after scheduler downtime. Repeated runs
+        are idempotent and eventually drain any backlog.
+        """
+        cutoff = now_iso or _now()
+        bounded_batch = max(1, min(int(batch_size), 10_000))
+        async with self._session() as session:
+            async with session.begin():
+                expired_ids = (
+                    select(TailorPreview.preview_id)
+                    .where(TailorPreview.expires_at <= cutoff)
+                    .order_by(TailorPreview.expires_at, TailorPreview.preview_id)
+                    .limit(bounded_batch)
+                )
+                result = await session.execute(
+                    delete(TailorPreview).where(
+                        TailorPreview.preview_id.in_(expired_ids)
+                    )
+                )
+                return int(result.rowcount or 0)
+
+    async def confirm_tailor_preview(
+        self,
+        user_id: str,
+        *,
+        preview_id: str,
+        resume_id: str,
+        job_id: str,
+        payload_hash: str,
+        improved_data: dict[str, Any],
+        improved_text: str,
+        improvements: list[dict[str, Any]],
+        cover_letter: str | None,
+        outreach_message: str | None,
+        interview_prep: str | None,
+        title: str | None,
+    ) -> tuple[str, dict[str, Any] | None]:
+        """Consume one matching preview and persist all confirmation rows atomically.
+
+        The conditional UPDATE is the concurrency gate. It matches owner, source,
+        job, payload hash, unconsumed state, and expiry in the database; only its
+        single winner may insert the tailored resume and dependent rows. Any
+        exception rolls back the consume and every insert together.
+        """
+        now = _now()
+        result_payload: dict[str, Any] | None = None
+        async with self._session() as session:
+            async with session.begin():
+                source = await self._get_owned_resume(session, user_id, resume_id)
+                job = await self._get_owned_job(session, user_id, job_id)
+                if source is None or job is None:
+                    return "not_found", None
+
+                consumed = await session.execute(
+                    sa_update(TailorPreview)
+                    .where(
+                        TailorPreview.preview_id == preview_id,
+                        TailorPreview.user_id == user_id,
+                        TailorPreview.resume_id == resume_id,
+                        TailorPreview.job_id == job_id,
+                        TailorPreview.payload_hash == payload_hash,
+                        TailorPreview.consumed_at.is_(None),
+                        TailorPreview.expires_at > now,
+                    )
+                    .values(consumed_at=now)
+                )
+                if consumed.rowcount != 1:
+                    return "invalid_preview", None
+
+                tailored_resume_id = str(uuid4())
+                confirmation_id = str(uuid4())
+                application_id = str(uuid4())
+                filename = f"tailored_{source.filename or 'resume'}"
+                session.add(
+                    Resume(
+                        resume_id=tailored_resume_id,
+                        user_id=user_id,
+                        content=improved_text,
+                        content_type="json",
+                        filename=filename,
+                        is_master=False,
+                        parent_id=resume_id,
+                        processed_data=improved_data,
+                        processing_status="ready",
+                        cover_letter=cover_letter,
+                        outreach_message=outreach_message,
+                        interview_prep=interview_prep,
+                        title=title,
+                        template_settings=source.template_settings,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                )
+
+                from app.versions.service import compress_processed_data
+
+                blob, size_bytes, content_hash = compress_processed_data(improved_data)
+                session.add(
+                    ResumeVersion(
+                        user_id=user_id,
+                        resume_id=tailored_resume_id,
+                        source="ai",
+                        label=None,
+                        content_hash=content_hash,
+                        data_gz=blob,
+                        size_bytes=size_bytes,
+                        template_settings=source.template_settings,
+                        created_at=now,
+                    )
+                )
+                session.add(
+                    Improvement(
+                        request_id=confirmation_id,
+                        user_id=user_id,
+                        original_resume_id=resume_id,
+                        tailored_resume_id=tailored_resume_id,
+                        job_id=job_id,
+                        improvements=improvements,
+                        created_at=now,
+                    )
+                )
+
+                position = await self._next_position(session, user_id, "applied")
+                metadata = job.metadata_json or {}
+                company = metadata.get("company") if isinstance(metadata, dict) else None
+                role = title or (metadata.get("role") if isinstance(metadata, dict) else None)
+                session.add(
+                    Application(
+                        application_id=application_id,
+                        user_id=user_id,
+                        job_id=job_id,
+                        resume_id=tailored_resume_id,
+                        master_resume_id=resume_id,
+                        status="applied",
+                        company=company,
+                        role=role,
+                        applied_at=now,
+                        position=position,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                )
+
+                await self._adjust_user_counter(session, user_id, "resume_count", +1)
+                await self._adjust_user_counter(session, user_id, "application_count", +1)
+                self._emit_search_event(
+                    session, "resume.upserted", user_id, tailored_resume_id
+                )
+                self._emit_search_event(
+                    session, "application.upserted", user_id, application_id
+                )
+                session.add(
+                    Outbox(
+                        user_id=user_id,
+                        event_type="ai.generation_done",
+                        payload={"resume_id": tailored_resume_id},
+                        created_at=now,
+                    )
+                )
+                await session.flush()
+                result_payload = {
+                    "request_id": confirmation_id,
+                    "preview_id": preview_id,
+                    "resume_id": tailored_resume_id,
+                    "application_id": application_id,
+                }
+        return "created", result_payload
 
     # -- Improvement operations ---------------------------------------------
 
@@ -1581,6 +2004,58 @@ class Database:
             row = await self._get_owned_application(session, user_id, application_id)
             return self._application_to_dict(row) if row else None
 
+    async def get_application_detail(
+        self, user_id: str, application_id: str
+    ) -> dict[str, Any] | None:
+        """Load a card, JD text, and resume deliverables in one narrow query."""
+        stmt = (
+            Repo.scoped(
+                select(
+                    Application,
+                    Job.content.label("job_content"),
+                    Resume.resume_id.label("detail_resume_id"),
+                    Resume.cover_letter,
+                    Resume.outreach_message,
+                    Resume.interview_prep,
+                ),
+                Application,
+                user_id,
+            )
+            .outerjoin(
+                Job,
+                and_(
+                    Job.job_id == Application.job_id,
+                    Job.user_id == user_id,
+                ),
+            )
+            .outerjoin(
+                Resume,
+                and_(
+                    Resume.resume_id == Application.resume_id,
+                    Resume.user_id == user_id,
+                ),
+            )
+            .where(Application.application_id == application_id)
+        )
+        async with self._session() as session:
+            result = await session.execute(stmt)
+            row = result.first()
+            if row is None:
+                return None
+            detail = self._application_to_dict(row[0])
+            detail["job_content"] = row.job_content
+            detail["resume"] = (
+                {
+                    "resume_id": row.detail_resume_id,
+                    "cover_letter": row.cover_letter,
+                    "outreach_message": row.outreach_message,
+                    "interview_prep": row.interview_prep,
+                }
+                if row.detail_resume_id is not None
+                else None
+            )
+            return detail
+
     async def update_application(
         self, user_id: str, application_id: str, updates: dict[str, Any]
     ) -> dict[str, Any] | None:
@@ -1740,6 +2215,7 @@ class Database:
                 row.ciphertext = ciphertext
                 row.updated_at = _now()
             session.commit()
+        _invalidate_api_key_cache(user_id)
 
     def delete_api_key(self, user_id: str, provider: str) -> None:
         """Delete one provider's key for ``user_id`` (sync)."""
@@ -1748,12 +2224,76 @@ class Database:
             if row is not None:
                 session.delete(row)
                 session.commit()
+        _invalidate_api_key_cache(user_id)
 
     def clear_api_keys(self, user_id: str) -> None:
         """Delete all of ``user_id``'s stored keys (sync)."""
         with self._sync() as session:
             session.execute(Repo.scoped(delete(ApiKey), ApiKey, user_id))
             session.commit()
+        _invalidate_api_key_cache(user_id)
+
+    def patch_api_key_ciphertexts(
+        self,
+        user_id: str,
+        updates: dict[str, str | None],
+    ) -> None:
+        """Atomically patch only the specified provider keys for ``user_id``.
+
+        Unlike replace-all semantics, disjoint concurrent requests cannot erase
+        each other's providers. Each non-empty ciphertext is upserted on the
+        composite ``(provider, user_id)`` primary key and ``None`` deletes only
+        that provider, all within one transaction.
+        """
+        if not updates:
+            return
+        with self._sync() as session:
+            now = _now()
+            deletes = [provider for provider, value in updates.items() if not value]
+            if deletes:
+                session.execute(
+                    delete(ApiKey).where(
+                        ApiKey.user_id == user_id,
+                        ApiKey.provider.in_(deletes),
+                    )
+                )
+
+            values = [
+                {
+                    "provider": provider,
+                    "user_id": user_id,
+                    "ciphertext": ciphertext,
+                    "updated_at": now,
+                }
+                for provider, ciphertext in updates.items()
+                if ciphertext
+            ]
+            dialect = session.get_bind().dialect.name
+            for value in values:
+                if dialect == "sqlite":
+                    from sqlalchemy.dialects.sqlite import insert as dialect_insert
+                elif dialect == "postgresql":
+                    from sqlalchemy.dialects.postgresql import insert as dialect_insert
+                else:  # pragma: no cover - supported deployments are SQLite/Postgres
+                    row = self._owned_api_key(session, user_id, value["provider"])
+                    if row is None:
+                        session.add(ApiKey(**value))
+                    else:
+                        row.ciphertext = value["ciphertext"]
+                        row.updated_at = now
+                    continue
+                stmt = dialect_insert(ApiKey).values(**value)
+                session.execute(
+                    stmt.on_conflict_do_update(
+                        index_elements=[ApiKey.provider, ApiKey.user_id],
+                        set_={
+                            "ciphertext": stmt.excluded.ciphertext,
+                            "updated_at": stmt.excluded.updated_at,
+                        },
+                    )
+                )
+            session.commit()
+        _invalidate_api_key_cache(user_id)
 
     def replace_api_keys(self, user_id: str, ciphertexts: dict[str, str]) -> None:
         """Atomically replace ``user_id``'s key store (clear + insert in one txn).
@@ -1776,6 +2316,7 @@ class Database:
                         )
                     )
             session.commit()
+        _invalidate_api_key_cache(user_id)
 
     # -- Stats / maintenance ------------------------------------------------
 
@@ -1819,6 +2360,7 @@ class Database:
         async with self._session() as session:
             await session.execute(Repo.scoped(delete(Application), Application, user_id))
             await session.execute(Repo.scoped(delete(Improvement), Improvement, user_id))
+            await session.execute(Repo.scoped(delete(TailorPreview), TailorPreview, user_id))
             await session.execute(Repo.scoped(delete(Job), Job, user_id))
             await session.execute(Repo.scoped(delete(Resume), Resume, user_id))
             # Reset the denormalized usage counters for this user (R11.3).
@@ -1883,6 +2425,7 @@ class Database:
             for label, model in (
                 ("improvements", Improvement),
                 ("applications", Application),
+                ("tailor_previews", TailorPreview),
                 ("resume_versions", ResumeVersion),
                 ("notifications", Notification),
                 ("notification_prefs", NotificationPref),

@@ -1,6 +1,8 @@
 # Database files (local data)
 data/*.json
 data/config.json
+data/*.schema.lock
+data/_schema_backup/
 !data/.gitkeep
 
 # Config file with API keys - NEVER COMMIT

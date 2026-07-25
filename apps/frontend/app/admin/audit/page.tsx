@@ -13,6 +13,7 @@ import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import ScrollText from 'lucide-react/dist/esm/icons/scroll-text';
 import RefreshCw from 'lucide-react/dist/esm/icons/refresh-cw';
 import ShieldAlert from 'lucide-react/dist/esm/icons/shield-alert';
+import ChevronDown from 'lucide-react/dist/esm/icons/chevron-down';
 import { Card } from '@/components/atelier/card';
 import { Badge } from '@/components/atelier/badge';
 import { Button } from '@/components/atelier/button';
@@ -33,6 +34,29 @@ import type { AuditListParams } from '@/lib/api/admin';
 // Req 11.8: every list view paginates with the shared cursor pagination at a
 // page size of 25.
 const PAGE_SIZE = 25;
+
+const SENSITIVE_METADATA_KEY =
+  /authorization|cookie|password|passwd|secret|session|token|api[-_]?key/i;
+
+/** Defense in depth: preserve useful metadata while hiding sensitive values. */
+function sanitizeAuditMetadata(value: unknown, key = ''): unknown {
+  if (SENSITIVE_METADATA_KEY.test(key)) return '[REDACTED]';
+  if (Array.isArray(value)) return value.map((item) => sanitizeAuditMetadata(item));
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([entryKey, entryValue]) => [
+        entryKey,
+        sanitizeAuditMetadata(entryValue, entryKey),
+      ])
+    );
+  }
+  return value;
+}
+
+function formatAuditMetadata(metadata: Record<string, unknown> | null | undefined): string {
+  if (!metadata) return '{}';
+  return JSON.stringify(sanitizeAuditMetadata(metadata), null, 2) ?? '{}';
+}
 
 // ---------------------------------------------------------------------------
 // Security strip (Req 9 / task 13.3) - a compact, self-contained row of the
@@ -93,18 +117,35 @@ function SecurityStrip() {
   const data = security.data;
 
   return (
-    <Card role="region" aria-label="Security overview, last 24 hours" className="p-4">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <ShieldAlert className="h-4 w-4 text-[var(--muted-foreground)]" aria-hidden />
-          <h2 className="text-sm font-semibold">Security</h2>
-          <Badge variant="neutral" aria-label={`Window: last ${data?.windowHours ?? 24} hours`}>
-            last {data?.windowHours ?? 24}h
-          </Badge>
+    <Card role="region" aria-label="Security overview, exact trailing 24 hours" className="p-4">
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <ShieldAlert className="h-4 w-4 text-[var(--muted-foreground)]" aria-hidden />
+            <h2 className="text-sm font-semibold">Security</h2>
+            <Badge variant="neutral" aria-label="Window: exact trailing 24 hours">
+              exact trailing {data?.windowHours ?? 24}h
+            </Badge>
+            {data && (
+              <span className="text-xs text-[var(--muted-foreground)]">
+                As of <LocalTime iso={data.computedAt} />
+              </span>
+            )}
+          </div>
           {data && (
-            <span className="text-xs text-[var(--muted-foreground)]">
-              As of <LocalTime iso={data.computedAt} />
-            </span>
+            <div className="mt-1 text-xs text-[var(--muted-foreground)]">
+              <p>
+                Window <LocalTime iso={data.windowStart} /> to <LocalTime iso={data.windowEnd} /> (
+                {data.windowKind.replaceAll('_', ' ')}, end exclusive).
+              </p>
+              <p>
+                Admin-login role basis:{' '}
+                {data.adminLoginRoleBasis === 'current_role_at_query_time'
+                  ? 'current role at query time'
+                  : data.adminLoginRoleBasis.replaceAll('_', ' ')}
+                .
+              </p>
+            </div>
           )}
         </div>
         <Button
@@ -146,7 +187,7 @@ function SecurityStrip() {
               notInstrumented={data.notInstrumented?.includes('rateLimited')}
             />
             <SecurityStat
-              label="Suspicious"
+              label="CAPTCHA denied"
               value={data.suspicious}
               highlight
               notInstrumented={data.notInstrumented?.includes('suspicious')}
@@ -174,14 +215,26 @@ function AdminAuditPageInner() {
   const event = params.get('event') ?? '';
   const actor = params.get('actor') ?? '';
   const target = params.get('target') ?? '';
+  const from = params.get('from') ?? '';
+  const to = params.get('to') ?? '';
 
   const [eventInput, setEventInput] = React.useState(event);
   const [cursorStack, setCursorStack] = React.useState<string[]>([]);
+  const [expandedRows, setExpandedRows] = React.useState<Set<string>>(() => new Set());
   const cursor = cursorStack[cursorStack.length - 1] ?? null;
+
+  const toggleRow = (id: string) => {
+    setExpandedRows((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   React.useEffect(() => {
     setCursorStack([]);
-  }, [event, actor, target]);
+  }, [event, actor, target, from, to]);
 
   const setParam = (patch: Record<string, string | null>) => {
     const sp = new URLSearchParams(params.toString());
@@ -204,6 +257,8 @@ function AdminAuditPageInner() {
     event: event || undefined,
     actor: actor || undefined,
     target: target || undefined,
+    from: from || undefined,
+    to: to || undefined,
     cursor,
     limit: PAGE_SIZE,
   };
@@ -215,7 +270,8 @@ function AdminAuditPageInner() {
       <div>
         <h1 className="text-2xl font-semibold">Audit log</h1>
         <p className="text-sm text-[var(--muted-foreground)]">
-          Append-only trail of security-relevant actions and sensitive reads.
+          Append-only trail of security-relevant actions and sensitive reads. Entries are retained
+          according to configured retention; older rows may be removed.
         </p>
       </div>
 
@@ -231,19 +287,52 @@ function AdminAuditPageInner() {
           className="max-w-xs"
           aria-label="Filter by event"
         />
-        {(actor || target) && (
-          <div className="flex items-center gap-2 text-xs text-[var(--muted-foreground)]">
+        {(actor || target || from || to) && (
+          <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--muted-foreground)]">
             {actor && <Badge variant="ai">actor: {actor.slice(0, 8)}...</Badge>}
             {target && <Badge variant="ai">target: {target.slice(0, 8)}...</Badge>}
+            {from && <Badge variant="neutral">from: {from}</Badge>}
+            {to && <Badge variant="neutral">to: {to}</Badge>}
             <Button
               size="sm"
               variant="ghost"
-              onClick={() => setParam({ actor: null, target: null })}
+              onClick={() => setParam({ actor: null, target: null, from: null, to: null })}
             >
               Clear
             </Button>
           </div>
         )}
+        <div className="flex flex-wrap items-end gap-2">
+          <div>
+            <label
+              htmlFor="audit-from"
+              className="mb-1 block text-xs text-[var(--muted-foreground)]"
+            >
+              From date
+            </label>
+            <Input
+              id="audit-from"
+              type="date"
+              value={from}
+              max={to || undefined}
+              onChange={(e) => setParam({ from: e.target.value || null })}
+              className="w-auto"
+            />
+          </div>
+          <div>
+            <label htmlFor="audit-to" className="mb-1 block text-xs text-[var(--muted-foreground)]">
+              To date
+            </label>
+            <Input
+              id="audit-to"
+              type="date"
+              value={to}
+              min={from || undefined}
+              onChange={(e) => setParam({ to: e.target.value || null })}
+              className="w-auto"
+            />
+          </div>
+        </div>
       </div>
 
       {/* aria-live so async list results are announced without stealing focus. */}
@@ -272,23 +361,90 @@ function AdminAuditPageInner() {
                     <TableHead>Event</TableHead>
                     <TableHead>Actor</TableHead>
                     <TableHead>Target</TableHead>
+                    <TableHead className="w-20 text-right">Details</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {rows.map((a) => (
-                    <TableRow key={a.id}>
-                      <TableCell className="whitespace-nowrap">
-                        <LocalTime iso={a.ts} />
-                      </TableCell>
-                      <TableCell className="font-mono text-xs">{a.event}</TableCell>
-                      <TableCell className="font-mono text-xs text-[var(--muted-foreground)]">
-                        {a.actorUserId ? a.actorUserId.slice(0, 8) + '...' : '-'}
-                      </TableCell>
-                      <TableCell className="font-mono text-xs text-[var(--muted-foreground)]">
-                        {a.targetUserId ? a.targetUserId.slice(0, 8) + '...' : '-'}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {rows.map((a) => {
+                    const expanded = expandedRows.has(a.id);
+                    const detailsId = `audit-details-${a.id.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+
+                    return (
+                      <React.Fragment key={a.id}>
+                        <TableRow>
+                          <TableCell className="whitespace-nowrap py-2">
+                            <LocalTime iso={a.ts} />
+                          </TableCell>
+                          <TableCell className="py-2 font-mono text-xs">{a.event}</TableCell>
+                          <TableCell className="py-2 font-mono text-xs text-[var(--muted-foreground)]">
+                            {a.actorUserId ? a.actorUserId.slice(0, 8) + '...' : '-'}
+                          </TableCell>
+                          <TableCell className="py-2 font-mono text-xs text-[var(--muted-foreground)]">
+                            {a.targetUserId ? a.targetUserId.slice(0, 8) + '...' : '-'}
+                          </TableCell>
+                          <TableCell className="py-1 text-right">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              aria-expanded={expanded}
+                              aria-controls={detailsId}
+                              aria-label={`${expanded ? 'Collapse' : 'Expand'} details for ${a.event}`}
+                              onClick={() => toggleRow(a.id)}
+                            >
+                              <ChevronDown
+                                className={`h-4 w-4 transition-transform ${expanded ? 'rotate-180' : ''}`}
+                                aria-hidden
+                              />
+                              <span className="sr-only">{expanded ? 'Collapse' : 'Expand'}</span>
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                        {expanded && (
+                          <TableRow id={detailsId}>
+                            <TableCell colSpan={5} className="bg-[var(--muted)]/30 p-4">
+                              <dl className="grid gap-3 text-xs sm:grid-cols-2">
+                                <div>
+                                  <dt className="font-medium text-[var(--muted-foreground)]">
+                                    Actor ID
+                                  </dt>
+                                  <dd className="break-all font-mono">{a.actorUserId ?? '-'}</dd>
+                                </div>
+                                <div>
+                                  <dt className="font-medium text-[var(--muted-foreground)]">
+                                    Target ID
+                                  </dt>
+                                  <dd className="break-all font-mono">{a.targetUserId ?? '-'}</dd>
+                                </div>
+                                <div>
+                                  <dt className="font-medium text-[var(--muted-foreground)]">
+                                    Request ID
+                                  </dt>
+                                  <dd className="break-all font-mono">{a.requestId ?? '-'}</dd>
+                                </div>
+                                <div>
+                                  <dt className="font-medium text-[var(--muted-foreground)]">
+                                    IP hash
+                                  </dt>
+                                  <dd className="break-all font-mono">{a.ipHash ?? '-'}</dd>
+                                </div>
+                                <div className="sm:col-span-2">
+                                  <dt className="mb-1 font-medium text-[var(--muted-foreground)]">
+                                    Metadata
+                                  </dt>
+                                  <dd>
+                                    <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-[var(--radius-at-md)] border border-[var(--border)] bg-[var(--card)] p-3 font-mono text-xs">
+                                      {formatAuditMetadata(a.meta)}
+                                    </pre>
+                                  </dd>
+                                </div>
+                              </dl>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </Card>

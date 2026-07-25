@@ -15,10 +15,11 @@
  *
  * The background-jobs table (task 7.2, Req 3.4 / 8.4) is its OWN observability
  * query (`useJobs`) so it loads, errors and refreshes independently of the health
- * tiles. Each job's STATE (running / failed / completed / idle) is derived on the
- * frontend from the run markers and always paired with a text label (never color
- * alone, a11y). The panel gauges (queue length, purge backlog) distinguish an
- * explicit "unavailable" from a real zero.
+ * tiles. Each job's STATE (running / failed / completed / skipped / idle) is
+ * derived on the frontend from run markers and always paired with a text label
+ * (never color alone, a11y). The three authoritative panel gauges (queue
+ * length, dead letters, and purge backlog) distinguish an explicit
+ * "unavailable" from a real zero.
  */
 import * as React from 'react';
 import RefreshCw from 'lucide-react/dist/esm/icons/refresh-cw';
@@ -99,21 +100,40 @@ const STATUS_PRESENTATION: Record<
 function TileCard({ tile }: { tile: HealthTile }) {
   const presentation = STATUS_PRESENTATION[tile.status] ?? STATUS_PRESENTATION.down;
   const Icon = presentation.icon;
+  const isQueueTile = tile.name === 'KVStore/Queue';
+  const storageDetailIsConfiguration =
+    tile.name === 'Storage provider' &&
+    tile.detail != null &&
+    /provider|configur/i.test(tile.detail);
+  const displayName = tile.name;
+  let statusLabel = presentation.label;
+  if (storageDetailIsConfiguration) {
+    statusLabel = tile.status === 'ok' ? 'Configured' : 'Config issue';
+  }
+  const detail = isQueueTile
+    ? (tile.detail ?? 'KV round-trip and indexed queue statistics verified.')
+    : storageDetailIsConfiguration
+      ? `${tile.detail}. Configuration check only; live storage connectivity was not checked.`
+      : tile.detail;
+
   return (
     <Card className="p-5">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2">
           {/* Color dot - decorative; the adjacent text label is authoritative. */}
           <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${presentation.dot}`} aria-hidden />
-          <span className="text-sm font-semibold">{tile.name}</span>
+          <span className="text-sm font-semibold">{displayName}</span>
         </div>
         {/* Text status label in addition to color (Req 3.8). */}
-        <Badge variant={presentation.badge} aria-label={`Status: ${presentation.label}`}>
+        <Badge
+          variant={presentation.badge}
+          aria-label={`${displayName} ${storageDetailIsConfiguration ? 'configuration' : 'status'}: ${statusLabel}`}
+        >
           <Icon className="h-3.5 w-3.5" aria-hidden />
-          {presentation.label}
+          {statusLabel}
         </Badge>
       </div>
-      {tile.detail && <p className="mt-3 text-sm text-[var(--muted-foreground)]">{tile.detail}</p>}
+      {detail && <p className="mt-3 text-sm text-[var(--muted-foreground)]">{detail}</p>}
     </Card>
   );
 }
@@ -309,20 +329,22 @@ function HealthOverview() {
 // ---------------------------------------------------------------------------
 
 /** Frontend-derived lifecycle state of one job (never sent by the backend). */
-type JobState = 'running' | 'failed' | 'completed' | 'idle';
+type JobState = 'running' | 'failed' | 'completed' | 'skipped' | 'idle';
 
 /**
  * Derive a job's state from its run markers (Req 8.4):
  * - running   <=> `runningSince` is set OR the single-flight lock is held;
  * - failed    <=> the last recorded outcome was a failure;
- * - completed <=> the last outcome was success/skipped and it is not running;
+ * - completed <=> the last recorded outcome was success;
+ * - skipped   <=> the last recorded outcome was skipped;
  * - idle      <=> never run (no outcome) and not running.
  * Running takes precedence so an in-flight run is never masked by a stale outcome.
  */
 function deriveJobState(job: JobRow): JobState {
   if (job.runningSince != null || job.lockState === 'held') return 'running';
   if (job.lastOutcome === 'failure') return 'failed';
-  if (job.lastOutcome === 'success' || job.lastOutcome === 'skipped') return 'completed';
+  if (job.lastOutcome === 'success') return 'completed';
+  if (job.lastOutcome === 'skipped') return 'skipped';
   return 'idle';
 }
 
@@ -339,6 +361,7 @@ const JOB_STATE_PRESENTATION: Record<
   running: { label: 'Running', badge: 'ai', icon: Loader, spin: true },
   failed: { label: 'Failed', badge: 'danger', icon: XCircle },
   completed: { label: 'Completed', badge: 'success', icon: CheckCircle },
+  skipped: { label: 'Skipped', badge: 'neutral', icon: Circle },
   idle: { label: 'Idle', badge: 'neutral', icon: Circle },
 };
 
@@ -466,12 +489,17 @@ function JobsCard() {
         <LoadingSkeleton rows={3} />
       ) : (
         <>
-          {/* Panel-level gauges: worker-independent queue + purge backlog. */}
+          {/* Authoritative panel gauges: queue, dead letters, and purge backlog. */}
           <div className="mb-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
             <GaugeStat
-              label="Queue length"
+              label="Queue backlog"
               value={jobs.data.queueLength}
               unavailable={jobs.data.queueLengthUnavailable}
+            />
+            <GaugeStat
+              label="Dead letters"
+              value={jobs.data.deadLetterCount}
+              unavailable={jobs.data.deadLetterCountUnavailable}
             />
             <GaugeStat
               label="Purge backlog"
@@ -626,17 +654,13 @@ function ErrorStat({
   );
 }
 
-/** The top failing route-classes list - grouped buckets, empty state when none. */
+/** The top failing route-classes list - current-process grouped buckets. */
 function TopRouteClasses({ data }: { data: ErrorsSummary }) {
   const rows = data.topRouteClasses ?? [];
   if (rows.length === 0) {
-    // Distinguish "not tracked" from "zero failures": when the feature has no
-    // durable per-route-class source, say so explicitly rather than implying
-    // there were no failures.
-    const notInstrumented = data.notInstrumented?.includes('topRouteClasses');
     return (
       <p className="py-6 text-center text-sm text-[var(--muted-foreground)]">
-        {notInstrumented ? 'Not instrumented' : 'No failing route-classes recorded'}
+        No failing route-classes recorded
       </p>
     );
   }
@@ -691,9 +715,16 @@ function ErrorsCard() {
         <div className="flex items-center gap-2">
           <h2 className="text-sm font-semibold text-[var(--muted-foreground)]">Errors</h2>
           {errors.data && (
-            <span className="text-xs text-[var(--muted-foreground)]">
-              As of <LocalTime iso={errors.data.computedAt} /> - last {errors.data.window} days
-            </span>
+            <div className="text-xs text-[var(--muted-foreground)]">
+              <span>
+                As of <LocalTime iso={errors.data.computedAt} /> · UTC dates{' '}
+                {errors.data.windowStartDate} through {errors.data.windowEndDate} (inclusive)
+              </span>
+              <span className="mt-0.5 block">
+                Totals and trend use durable UTC-day buckets; route-class failures are scoped to
+                current-process observations.
+              </span>
+            </div>
           )}
         </div>
         <div className="flex items-center gap-2">
@@ -745,7 +776,7 @@ function ErrorsCard() {
               </div>
             </section>
 
-            {/* Failure counts by originating subsystem (absent sources -> 0). */}
+            {/* Failure counts by subsystem; unavailable sources use notInstrumented. */}
             <section aria-label="Errors by source">
               <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
                 By source
@@ -801,13 +832,13 @@ function ErrorsCard() {
 // ---------------------------------------------------------------------------
 // Performance signals (Req 6) - its own observability query.
 //
-// Renders ONLY what `PerformanceSignals` provides - latency/cache aggregates the
-// backend ALREADY produces. It mounts NO host-metric (CPU/RAM/disk) display: the
-// backend omits those fields entirely (Non-Goal, Req 21.4), so they arrive as
-// `undefined` and simply are not shown. Any field listed in `unavailable` (e.g.
-// `dbQueryTimeMs`) is rendered with an explicit "Unavailable" indicator rather
-// than a fabricated value (Req 6.7). No new instrumentation, no query params -
-// its own loading/error/retry states, independent of the tiles/errors/jobs.
+// Renders ONLY what `PerformanceSignals` provides: latency and cache aggregates
+// that the backend already produces. It mounts NO host-metric (CPU/RAM/disk)
+// display: the backend omits those fields entirely (Non-Goal, Req 21.4), so they
+// arrive as `undefined` and simply are not shown. Any field listed in
+// `unavailable` (e.g. `dbQueryTimeMs`) is rendered with an explicit "Unavailable"
+// indicator rather than a fabricated value (Req 6.7). No new instrumentation or
+// query params; its loading/error/retry states are independent of the other cards.
 // ---------------------------------------------------------------------------
 
 /** Format a millisecond aggregate (`1,234.5 ms`); `-` when absent. */
@@ -816,23 +847,25 @@ function formatMs(ms?: number | null): string {
   return `${ms.toLocaleString(undefined, { maximumFractionDigits: 2 })} ms`;
 }
 
-/** A single performance stat: a value, or an explicit "Unavailable" badge. */
+/** A single performance stat: a value, or an explicit unavailable/empty badge. */
 function PerfStat({
   label,
   value,
   unavailable,
+  unavailableLabel = 'Unavailable',
 }: {
   label: string;
   value: React.ReactNode;
   unavailable: boolean;
+  unavailableLabel?: string;
 }) {
   return (
     <div className="rounded-[var(--radius-at-md)] border border-[var(--border)] p-4">
       <p className="text-sm text-[var(--muted-foreground)]">{label}</p>
       {unavailable ? (
         <p className="mt-1">
-          <Badge variant="outline" aria-label={`${label}: unavailable`}>
-            Unavailable
+          <Badge variant="outline" aria-label={`${label}: ${unavailableLabel.toLowerCase()}`}>
+            {unavailableLabel}
           </Badge>
         </p>
       ) : (
@@ -903,7 +936,7 @@ function SlowRoutesTable({ rows }: { rows: RouteClassLatency[] }) {
   );
 }
 
-/** Top slow background jobs table (avg duration); empty-state aware. */
+/** Top slow background jobs (typical/estimated duration); empty-state aware. */
 function SlowJobsTable({ rows }: { rows: SlowJob[] }) {
   if (rows.length === 0) {
     return (
@@ -917,11 +950,13 @@ function SlowJobsTable({ rows }: { rows: SlowJob[] }) {
       {/* Desktop table. */}
       <div className="hidden md:block">
         <Table>
-          <caption className="sr-only">Slowest background jobs by average duration</caption>
+          <caption className="sr-only">
+            Slowest background jobs by typical or last-observed duration
+          </caption>
           <TableHeader>
             <TableRow>
               <TableHead>Job</TableHead>
-              <TableHead>Avg duration</TableHead>
+              <TableHead>Typical / estimated duration</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -943,7 +978,12 @@ function SlowJobsTable({ rows }: { rows: SlowJob[] }) {
             className="flex items-center justify-between gap-2 rounded-[var(--radius-at-md)] border border-[var(--border)] p-4"
           >
             <span className="font-medium">{j.name}</span>
-            <span className="tabular-nums">{formatMs(j.avgMs)}</span>
+            <span className="text-right">
+              <span className="block text-xs text-[var(--muted-foreground)]">
+                Typical / estimated
+              </span>
+              <span className="tabular-nums">{formatMs(j.avgMs)}</span>
+            </span>
           </li>
         ))}
       </ul>
@@ -960,9 +1000,18 @@ function PerformanceCard() {
         <div className="flex items-center gap-2">
           <h2 className="text-sm font-semibold text-[var(--muted-foreground)]">Performance</h2>
           {performance.data && (
-            <span className="text-xs text-[var(--muted-foreground)]">
-              As of <LocalTime iso={performance.data.computedAt} />
-            </span>
+            <div className="text-xs text-[var(--muted-foreground)]">
+              <span>
+                As of <LocalTime iso={performance.data.computedAt} /> · scope:{' '}
+                {performance.data.dataScope === 'current_process'
+                  ? 'current process'
+                  : performance.data.dataScope}
+              </span>
+              <span className="mt-0.5 block">
+                Cache ratio population: {performance.data.cacheObservationCount.toLocaleString()}{' '}
+                observations. DB query latency remains unavailable.
+              </span>
+            </div>
           )}
         </div>
         <Button
@@ -993,8 +1042,13 @@ function PerformanceCard() {
             // value is absent - render an explicit indicator, never a fake value.
             const dbUnavailable =
               data.unavailable.includes('dbQueryTimeMs') || data.dbQueryTimeMs == null;
+            // Cache availability comes from its own observation population,
+            // never from unrelated route-latency traffic.
+            const cacheNoObservations = data.cacheObservationCount === 0;
             const cacheUnavailable =
-              data.unavailable.includes('cacheHitRatio') || data.cacheHitRatio == null;
+              data.unavailable.includes('cacheHitRatio') ||
+              data.cacheHitRatio == null ||
+              cacheNoObservations;
             const cachePct =
               data.cacheHitRatio == null
                 ? '-'
@@ -1010,6 +1064,7 @@ function PerformanceCard() {
                       label="Cache hit ratio"
                       value={cachePct}
                       unavailable={cacheUnavailable}
+                      unavailableLabel={cacheNoObservations ? 'No observations' : 'Unavailable'}
                     />
                     <PerfStat
                       label="DB query time"
@@ -1027,7 +1082,7 @@ function PerformanceCard() {
                   <SlowRoutesTable rows={data.topSlowRoutes} />
                 </section>
 
-                {/* Slowest background jobs by average duration. */}
+                {/* Slowest background jobs by typical/estimated duration. */}
                 <section aria-label="Top slow background jobs">
                   <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
                     Top slow jobs
@@ -1135,11 +1190,14 @@ function ConfigTab() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
+        <p className="flex flex-wrap items-center gap-2 text-sm text-[var(--muted-foreground)]">
           As of <LocalTime iso={data.computedAt} />
           <Badge variant="outline" aria-label="This tab is read-only">
             Read-only
           </Badge>
+          <span>
+            Configuration snapshot; provider connectivity and runtime state are not verified.
+          </span>
         </p>
         <Button
           variant="outline"
@@ -1152,25 +1210,34 @@ function ConfigTab() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        {/* Environment + providers + scheduler settings. */}
+        {/* Environment + configured providers + scheduler settings. */}
         <Card className="p-5">
           <h2 className="mb-3 text-sm font-semibold text-[var(--muted-foreground)]">Environment</h2>
           <dl className="divide-y divide-[var(--border)] text-sm">
             <ConfigField label="Environment" value={data.env} />
-            <ConfigField label="Scheduler mode" value={data.schedulerMode} />
-            <ConfigField label="Grace period (days)" value={data.gracePeriodDays} />
-            <ConfigField label="Storage provider" value={data.storageProvider} />
-            <ConfigField label="Email provider" value={data.emailProvider} />
+            <ConfigField label="Configured scheduler mode" value={data.schedulerMode} />
+            <ConfigField label="Configured grace period (days)" value={data.gracePeriodDays} />
+            <ConfigField label="Configured storage provider" value={data.storageProvider} />
+            <ConfigField label="Configured email provider" value={data.emailProvider} />
             <ConfigField
-              label="Active AI providers"
+              label="Configured AI providers"
               value={data.activeAiProviders.length ? data.activeAiProviders.join(', ') : 'None'}
             />
-            <div className="flex items-center justify-between gap-4 py-1.5">
-              <dt className="text-[var(--muted-foreground)]">Maintenance mode</dt>
-              <dd>
-                <BoolIndicator on={data.maintenanceMode} onLabel="Enabled" offLabel="Disabled" />
-              </dd>
-            </div>
+            <ConfigField label="Provider list source" value={data.providersSource} />
+            <ConfigField
+              label="Maintenance mode configuration"
+              value={
+                data.maintenanceMode ? (
+                  <Badge variant="warning" aria-label="Maintenance mode configured enabled">
+                    Enabled
+                  </Badge>
+                ) : (
+                  <Badge variant="neutral" aria-label="Maintenance mode configured disabled">
+                    Disabled
+                  </Badge>
+                )
+              }
+            />
           </dl>
         </Card>
 
@@ -1313,8 +1380,8 @@ function MaintenancePanel() {
         </Badge>
       </div>
       <p className="mb-4 text-sm text-[var(--muted-foreground)]">
-        Re-invoke a background job. Each action is safe and idempotent - a job that is already
-        running is left untouched.
+        Request a background-job run. The server reports whether it started, was already running, or
+        is disabled; completion is not verified by this action.
       </p>
 
       <div className="flex flex-wrap gap-2">

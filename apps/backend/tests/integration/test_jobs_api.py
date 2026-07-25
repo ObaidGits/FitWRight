@@ -79,7 +79,7 @@ class TestJobAnalyze:
             resp = await client.post("/api/v1/jobs/analyze", json={"job_description": "  "})
         assert resp.status_code == 400
 
-    @patch("app.routers.jobs.extract_job_keywords", new_callable=AsyncMock)
+    @patch("app.routers.jobs.extract_job_keywords_cached", new_callable=AsyncMock)
     async def test_keywords_only_without_resume(self, mock_extract, client):
         mock_extract.return_value = self._KEYWORDS
         async with client:
@@ -97,7 +97,7 @@ class TestJobAnalyze:
         assert data["fit_score"] is None
 
     @patch("app.routers.jobs.db", new_callable=AsyncMock)
-    @patch("app.routers.jobs.extract_job_keywords", new_callable=AsyncMock)
+    @patch("app.routers.jobs.extract_job_keywords_cached", new_callable=AsyncMock)
     async def test_computes_matched_missing_and_fit(self, mock_extract, mock_db, client):
         mock_extract.return_value = self._KEYWORDS
         mock_db.get_resume.return_value = {
@@ -122,7 +122,7 @@ class TestJobAnalyze:
         assert data["fit_score"] == pytest.approx(50.0)
 
     @patch("app.routers.jobs.db", new_callable=AsyncMock)
-    @patch("app.routers.jobs.extract_job_keywords", new_callable=AsyncMock)
+    @patch("app.routers.jobs.extract_job_keywords_cached", new_callable=AsyncMock)
     async def test_missing_resume_returns_404(self, mock_extract, mock_db, client):
         mock_extract.return_value = self._KEYWORDS
         mock_db.get_resume.return_value = None
@@ -134,7 +134,7 @@ class TestJobAnalyze:
         assert resp.status_code == 404
 
     @patch("app.routers.jobs.db", new_callable=AsyncMock)
-    @patch("app.routers.jobs.extract_job_keywords", new_callable=AsyncMock)
+    @patch("app.routers.jobs.extract_job_keywords_cached", new_callable=AsyncMock)
     async def test_resume_without_processed_data_returns_keywords_only(
         self, mock_extract, mock_db, client
     ):

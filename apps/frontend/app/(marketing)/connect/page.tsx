@@ -162,9 +162,9 @@ export default function ConnectPage() {
             </span>
           </h1>
           <p className="mt-5 max-w-xl text-lg text-[var(--muted-foreground)]">
-            I'm Obaidullah - the engineer behind FitWright. Ideas, feedback, bug reports, or a role
-            worth exploring: I read every message and reply thoughtfully. Your feedback genuinely
-            shapes where this product goes next.
+            I&apos;m Obaidullah - the engineer behind FitWright. Ideas, feedback, bug reports, or a
+            role worth exploring: I read every message and reply thoughtfully. Your feedback
+            genuinely shapes where this product goes next.
           </p>
         </Reveal>
 
@@ -294,15 +294,15 @@ export default function ConnectPage() {
                 Why I built FitWright
               </h2>
               <p className="mt-3 max-w-2xl text-[var(--muted-foreground)]">
-                Job hunting shouldn't mean rewriting your resume by hand for every role. I wanted a
-                tool that reshapes your real experience to fit each job - honestly, transparently,
-                and without inventing things. FitWright is my take on an AI-native product that
-                respects your data and your intelligence: bring your own key, see every change, own
-                your work.
+                Job hunting shouldn&apos;t mean rewriting your resume by hand for every role. I
+                wanted a tool that reshapes your real experience to fit each job - honestly,
+                transparently, and without inventing things. FitWright is my take on an AI-native
+                product that respects your data and your intelligence: bring your own key, see every
+                change, own your work.
               </p>
               <p className="mt-3 max-w-2xl text-[var(--muted-foreground)]">
-                It's built in the open and improved continuously. If something feels off or could be
-                better, that feedback is a gift - tell me, and it shapes the roadmap.
+                It&apos;s built in the open and improved continuously. If something feels off or
+                could be better, that feedback is a gift - tell me, and it shapes the roadmap.
               </p>
               <p className="mt-5 inline-flex items-center gap-1.5 text-xs text-[var(--muted-foreground)]">
                 <ShieldCheck className="h-3.5 w-3.5 text-[var(--at-success)]" /> Privacy-first -

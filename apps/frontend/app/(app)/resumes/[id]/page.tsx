@@ -23,13 +23,6 @@ import { Badge } from '@/components/atelier/badge';
 import { Input, Textarea } from '@/components/atelier/input';
 import { Label } from '@/components/atelier/label';
 import { Switch } from '@/components/atelier/misc';
-import {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-} from '@/components/atelier/select';
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/components/atelier/sheet';
 import { LoadingSkeleton, ErrorState } from '@/components/atelier/states';
 import { useToast } from '@/components/atelier/toast';
@@ -63,10 +56,22 @@ import { CustomSectionsEditor } from '@/components/resume/custom-sections-editor
 import {
   DEFAULT_TEMPLATE_SETTINGS,
   TEMPLATE_OPTIONS,
-  applyTemplatePreset,
   type TemplateSettings,
-  type TemplateType,
 } from '@/lib/types/template-settings';
+import { TemplateGallery } from '@/components/resume/template-gallery';
+import {
+  getTemplateById,
+  templateToSettings,
+  type ResumeTemplate,
+} from '@/lib/resume/template-catalog';
+import { getPreferredTemplateId } from '@/lib/resume/preferred-template';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/atelier/dialog';
 
 type ItemEdit = {
   heading: string; // job title / project name
@@ -124,6 +129,12 @@ export default function ResumeEditorPage() {
   const [settings, setSettings] = React.useState<TemplateSettings>(DEFAULT_TEMPLATE_SETTINGS);
   const [askAiOpen, setAskAiOpen] = React.useState(false);
   const [askAiTarget, setAskAiTarget] = React.useState<AskAiTarget | null>(null);
+  // Template is chosen via the SAME visual gallery as the /templates page
+  // (real-render cards), not a dropdown.
+  const [templatePickerOpen, setTemplatePickerOpen] = React.useState(false);
+  const [pickedTemplateId, setPickedTemplateId] = React.useState<string | undefined>(
+    () => getPreferredTemplateId() ?? undefined
+  );
 
   // Draft persistence + recovery (Task 18 / Req 30.2).
   const draft = useDraft<Editable>(`resume-editor:${id}`);
@@ -454,6 +465,29 @@ export default function ResumeEditorPage() {
         target={askAiTarget}
         onApply={applyAi}
       />
+      {/* Template picker - the SAME visual gallery as the /templates page. */}
+      <Dialog open={templatePickerOpen} onOpenChange={setTemplatePickerOpen}>
+        <DialogContent className="max-w-6xl">
+          <DialogHeader>
+            <DialogTitle>Choose a template</DialogTitle>
+            <DialogDescription>
+              Pick the look for your resume. Every preview is the real renderer, so what you see is
+              exactly what you&apos;ll export.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[75vh] overflow-y-auto pr-1">
+            <TemplateGallery
+              selectedId={pickedTemplateId}
+              onSelect={(t: ResumeTemplate) => {
+                setPickedTemplateId(t.id);
+                persistSettings(templateToSettings(t));
+                setTemplatePickerOpen(false);
+              }}
+              ctaLabel="Use this template"
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Link
           href="/resumes"
@@ -484,23 +518,22 @@ export default function ResumeEditorPage() {
               <div className="space-y-4">
                 <div className="space-y-1.5">
                   <Label>Template</Label>
-                  <Select
-                    value={settings.template}
-                    onValueChange={(v) =>
-                      persistSettings(applyTemplatePreset(settings, v as TemplateType))
-                    }
-                  >
-                    <SelectTrigger aria-label="Resume template">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {TEMPLATE_OPTIONS.map((t) => (
-                        <SelectItem key={t.id} value={t.id}>
-                          {t.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="text-sm">
+                      {pickedTemplateId
+                        ? (getTemplateById(pickedTemplateId)?.name ?? 'Custom')
+                        : (TEMPLATE_OPTIONS.find((o) => o.id === settings.template)?.name ??
+                          settings.template)}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setTemplatePickerOpen(true)}
+                    >
+                      Change template
+                    </Button>
+                  </div>
                 </div>
                 <div className="flex items-center justify-between">
                   <Label>Contact icons</Label>
@@ -532,7 +565,13 @@ export default function ResumeEditorPage() {
               </div>
             </SheetContent>
           </Sheet>
-          <ExportButton kind="resume" resumeId={id} settings={settings} />
+          <ExportButton
+            kind="resume"
+            resumeId={id}
+            settings={settings}
+            name={edit?.name}
+            role={edit?.title}
+          />
           <Button size="sm" onClick={onSave} loading={saving} disabled={!dirty}>
             Save
           </Button>

@@ -59,7 +59,7 @@ export function ContactCta() {
             {/* Left - invitation + trust */}
             <div>
               <span className="text-xs font-semibold uppercase tracking-wider text-[var(--at-ai)]">
-                Let's work together
+                Let&apos;s work together
               </span>
               <h2
                 id="contact-cta-heading"
@@ -68,7 +68,7 @@ export function ContactCta() {
                 Have an idea worth building?
                 <br />
                 <span className="bg-gradient-to-r from-[var(--primary)] to-[var(--at-ai)] bg-clip-text text-transparent">
-                  I'd love to hear it.
+                  I&apos;d love to hear it.
                 </span>
               </h2>
               <p className="mt-4 max-w-md text-[var(--muted-foreground)]">
@@ -105,7 +105,7 @@ export function ContactCta() {
                 <MessageSquare className="h-5 w-5 text-[var(--at-ai)]" /> Start a conversation
               </h3>
               <p className="mt-1.5 text-sm text-[var(--muted-foreground)]">
-                Tell me what you're working on. Thoughtful messages get thoughtful replies -
+                Tell me what you&apos;re working on. Thoughtful messages get thoughtful replies -
                 typically within a day.
               </p>
 

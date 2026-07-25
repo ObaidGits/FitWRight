@@ -2,10 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   AdminApiError,
   bulkDisable,
+  createInvite,
   deleteUser,
   getStats,
   getUsageSeries,
+  listAudit,
+  listInvites,
   listUsers,
+  revokeInvite,
   setUserRole,
   setUserStatus,
 } from '@/lib/api/admin';
@@ -67,6 +71,45 @@ describe('admin api client', () => {
     expect(url).toContain('deleted=true');
     expect(url).not.toContain('role=');
     expect(url).not.toContain('cursor=');
+  });
+
+  it('listAudit serializes exact from/to query parameters', async () => {
+    fetchMock.mockResolvedValueOnce(json({ items: [], nextCursor: null }));
+    await listAudit({
+      from: '2026-01-01T00:00:00+00:00',
+      to: '2026-01-31T23:59:59+00:00',
+    });
+    const url = new URL(urlOf(), 'https://test.local');
+    expect(url.pathname).toContain('/admin/audit');
+    expect(url.searchParams.get('from')).toBe('2026-01-01T00:00:00+00:00');
+    expect(url.searchParams.get('to')).toBe('2026-01-31T23:59:59+00:00');
+  });
+
+  it('listInvites requests the bounded invite history', async () => {
+    fetchMock.mockResolvedValueOnce(json({ items: [] }));
+    await listInvites();
+    expect(urlOf()).toContain('/admin/invites');
+  });
+
+  it('createInvite omits ttlHours unless explicitly provided', async () => {
+    fetchMock.mockImplementation(async () => json({}));
+    await createInvite('new-admin@example.com');
+    expect(initOf().method).toBe('POST');
+    expect(JSON.parse(String(initOf().body))).toEqual({ email: 'new-admin@example.com' });
+
+    await createInvite('timed-admin@example.com', 12);
+    expect(initOf(1).method).toBe('POST');
+    expect(JSON.parse(String(initOf(1).body))).toEqual({
+      email: 'timed-admin@example.com',
+      ttlHours: 12,
+    });
+  });
+
+  it('revokeInvite DELETEs an encoded invite id', async () => {
+    fetchMock.mockResolvedValueOnce(json({ changed: true }));
+    await revokeInvite('invite/id with spaces');
+    expect(urlOf()).toContain('/admin/invites/invite%2Fid%20with%20spaces');
+    expect(initOf().method).toBe('DELETE');
   });
 
   it('setUserStatus routes to /disable and /enable', async () => {

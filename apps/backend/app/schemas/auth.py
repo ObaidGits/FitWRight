@@ -129,6 +129,10 @@ class SignupRequest(BaseModel):
     password: str = Field(min_length=1)
     name: str = Field(min_length=1, max_length=200)
     captcha_token: str | None = Field(default=None, max_length=4096)
+    # Optional admin-invite token (Option B). When present, redemption creates
+    # an account with the role BOUND TO THE INVITE (never a client-chosen role);
+    # the token is validated + consumed server-side against the invited email.
+    invite_token: str | None = Field(default=None, max_length=512)
 
     @field_validator("email")
     @classmethod

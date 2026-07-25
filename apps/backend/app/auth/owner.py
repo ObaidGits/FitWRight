@@ -29,6 +29,8 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from sqlalchemy import select, text, update
+from sqlalchemy.dialects.postgresql import insert as postgresql_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from app.config import settings
 from app.models import ApiKey, Application, Improvement, Job, Resume, User
@@ -91,6 +93,21 @@ def _owner_insert_values(owner_id: str, email: str) -> dict:
     }
 
 
+def _owner_insert_statement(session, owner_id: str, email: str):
+    """Build an atomic, dialect-native insert-if-absent statement."""
+    values = _owner_insert_values(owner_id, email)
+    dialect = session.get_bind().dialect.name
+    if dialect == "sqlite":
+        return sqlite_insert(User).values(**values).on_conflict_do_nothing(
+            index_elements=[User.email]
+        )
+    if dialect == "postgresql":
+        return postgresql_insert(User).values(**values).on_conflict_do_nothing(
+            index_elements=[User.email]
+        )
+    raise RuntimeError(f"Unsupported database dialect for owner bootstrap: {dialect}")
+
+
 async def ensure_owner(db=None) -> str:
     """Return the bootstrap owner's id, creating it + backfilling owned rows once.
 
@@ -108,14 +125,27 @@ async def ensure_owner(db=None) -> str:
         return cached
 
     email = normalize_email(settings.owner_email)
+    created = False
     async with db.session_factory() as session:
         owner_id = (
             await session.execute(select(User.id).where(User.email == email))
         ).scalar_one_or_none()
         if owner_id is None:
-            owner_id = str(uuid4())
-            session.add(User(**_owner_insert_values(owner_id, email)))
+            # End the read transaction before a potentially contended write on
+            # SQLite. The dialect-native upsert remains the race authority.
+            await session.rollback()
+            candidate_id = str(uuid4())
+            result = await session.execute(
+                _owner_insert_statement(session, candidate_id, email)
+            )
             await session.commit()
+            created = result.rowcount == 1
+            owner_id = (
+                await session.execute(select(User.id).where(User.email == email))
+            ).scalar_one_or_none()
+        if owner_id is None:  # pragma: no cover - insert/select invariant
+            raise RuntimeError("Bootstrap owner insert completed but owner is absent")
+        if created:
             logger.info("Created bootstrap owner for single-user mode (%s)", email)
 
     setattr(db, _OWNER_ID_ATTR, owner_id)
@@ -163,16 +193,30 @@ def resolve_owner_id_sync(db=None) -> str:
         return cached
 
     email = normalize_email(settings.owner_email)
+    created = False
     # ``db._sync`` is the initialized sync session factory (idempotent init).
     with db._sync() as session:
         owner_id = session.execute(
             select(User.id).where(User.email == email)
         ).scalar_one_or_none()
         if owner_id is None:
-            owner_id = str(uuid4())
-            session.add(User(**_owner_insert_values(owner_id, email)))
+            session.rollback()
+            candidate_id = str(uuid4())
+            result = session.execute(
+                _owner_insert_statement(session, candidate_id, email)
+            )
             session.commit()
-            logger.info("Created bootstrap owner (sync path) for single-user mode (%s)", email)
+            created = result.rowcount == 1
+            owner_id = session.execute(
+                select(User.id).where(User.email == email)
+            ).scalar_one_or_none()
+        if owner_id is None:  # pragma: no cover - insert/select invariant
+            raise RuntimeError("Bootstrap owner insert completed but owner is absent")
+        if created:
+            logger.info(
+                "Created bootstrap owner (sync path) for single-user mode (%s)",
+                email,
+            )
 
     setattr(db, _OWNER_ID_ATTR, owner_id)
     return owner_id

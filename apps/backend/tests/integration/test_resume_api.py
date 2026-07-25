@@ -107,8 +107,7 @@ class TestListResumes:
 
     @patch("app.routers.resumes.db", new_callable=AsyncMock)
     async def test_list_excludes_master_by_default(self, mock_db, client):
-        mock_db.list_resumes.return_value = [
-            {"resume_id": "master", "is_master": True, "created_at": "2026-01-01", "updated_at": "2026-01-01"},
+        mock_db.list_resume_summaries.return_value = [
             {"resume_id": "tailored-1", "is_master": False, "created_at": "2026-01-02", "updated_at": "2026-01-02"},
         ]
         async with client:
@@ -120,7 +119,7 @@ class TestListResumes:
 
     @patch("app.routers.resumes.db", new_callable=AsyncMock)
     async def test_list_includes_master_when_requested(self, mock_db, client):
-        mock_db.list_resumes.return_value = [
+        mock_db.list_resume_summaries.return_value = [
             {"resume_id": "master", "is_master": True, "created_at": "2026-01-01", "updated_at": "2026-01-01"},
             {"resume_id": "tailored-1", "is_master": False, "created_at": "2026-01-02", "updated_at": "2026-01-02"},
         ]
@@ -267,7 +266,7 @@ class TestGenerateInterviewPrep:
 
     @patch("app.routers.resumes.generate_interview_prep", new_callable=AsyncMock)
     @patch("app.routers.resumes.db", new_callable=AsyncMock)
-    async def test_generation_failure_returns_500(
+    async def test_generation_failure_returns_typed_provider_error(
         self, mock_db, mock_generate, client, mock_resume_record, sample_resume
     ):
         mock_db.get_resume.return_value = {
@@ -282,14 +281,20 @@ class TestGenerateInterviewPrep:
         async with client:
             resp = await client.post("/api/v1/resumes/res-123/generate-interview-prep")
 
-        assert resp.status_code == 500
-        assert "Failed to generate interview preparation" in resp.json()["detail"]
+        assert resp.status_code == 502
+        assert resp.json() == {
+            "error": {
+                "code": "llm_provider_error",
+                "message": "The AI provider could not complete the request. Please verify Settings or retry.",
+                "details": {"stage": "interview_prep", "retryable": True},
+            }
+        }
 
 
 class TestRetryProcessing:
     """POST /api/v1/resumes/{resume_id}/retry-processing"""
 
-    @patch("app.routers.resumes.parse_resume_to_json", new_callable=AsyncMock)
+    @patch("app.routers.resumes._parse_resume_cached", new_callable=AsyncMock)
     @patch("app.routers.resumes.db", new_callable=AsyncMock)
     async def test_retry_successful(self, mock_db, mock_parse, client, mock_resume_record, sample_resume):
         failed_record = {**mock_resume_record, "processing_status": "failed"}
@@ -301,6 +306,63 @@ class TestRetryProcessing:
         assert resp.status_code == 200
         data = resp.json()
         assert data["processing_status"] == "ready"
+        assert data["processing_error"] is None
+
+    @pytest.mark.parametrize(
+        ("failure", "expected_code", "retryable"),
+        [
+            (RuntimeError("upstream body with secret"), "llm_provider_error", True),
+            (ValueError("malformed model output"), "llm_response_invalid", True),
+        ],
+    )
+    @patch("app.routers.resumes._parse_resume_cached", new_callable=AsyncMock)
+    @patch("app.routers.resumes.db", new_callable=AsyncMock)
+    async def test_retry_returns_secret_safe_processing_error_without_duplicate_upload(
+        self,
+        mock_db,
+        mock_parse,
+        failure,
+        expected_code,
+        retryable,
+        client,
+        mock_resume_record,
+    ):
+        mock_db.get_resume.return_value = {
+            **mock_resume_record,
+            "processing_status": "failed",
+        }
+        mock_parse.side_effect = failure
+
+        async with client:
+            resp = await client.post("/api/v1/resumes/res-123/retry-processing")
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["resume_id"] == "res-123"
+        assert body["processing_status"] == "failed"
+        assert body["processing_error"]["code"] == expected_code
+        assert body["processing_error"]["retryable"] is retryable
+        assert "secret" not in body["processing_error"]["message"]
+        mock_db.create_resume_atomic_master.assert_not_awaited()
+        assert mock_db.update_resume.await_args.args[2] == {"processing_status": "failed"}
+
+    @patch("app.routers.resumes._parse_resume_cached", new_callable=AsyncMock)
+    @patch("app.routers.resumes.db", new_callable=AsyncMock)
+    async def test_ready_state_database_failure_is_not_mislabeled_as_provider_failure(
+        self, mock_db, mock_parse, client, mock_resume_record, sample_resume
+    ):
+        mock_db.get_resume.return_value = {
+            **mock_resume_record,
+            "processing_status": "failed",
+        }
+        mock_parse.return_value = sample_resume
+        mock_db.update_resume.side_effect = RuntimeError("database unavailable")
+
+        with pytest.raises(RuntimeError, match="database unavailable"):
+            async with client:
+                await client.post("/api/v1/resumes/res-123/retry-processing")
+
+        mock_db.update_resume.assert_awaited_once()
 
     @patch("app.routers.resumes.db", new_callable=AsyncMock)
     async def test_retry_not_failed_returns_400(self, mock_db, client, mock_resume_record):

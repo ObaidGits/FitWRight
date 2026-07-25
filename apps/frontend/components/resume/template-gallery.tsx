@@ -157,8 +157,7 @@ export function TemplateGallery({
   // Photo-capable templates preview with a sample headshot so the photo slot is
   // visible; photo-incapable templates (e.g. latex) stay photo-less.
   const dataForTemplate = React.useCallback(
-    (t: ResumeTemplate): ResumeData =>
-      t.photoSupport !== 'none' ? samplePhotoData : sampleData,
+    (t: ResumeTemplate): ResumeData => (t.photoSupport !== 'none' ? samplePhotoData : sampleData),
     [sampleData, samplePhotoData]
   );
   const { favorites, toggle } = useFavorites();

@@ -29,9 +29,12 @@ from app.config import settings
 from app.resilience import get_idempotency_cache, get_stream_registry
 from app.resilience.metrics import get_resilience_metrics
 from app.llm import (
+    LLMRequestCancelled,
     StreamResult,
+    classify_llm_error,
     get_llm_config,
     get_model_name,
+    llm_api_error,
     provider_supports_streaming,
     stream_complete,
 )
@@ -63,6 +66,7 @@ from app.schemas import (
     ResumeFetchResponse,
     ResumeListResponse,
     ResumeSummary,
+    ResumeProcessingError,
     ResumeUploadResponse,
     RawResume,
     UpdateCoverLetterRequest,
@@ -77,7 +81,10 @@ from app.services.improver import (
     MONTH_PATTERN,
     apply_diffs,
     build_skill_target_plan,
-    extract_job_keywords,
+    dedupe_resume_skills,
+    extract_job_keywords_cached,
+    extract_requested_additions,
+    merge_user_additions,
     generate_improvements,
     generate_skill_target_plan,
     generate_resume_diffs,
@@ -240,7 +247,10 @@ def _resolve_pdf_settings(
             if val not in _PDF_ENUMS[key]:
                 val = default
         elif isinstance(default, bool):
-            val = bool(val)
+            # Persisted JSON can drift, but truthiness is not boolean parsing:
+            # e.g. bool("false") is True. Accept actual JSON booleans only and
+            # otherwise use the safe product default.
+            val = val if isinstance(val, bool) else default
         elif isinstance(default, int):
             lo, hi = _PDF_INT_BOUNDS[key]
             try:
@@ -366,14 +376,45 @@ def _normalize_personal_info_value(value: Any) -> str:
     )
 
 
+def _improve_api_error(error: Exception, stage: str) -> ApiError:
+    """Build the tailoring provider error, with a CLEARER message when the cause
+    is ``llm_response_invalid``.
+
+    The generic "invalid response" wording reads like a platform fault. For
+    tailoring the real cause is almost always that the selected model can't
+    reliably produce the structured (JSON) output this feature needs - so we say
+    that explicitly and point the user at Test connection / choosing another
+    model. Other causes (auth/timeout/rate limit) keep their standard messages.
+    """
+    status, code, message, retryable = classify_llm_error(error)
+    if code == "llm_response_invalid":
+        message = (
+            "The selected AI model returned output this step couldn't use "
+            "(invalid structured response). This usually means the model doesn't "
+            "reliably support the structured format resume tailoring needs - not "
+            "a problem with your resume or the app. Try a different model, or use "
+            "Test connection in Settings to check whether a model supports it."
+        )
+        return ApiError(
+            status_code=status,
+            code=code,
+            message=message,
+            details={"stage": stage, "retryable": retryable, "reason": "model_structured_output"},
+        )
+    return llm_api_error(error, stage=stage)
+
+
 def _raise_improve_error(
     action: str,
     stage: str,
     error: Exception,
     detail: str,
 ) -> NoReturn:
-    logger.error("Resume %s failed during %s: %s", action, stage, error)
-    raise HTTPException(status_code=500, detail=detail)
+    logger.exception("Resume %s failed during %s", action, stage, exc_info=error)
+    ai_stages = {"keywords", "rewrite", "refine", "generate_auxiliary_messages"}
+    if stage in ai_stages:
+        raise _improve_api_error(error, stage) from error
+    raise HTTPException(status_code=500, detail=detail) from error
 
 
 def _get_original_resume_data(resume: dict[str, Any]) -> dict[str, Any] | None:
@@ -699,10 +740,10 @@ def _validate_confirm_payload(
     improved_data: dict[str, Any],
 ) -> None:
     if not original_data:
-        logger.warning(
-            "Skipping confirm payload validation; structured resume data unavailable."
+        raise ValueError(
+            "Original structured resume data is unavailable; regenerate the "
+            "preview after retrying resume processing"
         )
-        return
     original_info = original_data.get("personalInfo")
     improved_info = improved_data.get("personalInfo")
     # JSON-008: Explicit null checks with clear error messages
@@ -878,6 +919,67 @@ async def _emit_event(event_type, payload: dict[str, Any], *, user_id: str | Non
     except Exception:  # pragma: no cover - event emission is best-effort
         logger.warning("Outbox emit (%s) failed", event_type, exc_info=True)
 
+
+async def _structure_uploaded_resume(
+    *,
+    user_id: str,
+    resume: dict[str, Any],
+    markdown: str,
+    filename: str,
+) -> ResumeProcessingError | None:
+    """Structure one durable upload and persist an honest terminal status.
+
+    Only the provider-backed parse await is classified as an LLM failure. The
+    subsequent ready/failed database writes are intentionally outside that
+    boundary: a storage failure must propagate as a server failure rather than
+    being mislabeled as bad credentials or an invalid model response.
+    """
+    from app.events import EventType
+
+    try:
+        processed_data = await _parse_resume_cached(user_id, markdown)
+    except Exception as exc:  # provider/content trust boundary
+        api_error = llm_api_error(exc, stage="resume_parse")
+        logger.warning(
+            "Resume AI structuring failed for %s (%s)",
+            filename,
+            api_error.code,
+            exc_info=True,
+        )
+        await db.update_resume(
+            user_id, resume["resume_id"], {"processing_status": "failed"}
+        )
+        resume["processing_status"] = "failed"
+        await _emit_event(
+            EventType.RESUME_PARSE_FAILED,
+            {"resume_id": resume["resume_id"], "error_code": api_error.code},
+            user_id=user_id,
+        )
+        retryable = bool((api_error.details or {}).get("retryable", True))
+        return ResumeProcessingError(
+            code=api_error.code,
+            message=api_error.message,
+            retryable=retryable,
+        )
+
+    # These are local durability operations, not provider operations. A failed
+    # ready-state write leaves the durable row in "processing" for safe retry.
+    await db.update_resume(
+        user_id,
+        resume["resume_id"],
+        {"processed_data": processed_data, "processing_status": "ready"},
+    )
+    resume["processed_data"] = processed_data
+    resume["processing_status"] = "ready"
+    await _capture_version(user_id, resume["resume_id"], processed_data, "original")
+    await _emit_event(
+        EventType.RESUME_PARSED,
+        {"resume_id": resume["resume_id"]},
+        user_id=user_id,
+    )
+    return None
+
+
 ALLOWED_TYPES = {
     "application/pdf",
     "application/msword",
@@ -983,40 +1085,12 @@ async def upload_resume(
         original_markdown=markdown_content,
     )
 
-    # Try to parse to structured JSON (optional, may fail if LLM not configured)
-    try:
-        processed_data = await _parse_resume_cached(user_id, markdown_content)
-        await db.update_resume(
-            user_id,
-            resume["resume_id"],
-            {
-                "processed_data": processed_data,
-                "processing_status": "ready",
-            },
-        )
-        resume["processed_data"] = processed_data
-        resume["processing_status"] = "ready"
-        # Capture the initial parse as the retained ``original`` snapshot (R1.1).
-        await _capture_version(user_id, resume["resume_id"], processed_data, "original")
-        from app.events import EventType
-
-        await _emit_event(
-            EventType.RESUME_PARSED,
-            {"resume_id": resume["resume_id"]},
-            user_id=user_id,
-        )
-    except Exception as e:
-        # LLM parsing failed, update status to failed
-        logger.warning(f"Resume parsing to JSON failed for {file.filename}: {e}")
-        await db.update_resume(user_id, resume["resume_id"], {"processing_status": "failed"})
-        resume["processing_status"] = "failed"
-        from app.events import EventType
-
-        await _emit_event(
-            EventType.RESUME_PARSE_FAILED,
-            {"resume_id": resume["resume_id"]},
-            user_id=user_id,
-        )
+    processing_error = await _structure_uploaded_resume(
+        user_id=user_id,
+        resume=resume,
+        markdown=markdown_content,
+        filename=file.filename or "resume.pdf",
+    )
 
     # Return accurate status to client (API-001 fix)
     # --- Feature usage metric (daily aggregate, fire-and-forget) ---
@@ -1047,6 +1121,7 @@ async def upload_resume(
         resume_id=resume["resume_id"],
         processing_status=resume["processing_status"],
         is_master=resume.get("is_master", False),
+        processing_error=processing_error,
     )
 
 
@@ -1107,8 +1182,6 @@ async def upload_resume_stream(
     heartbeat_seconds = settings.stream_heartbeat_seconds
 
     async def event_gen():
-        from app.events import EventType
-
         # Background awaits we may need to cancel if the client disconnects.
         bg_tasks: list[asyncio.Task] = []
 
@@ -1162,36 +1235,21 @@ async def upload_resume_stream(
             # the slowest stage (often 30-90s); pump heartbeats while it runs so
             # the Heroku router keeps the SSE connection open to completion.
             yield _sse("stage", {"stage": "structuring", "status": "active"})
-            struct_task = asyncio.ensure_future(_parse_resume_cached(user_id, markdown))
+            struct_task = asyncio.ensure_future(
+                _structure_uploaded_resume(
+                    user_id=user_id,
+                    resume=resume,
+                    markdown=markdown,
+                    filename=filename,
+                )
+            )
             bg_tasks.append(struct_task)
             while True:
                 done_set, _ = await asyncio.wait({struct_task}, timeout=heartbeat_seconds)
                 if done_set:
                     break
                 yield _sse("heartbeat", {"stage": "structuring"})
-            try:
-                processed_data = struct_task.result()
-                await db.update_resume(
-                    user_id,
-                    resume["resume_id"],
-                    {"processed_data": processed_data, "processing_status": "ready"},
-                )
-                resume["processing_status"] = "ready"
-                await _capture_version(user_id, resume["resume_id"], processed_data, "original")
-                await _emit_event(
-                    EventType.RESUME_PARSED, {"resume_id": resume["resume_id"]}, user_id=user_id
-                )
-            except Exception as e:  # noqa: BLE001
-                logger.warning("Streaming upload: JSON parse failed for %s: %s", filename, e)
-                await db.update_resume(
-                    user_id, resume["resume_id"], {"processing_status": "failed"}
-                )
-                resume["processing_status"] = "failed"
-                await _emit_event(
-                    EventType.RESUME_PARSE_FAILED,
-                    {"resume_id": resume["resume_id"]},
-                    user_id=user_id,
-                )
+            processing_error = struct_task.result()
             yield _sse("stage", {"stage": "structuring", "status": "done"})
 
             yield _sse(
@@ -1199,8 +1257,14 @@ async def upload_resume_stream(
                 {
                     "result": {
                         "resume_id": resume["resume_id"],
+                        "request_id": str(uuid4()),
                         "processing_status": resume["processing_status"],
                         "is_master": resume.get("is_master", False),
+                        "processing_error": (
+                            processing_error.model_dump(mode="json")
+                            if processing_error is not None
+                            else None
+                        ),
                         "message": (
                             "Resume uploaded successfully"
                             if resume["processing_status"] == "ready"
@@ -1261,19 +1325,21 @@ async def get_resume(
     return _build_get_resume_response(resume_id, resume)
 
 
-async def _reresolve_canonical_photo(resume: dict, owner_id: str) -> None:
-    """Re-point a resume's header photo at the *live* profile photo (Photo System).
+async def _reresolve_canonical_photo_in_data(data: dict, owner_id: str) -> None:
+    """Re-point a resume ``processed_data`` dict's header photo at the *live*
+    profile photo (Photo System). Operates on the ``ResumeData``-shaped dict
+    directly so it can be reused by any path that produces/serves resume data
+    (get_resume, print, and - importantly - the tailor pipeline output, which
+    otherwise inherits a frozen ``avatarUrl`` copied verbatim from the source).
 
-    Photo provenance rule (single source: ``app.profile.photo.resolve_photo_url``):
-    a resume with ``photo.ref == "canonical"`` tracks the user's current profile
-    photo, so replacing the profile photo is reflected here on next read. A
-    ``snapshot`` resume is pinned and left untouched. Best-effort: any lookup
-    failure leaves the stored ``avatarUrl`` as-is (never breaks a read).
+    Provenance rule (single source: ``app.profile.photo.resolve_photo_url``):
+    only ``photo.show and photo.ref == "canonical"`` tracks the live profile
+    photo; a ``snapshot`` resume is pinned and left untouched. Best-effort: any
+    lookup failure leaves the current ``avatarUrl`` as-is (never breaks a read).
     """
-    processed = resume.get("processed_data")
-    if not isinstance(processed, dict):
+    if not isinstance(data, dict):
         return
-    personal = processed.get("personalInfo")
+    personal = data.get("personalInfo")
     if not isinstance(personal, dict):
         return
     photo = personal.get("photo")
@@ -1286,6 +1352,39 @@ async def _reresolve_canonical_photo(resume: dict, owner_id: str) -> None:
         personal["avatarUrl"] = record.avatar_url if record else None
     except Exception:  # pragma: no cover - defensive; render still works with stored url
         logger.debug("Canonical photo re-resolution failed", exc_info=True)
+
+
+async def _reresolve_canonical_photo(resume: dict, owner_id: str) -> None:
+    """Re-point a resume's header photo at the *live* profile photo (Photo System).
+
+    Thin wrapper over :func:`_reresolve_canonical_photo_in_data` for callers that
+    hold the full resume record (reads ``resume["processed_data"]``).
+    """
+    processed = resume.get("processed_data")
+    if isinstance(processed, dict):
+        await _reresolve_canonical_photo_in_data(processed, owner_id)
+
+
+def _apply_photo_intent(data: dict, show: bool) -> None:
+    """Set a resume's header-photo intent in-place (Photo System).
+
+    ``show=True`` turns on a canonical-tracking photo (the header follows the
+    live profile avatar); ``show=False`` hides it. Existing presentation hints on
+    the photo config (shape/size/offset/etc.) are preserved. Used at confirm time
+    so a tailored resume follows the photo support of the chosen template, without
+    disturbing the preview integrity hash (applied AFTER validation).
+    """
+    from app.profile.photo import PhotoConfig
+
+    personal = data.get("personalInfo")
+    if not isinstance(personal, dict):
+        return
+    current = personal.get("photo")
+    base = current if isinstance(current, dict) else PhotoConfig().model_dump(mode="json")
+    updated = {**base, "show": bool(show)}
+    if show:
+        updated["ref"] = "canonical"
+    personal["photo"] = updated
 
 
 def _build_get_resume_response(resume_id: str, resume: dict) -> ResumeFetchResponse:
@@ -1369,25 +1468,10 @@ async def list_resumes(
     user_id: str = Depends(get_effective_user_id),
 ) -> ResumeListResponse:
     """List resumes, optionally including the master resume."""
-    resumes = await db.list_resumes(user_id)
-    if not include_master:
-        resumes = [resume for resume in resumes if not resume.get("is_master", False)]
-
-    resumes.sort(key=lambda item: item.get("updated_at", ""), reverse=True)
-
-    summaries = [
-        ResumeSummary(
-            resume_id=resume["resume_id"],
-            filename=resume.get("filename"),
-            is_master=resume.get("is_master", False),
-            parent_id=resume.get("parent_id"),
-            processing_status=resume.get("processing_status", "pending"),
-            created_at=resume.get("created_at", ""),
-            updated_at=resume.get("updated_at", ""),
-            title=resume.get("title"),
-        )
-        for resume in resumes
-    ]
+    resumes = await db.list_resume_summaries(
+        user_id, include_master=include_master
+    )
+    summaries = [ResumeSummary(**resume) for resume in resumes]
 
     return ResumeListResponse(request_id=str(uuid4()), data=summaries)
 
@@ -1416,8 +1500,14 @@ async def improve_resume_preview_endpoint(
     language = get_content_language()
     prompt_id = request.prompt_id or _get_default_prompt_id()
 
-    stage = "load_job_keywords"
+    stage = "validate_context"
     detail = "Failed to preview resume. Please try again."
+
+    async def track_stage(name: str, status: str) -> None:
+        nonlocal stage
+        if status == "start":
+            stage = name
+
     try:
         return await asyncio.wait_for(
             _improve_preview_flow(
@@ -1427,6 +1517,7 @@ async def improve_resume_preview_endpoint(
                 job=job,
                 language=language,
                 prompt_id=prompt_id,
+                emit_stage=track_stage,
             ),
             timeout=settings.request_timeout_seconds,
         )
@@ -1473,9 +1564,8 @@ async def stream_improve_preview_endpoint(
     ``stage`` event at each real boundary - never a fabricated progress bar. The
     final ``done`` event carries the complete ``ImproveResumeResponse`` (same
     shape the non-stream endpoint returns), so the client renders identical
-    results. On cancellation nothing is persisted beyond the preview-hash the
-    non-stream path also writes; on any error the client falls back to
-    ``POST /resumes/improve/preview`` transparently.
+    results. Completion persists one durable, expiring ``TailorPreview``;
+    cancellation before completion persists no confirmation capability.
 
     Events: ``stage`` ({stage, status}), ``heartbeat`` (liveness), ``done``
     ({result} | {cancelled: true}), ``error`` ({code, message} -> fallback).
@@ -1559,27 +1649,32 @@ async def stream_improve_preview_endpoint(
                         job=job,
                         language=language,
                         prompt_id=prompt_id,
+                        request_id=request_id,
                         emit_stage=emit_stage,
                         cancel_check=cancel_check,
                     ),
                     timeout=settings.request_timeout_seconds,
                 )
                 await queue.put(("done", {"result": result.model_dump(mode="json")}))
-            except _TailorStreamCancelled:
+            except (_TailorStreamCancelled, LLMRequestCancelled):
                 await queue.put(("cancelled", None))
             except asyncio.TimeoutError:
                 await queue.put((
                     "error",
                     {"code": "stream_timeout", "message": "Tailoring took too long and was stopped."},
                 ))
-            except Exception:
+            except Exception as e:
                 logger.exception(
                     "Streaming improve preview failed for resume %s / job %s",
                     request_body.resume_id, request_body.job_id,
                 )
+                # Classify so the client shows the REAL, actionable reason (e.g.
+                # a model that can't produce valid structured output) instead of
+                # a generic "failed" - same wording as the non-stream path.
+                api_err = _improve_api_error(e, stage="rewrite")
                 await queue.put((
                     "error",
-                    {"code": "stream_error", "message": "Tailoring failed; falling back."},
+                    {"code": api_err.code, "message": api_err.message},
                 ))
             finally:
                 await queue.put((SENTINEL, None))
@@ -1631,6 +1726,45 @@ async def stream_improve_preview_endpoint(
     )
 
 
+@router.get(
+    "/improve/preview/result/{request_id}",
+    response_model=ImproveResumeResponse,
+)
+async def recover_improve_preview_result(
+    request_id: str,
+    response: Response,
+    user_id: str = Depends(require_verified_user_id),
+) -> ImproveResumeResponse:
+    """Recover a completed preview without rerunning provider work.
+
+    This endpoint is intentionally read-only and owner-scoped. It is used only
+    when the stream emitted progress but the terminal SSE event was lost.
+    Results remain bounded by the preview's expiry and single-use state.
+    """
+    if len(request_id) < 8 or len(request_id) > 100:
+        raise ApiError(422, "invalid_request_id", "Invalid tailoring request ID.")
+    payload = await db.get_tailor_preview_result(user_id, request_id)
+    if payload is None:
+        raise ApiError(
+            404,
+            "preview_result_not_ready",
+            "The completed tailoring result is not available yet.",
+            details={"request_id": request_id, "retryable": True},
+        )
+    try:
+        result = ImproveResumeResponse.model_validate(payload)
+    except ValidationError as exc:
+        logger.exception("Stored tailoring recovery payload is invalid")
+        raise ApiError(
+            500,
+            "preview_result_invalid",
+            "The saved tailoring result could not be recovered. Please retry tailoring.",
+            details={"request_id": request_id, "retryable": True},
+        ) from exc
+    response.headers["Cache-Control"] = "no-store"
+    return result
+
+
 async def _improve_preview_flow(
     *,
     user_id: str,
@@ -1639,6 +1773,7 @@ async def _improve_preview_flow(
     job: dict[str, Any],
     language: str,
     prompt_id: str,
+    request_id: str | None = None,
     emit_stage: Callable[[str, str], Awaitable[None]] | None = None,
     cancel_check: Callable[[], Awaitable[bool]] | None = None,
 ) -> ImproveResumeResponse:
@@ -1666,7 +1801,12 @@ async def _improve_preview_flow(
     job_keywords_hash = job.get("job_keywords_hash")
     content_hash = _hash_job_content(job["content"])
     if not job_keywords or job_keywords_hash != content_hash:
-        job_keywords = await extract_job_keywords(job["content"])
+        # Route through the shared analysis cache so a prior "Analyze fit" click
+        # on this exact JD is reused instead of paying for a second LLM keyword
+        # extraction (token-waste fix). Falls back to a direct call on cache miss.
+        job_keywords = await extract_job_keywords_cached(
+            user_id, job["content"], cancel_check=cancel_check
+        )
         # Cache extracted keywords with a content hash for basic invalidation.
         # Also surface company/role to the job's top level so the tracker's
         # auto-create-on-confirm path can read them without an extra LLM call.
@@ -1704,6 +1844,8 @@ async def _improve_preview_flow(
     original_resume_data = _get_original_resume_data(resume)
     # Collect warnings throughout the process
     response_warnings: list[str] = []
+    # User-facing Extra-Instructions outcomes (kept separate from internal warnings).
+    instruction_notes: list[str] = []
 
     # Diff-based improvement: generate targeted changes, apply with verification
     if original_resume_data:
@@ -1745,6 +1887,8 @@ async def _improve_preview_flow(
             prompt_id=prompt_id,
             original_resume_data=original_resume_data,
             skill_targets=skill_targets,
+            custom_instructions=request.custom_instructions,
+            cancel_check=cancel_check,
         )
 
         improved_data, applied_changes, rejected_changes = apply_diffs(
@@ -1784,6 +1928,8 @@ async def _improve_preview_flow(
             language=language,
             prompt_id=prompt_id,
             original_resume_data=original_resume_data,
+            custom_instructions=request.custom_instructions,
+            cancel_check=cancel_check,
         )
         await _emit("rewrite", "done")
 
@@ -1825,6 +1971,8 @@ async def _improve_preview_flow(
                 job_description=job["content"],
                 job_keywords=job_keywords,
                 config=RefinementConfig(),
+                cancel_check=cancel_check,
+                user_instructions=request.custom_instructions,
             )
             improved_data = refinement_result.refined_data
             refinement_stats = RefinementStats(
@@ -1861,32 +2009,47 @@ async def _improve_preview_flow(
             response_warnings.append(f"Refinement failed: {str(e)}")
 
     await _emit("refine", "done")
+
+    # User-attested additions (Extra Instructions): reliably add the real
+    # content the user asked for (a project/role/skill) via a dedicated, simple
+    # extraction that weak models handle far better than a nested add_entry in
+    # the big diff. Merged deterministically and re-gated against the user's own
+    # words, then done AFTER refinement so the alignment pass can't strip them.
+    if request.custom_instructions and request.custom_instructions.strip():
+        await _guard()
+        try:
+            additions = await extract_requested_additions(
+                request.custom_instructions,
+                language,
+                cancel_check=cancel_check,
+            )
+            improved_data, added_count, new_notes = merge_user_additions(
+                improved_data, additions, request.custom_instructions
+            )
+            instruction_notes.extend(new_notes)
+            if added_count:
+                logger.info(
+                    "Merged %d user-attested addition(s) from instructions.",
+                    added_count,
+                )
+        except _TailorStreamCancelled:
+            raise
+        except Exception as e:  # noqa: BLE001 - additions are best-effort
+            logger.warning("User additions step failed (non-fatal): %s", e)
+
+    # Final cleanup: collapse near-duplicate skills (React/React.js) accumulated
+    # across the diff, preservation, refinement, and additions passes.
+    improved_data = dedupe_resume_skills(improved_data)
+
+    # personalInfo was restored verbatim from the (possibly stale) source, so a
+    # canonical header photo must be re-pointed at the LIVE profile avatar here -
+    # otherwise the preview and the persisted tailored resume inherit a frozen/
+    # empty avatarUrl and the photo "sometimes" fails to show off get_resume.
+    await _reresolve_canonical_photo_in_data(improved_data, user_id)
+
     await _emit("score", "start")
     improved_text = json.dumps(improved_data, indent=2)
-    preview_hash = _hash_improved_data(improved_data)
-    preview_hashes = job.get("preview_hashes")
-    if not isinstance(preview_hashes, dict):
-        preview_hashes = {}
-    preview_hashes[prompt_id] = preview_hash
-    # NOTE: preview_hashes updates are last-write-wins; concurrent previews can race.
-    try:
-        updated_job = await db.update_job(
-            user_id,
-            request.job_id,
-            {
-                "preview_hash": preview_hash,
-                "preview_prompt_id": prompt_id,
-                "preview_hashes": preview_hashes,
-            },
-        )
-        if not updated_job:
-            logger.warning(
-                "Failed to persist preview hash for job %s.", request.job_id
-            )
-    except Exception as e:
-        logger.warning(
-            "Failed to persist preview hash for job %s: %s", request.job_id, e
-        )
+    payload_hash = _hash_improved_data(improved_data)
     diff_summary, detailed_changes, diff_error = _calculate_diff_from_resume(
         resume,
         improved_data,
@@ -1895,12 +2058,17 @@ async def _improve_preview_flow(
         response_warnings.append(f"Could not calculate changes: {diff_error}")
     improvements = generate_improvements(job_keywords)
     await _emit("score", "done")
+    # A disconnect/cancel arriving during the final synchronous scoring window
+    # must not leave a confirmation capability the client explicitly abandoned.
+    await _guard()
 
-    request_id = str(uuid4())
-    return ImproveResumeResponse(
+    request_id = request_id or str(uuid4())
+    preview_id = str(uuid4())
+    response = ImproveResumeResponse(
         request_id=request_id,
         data=ImproveResumeData(
             request_id=request_id,
+            preview_id=preview_id,
             resume_id=None,
             job_id=request.job_id,
             resume_preview=ResumeData.model_validate(improved_data),
@@ -1926,10 +2094,24 @@ async def _improve_preview_flow(
                 refinement_successful,
             ),
             warnings=response_warnings,
+            instruction_notes=instruction_notes,
             refinement_attempted=refinement_attempted,
             refinement_successful=refinement_successful,
         ),
     )
+    preview = await db.create_tailor_preview(
+        user_id,
+        resume_id=request.resume_id,
+        job_id=request.job_id,
+        prompt_id=prompt_id,
+        payload_hash=payload_hash,
+        request_id=request_id,
+        preview_id=preview_id,
+        result_payload=response.model_dump(mode="json"),
+    )
+    if preview is None:
+        raise HTTPException(status_code=404, detail="Resume or job description not found")
+    return response
 
 
 @router.post(
@@ -1961,8 +2143,6 @@ async def improve_resume_confirm_endpoint(
     try:
         improved_data = request.improved_data.model_dump()
         improved_text = json.dumps(improved_data, indent=2)
-        # NOTE: This endpoint relies on preview-hash validation to ensure the payload matches a prior preview.
-        # Stronger guarantees would require server-side preview storage or re-running the improvement.
         try:
             _validate_confirm_payload(_get_original_resume_data(resume), improved_data)
         except ValueError as e:
@@ -1971,36 +2151,17 @@ async def improve_resume_confirm_endpoint(
                 status_code=400,
                 detail="Invalid improved resume data. Please retry preview.",
             )
-        preview_hashes = job.get("preview_hashes")
-        allowed_hashes: set[str] = set()
-        if isinstance(preview_hashes, dict):
-            allowed_hashes.update(preview_hashes.values())
-        elif isinstance(preview_hashes, list):
-            allowed_hashes.update(
-                [value for value in preview_hashes if isinstance(value, str)]
-            )
-        else:
-            preview_hash = job.get("preview_hash")
-            if isinstance(preview_hash, str):
-                allowed_hashes.add(preview_hash)
-
-        if not allowed_hashes:
-            logger.warning(
-                "Rejecting confirm; preview hash missing for job %s.",
-                request.job_id,
-            )
-            raise HTTPException(
-                status_code=400,
-                detail="Preview required before confirmation. Please retry preview.",
-            )
-
         request_hash = _hash_improved_data(improved_data)
-        if request_hash not in allowed_hashes:
-            logger.warning("Resume confirm rejected due to preview hash mismatch.")
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid improved resume data. Please retry preview.",
-            )
+
+        # Apply the chosen template's photo intent AFTER hashing (so the preview
+        # integrity hash still matches) but before persisting, so the saved
+        # resume follows the template's photo support. Canonical photos then
+        # resolve to the live profile avatar.
+        if request.include_photo is not None:
+            _apply_photo_intent(improved_data, request.include_photo)
+            if request.include_photo:
+                await _reresolve_canonical_photo_in_data(improved_data, user_id)
+            improved_text = json.dumps(improved_data, indent=2)
 
         stage = "calculate_diff"
         response_warnings: list[str] = []
@@ -2031,60 +2192,36 @@ async def improve_resume_confirm_endpoint(
         )
         response_warnings.extend(aux_warnings)
 
-        stage = "create_resume"
-        tailored_resume = await db.create_resume(
+        improvements_payload = [imp.model_dump() for imp in request.improvements]
+        stage = "commit_confirmation"
+        status, committed = await db.confirm_tailor_preview(
             user_id,
-            content=improved_text,
-            content_type="json",
-            filename=f"tailored_{resume.get('filename', 'resume')}",
-            is_master=False,
-            parent_id=request.resume_id,
-            processed_data=improved_data,
-            processing_status="ready",
+            preview_id=request.preview_id,
+            resume_id=request.resume_id,
+            job_id=request.job_id,
+            payload_hash=request_hash,
+            improved_data=improved_data,
+            improved_text=improved_text,
+            improvements=improvements_payload,
             cover_letter=cover_letter,
             outreach_message=outreach_message,
             interview_prep=_serialize_interview_prep(interview_prep),
             title=title,
-            # Preserve the source resume's appearance on the tailored copy so a
-            # tailored resume opens in the same template (Phase 5). The user can
-            # still switch it in the editor afterwards.
-            template_settings=resume.get("template_settings"),
         )
+        if status == "not_found":
+            raise HTTPException(status_code=404, detail="Resume or job description not found")
+        if status != "created" or committed is None:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Preview expired, does not match this request, or was already "
+                    "confirmed. Please generate a new preview."
+                ),
+            )
+        request_id = committed["request_id"]
+        tailored_resume_id = committed["resume_id"]
 
-        improvements_payload = [imp.model_dump() for imp in request.improvements]
-        stage = "create_improvement"
-        request_id = str(uuid4())
-        await db.create_improvement(
-            user_id,
-            original_resume_id=request.resume_id,
-            tailored_resume_id=tailored_resume["resume_id"],
-            job_id=request.job_id,
-            improvements=improvements_payload,
-        )
-
-        # Capture the accepted AI generation as an ``ai`` snapshot (R1.1) and
-        # emit the done event (-> notification, decoupled from this request).
-        await _capture_version(
-            user_id, tailored_resume["resume_id"], improved_data, "ai"
-        )
-        from app.events import EventType
-
-        await _emit_event(
-            EventType.AI_GENERATION_DONE,
-            {"resume_id": tailored_resume["resume_id"]},
-            user_id=user_id,
-        )
-
-        await _auto_create_tracker_application(
-            user_id=user_id,
-            job_id=request.job_id,
-            tailored_resume_id=tailored_resume["resume_id"],
-            master_resume_id=request.resume_id,
-            job=job,
-            title=title,
-        )
-
-        # --- Feature usage metric (daily aggregate, fire-and-forget) ---
+        # The atomic database transaction has committed before metrics run.
         try:
             from datetime import datetime, timezone
             from app.admin.metric_store import get_metric_store
@@ -2098,7 +2235,11 @@ async def improve_resume_confirm_endpoint(
             from datetime import datetime, timezone
             from app.admin.metric_store import get_metric_store
             from app.admin.metric_registry import RESUMES_TAILORED
-            await get_metric_store().add(datetime.now(timezone.utc).strftime("%Y-%m-%d"), RESUMES_TAILORED, 1)
+            await get_metric_store().add(
+                datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+                RESUMES_TAILORED,
+                1,
+            )
         except Exception:
             pass  # metrics never break user operations
 
@@ -2106,7 +2247,8 @@ async def improve_resume_confirm_endpoint(
             request_id=request_id,
             data=ImproveResumeData(
                 request_id=request_id,
-                resume_id=tailored_resume["resume_id"],
+                preview_id=request.preview_id,
+                resume_id=tailored_resume_id,
                 job_id=request.job_id,
                 resume_preview=request.improved_data,
                 improvements=request.improvements,
@@ -2160,8 +2302,9 @@ async def improve_resume_endpoint(
     language = get_content_language()
 
     try:
-        # Extract keywords from job description
-        job_keywords = await extract_job_keywords(job["content"])
+        # Extract keywords from job description (shared analysis cache so a
+        # prior Analyze/preview on this JD is reused rather than re-extracted).
+        job_keywords = await extract_job_keywords_cached(user_id, job["content"])
 
         # Generate improved resume in the configured language
         prompt_id = request.prompt_id or _get_default_prompt_id()
@@ -2169,6 +2312,7 @@ async def improve_resume_endpoint(
         original_resume_data = _get_original_resume_data(resume)
         # Collect warnings throughout the process
         response_warnings: list[str] = []
+        instruction_notes: list[str] = []
 
         # Diff-based improvement: generate targeted changes, apply with verification
         if original_resume_data:
@@ -2179,6 +2323,7 @@ async def improve_resume_endpoint(
                 language=language,
                 prompt_id=prompt_id,
                 original_resume_data=original_resume_data,
+                custom_instructions=request.custom_instructions,
             )
 
             improved_data, applied_changes, rejected_changes = apply_diffs(
@@ -2214,6 +2359,7 @@ async def improve_resume_endpoint(
                 language=language,
                 prompt_id=prompt_id,
                 original_resume_data=original_resume_data,
+                custom_instructions=request.custom_instructions,
             )
 
         # Safety nets (defense in depth)
@@ -2252,6 +2398,7 @@ async def improve_resume_endpoint(
                     job_description=job["content"],
                     job_keywords=job_keywords,
                     config=RefinementConfig(),
+                    user_instructions=request.custom_instructions,
                 )
                 improved_data = refinement_result.refined_data
                 refinement_stats = RefinementStats(
@@ -2286,6 +2433,31 @@ async def improve_resume_endpoint(
             logger.warning("Refinement failed, using unrefined result: %s", e)
             if refinement_attempted:
                 response_warnings.append(f"Refinement failed: {str(e)}")
+
+        # User-attested additions from Extra Instructions (see preview flow).
+        if request.custom_instructions and request.custom_instructions.strip():
+            try:
+                additions = await extract_requested_additions(
+                    request.custom_instructions, language
+                )
+                improved_data, added_count, new_notes = merge_user_additions(
+                    improved_data, additions, request.custom_instructions
+                )
+                instruction_notes.extend(new_notes)
+                if added_count:
+                    logger.info(
+                        "Merged %d user-attested addition(s) from instructions.",
+                        added_count,
+                    )
+            except Exception as e:  # noqa: BLE001 - additions are best-effort
+                logger.warning("User additions step failed (non-fatal): %s", e)
+
+        # Final cleanup: collapse near-duplicate skills (React/React.js).
+        improved_data = dedupe_resume_skills(improved_data)
+
+        # Re-point a canonical header photo at the live profile avatar (see the
+        # preview flow) so the saved tailored resume never carries a stale one.
+        await _reresolve_canonical_photo_in_data(improved_data, user_id)
 
         # Convert improved data to JSON string for storage
         improved_text = json.dumps(improved_data, indent=2)
@@ -2415,6 +2587,7 @@ async def improve_resume_endpoint(
                     refinement_successful,
                 ),
                 warnings=response_warnings,
+                instruction_notes=instruction_notes,
                 refinement_attempted=refinement_attempted,
                 refinement_successful=refinement_successful,
             ),
@@ -2573,6 +2746,56 @@ async def update_resume_endpoint(
     return response
 
 
+def _slug_filename_part(value: str | None, max_len: int = 40) -> str:
+    """Filesystem-safe slug: strip accents, keep alphanumerics, collapse to '_'."""
+    if not value:
+        return ""
+    ascii_only = unicodedata.normalize("NFKD", str(value)).encode("ascii", "ignore").decode("ascii")
+    out: list[str] = []
+    prev_us = False
+    for ch in ascii_only:
+        if ch.isalnum():
+            out.append(ch)
+            prev_us = False
+        elif not prev_us:
+            out.append("_")
+            prev_us = True
+    return "".join(out).strip("_")[:max_len].strip("_")
+
+
+def _pdf_content_disposition(resume: dict, resume_id: str, kind: str) -> dict[str, str]:
+    """Build a meaningful, RFC 5987-encoded Content-Disposition for a PDF.
+
+    Prefers the person's name (+ role/title) so a directly-opened export is
+    named like ``Obaid_Zeeshan_Resume.pdf`` rather than a bare UUID. Browser
+    blob downloads override this via their own ``download`` attribute; this is
+    the correct name for anyone hitting the URL directly.
+    """
+    kind_label = "Cover_Letter" if kind == "cover-letter" else "Resume"
+    processed = resume.get("processed_data")
+    personal = processed.get("personalInfo") if isinstance(processed, dict) else None
+    personal = personal if isinstance(personal, dict) else {}
+    name = _slug_filename_part(personal.get("name"))
+    tail = _slug_filename_part(personal.get("title"), 30) or _slug_filename_part(
+        resume.get("title"), 30
+    )
+    if name and tail:
+        base = f"{name}_{tail}_{kind_label}"
+    elif name:
+        base = f"{name}_{kind_label}"
+    elif tail:
+        base = f"{tail}_{kind_label}"
+    else:
+        base = f"{kind_label.lower()}-{resume_id[:8]}"
+    base = base[:90].strip("_") or kind_label.lower()
+    filename = f"{base}.pdf"
+    # Our slug is already ASCII, so the fallback equals the name; keep both parts
+    # for strict clients per RFC 6266.
+    return {
+        "Content-Disposition": f"attachment; filename=\"{filename}\"; filename*=UTF-8''{quote(filename)}"
+    }
+
+
 @router.get("/{resume_id}/pdf")
 async def download_resume_pdf(
     resume_id: str,
@@ -2656,6 +2879,25 @@ async def download_resume_pdf(
     )
     if lang:
         params = f"{params}&lang={lang}"
+
+    # Serve an identical, previously-rendered PDF from the in-process cache -
+    # keyed on the appearance params (BEFORE the volatile print token is added)
+    # plus the resume content, so any edit or template change busts it. This
+    # skips Chromium entirely on repeat downloads, making them near-instant.
+    from app.pdf_cache import get_pdf_cache, make_pdf_cache_key
+
+    headers = _pdf_content_disposition(resume, resume_id, "resume")
+    cache = get_pdf_cache()
+    cache_key = (
+        make_pdf_cache_key(kind="resume", resume_id=resume_id, params=params, content=resume)
+        if cache is not None
+        else None
+    )
+    if cache is not None and cache_key is not None:
+        cached = await cache.get(cache_key)
+        if cached is not None:
+            return Response(content=cached, media_type="application/pdf", headers=headers)
+
     # Mint a short-lived signed print token so the headless render can load the
     # resume in hosted mode (the browser has no user session cookie).
     from app.pdf_token import make_print_token
@@ -2677,7 +2919,9 @@ async def download_resume_pdf(
     except PDFRenderError as e:
         raise HTTPException(status_code=503, detail=str(e))
 
-    headers = {"Content-Disposition": f'attachment; filename="resume_{resume_id}.pdf"'}
+    if cache is not None and cache_key is not None:
+        await cache.set(cache_key, pdf_bytes)
+
     return Response(content=pdf_bytes, media_type="application/pdf", headers=headers)
 
 
@@ -2733,16 +2977,13 @@ async def retry_processing(
             detail="Resume has no stored content to re-process.",
         )
 
-    try:
-        processed_data = await _parse_resume_cached(user_id, markdown_content)
-        await db.update_resume(
-            user_id,
-            resume_id,
-            {
-                "processed_data": processed_data,
-                "processing_status": "ready",
-            },
-        )
+    processing_error = await _structure_uploaded_resume(
+        user_id=user_id,
+        resume=resume,
+        markdown=markdown_content,
+        filename=resume.get("filename") or "resume",
+    )
+    if processing_error is None:
         return ResumeUploadResponse(
             message="Resume processing succeeded on retry",
             request_id=str(uuid4()),
@@ -2750,16 +2991,14 @@ async def retry_processing(
             processing_status="ready",
             is_master=resume.get("is_master", False),
         )
-    except Exception as e:
-        logger.warning(f"Retry processing failed for resume {resume_id}: {e}")
-        await db.update_resume(user_id, resume_id, {"processing_status": "failed"})
-        return ResumeUploadResponse(
-            message="Retry processing failed",
-            request_id=str(uuid4()),
-            resume_id=resume_id,
-            processing_status="failed",
-            is_master=resume.get("is_master", False),
-        )
+    return ResumeUploadResponse(
+        message="Resume processing failed; the existing upload can be retried",
+        request_id=str(uuid4()),
+        resume_id=resume_id,
+        processing_status="failed",
+        is_master=resume.get("is_master", False),
+        processing_error=processing_error,
+    )
 
 
 @router.patch("/{resume_id}/cover-letter")
@@ -2975,11 +3214,8 @@ async def generate_cover_letter_endpoint(
             resume_data, job["content"], language
         )
     except Exception as e:
-        logger.error(f"Cover letter generation failed: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to generate cover letter. Please try again.",
-        )
+        logger.exception("Cover letter generation failed")
+        raise llm_api_error(e, stage="cover_letter") from e
 
     # Save to resume record
     await db.update_resume(user_id, resume_id, {"cover_letter": cover_letter_content})
@@ -3074,11 +3310,8 @@ async def generate_outreach_endpoint(
             resume_data, job["content"], language
         )
     except Exception as e:
-        logger.error(f"Outreach message generation failed: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to generate outreach message. Please try again.",
-        )
+        logger.exception("Outreach message generation failed")
+        raise llm_api_error(e, stage="outreach_message") from e
 
     # Save to resume record
     await db.update_resume(user_id, resume_id, {"outreach_message": outreach_content})
@@ -3154,11 +3387,8 @@ async def generate_interview_prep_endpoint(
             language,
         )
     except Exception as e:
-        logger.exception("Interview preparation generation failed: %s", e)
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to generate interview preparation. Please try again.",
-        )
+        logger.exception("Interview preparation generation failed")
+        raise llm_api_error(e, stage="interview_prep") from e
 
     await db.update_resume(
         user_id,
@@ -3242,10 +3472,10 @@ async def stream_generation_endpoint(
     """Stream an AI generation (cover letter / outreach) as SSE (R1.1-R1.6).
 
     Events: ``token`` (delta), ``heartbeat`` (liveness/keep-warm), ``done`` (final
-    text + token usage for cost accounting), ``error`` (terminal -> client falls
-    back to the non-stream path). Cancellation (client close, explicit
-    ``/cancel``, or lifetime/heartbeat reaping) aborts the provider call and
-    persists nothing - streamed text is a preview until explicit accept (R1.4).
+    text + token usage for cost accounting), and ``error`` (terminal; never
+    automatically rerun after stream progress). Cancellation (client close,
+    explicit ``/cancel``, or lifetime/heartbeat reaping) aborts the provider call
+    and persists nothing - streamed text is a preview until explicit accept.
     """
     if kind not in _STREAM_KINDS:
         raise HTTPException(status_code=404, detail="Unknown streaming kind")
@@ -3366,14 +3596,14 @@ async def stream_generation_endpoint(
             })
         except asyncio.CancelledError:  # pragma: no cover - server shutdown
             raise
-        except Exception:
+        except Exception as e:
             logger.exception("Streaming generation failed for %s", resume_id)
             metrics.stream_error()
-            # Terminal error -> client transparently falls back (R1.3). Any
-            # partial text is surfaced as a discardable preview.
+            api_error = llm_api_error(e, stage=f"{kind}_stream")
             yield _sse("error", {
-                "code": "stream_error",
-                "message": "Generation failed; falling back.",
+                "code": api_error.code,
+                "message": api_error.message,
+                "details": api_error.details,
                 "text": result.text,
             })
         finally:
@@ -3476,9 +3706,32 @@ async def download_cover_letter_pdf(
         )
 
     # Build print URL (same pattern as resume PDF)
-    url = f"{settings.frontend_base_url}/print/cover-letter/{resume_id}?pageSize={pageSize}"
+    base_params = f"pageSize={pageSize}"
     if lang:
-        url = f"{url}&lang={lang}"
+        base_params = f"{base_params}&lang={lang}"
+
+    # Reuse an identical previously-rendered cover-letter PDF (keyed on page
+    # size + locale + the cover-letter content) so repeat downloads are instant.
+    from app.pdf_cache import get_pdf_cache, make_pdf_cache_key
+
+    headers = _pdf_content_disposition(resume, resume_id, "cover-letter")
+    cache = get_pdf_cache()
+    cache_key = (
+        make_pdf_cache_key(
+            kind="cover-letter",
+            resume_id=resume_id,
+            params=base_params,
+            content=cover_letter,
+        )
+        if cache is not None
+        else None
+    )
+    if cache is not None and cache_key is not None:
+        cached = await cache.get(cache_key)
+        if cached is not None:
+            return Response(content=cached, media_type="application/pdf", headers=headers)
+
+    url = f"{settings.frontend_base_url}/print/cover-letter/{resume_id}?{base_params}"
     # Short-lived signed print token -> lets the headless render authenticate in
     # hosted mode (browser has no user session cookie).
     from app.pdf_token import make_print_token
@@ -3493,7 +3746,7 @@ async def download_cover_letter_pdf(
     except PDFRenderError as e:
         raise HTTPException(status_code=503, detail=str(e))
 
-    headers = {
-        "Content-Disposition": f'attachment; filename="cover_letter_{resume_id}.pdf"'
-    }
+    if cache is not None and cache_key is not None:
+        await cache.set(cache_key, pdf_bytes)
+
     return Response(content=pdf_bytes, media_type="application/pdf", headers=headers)

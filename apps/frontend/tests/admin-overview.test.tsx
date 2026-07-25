@@ -57,6 +57,7 @@ function kpiSnapshot(over: Partial<OverviewKpis> = {}): OverviewKpis {
     newUsersToday: { value: 12, unavailable: false },
     aiCallsToday: { value: 42, unavailable: false },
     errorRate24h: { value: 2.5, unavailable: false },
+    errorRateWindowLabel: 'Today + yesterday (UTC daily buckets)',
     purgeBacklog: { value: null, unavailable: true },
     computedAt: new Date().toISOString(),
     stale: false,
@@ -110,7 +111,7 @@ describe('AdminOverviewPage - KPI cards', () => {
       'Total users',
       'New users today',
       'AI calls today',
-      'Error rate (24h)',
+      'Error rate — Today + yesterday (UTC daily buckets)',
       'Purge backlog',
     ]) {
       expect(screen.getByText(label)).toBeInTheDocument();

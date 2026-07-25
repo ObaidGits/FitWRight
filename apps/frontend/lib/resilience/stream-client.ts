@@ -6,9 +6,9 @@
  *   stream into `{ event, data }` records.
  * - {@link StreamController} - orchestrates a generation: accumulates `token`
  *   deltas into an `aria-live` preview, exposes cancel (aborts the request +
- *   signals the server), and on a terminal `error` (or unsupported/failed
- *   stream) transparently falls back to the non-stream path, surfacing any
- *   partial text as a discardable preview.
+ *   signals the server), and falls back only when stream opening fails before
+ *   any SSE event. Once the server has emitted progress, automatically issuing
+ *   the non-stream request could duplicate provider work and is forbidden.
  *
  * Streamed output is a **preview**; it is persisted only via the existing
  * explicit accept path - never here.
@@ -111,8 +111,13 @@ export class StreamController {
     this.setStatus('streaming');
     let usage: unknown;
     let terminalError: string | null = null;
+    let observedEvent = false;
     try {
       for await (const ev of this.transport.open(this.abort.signal)) {
+        // Any complete SSE event proves server-side work has started. A second
+        // non-stream request from this point could spend tokens and persist work
+        // twice, even when the only event observed was progress/heartbeat.
+        observedEvent = true;
         if (ev.event === 'token') {
           const delta = (ev.data as { text?: string })?.text ?? '';
           if (delta) {
@@ -156,8 +161,17 @@ export class StreamController {
       return this.text;
     }
 
-    // Transparent fallback to the non-stream path (R1.3). Partial streamed text
-    // remains as a discardable preview until fallback returns.
+    // Once any server event was observed, never rerun generation automatically:
+    // the provider may have completed even if the final event was lost. Preserve
+    // partial text for review and surface a retry choice to the caller instead.
+    if (observedEvent) {
+      this.setStatus('error');
+      this.cb.onError?.(terminalError ?? 'The generation stream ended before completion.');
+      return this.text;
+    }
+
+    // No event was observed, so the provider workflow is not known to have
+    // started. Capability/open transport failures are safe to run non-stream.
     this.setStatus('fallback');
     try {
       const full = await this.transport.fallback();

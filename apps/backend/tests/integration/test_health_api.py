@@ -25,10 +25,11 @@ class TestHealthEndpoint:
         assert resp.status_code == 200
         assert resp.json()["status"] == "healthy"
 
-    @patch("app.routers.health.check_llm_health", new_callable=AsyncMock)
+    @patch("app.llm.check_llm_health", new_callable=AsyncMock)
     async def test_health_is_independent_of_llm(self, mock_health, client):
         """/health is a liveness probe: it stays healthy even when the LLM is
-        unhealthy, and must NOT call the provider. Readiness lives at /status.
+        unhealthy, and must NOT call the provider. Dependency readiness lives
+        at /health/ready; provider testing is explicit and authenticated.
 
         Regression guard for the liveness-vs-readiness split - the previous
         version of this test asserted the deleted '/health returns degraded'
@@ -43,14 +44,17 @@ class TestHealthEndpoint:
 
 
 class TestStatusEndpoint:
-    """GET /api/v1/status"""
+    """GET /api/v1/status - persisted setup facts, never a live LLM probe."""
 
+    @patch("app.llm.check_llm_health", new_callable=AsyncMock)
     @patch("app.routers.health.db", new_callable=AsyncMock)
-    @patch("app.routers.health.check_llm_health", new_callable=AsyncMock)
     @patch("app.routers.health.get_llm_config")
-    async def test_status_ready(self, mock_config, mock_health, mock_db, client):
-        mock_config.return_value = type("C", (), {"api_key": "sk-test", "provider": "openai"})()
-        mock_health.return_value = {"healthy": True}
+    async def test_status_ready_from_persisted_setup(
+        self, mock_config, mock_db, mock_health, client
+    ):
+        mock_config.return_value = type(
+            "C", (), {"api_key": "sk-test", "provider": "openai"}
+        )()
         mock_db.get_stats.return_value = {
             "total_resumes": 1,
             "total_jobs": 0,
@@ -62,15 +66,20 @@ class TestStatusEndpoint:
         assert resp.status_code == 200
         data = resp.json()
         assert data["status"] == "ready"
-        assert data["llm_healthy"] is True
+        assert data["llm_configured"] is True
+        assert data["llm_healthy"] is None
         assert data["has_master_resume"] is True
+        mock_health.assert_not_awaited()
 
+    @patch("app.llm.check_llm_health", new_callable=AsyncMock)
     @patch("app.routers.health.db", new_callable=AsyncMock)
-    @patch("app.routers.health.check_llm_health", new_callable=AsyncMock)
     @patch("app.routers.health.get_llm_config")
-    async def test_status_setup_required(self, mock_config, mock_health, mock_db, client):
-        mock_config.return_value = type("C", (), {"api_key": "", "provider": "openai"})()
-        mock_health.return_value = {"healthy": False}
+    async def test_status_setup_required_only_for_missing_persisted_setup(
+        self, mock_config, mock_db, mock_health, client
+    ):
+        mock_config.return_value = type(
+            "C", (), {"api_key": "", "provider": "openai"}
+        )()
         mock_db.get_stats.return_value = {
             "total_resumes": 0,
             "total_jobs": 0,
@@ -82,17 +91,19 @@ class TestStatusEndpoint:
         assert resp.status_code == 200
         data = resp.json()
         assert data["status"] == "setup_required"
+        assert data["llm_healthy"] is None
+        mock_health.assert_not_awaited()
 
+    @patch("app.llm.check_llm_health", new_callable=AsyncMock)
     @patch("app.routers.health.db", new_callable=AsyncMock)
-    @patch("app.routers.health.check_llm_health", new_callable=AsyncMock)
     @patch("app.routers.health.get_llm_config")
-    async def test_status_degrades_when_llm_check_fails(
-        self, mock_config, mock_health, mock_db, client
+    async def test_provider_outage_cannot_change_complete_setup_to_required(
+        self, mock_config, mock_db, mock_health, client
     ):
-        """A failing LLM health probe degrades llm_healthy, not the endpoint:
-        /status still returns 200 and the DB check still runs."""
-        mock_config.return_value = type("C", (), {"api_key": "sk-test", "provider": "openai"})()
-        mock_health.side_effect = RuntimeError("llm boom")
+        mock_config.return_value = type(
+            "C", (), {"api_key": "sk-test", "provider": "openai"}
+        )()
+        mock_health.side_effect = RuntimeError("must not be called")
         mock_db.get_stats.return_value = {
             "total_resumes": 2,
             "total_jobs": 0,
@@ -101,113 +112,120 @@ class TestStatusEndpoint:
         }
         async with client:
             resp = await client.get("/api/v1/status")
-        assert resp.status_code == 200  # not 500
+        assert resp.status_code == 200
         data = resp.json()
-        assert data["llm_healthy"] is False
-        assert data["has_master_resume"] is True  # DB check still ran
-        assert data["database_stats"]["total_resumes"] == 2
+        assert data["status"] == "ready"
+        assert data["llm_healthy"] is None
+        mock_health.assert_not_awaited()
 
+    @patch("app.llm.check_llm_health", new_callable=AsyncMock)
     @patch("app.routers.health.db", new_callable=AsyncMock)
-    @patch("app.routers.health.check_llm_health", new_callable=AsyncMock)
     @patch("app.routers.health.get_llm_config")
     async def test_status_degrades_when_db_stats_fails(
-        self, mock_config, mock_health, mock_db, client
+        self, mock_config, mock_db, mock_health, client
     ):
-        """A failing DB stats query degrades its fields, not the endpoint:
-        /status still returns 200 and the LLM check still runs."""
-        mock_config.return_value = type("C", (), {"api_key": "sk-test", "provider": "openai"})()
-        mock_health.return_value = {"healthy": True}
+        mock_config.return_value = type(
+            "C", (), {"api_key": "sk-test", "provider": "openai"}
+        )()
         mock_db.get_stats.side_effect = RuntimeError("db boom")
         async with client:
             resp = await client.get("/api/v1/status")
-        assert resp.status_code == 200  # not 500
+        assert resp.status_code == 200
         data = resp.json()
-        assert data["llm_healthy"] is True  # LLM check still ran
+        assert data["status"] == "setup_required"
+        assert data["llm_healthy"] is None
         assert data["has_master_resume"] is False
         assert data["database_stats"]["total_resumes"] == 0
+        mock_health.assert_not_awaited()
 
+    @patch("app.llm.check_llm_health", new_callable=AsyncMock)
     @patch("app.routers.health.db", new_callable=AsyncMock)
-    @patch("app.routers.health.check_llm_health", new_callable=AsyncMock)
     @patch("app.routers.health.get_llm_config")
     async def test_status_openai_compatible_is_configured_without_key(
-        self, mock_config, mock_health, mock_db, client
+        self, mock_config, mock_db, mock_health, client
     ):
-        """openai_compatible (like ollama) runs without an API key, so it must
-        report llm_configured=True to stay consistent with the health check."""
         mock_config.return_value = type(
             "C", (), {"api_key": "", "provider": "openai_compatible"}
         )()
-        mock_health.return_value = {"healthy": True}
         mock_db.get_stats.return_value = {
-            "total_resumes": 0,
+            "total_resumes": 1,
             "total_jobs": 0,
             "total_improvements": 0,
-            "has_master_resume": False,
+            "has_master_resume": True,
         }
         async with client:
             resp = await client.get("/api/v1/status")
         assert resp.status_code == 200
-        assert resp.json()["llm_configured"] is True
+        data = resp.json()
+        assert data["llm_configured"] is True
+        assert data["status"] == "ready"
+        assert data["llm_healthy"] is None
+        mock_health.assert_not_awaited()
 
-
-class TestStatusLlmHealthCache:
-    """The /status LLM-health probe is cached (short TTL, single-flight) so a
-    public, unauthenticated /status flood cannot trigger one live provider
-    round-trip per request (cost/abuse + throughput guard)."""
-
+    @patch("app.llm.check_llm_health", new_callable=AsyncMock)
     @patch("app.routers.health.db", new_callable=AsyncMock)
-    @patch("app.routers.health.check_llm_health", new_callable=AsyncMock)
     @patch("app.routers.health.get_llm_config")
-    async def test_repeated_status_probes_llm_once(
-        self, mock_config, mock_health, mock_db, client
+    async def test_repeated_status_requests_never_probe_provider(
+        self, mock_config, mock_db, mock_health, client
     ):
         mock_config.return_value = type(
-            "C", (), {"api_key": "sk-test", "provider": "openai", "model": "gpt", "api_base": ""}
+            "C", (), {"api_key": "sk-test", "provider": "openai"}
         )()
-        mock_health.return_value = {"healthy": True}
         mock_db.get_stats.return_value = {
-            "total_resumes": 0,
+            "total_resumes": 1,
             "total_jobs": 0,
             "total_improvements": 0,
-            "has_master_resume": False,
+            "has_master_resume": True,
         }
         async with client:
             for _ in range(5):
                 resp = await client.get("/api/v1/status")
                 assert resp.status_code == 200
-        # Five status calls, but only ONE live provider round-trip.
-        assert mock_health.await_count == 1
+                assert resp.json()["llm_healthy"] is None
+        mock_health.assert_not_awaited()
 
-    @patch("app.routers.health.db", new_callable=AsyncMock)
-    @patch("app.routers.health.check_llm_health", new_callable=AsyncMock)
-    @patch("app.routers.health.get_llm_config")
-    async def test_key_rotation_invalidates_cache(
-        self, mock_config, mock_health, mock_db, client
-    ):
-        mock_health.return_value = {"healthy": True}
-        mock_db.get_stats.return_value = {
-            "total_resumes": 0,
-            "total_jobs": 0,
-            "total_improvements": 0,
+    async def test_anonymous_hosted_status_never_resolves_owner_config(self, client):
+        """No hosted principal means no config/key or owned DB lookup at all."""
+        with (
+            patch(
+                "app.routers.health._resolve_status_user_id",
+                new=AsyncMock(return_value=None),
+            ),
+            patch("app.routers.health.get_llm_config") as mock_config,
+            patch("app.routers.health.db", new_callable=AsyncMock) as mock_db,
+            patch("app.llm.check_llm_health", new_callable=AsyncMock) as mock_health,
+        ):
+            async with client:
+                resp = await client.get("/api/v1/status")
+
+        assert resp.status_code == 200
+        body = resp.json()
+        # The deployment-mode flag is reported for the frontend mismatch guard;
+        # it reflects the backend's own configured mode.
+        from app.config import settings
+
+        assert body.pop("single_user") == settings.single_user_mode
+        assert body == {
+            "status": "setup_required",
+            "llm_configured": False,
+            "llm_healthy": None,
             "has_master_resume": False,
+            "database_stats": {
+                "total_resumes": 0,
+                "total_jobs": 0,
+                "total_improvements": 0,
+                "has_master_resume": False,
+            },
         }
-        async with client:
-            mock_config.return_value = type(
-                "C", (), {"api_key": "sk-old", "provider": "openai", "model": "gpt", "api_base": ""}
-            )()
-            await client.get("/api/v1/status")
-            # Rotate the key -> new fingerprint -> cache miss -> fresh probe.
-            mock_config.return_value = type(
-                "C", (), {"api_key": "sk-new", "provider": "openai", "model": "gpt", "api_base": ""}
-            )()
-            await client.get("/api/v1/status")
-        assert mock_health.await_count == 2
+        mock_config.assert_not_called()
+        mock_db.get_stats.assert_not_awaited()
+        mock_health.assert_not_awaited()
 
 
 class TestSetupStatusEndpoint:
     """GET /api/v1/setup/status - deterministic persisted onboarding facts."""
 
-    @patch("app.routers.health.check_llm_health", new_callable=AsyncMock)
+    @patch("app.llm.check_llm_health", new_callable=AsyncMock)
     @patch("app.routers.health.db", new_callable=AsyncMock)
     @patch("app.routers.health.get_llm_config")
     async def test_complete_for_configured_user_with_master(

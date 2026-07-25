@@ -55,6 +55,23 @@ function StatusBadge({ status }: { status: AdminUserRow['status'] }) {
   return <Badge variant="ai">pending</Badge>;
 }
 
+function formatAccountMethod(method: string): string {
+  if (method === 'password') return 'Password';
+  if (method === 'unknown') return 'Unknown';
+
+  const [kind, providers = ''] = method.split(':', 2);
+  const providerList = providers
+    .split(',')
+    .filter(Boolean)
+    .map((provider) => provider.charAt(0).toUpperCase() + provider.slice(1))
+    .join(', ');
+  if (kind === 'oauth') return providerList ? `OAuth (${providerList})` : 'OAuth';
+  if (kind === 'password+oauth') {
+    return providerList ? `Password + OAuth (${providerList})` : 'Password + OAuth';
+  }
+  return method;
+}
+
 const PAGE_SIZE = 25;
 
 export default function AdminUsersPage() {
@@ -456,8 +473,18 @@ function UserDetailDrawer({
               <Field label="Role" value={data.role} />
               <Field label="Status" value={<StatusBadge status={data.status} />} />
               <Field label="Verified" value={data.emailVerified ? 'Yes' : 'No'} />
-              <Field label="Sign-up" value={data.signupMethod} />
-              <Field label="AI configured" value={data.aiConfigured ? 'Yes' : 'No'} />
+              <Field label="Account method" value={formatAccountMethod(data.signupMethod)} />
+              <Field
+                label="AI credentials"
+                value={
+                  <span>
+                    {data.aiConfigured ? 'AI credentials saved' : 'AI credentials not saved'}
+                    <span className="block text-xs text-[var(--muted-foreground)]">
+                      Validity and connectivity unverified
+                    </span>
+                  </span>
+                }
+              />
               <Field label="Joined" value={<LocalTime iso={data.createdAt} />} />
               <Field label="Last active" value={<RelativeTime iso={data.lastActiveAt} />} />
               <Field label="Resumes" value={String(data.resumeCount)} />

@@ -17,6 +17,21 @@ BOLD='\033[1m'
 FRONTEND_PORT="${PORT:-3000}"
 BACKEND_PORT="8000"
 
+# Backend worker processes (audit: single-worker limitation).
+# Defaults to 1 to preserve the historical behavior and avoid multiplying
+# memory (Playwright/Chromium + litellm) on small dynos. Set BACKEND_WORKERS>1
+# to spread the async workload across CPU cores.
+# IMPORTANT: running >1 worker REQUIRES a shared KVSTORE_URL (redis:// / rediss://)
+# so rate-limits, account lockouts, CAPTCHA gating and the session cache stay
+# consistent across workers (an in-process KVStore split-brains). This mirrors
+# the hosted config validation. Bounded to a sane range.
+BACKEND_WORKERS="${BACKEND_WORKERS:-1}"
+case "$BACKEND_WORKERS" in
+    ''|*[!0-9]*) BACKEND_WORKERS=1 ;;
+esac
+if [ "$BACKEND_WORKERS" -lt 1 ]; then BACKEND_WORKERS=1; fi
+if [ "$BACKEND_WORKERS" -gt 16 ]; then BACKEND_WORKERS=16; fi
+
 # Print banner
 print_banner() {
     echo -e "${CYAN}"
@@ -106,6 +121,38 @@ normalize_log_level() {
     esac
 }
 
+normalize_bool() {
+    local value="${1,,}"
+    local name="$2"
+
+    case "$value" in
+        true|1|yes|on)
+            echo "true"
+            ;;
+        false|0|no|off)
+            echo "false"
+            ;;
+        *)
+            error "Invalid ${name}='$1'; expected true or false"
+            return 1
+            ;;
+    esac
+}
+
+# Next.js inlines NEXT_PUBLIC_SINGLE_USER_MODE during image build, while the
+# backend reads SINGLE_USER_MODE at runtime. A mismatch makes protected pages
+# redirect to login even though the backend has auth disabled (or the inverse),
+# so reject the image before either service starts. Hosted builds must pass
+# --build-arg NEXT_PUBLIC_SINGLE_USER_MODE=false and set SINGLE_USER_MODE=false.
+RUNTIME_SINGLE_USER_MODE="$(normalize_bool "${SINGLE_USER_MODE:-true}" "SINGLE_USER_MODE")"
+FRONTEND_SINGLE_USER_MODE="$(normalize_bool "${BUILT_NEXT_PUBLIC_SINGLE_USER_MODE:-true}" "BUILT_NEXT_PUBLIC_SINGLE_USER_MODE")"
+if [ "$RUNTIME_SINGLE_USER_MODE" != "$FRONTEND_SINGLE_USER_MODE" ]; then
+    error "Frontend/backend auth mode mismatch: image was built with NEXT_PUBLIC_SINGLE_USER_MODE=${FRONTEND_SINGLE_USER_MODE}, but runtime SINGLE_USER_MODE=${RUNTIME_SINGLE_USER_MODE}."
+    error "Rebuild with --build-arg NEXT_PUBLIC_SINGLE_USER_MODE=${RUNTIME_SINGLE_USER_MODE}; runtime environment variables cannot change the compiled Next.js mode."
+    exit 1
+fi
+export SINGLE_USER_MODE="$RUNTIME_SINGLE_USER_MODE"
+
 # Exit code to propagate from failed child processes
 EXIT_CODE=0
 
@@ -191,9 +238,12 @@ else
     status "Data directory exists: $DATA_DIR"
 fi
 
-# Check for Playwright browsers
+# Check for the browser baked into the production image. The fallback keeps
+# local/custom images functional, but official images should never need it.
 info "Checking Playwright browsers..."
-if [ -d "/root/.cache/ms-playwright" ] || [ -d "/home/appuser/.cache/ms-playwright" ]; then
+if [ -n "${PLAYWRIGHT_BROWSERS_PATH:-}" ] && [ -d "${PLAYWRIGHT_BROWSERS_PATH}" ]; then
+    status "Playwright browsers found"
+elif [ -d "/root/.cache/ms-playwright" ] || [ -d "/home/appuser/.cache/ms-playwright" ]; then
     status "Playwright browsers found"
 else
     warn "Installing Playwright Chromium (this may take a moment)..."
@@ -208,7 +258,8 @@ echo ""
 info "Starting backend server on internal port ${BACKEND_PORT}..."
 cd /app/backend
 trap '' SIGTERM SIGINT SIGQUIT
-python -m uvicorn app.main:app --host 0.0.0.0 --port "${BACKEND_PORT}" --log-level "${UVICORN_LOG_LEVEL}" &
+info "Backend workers: ${BOLD}${BACKEND_WORKERS}${NC}"
+python -m uvicorn app.main:app --host 0.0.0.0 --port "${BACKEND_PORT}" --log-level "${UVICORN_LOG_LEVEL}" --workers "${BACKEND_WORKERS}" &
 BACKEND_PID=$!
 trap cleanup SIGTERM SIGINT SIGQUIT
 

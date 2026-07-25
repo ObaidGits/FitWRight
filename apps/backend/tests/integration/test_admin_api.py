@@ -75,6 +75,12 @@ async def _admin_client(db, email="admin@example.com"):
 
 
 class TestAuthz:
+    async def test_single_user_owner_200(self, auth_env, monkeypatch):
+        monkeypatch.setattr(app_settings, "single_user_mode", True)
+        async with _client() as client:
+            response = await client.get("/api/v1/admin/stats")
+        assert response.status_code == 200
+
     async def test_anonymous_401(self, auth_env, hosted):
         async with _client() as client:
             assert (await client.get("/api/v1/admin/stats")).status_code == 401

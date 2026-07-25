@@ -171,11 +171,11 @@ class TestKvStoreTile:
 
 
 class TestAiTile:
-    """AI mapping via the cached /status probe (never a new billable round-trip)."""
+    """AI mapping via the authenticated admin-only cached probe."""
 
     def _patch_llm(self, monkeypatch, *, api_key: str, provider: str, healthy: bool):
         import app.llm as llm_mod
-        import app.routers.health as health_router_mod
+        import app.admin.health_service as health_service_mod
 
         cfg = SimpleNamespace(api_key=api_key, provider=provider, model="m", api_base="")
         monkeypatch.setattr(llm_mod, "get_llm_config", lambda _principal: cfg)
@@ -183,7 +183,7 @@ class TestAiTile:
         async def _cached(config):
             return {"healthy": healthy}
 
-        monkeypatch.setattr(health_router_mod, "_cached_llm_health", _cached)
+        monkeypatch.setattr(health_service_mod, "_cached_admin_llm_health", _cached)
 
     async def test_configured_healthy_is_ok(self, monkeypatch):
         self._patch_llm(monkeypatch, api_key="sk-x", provider="openai", healthy=True)

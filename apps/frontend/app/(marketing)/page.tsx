@@ -6,6 +6,7 @@
  * no testimonials, fake stats, or manufactured social proof.
  */
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import Sparkles from 'lucide-react/dist/esm/icons/sparkles';
 import Gauge from 'lucide-react/dist/esm/icons/gauge';
@@ -37,6 +38,7 @@ import { LANDING_FAQS } from '@/components/marketing/faq-data';
 import { AnalysisMock, KanbanMock, ResumeDocMock } from '@/components/marketing/mockups';
 import { CAPABILITY_NAV } from '@/components/marketing/capabilities-data';
 import { JsonLd } from '@/lib/seo/json-ld';
+import { SINGLE_USER_MODE, APP_ENTRY_HREF } from '@/lib/config/auth';
 import { KEYWORDS } from '@/lib/seo/page-keywords';
 import { OG_IMAGE, TWITTER_IMAGE } from '@/lib/seo/config';
 import {
@@ -177,6 +179,10 @@ function SectionHeading({ eyebrow, title, sub }: { eyebrow: string; title: strin
 }
 
 export default function LandingPage() {
+  // Single-user mode has no marketing/acquisition surface - the owner should
+  // land directly in their workspace, not on a public landing page with
+  // Sign in / Sign up affordances.
+  if (SINGLE_USER_MODE) redirect('/home');
   return (
     <main>
       {/* Product + FAQ + breadcrumb structured data. Organization/WebSite are
@@ -284,7 +290,7 @@ export default function LandingPage() {
             <p className="mt-3 text-[var(--muted-foreground)]">
               FitWright reads the job description, detects the role, and extracts the skills and
               keywords that matter. You get a transparent breakdown of what your resume already
-              covers - and what it's missing - so nothing is a black box.
+              covers - and what it&apos;s missing - so nothing is a black box.
             </p>
             <ul className="mt-6 space-y-3">
               {[
@@ -358,7 +364,7 @@ export default function LandingPage() {
             </p>
             <div className="mt-6">
               <Button asChild variant="outline">
-                <Link href="/home">
+                <Link href={APP_ENTRY_HREF}>
                   Explore the workspace <ArrowRight className="h-4 w-4" />
                 </Link>
               </Button>
@@ -509,7 +515,7 @@ export default function LandingPage() {
               </p>
               <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
                 <Button asChild size="lg">
-                  <Link href="/home">
+                  <Link href={APP_ENTRY_HREF}>
                     <Sparkles className="h-4 w-4" /> Get started
                     <ArrowRight className="h-4 w-4" />
                   </Link>

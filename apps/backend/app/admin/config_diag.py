@@ -62,6 +62,10 @@ class ConfigService:
         return ConfigDiagnostics(
             env=self._env(),
             activeAiProviders=self._active_ai_providers(),
+            providersSource=(
+                "default configuration plus saved credential provider names "
+                "(connectivity unverified)"
+            ),
             storageProvider=str(settings.storage_provider),
             emailProvider=self._email_provider(),
             featureFlags=self._feature_flags(),
@@ -94,13 +98,12 @@ class ConfigService:
 
     @staticmethod
     def _active_ai_providers() -> list[str]:
-        """The active AI provider name(s) - names only, never keys (Req 10.4).
+        """Return the normalized default provider name, if configured.
 
-        The backend selects a single default LLM provider via ``LLM_PROVIDER``
-        (per-user provider keys live in the encrypted store and are intentionally
-        NOT read here, so this stays a sync, settings-only, secret-free read).
-        Reported as a one-element list to match the schema's list shape and to
-        leave room for multi-provider setups without a shape change.
+        The router augments this settings-only seed with distinct provider names
+        from saved credential rows and discloses the combined source. Names are
+        configuration metadata only; neither credentials nor connectivity state
+        are exposed by this diagnostics endpoint.
         """
         provider = str(settings.llm_provider).strip()
         return [provider] if provider else []
@@ -152,16 +155,8 @@ class ConfigService:
 
     @staticmethod
     def _maintenance_mode() -> bool:
-        """Maintenance-mode state.
-
-        The current configuration has no maintenance-mode toggle (Task 8.2's
-        MaintenanceService triggers maintenance *actions* - re-running existing
-        jobs - not a platform-wide maintenance *mode*). There is therefore no
-        honest signal to derive it from, so this reports ``False``. Documented
-        gap: introduce a dedicated ``MAINTENANCE_MODE`` setting if/when a
-        read-through maintenance state is added.
-        """
-        return False
+        """Return the real read-only platform maintenance-mode setting."""
+        return bool(settings.maintenance_mode)
 
     @staticmethod
     def _kill_switches() -> dict[str, bool]:

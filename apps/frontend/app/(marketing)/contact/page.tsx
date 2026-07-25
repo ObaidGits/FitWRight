@@ -95,12 +95,13 @@ export default function ContactPage() {
             Have an idea?
             <br />
             <span className="bg-gradient-to-r from-[var(--primary)] to-[var(--at-ai)] bg-clip-text text-transparent">
-              Let's talk.
+              Let&apos;s talk.
             </span>
           </h1>
           <p className="mt-5 max-w-md text-lg text-[var(--muted-foreground)]">
-            I'm always up for a good conversation about software, AI, engineering, or a role worth
-            exploring. Tell me what you're working on - thoughtful messages get thoughtful replies.
+            I&apos;m always up for a good conversation about software, AI, engineering, or a role
+            worth exploring. Tell me what you&apos;re working on - thoughtful messages get
+            thoughtful replies.
           </p>
 
           {/* SLA + reach */}

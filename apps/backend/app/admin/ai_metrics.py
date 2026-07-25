@@ -2,14 +2,19 @@
 
 Mirrors :class:`app.admin.metrics.AdminMetrics`: a tiny, process-wide,
 lock-guarded counter sink that the LLM call site updates via
-:meth:`AiMetricsService.record_call` after every provider round-trip. The
-``AiFlushStep`` (Task 9.2) reads :meth:`snapshot` and, on a successful durable
-persist, calls :meth:`reset`.
+:meth:`AiMetricsService.record_call` after each classified provider round-trip.
+The model intentionally remains binary (success/failure): because cancellation
+is not an allowlisted signal, cancelled streams are omitted at the LLM call site
+rather than being misclassified in either bucket. The ``AiFlushStep`` (Task 9.2)
+reads :meth:`snapshot` and, on a successful durable persist, calls :meth:`reset`.
 
 **Allowlist (Req 4, design philosophy §4) - EXACTLY these signals, nothing more:**
 total calls, success, failure, timeouts, retries, per-provider call counts,
-summed tokens, and summed latency (ms). Cost is derived separately by the
-``CostMonitor`` at flush time (Task 9.3) and is **not** accumulated here.
+summed tokens, and summed latency (ms). The response schema also exposes a
+nullable decimal cost estimate plus explicit availability metadata. This
+service does not have an accurate selected-window cost input, so it returns
+``None`` with an unavailable reason rather than fabricating zero or substituting
+an unrelated cost signal.
 
 **Explicitly rejected - never accepted, accumulated, or stored here:**
 temperature, prompt/completion length, model version, system prompt, tool
@@ -20,9 +25,10 @@ no parameters or fields for any of these.
 the closed :class:`~app.admin.metric_registry.AiProvider` enum. The per-provider
 dict is fixed at construction - exactly one counter per enum member - so no key
 is ever composed from a runtime value. A provider *string* handed to
-:meth:`record_call` is mapped to an ``AiProvider`` via a static alias table; an
-**unknown** provider is handled safely by still counting the global accumulators
-while **skipping** the per-provider counter (never creating a runtime key).
+:meth:`record_call` is mapped via a static alias table. Every supported provider
+has its own bucket; unknown or blank values are collapsed into the static
+``other`` bucket so untrusted input is never exposed and provider totals cannot
+silently omit recorded calls.
 
 This module depends only on :mod:`app.admin.metric_registry` and the stdlib -
 never on another Domain_Metrics_Service (Req 19.2/19.3/19.5).
@@ -63,34 +69,39 @@ __all__ = [
 # provider string -> closed AiProvider enum (static; no runtime-composed keys)
 # ---------------------------------------------------------------------------
 #
-# The LLM layer (``app/llm.py``) uses provider strings that are a superset of
-# the closed AiProvider set: it also supports ``openrouter``, ``deepseek`` and
-# ``groq`` (OpenAI-shaped aggregators) and spells the compatible provider
-# ``openai_compatible`` (the enum value is ``openai_compat``). This table maps
-# every *known* spelling to its enum member. Anything not present is treated as
-# an unknown provider (see :func:`provider_to_enum`).
+# The LLM layer (``app/llm.py``) uses the eight supported provider strings
+# represented below and spells the compatible provider ``openai_compatible``
+# (the enum value is ``openai_compat``). ``google`` is accepted as the key-store
+# alias for Gemini. Anything else is safely collapsed into ``other`` by
+# :func:`provider_to_enum`.
 _PROVIDER_ALIASES: dict[str, AiProvider] = {
     "openai": AiProvider.OPENAI,
     "gemini": AiProvider.GEMINI,
+    "google": AiProvider.GEMINI,
     "anthropic": AiProvider.ANTHROPIC,
     "ollama": AiProvider.OLLAMA,
     "openai_compat": AiProvider.OPENAI_COMPAT,
     "openai_compatible": AiProvider.OPENAI_COMPAT,
+    "openrouter": AiProvider.OPENROUTER,
+    "deepseek": AiProvider.DEEPSEEK,
+    "groq": AiProvider.GROQ,
 }
 
 
-def provider_to_enum(provider: "str | AiProvider | None") -> AiProvider | None:
-    """Map a provider (str or enum) to a closed :class:`AiProvider`.
+def provider_to_enum(provider: "str | AiProvider | None") -> AiProvider:
+    """Map a provider to one member of the closed provider dimension.
 
-    Returns the matching enum member, or ``None`` for an unknown/blank provider.
-    A ``None`` result is the documented signal to count the global accumulators
-    but **skip** the per-provider counter - never to invent a runtime key.
+    Known spellings retain their identity. Unknown, blank, or otherwise
+    untrusted values collapse into the static ``other`` bucket; the raw value is
+    never retained, serialized, or used to compose a metric key.
     """
     if isinstance(provider, AiProvider):
         return provider
     if not provider:
-        return None
-    return _PROVIDER_ALIASES.get(str(provider).strip().lower())
+        return AiProvider.OTHER
+    return _PROVIDER_ALIASES.get(
+        str(provider).strip().lower(), AiProvider.OTHER
+    )
 
 
 class AiMetricsService:
@@ -112,11 +123,11 @@ class AiMetricsService:
         # Fixed per-provider counters: exactly one per closed enum member. This
         # dict's keyset never changes at runtime (Req 20 / Property 8).
         self._by_provider: dict[AiProvider, int] = {p: 0 for p in AiProvider}
-        # Optional injected read collaborators for :meth:`analytics` (tests);
-        # otherwise the process-wide singletons are resolved lazily. The service
-        # depends ONLY on the shared MetricStore + Metric_Registry + schemas and
-        # the CostMonitor (in ``app.jd.monitoring`` - not a Domain_Metrics_Service),
-        # never on another domain service (import-graph guard, Req 19.2/19.3/19.5).
+        # Optional injected read collaborator for :meth:`analytics` (tests);
+        # otherwise the process-wide singleton is resolved lazily. Keep the
+        # legacy ``cost_monitor`` argument for constructor compatibility only:
+        # it is intentionally not read because it measures a rolling JD-only
+        # signal, not spend for the selected analytics window.
         self._metric_store = metric_store
         self._cost_monitor = cost_monitor
 
@@ -128,16 +139,6 @@ class AiMetricsService:
         from app.admin.metric_store import get_metric_store
 
         return get_metric_store()
-
-    def _get_cost_monitor(self):
-        if self._cost_monitor is not None:
-            return self._cost_monitor
-        # CostMonitor is a plain KV-backed helper (not a Domain_Metrics_Service),
-        # so importing it here is allowed by the import-graph fitness test.
-        from app.auth.runtime import get_kvstore
-        from app.jd.monitoring.cost import CostMonitor
-
-        return CostMonitor(get_kvstore())
 
     # -- mutation ------------------------------------------------------------
 
@@ -154,8 +155,8 @@ class AiMetricsService:
 
         Args:
             provider: The configured provider (str or :class:`AiProvider`).
-                Unknown/blank -> global counters still update, per-provider
-                counter is skipped (no runtime key created).
+                Unknown/blank values are counted in the static ``other`` bucket;
+                raw provider input is never retained or exposed.
             ok: Whether the call ultimately succeeded.
             timed_out: Whether the failure was a timeout.
             retried: Retry indicator. A ``bool`` contributes +1 when ``True``;
@@ -200,10 +201,7 @@ class AiMetricsService:
             self._retries += retry_inc
             self._tokens_sum += tok
             self._latency_ms_sum += lat
-            if mapped is not None:
-                self._by_provider[mapped] += 1
-            # Unknown provider: intentionally NOT counted per-provider (the
-            # global call is still counted above). Documented in module header.
+            self._by_provider[mapped] += 1
 
     # -- read / lifecycle ----------------------------------------------------
 
@@ -307,18 +305,21 @@ class AiMetricsService:
         assumed to be a sane int (the endpoint validates 1-365; default 30).
 
         **O(1) read (Req 4.9).** Only a bounded, fixed number of indexed
-        ``(metric, day)`` reads run: one ``MetricStore.sum`` per durable ``AI_*``
-        key (7) + one per provider (5) + one bounded ``series`` for the daily
-        chart. No row scan and no cost that grows with users/rows.
+        ``(metric, day)`` reads run: one ``MetricStore.sum`` per durable scalar
+        ``AI_*`` key (7), one per named provider (8), and one bounded ``series``
+        for the daily chart. No row scan and no cost grows with users/rows.
 
         **Rate invariant (Req 4.6/4.7).** ``successRate`` is ``successes/total``
         rounded to 4dp and ``failureRate`` is the 4dp complement
         (``round(1.0 - successRate, 4)``), so the two ALWAYS sum to exactly 1.0
         (in float) when ``total > 0``; both are 0.0 when ``total == 0``.
 
-        **Cost (Req 4.5).** ``estimatedCostDollars`` = the best-available KVStore
-        microdollar counter (``CostMonitor.global_spent``) truncated by integer
-        division by 1,000,000. See the limitation note below.
+        **Cost and scope.** Selected-window AI cost tracking is not
+        instrumented, so the read model explicitly marks cost unavailable and
+        returns no numeric estimate. Durable daily aggregates are combined with
+        the current process's not-yet-flushed accumulator; ``dataScope`` names
+        that mixed scope so consumers do not mistake the live contribution for
+        a fleet-wide durable value.
         """
         store = self._get_metric_store()
         now = datetime.now(timezone.utc)
@@ -356,28 +357,35 @@ class AiMetricsService:
             avg_latency_ms = 0.0
             avg_units_per_call = 0.0
 
-        # Per-provider breakdown: all five closed providers are returned (even
-        # zero-count ones) for a stable, fixed-shape table across windows.
-        providers: list[ProviderCount] = []
+        # Per-provider breakdown. Supported providers have dedicated static
+        # keys. ``other`` is derived as the residual against the authoritative
+        # global total so calls recorded before the expanded provider registry
+        # (or with an unknown/blank label) remain represented without exposing
+        # untrusted labels or creating runtime keys. With internally consistent
+        # counters this makes the breakdown sum exactly to ``total_calls``.
+        provider_counts: dict[AiProvider, int] = {}
         for provider in AiProvider:
-            calls = await store.sum([ai_calls_key(provider)], day_from, day_to) + int(
-                live_by_provider.get(provider, 0)
+            if provider is AiProvider.OTHER:
+                continue
+            provider_counts[provider] = (
+                await store.sum([ai_calls_key(provider)], day_from, day_to)
+                + int(live_by_provider.get(provider, 0))
             )
-            providers.append(ProviderCount(provider=provider.value, calls=calls))
 
-        # Estimated cost (Req 4.5). LIMITATION: the only durable KVStore
-        # microdollar counter today is CostMonitor's rolling one-hour global
-        # counter, scoped to the JD extraction pipeline - there is NO durable
-        # arbitrary-window AI-cost total (adding one would be scope creep beyond
-        # the metric registry). We therefore truncate the best-available signal;
-        # the value is an operational estimate / "ready for future billing", not
-        # a precise windowed AI spend. Fails soft to 0 on any read error.
-        try:
-            microdollars = await self._get_cost_monitor().global_spent()
-        except Exception:
-            logger.debug("AI analytics cost read failed", exc_info=True)
-            microdollars = 0
-        estimated_cost_dollars = int(max(0, int(microdollars)) // 1_000_000)
+        classified_calls = sum(provider_counts.values())
+        provider_counts[AiProvider.OTHER] = max(0, total_calls - classified_calls)
+        providers = [
+            ProviderCount(provider=provider.value, calls=provider_counts[provider])
+            for provider in AiProvider
+        ]
+
+        # Selected-window AI cost is not recorded by the allowlisted call
+        # instrumentation. Do not substitute the unrelated rolling one-hour
+        # JD-pipeline counter or fabricate a numeric zero.
+        estimated_cost_dollars = None
+        cost_unavailable_reason = (
+            "Selected-window cost tracking is not instrumented."
+        )
 
         # Daily AI_CALLS series for the chart; the trailing window's last point is
         # today, so fold in the live accumulator there to stay consistent.
@@ -398,6 +406,9 @@ class AiMetricsService:
             timeouts=timeouts,
             retries=retries,
             estimatedCostDollars=estimated_cost_dollars,
+            costUnavailable=True,
+            costUnavailableReason=cost_unavailable_reason,
+            dataScope="durable_daily_plus_current_process",
             providers=providers,
             daily=daily,
             computedAt=now.isoformat(),
@@ -456,9 +467,9 @@ def reset_ai_metrics_service() -> None:
 # Day/idempotency: like ``MetricsFlushStep`` the amounts are added to ``today``
 # (the accumulating day), never the just-closed ``day`` the pipeline passes, so a
 # re-run never rewrites a closed day (the counts for a day were all added while it
-# was current). ``AI_CALLS`` + the five per-provider ``AI_CALLS_*`` keys are owned
-# EXCLUSIVELY here (``MetricsFlushStep`` intentionally does not flush them), so no
-# AI key is written by two steps.
+# was current). ``AI_CALLS`` + the bounded per-provider ``AI_CALLS_*`` keys are
+# owned EXCLUSIVELY here (``MetricsFlushStep`` intentionally does not flush them),
+# so no AI key is written by two steps.
 
 # Durable AI Metric_Key -> AiMetricsService.snapshot() scalar field name. The
 # amount added for each is the integer of the snapshot value (the float
@@ -552,7 +563,7 @@ class AiFlushStep:
                 continue
             consumed[field] = amount
 
-        # -- the five static per-provider AI_CALLS_* keys ----------------------
+        # -- bounded static per-provider AI_CALLS_* keys ----------------------
         consumed_providers: dict[AiProvider, int] = {}
         for provider, count in by_provider.items():
             try:

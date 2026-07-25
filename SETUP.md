@@ -1,561 +1,240 @@
-# FitWright Setup Guide
+# FitWright Local Setup
 
-Welcome! This guide will walk you through setting up FitWright on your local machine. Whether you're a developer looking to contribute or someone who wants to run the application locally, this guide has you covered.
+FitWright supports two local workflows:
 
----
+1. **Docker Compose (recommended for users):** one container, one public port, no local Python or Node.js setup.
+2. **Native development:** backend and frontend run separately with locked dependencies and hot reload.
 
-## Table of Contents
+AI credentials are optional during installation. The app, health check, and Settings page work without a key; configure a provider after startup.
 
-- [Prerequisites](#prerequisites)
-- [Quick Start](#quick-start)
-- [Step-by-Step Setup](#step-by-step-setup)
-  - [1. Clone the Repository](#1-clone-the-repository)
-  - [2. Backend Setup](#2-backend-setup)
-  - [3. Frontend Setup](#3-frontend-setup)
-- [Configuring Your AI Provider](#configuring-your-ai-provider)
-  - [Option A: Cloud Providers](#option-a-cloud-providers)
-  - [Option B: Local AI with Ollama](#option-b-local-ai-with-ollama-free)
-- [Docker Deployment](#docker-deployment)
-- [Accessing the Application](#accessing-the-application)
-- [Common Commands Reference](#common-commands-reference)
-- [Troubleshooting](#troubleshooting)
-- [Project Structure Overview](#project-structure-overview)
-- [Getting Help](#getting-help)
+## Option 1: Docker Compose (recommended)
 
----
+### Prerequisites
 
-## Prerequisites
+- Git
+- Docker Desktop, or Docker Engine with Docker Compose v2
+- At least 4 GB of free memory and enough disk space for the image
 
-Before you begin, make sure you have the following installed on your system:
-
-| Tool | Minimum Version | How to Check | Installation |
-|------|-----------------|--------------|--------------|
-| **Python** | 3.13+ | `python --version` | [python.org](https://python.org) |
-| **Node.js** | 22+ | `node --version` | [nodejs.org](https://nodejs.org) |
-| **npm** | 10+ | `npm --version` | Comes with Node.js |
-| **uv** | Latest | `uv --version` | [astral.sh/uv](https://docs.astral.sh/uv/getting-started/installation/) |
-| **Git** | Any | `git --version` | [git-scm.com](https://git-scm.com) |
-
-### Installing uv (Python Package Manager)
-
-FitWright uses `uv` for fast, reliable Python dependency management. Install it with:
-
-```bash
-# macOS/Linux
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# Windows (PowerShell)
-powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
-
-# Or via pip
-pip install uv
-```
-
----
-
-## Quick Start
-
-If you're familiar with development tools and want to get running quickly:
-
-```bash
-# 1. Clone the repository
-git clone https://github.com/ObaidGits/FitWRight.git
-cd FitWRight
-
-# 2. Start the backend (Terminal 1)
-cd apps/backend
-cp .env.example .env        # Create config from template
-uv sync                      # Install Python dependencies
-uv run app
-
-# 3. Start the frontend (Terminal 2)
-cd apps/frontend
-npm install                  # Install Node.js dependencies
-npm run dev                  # Start the dev server
-```
-
-Open your browser to **<http://localhost:3000>** and you're ready to go!
-
-> **Note:** You'll need to configure an AI provider before using the app. See [Configuring Your AI Provider](#configuring-your-ai-provider) below.
-
----
-
-## Step-by-Step Setup
-
-### 1. Clone the Repository
-
-First, get the code on your machine:
+### Install and start
 
 ```bash
 git clone https://github.com/ObaidGits/FitWRight.git
 cd FitWRight
+docker compose up -d --build
 ```
 
-### 2. Backend Setup
-
-The backend is a Python FastAPI application that handles AI processing, resume parsing, and data storage.
-
-#### Navigate to the backend directory
+The first build downloads dependencies and Chromium, so it takes longer than later starts. Check readiness with:
 
 ```bash
-cd apps/backend
+docker compose ps
+docker compose logs -f fitwright
 ```
 
-#### Create your environment file
+When the service is healthy, open:
+
+| URL | Purpose |
+|-----|---------|
+| <http://localhost:3000> | Application |
+| <http://localhost:3000/settings> | AI provider configuration |
+| <http://localhost:3000/api/v1/health> | End-to-end health check |
+| <http://localhost:3000/docs> | API documentation |
+
+Stop or restart without deleting data:
 
 ```bash
-cp .env.example .env
+docker compose down
+docker compose up -d
 ```
 
-#### Edit the `.env` file with your preferred text editor
+> Do not add `-v` to `docker compose down` unless you intentionally want to delete all local FitWright data.
 
-```bash
-# macOS/Linux
-nano .env
+## Local configuration
 
-# Or use any editor you prefer
-code .env   # VS Code
-```
+The default Compose configuration is safe for one local user:
 
-The most important setting is your AI provider. Here's a minimal configuration for OpenAI:
+- `SINGLE_USER_MODE=true`; no email, OAuth, Redis, or hosted secrets required.
+- Data is stored in the Docker volume `resume-data` and survives restarts/rebuilds.
+- Cloud API keys are best entered in **Settings** after startup and are encrypted at rest.
+- Local providers such as Ollama can run without a cloud key.
 
-```env
-LLM_PROVIDER=openai
-LLM_MODEL=gpt-5-nano-2025-08-07
-LLM_API_KEY=sk-your-api-key-here
+### Use Ollama from Docker
 
-# Keep these as default for local development
-HOST=0.0.0.0
-PORT=8000
-FRONTEND_BASE_URL=http://localhost:3000
-CORS_ORIGINS=["http://localhost:3000", "http://127.0.0.1:3000"]
-```
-
-#### Install Python dependencies
-
-```bash
-uv sync
-```
-
-This creates a virtual environment and installs all required packages.
-
-#### Start the backend server
-
-```bash
-RELOAD=true uv run app
-```
-
-You should see output like:
-
-```
-INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
-INFO:     Started reloader process
-```
-
-**Keep this terminal running** and open a new terminal for the frontend.
-
-### 3. Frontend Setup
-
-The frontend is a Next.js application that provides the user interface.
-
-#### Navigate to the frontend directory
-
-```bash
-cd apps/frontend
-```
-
-#### (Optional) Create a frontend environment file
-
-This is only needed if your backend runs on a different port:
-
-```bash
-cp .env.sample .env.local
-```
-
-#### Install Node.js dependencies
-
-```bash
-npm install
-```
-
-#### Start the development server
-
-```bash
-npm run dev
-```
-
-You should see:
-
-```
-▲ Next.js 16.x.x (Turbopack)
-- Local:        http://localhost:3000
-```
-
-Open **<http://localhost:3000>** in your browser. You should see the FitWright dashboard!
-
----
-
-## Configuring Your AI Provider
-
-FitWright supports multiple AI providers. You can configure your provider through the Settings page in the app, or by editing the backend `.env` file.
-
-### Option A: Cloud Providers
-
-| Provider | Configuration | Get API Key |
-|----------|--------------|-------------|
-| **OpenAI** | `LLM_PROVIDER=openai`<br>`LLM_MODEL=gpt-5-nano-2025-08-07` | [platform.openai.com](https://platform.openai.com/api-keys) |
-| **Anthropic** | `LLM_PROVIDER=anthropic`<br>`LLM_MODEL=claude-haiku-4-5-20251001` | [console.anthropic.com](https://console.anthropic.com/) |
-| **Google Gemini** | `LLM_PROVIDER=gemini`<br>`LLM_MODEL=gemini/gemini-3-flash-preview` | [aistudio.google.com](https://aistudio.google.com/app/apikey) |
-| **OpenRouter** | `LLM_PROVIDER=openrouter`<br>`LLM_MODEL=deepseek/deepseek-chat` | [openrouter.ai](https://openrouter.ai/keys) |
-| **DeepSeek** | `LLM_PROVIDER=deepseek`<br>`LLM_MODEL=deepseek-chat` | [platform.deepseek.com](https://platform.deepseek.com/) |
-| **OpenAI-Compatible** | `LLM_PROVIDER=openai_compatible`<br>`LLM_MODEL=llama-3.1-8b`<br>`LLM_API_BASE=http://localhost:8080/v1` | - (local) |
-
-**OpenAI-Compatible** targets any local server that exposes the OpenAI Chat Completions API - llama.cpp, vLLM, LM Studio, etc. API key is optional.
-
-Example `.env` for Anthropic:
-
-```env
-LLM_PROVIDER=anthropic
-LLM_MODEL=claude-haiku-4-5-20251001
-LLM_API_KEY=sk-ant-your-key-here
-```
-
-### Option B: Local AI with Ollama (Free)
-
-Want to run AI models locally without API costs? Use Ollama!
-
-#### Step 1: Install Ollama
-
-Download and install from [ollama.com](https://ollama.com)
-
-#### Step 2: Pull a model
+Start Ollama on the host, pull a model, then start FitWright with the host endpoint:
 
 ```bash
 ollama pull gemma3:4b
+LLM_PROVIDER=ollama LLM_MODEL=gemma3:4b \
+  LLM_API_BASE=http://host.docker.internal:11434 \
+  docker compose up -d --build
 ```
 
-Other good options: `llama3.2`, `mistral`, `codellama`, `neural-chat`
+`host.docker.internal` is configured for Linux, macOS, and Windows by the Compose file.
 
-#### Step 3: Configure your `.env`
+### Use another host port
 
-```env
-LLM_PROVIDER=ollama
-LLM_MODEL=gemma3:4b
-LLM_API_BASE=http://localhost:11434
-# LLM_API_KEY is not needed for Ollama
-```
-
-#### Step 4: Make sure Ollama is running
+The public URL and host port must match:
 
 ```bash
-ollama serve
+PORT=4000 FRONTEND_BASE_URL=http://localhost:4000 docker compose up -d --build
 ```
 
-Ollama typically starts automatically after installation.
+Then open <http://localhost:4000>.
 
----
+### Update an existing installation
 
-## Docker Deployment
-
-Prefer containerized deployment? FitWright includes Docker support.
-
-### Quick Start with Docker Compose
+Back up important data first, then rebuild without deleting the volume:
 
 ```bash
-# Start the container from a published image
-docker compose up -d
-
-# View logs
-docker compose logs -f
-
-# Stop the container
-docker compose down
+git pull
+docker compose up -d --build
 ```
 
-### Customizing Ports
+To inspect the volume name, run `docker volume ls`. Never copy or publish files from the volume because they can contain resumes and encrypted credentials.
+
+## Option 2: Native development
+
+### Prerequisites
+
+| Tool | Required version |
+|------|------------------|
+| Python | 3.13 (managed automatically by `uv`) |
+| Node.js | 24 (`apps/frontend/.nvmrc`) |
+| npm | Version bundled with Node.js 24 |
+| uv | Current release |
+| Git | Any supported release |
+
+On macOS, Linux, or WSL, run the non-destructive bootstrap script from the repository root:
 
 ```bash
-# Change host port only (container stays on 3000)
-PORT=4000 docker compose up -d
+bash scripts/setup-local.sh
 ```
 
-### Configuration Options
+The script:
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PORT` | `3000` | Host port mapped to container port `3000` |
-| `LOG_LEVEL` | `INFO` | Application-wide Python/Uvicorn log level (`ERROR`, `WARNING`, `INFO`, `DEBUG`) |
-| `LOG_LLM` | `WARNING` | LiteLLM log level (`ERROR`, `WARNING`, `INFO`, `DEBUG`) |
-| `LLM_PROVIDER` | `openai` | AI provider (openai, anthropic, gemini, etc.) |
-| `LLM_MODEL` | - | Model to use (configured via Settings UI) |
-| `LLM_API_KEY` | - | API key (recommended: configure via Settings UI) |
-| `LLM_API_BASE` | - | Custom API endpoint (for Ollama or proxies) |
+- validates `uv`, Node.js 24, and npm;
+- copies `apps/backend/.env.example` only when `.env` does not exist;
+- installs Python dependencies from `uv.lock` with `--frozen`;
+- installs Chromium and required Linux libraries for PDF export;
+- installs frontend dependencies from `package-lock.json` with `npm ci`;
+- never overwrites environment files or removes application data.
 
-> **Note:** Changes to `LOG_LEVEL` and `LOG_LLM` require a container restart to take effect.
+### Start native development
 
-### Using Ollama with Docker
-
-To use Ollama running on your host machine:
-
-```bash
-LLM_API_BASE=http://host.docker.internal:11434 docker compose up -d
-```
-
-Then configure Ollama as your provider in the Settings UI.
-
-### Using Docker Secrets
-
-The container supports `*_FILE` from
-[docker secrets](https://docs.docker.com/compose/how-tos/use-secrets/#use-secrets).
-For sensitive values, you can mount a secret file and point to it:
-
-```bash
-LLM_API_KEY_FILE=/run/secrets/llm_api_key docker compose up -d
-```
-
-Supported `*_FILE` variables:
-
-| Variable | `*_FILE` variant |
-|----------|-----------------|
-| `LOG_LEVEL` | `LOG_LEVEL_FILE` |
-| `LOG_LLM` | `LOG_LLM_FILE` |
-| `LLM_PROVIDER` | `LLM_PROVIDER_FILE` |
-| `LLM_MODEL` | `LLM_MODEL_FILE` |
-| `LLM_API_KEY` | `LLM_API_KEY_FILE` |
-| `LLM_API_BASE` | `LLM_API_BASE_FILE` |
-
-Rules:
-
-- Use either the variable or its `*_FILE` variant, not both.
-- If both are set, the container exits with an explicit error.
-
-### Logging Level Configuration
-
-You can tune logs globally and for LiteLLM separately:
-
-```bash
-LOG_LEVEL=INFO LOG_LLM=DEBUG docker compose up -d
-```
-
-> **Security warning:** `LOG_LLM=DEBUG` causes LiteLLM to log API keys in
-> plaintext. Do not use `DEBUG` level in production or shared environments.
-> The default `WARNING` is safe.
-
-> **Note:** LiteLLM also reads the `LITELLM_LOG` environment variable internally
-> to control handler-level filtering. `LOG_LLM` sets the *logger* level. Both must
-> allow a message for it to appear. If you set `LITELLM_LOG` from LiteLLM docs,
-> make sure `LOG_LLM` is set to an equal or lower level.
-
-### Important Notes
-
-- **API keys are best configured through the UI** at `http://localhost:3000/settings`
-- Data is persisted in a Docker volume (`resume-data`)
-- The Settings UI configuration is stored in the volume and persists across restarts
-- App and API share the same origin: frontend on `/`, API on `/api`
-
-
-
-## Accessing the Application
-
-Once the container is running, open your browser:
-
-| URL | Description |
-|-----|-------------|
-| **<http://localhost:3000>** | Main application (Dashboard) |
-| **<http://localhost:3000/settings>** | Configure AI provider |
-| **<http://localhost:3000/api/v1/health>** | Backend health check |
-| **<http://localhost:3000/docs>** | Interactive API documentation |
-
-### First-Time Setup Checklist
-
-1. Open <http://localhost:3000/settings>
-2. Select your AI provider
-3. Enter your API key (or configure Ollama)
-4. Click "Save Configuration"
-5. Click "Test Connection" to verify it works
-6. Return to Dashboard and upload your first resume!
-
----
-
-## Common Commands Reference
-
-### Backend Commands
+Start the backend in terminal 1:
 
 ```bash
 cd apps/backend
-
-# Start development server (with auto-reload)
 RELOAD=true uv run app
-
-# Start production server
-uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
-
-# Install dependencies
-uv sync
-
-# Install with dev dependencies (for testing)
-uv sync --group dev
-
-# Run tests
-uv run pytest
-
-# Check if database needs reset (stored as JSON files)
-ls -la data/
 ```
 
-### Frontend Commands
+Start the frontend in terminal 2:
 
 ```bash
 cd apps/frontend
-
-# Start development server (with Turbopack for fast refresh)
 npm run dev
-
-# Build for production
-npm run build
-
-# Start production server
-npm run start
-
-# Run linter
-npm run lint
-
-# Format code with Prettier
-npm run format
-
-# Run on a different port
-npm run dev -- -p 3001
 ```
 
-### Database Management
+Open <http://localhost:3000>. The frontend proxies `/api`, `/docs`, `/redoc`, and `/openapi.json` to the backend at `127.0.0.1:8000`.
 
-FitWright uses TinyDB (JSON file storage). All data is in `apps/backend/data/`:
+A frontend `.env.local` is not required for the default ports. For custom frontend settings, copy the template without replacing an existing file:
 
 ```bash
-# View database files
-ls apps/backend/data/
-
-# Backup your data
-cp -r apps/backend/data apps/backend/data-backup
-
-# Reset everything (start fresh)
-rm -rf apps/backend/data
+cd apps/frontend
+[ -f .env.local ] || cp .env.sample .env.local
 ```
 
----
+### Native quality checks
+
+```bash
+# Backend
+cd apps/backend
+uv sync --frozen --extra dev
+uv run pytest -q
+
+# Frontend
+cd apps/frontend
+npm ci
+npm run lint
+npm run test
+npm run build
+```
+
+`pyproject.toml` and `uv.lock` are the authoritative backend dependency files. `package.json` and `package-lock.json` are authoritative for the frontend.
+
+## Data and database behavior
+
+Local mode uses SQLite and supporting files under `apps/backend/data/` (native) or `/app/backend/data/` in the Docker volume. Legacy TinyDB JSON is imported automatically when present.
+
+Before moving or resetting data:
+
+1. Stop FitWright.
+2. Back up the entire data directory or Docker volume.
+3. Keep `.secret_key` with the database; losing it can make stored provider keys unreadable.
+
+There is intentionally no destructive reset command in this guide.
+
+## Production is a separate mode
+
+These local instructions use single-user mode. A hosted multi-user deployment must be built with `NEXT_PUBLIC_SINGLE_USER_MODE=false`, run with `SINGLE_USER_MODE=false`, and configure Postgres plus stable security secrets. Do not expose the local Compose configuration directly to the internet.
 
 ## Troubleshooting
 
-### Backend won't start
-
-**Error:** `ModuleNotFoundError`
-
-Make sure you're running with `uv`:
+### Container is not healthy
 
 ```bash
-uv run uvicorn app.main:app --reload
+docker compose ps
+docker compose logs --tail=200 fitwright
 ```
 
-**Error:** `LLM_API_KEY not configured`
+Verify that port 3000 is free, then retry `docker compose up -d --build`. A cloud API key is not required for the service to become healthy.
 
-Check your `.env` file has a valid API key for your chosen provider.
-
-### Frontend won't start
-
-**Error:** `ECONNREFUSED` when loading pages
-
-The backend isn't running. Start it first:
+### Port 3000 is already in use
 
 ```bash
-cd apps/backend && uv run uvicorn app.main:app --reload
+PORT=4000 FRONTEND_BASE_URL=http://localhost:4000 docker compose up -d --build
 ```
 
-**Error:** Build or TypeScript errors
+### Backend dependency mismatch
 
-Clear the Next.js cache:
+Do not delete the lockfile. Restore it and run:
 
 ```bash
-rm -rf apps/frontend/.next
-npm run dev
+cd apps/backend
+uv sync --frozen
 ```
 
-### PDF Download fails
+### Frontend dependency mismatch
 
-**Error:** `Cannot connect to frontend for PDF generation`
+Use the committed lockfile:
 
-Your backend can't reach the frontend. Check:
+```bash
+cd apps/frontend
+npm ci
+```
 
-1. Frontend is running
-2. `FRONTEND_BASE_URL` in `.env` matches your frontend URL
-3. `CORS_ORIGINS` includes your frontend URL
+### Native PDF export fails on Linux
 
-If frontend runs on port 3001:
+Install Playwright's Chromium and system dependencies:
 
-```env
-FRONTEND_BASE_URL=http://localhost:3001
-CORS_ORIGINS=["http://localhost:3001", "http://127.0.0.1:3001"]
+```bash
+cd apps/backend
+uv run playwright install --with-deps chromium
 ```
 
 ### Ollama connection fails
 
-**Error:** `Connection refused to localhost:11434`
+Confirm Ollama is running and the model exists:
 
-1. Check Ollama is running: `ollama list`
-2. Start Ollama if needed: `ollama serve`
-3. Make sure the model is downloaded: `ollama pull gemma3:4b`
-
----
-
-## Project Structure Overview
-
-```
-FitWRight/
-+-- apps/
-|   +-- backend/                 # Python FastAPI backend
-|   |   +-- app/
-|   |   |   +-- main.py          # Application entry point
-|   |   |   +-- config.py        # Environment configuration
-|   |   |   +-- database.py      # TinyDB wrapper
-|   |   |   +-- llm.py           # AI provider integration
-|   |   |   +-- routers/         # API endpoints
-|   |   |   +-- services/        # Business logic
-|   |   |   +-- schemas/         # Data models
-|   |   |   +-- prompts/         # LLM prompt templates
-|   |   +-- data/                # Database storage (auto-created)
-|   |   +-- .env.example         # Environment template
-|   |   +-- pyproject.toml       # Python dependencies
-|   |
-|   +-- frontend/                # Next.js React frontend
-|       +-- app/                 # Pages (dashboard, builder, etc.)
-|       +-- components/          # Reusable React components
-|       +-- lib/                 # Utilities and API client
-|       +-- .env.sample          # Environment template
-|       +-- package.json         # Node.js dependencies
-|
-+-- docs/                        # Additional documentation
-+-- docker-compose.yml           # Docker configuration
-+-- Dockerfile                   # Container build instructions
-+-- README.md                    # Project overview
+```bash
+ollama list
 ```
 
----
+Native development uses `http://localhost:11434`; Docker uses `http://host.docker.internal:11434`.
 
-## Getting Help
+### AI generation reports a missing key
 
-Stuck? Here are your options:
+The installation is working; only the selected cloud provider is unconfigured. Open <http://localhost:3000/settings>, save the provider key, and use **Test Connection**.
 
-- **GitHub Issues:** [Open an issue](https://github.com/ObaidGits/FitWRight/issues) for bugs or feature requests
-- **GitHub Discussions:** [Ask a question](https://github.com/ObaidGits/FitWRight/discussions)
-- **Documentation:** Check the [docs/agent/](docs/agent/) folder for detailed guides
+## Getting help
 
-### Useful Documentation
-
-| Document | Description |
-|----------|-------------|
-| [backend-guide.md](docs/agent/architecture/backend-guide.md) | Backend architecture and API details |
-| [frontend-workflow.md](docs/agent/architecture/frontend-workflow.md) | User flow and component architecture |
-| [swiss-design-system/](docs/portable/swiss-design-system/README.md) | UI design system (Swiss International Style) - portable pack |
-
----
-
-Happy resume building! If you find FitWright helpful, consider [starring the repo](https://github.com/ObaidGits/FitWRight).
+When reporting a setup issue, include your operating system, Docker/Node/Python version, the command that failed, and sanitized logs. Never post `.env` contents, API keys, resumes, database files, or `.secret_key`.

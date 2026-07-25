@@ -35,10 +35,18 @@ export interface Application {
   updated_at: string;
 }
 
+export interface ApplicationResumeDeliverables {
+  resume_id: string;
+  cover_letter: string | null;
+  outreach_message: string | null;
+  interview_prep: string | Record<string, unknown> | null;
+}
+
 export interface ApplicationDetail extends Application {
   job_content: string | null;
-  // The applied/tailored resume record (null when it has been deleted).
-  resume: Record<string, unknown> | null;
+  // The detail endpoint embeds these persisted fields in the same round trip.
+  // Keep the type narrow so the workspace never needs the full resume API.
+  resume: ApplicationResumeDeliverables | null;
 }
 
 export type ApplicationColumns = Record<ApplicationStatus, Application[]>;

@@ -5,8 +5,8 @@ is constructed field-by-field from allowlisted values (never ``**row.__dict__``)
 so a new column on ``users`` can never ride along into an admin response. The
 :data:`FORBIDDEN_SUBSTRINGS` + :func:`assert_no_forbidden_fields` pair is the
 serialization safeguard asserted by the security suite (R14.3, Property 2):
-password hashes, session/CSRF tokens, api-keys (even masked), and OAuth tokens
-never serialize - the api-key state is surfaced only as ``aiConfigured: bool``.
+saved AI credentials never serialize; only ``aiConfigured: bool`` reports that
+credentials were saved, not that they were verified.
 
 All timestamps are the stored UTC ISO strings (the frontend renders local time
 with a UTC tooltip). Field names are camelCase to match the P1 ``SafeUser``
@@ -36,6 +36,10 @@ __all__ = [
     "MutationResult",
     "BulkDisableResult",
     "MaintenanceResult",
+    "CreateInviteRequest",
+    "CreatedInvite",
+    "AdminInviteView",
+    "AdminInviteList",
     # -- Observability / product-analytics shared submodels (Task 5.1) --
     "SeriesPoint",
     "HealthTile",
@@ -184,7 +188,10 @@ class AdminUserDetail(BaseModel):
     tailoredCount: int = 0
     applicationCount: int = 0
     lastActiveAt: str | None = None
+    # Stable representation: password, oauth:<providers>,
+    # password+oauth:<providers>, or unknown.
     signupMethod: str = "password"
+    # True means saved AI credentials exist; it does not verify they work.
     aiConfigured: bool = False
     recentAudit: list[AuditEntry] = Field(default_factory=list)
 
@@ -263,6 +270,58 @@ class MutationResult(BaseModel):
 
     changed: bool
     user: AdminUserRow | None = None
+
+
+class CreateInviteRequest(BaseModel):
+    """``POST /admin/invites`` - issue an admin invite bound to an email."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    email: str = Field(min_length=3, max_length=320)
+    # Optional override of the configured default lifetime (bounded to <=30d).
+    ttlHours: int | None = Field(default=None, ge=1, le=720)
+
+
+class CreatedInvite(BaseModel):
+    """Returned ONCE at creation. ``inviteUrl`` embeds the single-use token in
+    its query string (shown only now, never persisted or retrievable again). No
+    key here matches the forbidden-substring guard (the raw value lives in a URL,
+    which is a value, not a key)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    email: str
+    role: str
+    expiresAt: str
+    inviteUrl: str
+
+
+class AdminInviteView(BaseModel):
+    """One admin invite lifecycle record (never carries the raw invite value)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    email: str
+    role: str
+    createdBy: str | None = None
+    createdAt: str
+    expiresAt: str
+    status: Literal["active", "used", "expired", "revoked", "superseded"]
+    usedAt: str | None = None
+    usedBy: str | None = None
+    revokedAt: str | None = None
+    revokedBy: str | None = None
+    revokeReason: str | None = None
+
+
+class AdminInviteList(BaseModel):
+    """``GET /admin/invites`` - invite lifecycle records."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[AdminInviteView]
 
 
 class BulkDisableResult(BaseModel):
@@ -403,13 +462,17 @@ class AiAnalytics(BaseModel):
     successRate: float  # 4dp; success + failure == 1.0 when totalCalls > 0
     failureRate: float  # 4dp; both 0.0 when totalCalls == 0
     avgLatencyMs: float
-    # Average AI tokens per call. Named ``avgUnitsPerCall`` (not ``avgTokens``)
-    # because "token" is a FORBIDDEN_SUBSTRINGS entry - the serialization guard
-    # (Req 15.7) rejects any key containing it, so this avoids a false leak.
+    # Average AI units per call. The neutral field name also respects the
+    # forbidden-field response guard.
     avgUnitsPerCall: float
     timeouts: int
     retries: int
-    estimatedCostDollars: int  # microdollars / 1_000_000, truncated
+    # Decimal-dollar estimate; None when the configured pricing cannot cover
+    # the observed data.
+    estimatedCostDollars: float | None = None
+    costUnavailable: bool = False
+    costUnavailableReason: str | None = None
+    dataScope: str
     providers: list[ProviderCount] = Field(default_factory=list)
     daily: list[SeriesPoint] | None = None
     computedAt: str
@@ -441,20 +504,21 @@ class ErrorsBySource(BaseModel):
 
 
 class ErrorsSummary(BaseModel):
-    """``GET /admin/errors`` - grouped 4xx/5xx counts + by-source + trend.
+    """``GET /admin/errors`` - grouped date-bucket counts and trend.
 
-    ``notInstrumented`` lists the field paths that have **no durable source**
-    today (e.g. ``topRouteClasses`` - there is no bounded per-route-class failure
-    bucket; ``bySource.job`` / ``bySource.storage`` - no durable job/storage
-    failure counter). The UI shows an explicit "Not instrumented" indicator for
-    these instead of a misleading empty list / zero, so an operator can tell
-    "no failures" apart from "not tracked". This is metadata, not a raw-log field
-    (the panel remains grouped-buckets-only - Req 21.2).
+    ``windowStartDate`` and ``windowEndDate`` delimit inclusive UTC calendar
+    dates; ``granularity`` identifies the UTC-day buckets. ``notInstrumented``
+    lists field paths that have no durable source so consumers can distinguish
+    unavailable instrumentation from a measured zero or empty list.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     window: int
+    windowStartDate: str  # YYYY-MM-DD
+    windowEndDate: str  # YYYY-MM-DD
+    granularity: Literal["utc_day"] = "utc_day"
+    dataScope: str
     counts4xx: int
     counts5xx: int
     topRouteClasses: list[RouteClassFailures] = Field(default_factory=list)
@@ -465,7 +529,7 @@ class ErrorsSummary(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Performance signals (Req 6) - existing aggregates only; no new instrumentation
+# Performance signals (Req 6) - bounded current-process instrumentation
 # ---------------------------------------------------------------------------
 
 
@@ -489,9 +553,11 @@ class SlowJob(BaseModel):
 
 
 class PerformanceSignals(BaseModel):
-    """``GET /admin/performance`` - latency/cache aggregates the backend already
-    produces. Host metrics (cpu/memory/disk) are ``None`` unless already
-    produced and are dropped by ``exclude_none`` (Non-Goal - Req 21.4)."""
+    """``GET /admin/performance`` - available latency and cache observations.
+
+    Optional percentile and host fields remain nullable when their sources are
+    unavailable; ``unavailable`` names those gaps explicitly.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -500,6 +566,8 @@ class PerformanceSignals(BaseModel):
     topSlowJobs: list[SlowJob] = Field(default_factory=list)
     dbQueryTimeMs: float | None = None
     cacheHitRatio: float | None = None  # 0.0..1.0
+    cacheObservationCount: int
+    dataScope: str
     memoryBytes: int | None = None
     cpuPercent: float | None = None
     diskBytes: int | None = None
@@ -513,7 +581,7 @@ class PerformanceSignals(BaseModel):
 
 
 class StoragePanel(BaseModel):
-    """``GET /admin/storage`` - cached DB size + object storage + counts + growth."""
+    """``GET /admin/storage`` - cached sizes, zero-safe counts, and growth."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -524,6 +592,9 @@ class StoragePanel(BaseModel):
     avatarCount: int = 0
     resumeCount: int = 0
     resumeVersionCount: int = 0
+    countsUnavailable: bool = False
+    countsStale: bool = False
+    snapshotAt: str | None = None
     retentionStatus: str | None = None
     growthBytesPerDay: float | None = None  # None when insufficient samples
     growthUnavailable: bool = False
@@ -546,29 +617,33 @@ class JobsPanel(BaseModel):
     queueLengthUnavailable: bool = False
     purgeBacklog: int | None = None
     purgeBacklogUnavailable: bool = False
+    deadLetterCount: int | None = None
+    deadLetterCountUnavailable: bool = False
     computedAt: str
     stale: bool = False
 
 
 # ---------------------------------------------------------------------------
-# Security view (Req 9) - 24h aggregate counts, read from SEC_* keys only
+# Security view (Req 9) - exact indexed trailing-window counts
 # ---------------------------------------------------------------------------
 
 
 class SecurityView(BaseModel):
-    """``GET /admin/security`` - 24h security aggregate counts (zero when no data).
+    """``GET /admin/security`` - exact trailing 24-hour aggregate counts.
 
-    ``notInstrumented`` lists the camelCase field names that have **no durable
-    aggregate source** and therefore must NOT be read as a real "0". The UI shows
-    an explicit "Not instrumented" indicator for those instead of a misleading
-    zero - honesty over a fabricated count. A field is listed here only when the
-    backend produces no signal for it without new instrumentation (a Non-Goal,
-    Req 21.4); fields with a real source are never listed.
+    Explicit boundaries and ``windowKind`` define the interval semantics.
+    ``adminLoginRoleBasis`` records how admin-login events are classified.
+    ``notInstrumented`` is retained as explicit availability metadata and is
+    empty while all five counts have durable audit-event instrumentation.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     windowHours: int = 24
+    windowStart: str  # UTC ISO timestamp
+    windowEnd: str  # UTC ISO timestamp
+    windowKind: str
+    adminLoginRoleBasis: str
     loginFailed: int = 0
     adminLogin: int = 0
     authzDenied: int = 0
@@ -592,7 +667,9 @@ class ConfigDiagnostics(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     env: str
+    # Compatibility list; providersSource explains how the list was derived.
     activeAiProviders: list[str] = Field(default_factory=list)
+    providersSource: str
     storageProvider: str
     emailProvider: str
     featureFlags: dict[str, bool] = Field(default_factory=dict)
@@ -633,6 +710,7 @@ class OverviewKpis(BaseModel):
     newUsersToday: KpiValue
     aiCallsToday: KpiValue
     errorRate24h: KpiValue  # value 0.00..100.00
+    errorRateWindowLabel: str  # identifies the current date-bucket semantics
     purgeBacklog: KpiValue
     computedAt: str
     stale: bool = False
@@ -669,18 +747,16 @@ class FeatureUsage(BaseModel):
 
 
 class ResumeSourceSplit(BaseModel):
-    """Resume source split: counts + percentages for each origin."""
+    """Current resume inventory split by origin, with percentages."""
 
     model_config = ConfigDict(extra="forbid")
 
     generated: int = 0
     imported: int = 0
     tailored: int = 0
-    deleted: int = 0
     generatedPct: float = 0.0
     importedPct: float = 0.0
     tailoredPct: float = 0.0
-    deletedPct: float = 0.0
 
 
 class TemplateCount(BaseModel):
@@ -693,12 +769,16 @@ class TemplateCount(BaseModel):
 
 
 class ResumeAnalytics(BaseModel):
-    """``GET /admin/analytics/resumes`` - source split, top templates, growth."""
+    """Resume inventory snapshots, window activity, and daily net change."""
 
     model_config = ConfigDict(extra="forbid")
 
     window: int
     sourceSplit: ResumeSourceSplit
     topTemplates: list[TemplateCount] = Field(default_factory=list)  # top 10, tie -> name
-    growth: list[SeriesPoint] = Field(default_factory=list)
+    deletedInWindow: int
+    netChange: int
+    inventoryAsOf: str
+    templatesAsOf: str
+    growth: list[SeriesPoint] = Field(default_factory=list)  # daily net inventory change
     computedAt: str

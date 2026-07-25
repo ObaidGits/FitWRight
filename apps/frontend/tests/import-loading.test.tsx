@@ -13,8 +13,12 @@ vi.mock('next/navigation', () => ({
 vi.mock('@tanstack/react-query', () => ({
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }));
+let statusData: { llm_configured: boolean; llm_healthy: boolean | null } | undefined = {
+  llm_configured: true,
+  llm_healthy: null,
+};
 vi.mock('@/features/home/hooks', () => ({
-  useSystemStatus: () => ({ data: { llm_configured: true, llm_healthy: true } }),
+  useSystemStatus: () => ({ data: statusData }),
 }));
 vi.mock('@/components/atelier/toast', async (orig) => {
   const actual = (await orig()) as Record<string, unknown>;
@@ -33,9 +37,40 @@ vi.mock('@/features/resumes/upload', () => ({
 
 import ImportPage from '@/app/(app)/import/page';
 
-afterEach(() => vi.clearAllMocks());
+afterEach(() => {
+  vi.clearAllMocks();
+  statusData = { llm_configured: true, llm_healthy: null };
+});
 
 describe('Import page - parse loading experience', () => {
+  it('does not treat unknown provider health as a failed health check', () => {
+    statusData = { llm_configured: true, llm_healthy: null };
+    render(<ImportPage />);
+
+    expect(screen.queryByText(/your AI provider key isn't responding/i)).not.toBeInTheDocument();
+  });
+
+  it('still warns after an explicit failed provider check', () => {
+    statusData = { llm_configured: true, llm_healthy: false };
+    render(<ImportPage />);
+
+    expect(screen.getByText(/your AI provider key isn't responding/i)).toBeInTheDocument();
+  });
+
+  it('blocks upload requests while AI status is unresolved', () => {
+    statusData = undefined;
+    const { container } = render(<ImportPage />);
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+
+    expect(input).toBeDisabled();
+    fireEvent.change(input, {
+      target: { files: [new File(['x'], 'resume.pdf', { type: 'application/pdf' })] },
+    });
+    expect(validateResumeFile).not.toHaveBeenCalled();
+    expect(streamUploadResumeFile).not.toHaveBeenCalled();
+    expect(uploadResumeFile).not.toHaveBeenCalled();
+  });
+
   it('shows the deterministic stage timeline when streaming is unavailable', async () => {
     validateResumeFile.mockReturnValue(null); // valid file
     // Streaming off -> falls back to the non-stream path (deterministic timeline).

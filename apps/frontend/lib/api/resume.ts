@@ -130,6 +130,13 @@ export class ResumeRequestError extends Error {
   }
 }
 
+/** Stable, secret-safe reason AI structuring did not complete. */
+export interface ResumeProcessingError {
+  code: string;
+  message: string;
+  retryable: boolean;
+}
+
 /** Response from resume upload endpoint */
 export interface ResumeUploadResponse {
   message: string;
@@ -137,9 +144,11 @@ export interface ResumeUploadResponse {
   resume_id: string;
   processing_status: 'pending' | 'processing' | 'ready' | 'failed';
   is_master: boolean;
+  processing_error?: ResumeProcessingError | null;
 }
 
 interface ImproveResumeConfirmRequest {
+  preview_id: string;
   resume_id: string;
   job_id: string;
   improved_data: ResumeData;
@@ -147,6 +156,10 @@ interface ImproveResumeConfirmRequest {
     suggestion: string;
     lineNumber?: number | null;
   }>;
+  /** Apply the chosen template's photo intent server-side (after the preview
+   *  hash is validated): true = show the canonical profile photo, false = hide
+   *  it, omitted = leave the generated resume as-is. */
+  include_photo?: boolean;
 }
 
 function normalizeResumeId(resumeId: string): string {
@@ -292,13 +305,45 @@ export async function improveResume(
 export async function previewImproveResume(
   resumeId: string,
   jobId: string,
-  promptId?: string
+  promptId?: string,
+  customInstructions?: string
 ): Promise<ImprovedResult> {
   return postImprove('/resumes/improve/preview', {
     resume_id: resumeId,
     job_id: jobId,
     prompt_id: promptId ?? null,
+    ...(customInstructions?.trim() ? { custom_instructions: customInstructions.trim() } : {}),
   });
+}
+
+/**
+ * Recover a completed stream result by its client request ID without rerunning
+ * tailoring. A short bounded poll covers the race where the SSE connection is
+ * lost while the server is committing the durable preview.
+ */
+export async function recoverTailorPreview(
+  requestId: string,
+  attempts = 4
+): Promise<ImprovedResult | null> {
+  const delays = [0, 250, 750, 1250];
+  const boundedAttempts = Math.max(1, Math.min(attempts, delays.length));
+  for (let attempt = 0; attempt < boundedAttempts; attempt += 1) {
+    const delay = delays[attempt] ?? 0;
+    if (delay > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+    const response = await apiFetch(
+      `/resumes/improve/preview/result/${encodeURIComponent(requestId)}`,
+      { method: 'GET' },
+      5_000
+    );
+    if (response.status === 404) continue;
+    if (!response.ok) {
+      throw await parseError(response, 'The completed tailoring result could not be recovered.');
+    }
+    return (await response.json()) as ImprovedResult;
+  }
+  return null;
 }
 
 /** The real tailor pipeline stages, in order, surfaced by the streaming path. */
@@ -317,22 +362,69 @@ export class TailorStreamCancelled extends Error {
   }
 }
 
+export type TailorStreamFailurePhase = 'open' | 'before-event' | 'after-event';
+
+/**
+ * A typed tailoring-stream failure. `fallbackSafe` is true only when retrying
+ * through the non-stream endpoint cannot duplicate work known to have started.
+ */
+export class TailorStreamError extends ApiError {
+  constructor(
+    code: string,
+    message: string,
+    status: number,
+    public readonly phase: TailorStreamFailurePhase,
+    public readonly fallbackSafe: boolean,
+    details?: unknown,
+    retryAfter?: number
+  ) {
+    super(code, message, status, details, retryAfter);
+    this.name = 'TailorStreamError';
+  }
+
+  static fromApiError(error: ApiError, fallbackSafe: boolean): TailorStreamError {
+    return new TailorStreamError(
+      error.code,
+      error.message,
+      error.status,
+      'open',
+      fallbackSafe,
+      error.details,
+      error.retryAfter
+    );
+  }
+}
+
+function streamTransportError(
+  error: unknown,
+  phase: TailorStreamFailurePhase,
+  fallbackSafe: boolean
+): TailorStreamError {
+  const message = error instanceof Error ? error.message : 'The tailoring stream was interrupted.';
+  return new TailorStreamError('stream_transport_error', message, 0, phase, fallbackSafe);
+}
+
 /**
  * Stream the tailor pipeline as stage-progress SSE (P4 R1 pattern extended to
  * the multi-stage improve flow). `onStage` fires at each real backend boundary
  * (never fabricated), and the promise resolves the same {@link ImprovedResult}
  * the non-stream endpoint returns.
  *
- * Throws {@link TailorStreamCancelled} when `signal` aborts (caller should stop,
- * not fall back). Any other throw means the stream was unusable (flag off,
- * unsupported, network) and the caller should transparently fall back to
- * {@link previewImproveResume}.
+ * Throws {@link TailorStreamCancelled} for user cancellation and
+ * {@link TailorStreamError} for every other failure. Callers may use the
+ * latter's `fallbackSafe` flag; notably, errors after any SSE event are never
+ * safe to rerun automatically.
  */
 export async function streamImproveResume(
   resumeId: string,
   jobId: string,
   promptId: string | undefined,
-  opts: { requestId: string; signal: AbortSignal; onStage?: (e: TailorStageEvent) => void }
+  opts: {
+    requestId: string;
+    signal: AbortSignal;
+    onStage?: (e: TailorStageEvent) => void;
+    customInstructions?: string;
+  }
 ): Promise<ImprovedResult> {
   const url = `${API_BASE}/resumes/improve/preview/stream?request_id=${encodeURIComponent(
     opts.requestId
@@ -350,16 +442,39 @@ export async function streamImproveResume(
       method: 'POST',
       credentials: 'include',
       headers,
-      body: JSON.stringify({ resume_id: resumeId, job_id: jobId, prompt_id: promptId ?? null }),
+      body: JSON.stringify({
+        resume_id: resumeId,
+        job_id: jobId,
+        prompt_id: promptId ?? null,
+        ...(opts.customInstructions?.trim()
+          ? { custom_instructions: opts.customInstructions.trim() }
+          : {}),
+      }),
       signal: opts.signal,
     });
   } catch (e) {
     if (opts.signal.aborted) throw new TailorStreamCancelled();
-    throw e instanceof Error ? e : new Error('stream_open_failed');
+    throw streamTransportError(e, 'open', true);
   }
-  if (!res.ok || !res.body) {
-    // 409 (disabled) / 429 / any non-2xx -> caller falls back to non-stream.
-    throw new Error(`stream_open_failed:${res.status}`);
+
+  if (!res.ok) {
+    const error = await parseError(
+      res,
+      'Resume tailoring is temporarily unavailable. Please try again in a moment.'
+    );
+    const isCapabilityNegotiation =
+      error.status === 409 &&
+      (error.code === 'streaming_disabled' || error.code === 'streaming_unsupported');
+    throw TailorStreamError.fromApiError(error, isCapabilityNegotiation);
+  }
+  if (!res.body) {
+    throw new TailorStreamError(
+      'stream_body_missing',
+      'The tailoring stream could not be opened.',
+      res.status,
+      'before-event',
+      true
+    );
   }
 
   const reader = res.body.getReader();
@@ -367,13 +482,17 @@ export async function streamImproveResume(
   const td = new TextDecoder();
   let result: ImprovedResult | null = null;
   let cancelled = false;
-  let terminalError: string | null = null;
+  let terminalError: { message: string; details?: unknown } | null = null;
+  let observedEvent = false;
 
   try {
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
       for (const ev of decoder.push(td.decode(value, { stream: true }))) {
+        // Any complete SSE record means the server started stream work. From
+        // this point onward an automatic non-stream rerun could duplicate it.
+        observedEvent = true;
         if (ev.event === 'stage') {
           opts.onStage?.(ev.data as TailorStageEvent);
         } else if (ev.event === 'done') {
@@ -381,13 +500,16 @@ export async function streamImproveResume(
           if (d?.cancelled) cancelled = true;
           else if (d?.result) result = d.result;
         } else if (ev.event === 'error') {
-          terminalError = (ev.data as { message?: string })?.message ?? 'stream_error';
+          terminalError = {
+            message: (ev.data as { message?: string })?.message ?? 'The tailoring stream failed.',
+            details: ev.data,
+          };
         }
       }
     }
   } catch (e) {
     if (opts.signal.aborted) throw new TailorStreamCancelled();
-    throw e instanceof Error ? e : new Error('stream_read_failed');
+    throw streamTransportError(e, observedEvent ? 'after-event' : 'before-event', !observedEvent);
   } finally {
     try {
       await reader.cancel();
@@ -396,9 +518,26 @@ export async function streamImproveResume(
     }
   }
 
-  if (cancelled) throw new TailorStreamCancelled();
-  if (terminalError) throw new Error(terminalError);
-  if (!result) throw new Error('stream_incomplete');
+  if (cancelled || opts.signal.aborted) throw new TailorStreamCancelled();
+  if (terminalError) {
+    throw new TailorStreamError(
+      'stream_terminal_error',
+      terminalError.message,
+      0,
+      'after-event',
+      false,
+      terminalError.details
+    );
+  }
+  if (!result) {
+    throw new TailorStreamError(
+      'stream_incomplete',
+      'The tailoring stream ended before completion.',
+      0,
+      observedEvent ? 'after-event' : 'before-event',
+      !observedEvent
+    );
+  }
   return result;
 }
 

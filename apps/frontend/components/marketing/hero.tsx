@@ -15,6 +15,7 @@ import GitBranch from 'lucide-react/dist/esm/icons/git-branch';
 import KeyRound from 'lucide-react/dist/esm/icons/key-round';
 import { Button } from '@/components/atelier/button';
 import { TailorMock, AiSuggestionCard, CoverLetterMock } from '@/components/marketing/mockups';
+import { APP_ENTRY_HREF } from '@/lib/config/auth';
 
 export function Hero() {
   return (
@@ -51,7 +52,7 @@ export function Hero() {
           </p>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3 lg:justify-start">
             <Button asChild size="lg">
-              <Link href="/home">
+              <Link href={APP_ENTRY_HREF}>
                 <Sparkles className="h-4 w-4" /> Start tailoring
                 <ArrowRight className="h-4 w-4" />
               </Link>

@@ -1,26 +1,8 @@
-"""Unit tests for the ``AiMetricsService`` + ``AiFlushStep`` (Task 9.5).
+"""Unit tests for ``AiMetricsService`` and its durable flush step.
 
-Covers the Requirement-4 guarantees of the in-process AI-call accumulators and
-their durable flush (see :mod:`app.admin.ai_metrics`):
-
-- **Rate invariant (Req 4.6).** ``successRate + failureRate == 1.0`` *exactly*
-  (both rounded to 4dp) whenever ``totalCalls > 0``, across arbitrary splits.
-- **Zero-calls (Req 4.7).** An empty store yields all-zero aggregates with no
-  division-by-zero, all five providers present at zero, and cost 0.
-- **Cost truncation (Req 4.5).** ``estimatedCostDollars`` is the injected
-  ``CostMonitor.global_spent()`` microdollar counter floored by 1,000,000.
-- **Allowlist (Req 4 §4 / 15.8).** ``record_call``'s signature, ``snapshot``'s
-  keys, and the ``AiAnalytics`` model fields expose ONLY the allowlisted signals
-  - never temperature/prompt-length/model/system-prompt/tool-calls/reasoning/ids
-  - and the ``llm.py`` call sites pass only allowlisted kwargs.
-- **Flush reset-on-success / retain-on-failure / idempotent (Req 4.2 / 4.8).**
-  A clean flush consumes exactly the persisted amounts; a per-key ``add`` failure
-  retains that key's accumulator (retried next run, no double-count); a re-flush
-  with no new activity adds nothing.
-- **provider_to_enum.** Known spellings map to the closed enum; unknown/blank ->
-  ``None`` (global counters still move, no per-provider key invented).
-
-Requirements: 4.2, 4.5, 4.6, 4.7, 4.8, 15.8.
+Coverage includes rate invariants, explicit selected-window cost unavailability,
+the complete closed ``AiProvider`` dimension, static ``OTHER`` normalization,
+allowlisted instrumentation, and flush reset/retain/idempotency behavior.
 """
 
 from __future__ import annotations
@@ -71,23 +53,8 @@ class _FakeKV:
         self.data[key] = value
 
 
-class _FakeCostMonitor:
-    """A ``CostMonitor``-shaped fake returning a fixed microdollar counter."""
-
-    def __init__(self, microdollars: int) -> None:
-        self._micro = microdollars
-
-    async def global_spent(self) -> int:
-        return self._micro
-
-
 class _FailingAddStore:
-    """A ``MetricStore``-shaped fake whose ``add`` raises for configured keys.
-
-    Records healthy ``add`` calls into an in-memory ``(day, key) -> value`` map
-    and raises for any key in ``fail_keys`` (clearable to simulate recovery).
-    Only ``add`` is exercised by :class:`AiFlushStep`.
-    """
+    """A ``MetricStore`` fake whose ``add`` raises for configured keys."""
 
     def __init__(self, *fail_keys: str) -> None:
         self.values: dict[tuple[str, str], int] = defaultdict(int)
@@ -104,9 +71,9 @@ def _store(isolated_db) -> MetricStore:
     return MetricStore(isolated_db.session_factory, kvstore=_FakeKV())
 
 
-def _service(store=None, *, cost=0) -> AiMetricsService:
-    """An ``AiMetricsService`` with injected store + a fixed-cost fake monitor."""
-    return AiMetricsService(metric_store=store, cost_monitor=_FakeCostMonitor(cost))
+def _service(store=None) -> AiMetricsService:
+    """An ``AiMetricsService`` with an injected durable metric store."""
+    return AiMetricsService(metric_store=store)
 
 
 def _today() -> str:
@@ -200,10 +167,10 @@ class TestRateInvariant:
 
 
 class TestZeroCalls:
-    """Validates: Requirements 4.7"""
+    """Validates zero-safe analytics and explicit unavailable cost metadata."""
 
-    async def test_empty_store_yields_all_zero_no_division_error(self, isolated_db):
-        result = await _service(_store(isolated_db), cost=0).analytics(window=30)
+    async def test_empty_store_yields_zero_metrics_and_unavailable_cost(self, isolated_db):
+        result = await _service(_store(isolated_db)).analytics(window=30)
 
         assert result.totalCalls == 0
         assert result.successRate == 0.0
@@ -212,38 +179,16 @@ class TestZeroCalls:
         assert result.avgUnitsPerCall == 0.0
         assert result.timeouts == 0
         assert result.retries == 0
-        assert result.estimatedCostDollars == 0
-        # All five closed providers present, each at zero.
+        assert result.estimatedCostDollars is None
+        assert result.costUnavailable is True
+        assert (
+            result.costUnavailableReason
+            == "Selected-window cost tracking is not instrumented."
+        )
+        assert result.dataScope == "durable_daily_plus_current_process"
         assert len(result.providers) == len(AiProvider)
         assert {p.provider for p in result.providers} == {p.value for p in AiProvider}
         assert all(p.calls == 0 for p in result.providers)
-
-
-# ===========================================================================
-# 3. Cost truncation (Req 4.5)
-# ===========================================================================
-
-
-class TestCostTruncation:
-    """Validates: Requirements 4.5"""
-
-    @pytest.mark.parametrize(
-        "microdollars,expected_dollars",
-        [
-            (3_500_000, 3),    # 3.5 -> 3 (truncated, not rounded)
-            (999_999, 0),      # < $1 -> 0
-            (0, 0),
-            (1_000_000, 1),    # exactly $1
-            (1_999_999, 1),    # 1.999... -> 1
-            (100_000_000, 100),
-        ],
-    )
-    async def test_cost_is_floored_microdollars(
-        self, isolated_db, microdollars, expected_dollars
-    ):
-        svc = _service(_store(isolated_db), cost=microdollars)
-        result = await svc.analytics(window=30)
-        assert result.estimatedCostDollars == expected_dollars
 
 
 # ===========================================================================
@@ -413,7 +358,7 @@ class TestFlushIdempotent:
 
 
 class TestProviderMapping:
-    """Validates: Requirements 4.1 (bounded cardinality - supports 15.8)"""
+    """Validates the complete bounded provider dimension and ``OTHER`` bucket."""
 
     @pytest.mark.parametrize(
         "spelling,expected",
@@ -424,26 +369,33 @@ class TestProviderMapping:
             ("ollama", AiProvider.OLLAMA),
             ("openai_compat", AiProvider.OPENAI_COMPAT),
             ("openai_compatible", AiProvider.OPENAI_COMPAT),
-            ("OpenAI", AiProvider.OPENAI),  # case-insensitive
-            ("  gemini  ", AiProvider.GEMINI),  # trimmed
+            ("openrouter", AiProvider.OPENROUTER),
+            ("deepseek", AiProvider.DEEPSEEK),
+            ("groq", AiProvider.GROQ),
+            ("OpenAI", AiProvider.OPENAI),
+            ("  gemini  ", AiProvider.GEMINI),
         ],
     )
-    def test_known_providers_map_to_enum(self, spelling, expected):
+    def test_supported_providers_map_to_enum(self, spelling, expected):
         assert provider_to_enum(spelling) is expected
 
-    @pytest.mark.parametrize("spelling", ["openrouter", "deepseek", "groq", "", None])
-    def test_unknown_or_blank_providers_map_to_none(self, spelling):
-        assert provider_to_enum(spelling) is None
+    @pytest.mark.parametrize("spelling", ["unknown-vendor", "", "   ", None])
+    def test_unknown_or_blank_providers_map_to_other(self, spelling):
+        assert provider_to_enum(spelling) is AiProvider.OTHER
 
     def test_enum_input_passes_through(self):
         assert provider_to_enum(AiProvider.OLLAMA) is AiProvider.OLLAMA
 
-    def test_unknown_provider_counts_global_but_no_per_provider_counter(self):
+    def test_unknown_and_blank_increment_static_other_counter(self):
         svc = AiMetricsService()
-        svc.record_call("openrouter", ok=True, tokens=5)
+        svc.record_call("unknown-vendor", ok=True, tokens=5)
+        svc.record_call("", ok=False, tokens=2)
         snap = svc.snapshot()
-        assert snap["calls"] == 1  # global counter still moves
+
+        assert snap["calls"] == 2
         assert snap["success"] == 1
-        assert snap["tokens_sum"] == 5
-        # No per-provider counter was invented (all closed counters stay zero).
-        assert all(v == 0 for v in snap["by_provider"].values())
+        assert snap["failure"] == 1
+        assert snap["tokens_sum"] == 7
+        assert snap["by_provider"][AiProvider.OTHER] == 2
+        assert sum(snap["by_provider"].values()) == 2
+        assert len(snap["by_provider"]) == len(AiProvider)

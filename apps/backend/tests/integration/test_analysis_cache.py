@@ -281,7 +281,7 @@ class TestJobAnalyzeReuse:
     ):
         jd = "Senior Python engineer building APIs at scale."
         with patch(
-            "app.routers.jobs.extract_job_keywords",
+            "app.services.improver.extract_job_keywords",
             new=AsyncMock(return_value=self._KEYWORDS),
         ) as mock_extract:
             async with client:
@@ -293,6 +293,29 @@ class TestJobAnalyzeReuse:
             # The expensive LLM extraction ran exactly once - the second identical
             # analysis was served from the persistent cache.
             assert mock_extract.await_count == 1
+
+    async def test_generate_reuses_analyze_keywords(self, isolated_db, owner_id):
+        """Analyze -> Generate on an identical JD costs ONE LLM extraction.
+
+        Both the ``/jobs/analyze`` endpoint and the tailoring pipeline call
+        ``extract_job_keywords_cached``; a shared content-addressed artifact key
+        means the second caller (Generate) reuses Analyze's stored keywords
+        instead of paying for a duplicate provider call (token-waste fix).
+        """
+        from app.services.improver import extract_job_keywords_cached
+
+        jd = "Staff Go engineer, distributed systems, gRPC, Kubernetes."
+        with patch(
+            "app.services.improver.extract_job_keywords",
+            new=AsyncMock(return_value=self._KEYWORDS),
+        ) as mock_extract:
+            # Simulate "Analyze fit" then "Generate" for the same JD text.
+            first = await extract_job_keywords_cached(owner_id, jd)
+            second = await extract_job_keywords_cached(owner_id, jd)
+
+        assert first == self._KEYWORDS
+        assert second == self._KEYWORDS
+        assert mock_extract.await_count == 1
 
 
 # ---------------------------------------------------------------------------

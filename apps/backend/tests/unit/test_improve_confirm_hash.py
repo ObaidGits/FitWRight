@@ -12,7 +12,9 @@ so the two sides agree.
 
 from __future__ import annotations
 
-from app.routers.resumes import _hash_improved_data
+import pytest
+
+from app.routers.resumes import _hash_improved_data, _validate_confirm_payload
 from app.schemas import ResumeData
 
 
@@ -50,3 +52,8 @@ def test_hash_distinguishes_genuinely_different_resumes() -> None:
     a = {"personalInfo": {"name": "Jane"}, "summary": "Backend engineer."}
     b = {"personalInfo": {"name": "Jane"}, "summary": "Frontend engineer."}
     assert _hash_improved_data(a) != _hash_improved_data(b)
+
+
+def test_confirm_validation_fails_closed_without_structured_source() -> None:
+    with pytest.raises(ValueError, match="structured resume data is unavailable"):
+        _validate_confirm_payload(None, {"personalInfo": {"name": "AI output"}})

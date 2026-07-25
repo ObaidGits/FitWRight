@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 
 /**
@@ -47,6 +47,13 @@ import {
 } from '@/lib/api/resume-wizard';
 
 const mockedPrefill = vi.mocked(prefillResumeWizard);
+
+beforeEach(() => {
+  // Draft persistence is the behavior under test elsewhere; this suite must
+  // always start from a known profile-prefill boundary, even when Vitest reuses
+  // a jsdom worker after another wizard test file.
+  localStorage.clear();
+});
 
 afterEach(() => {
   vi.clearAllMocks();

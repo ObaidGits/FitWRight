@@ -478,6 +478,51 @@ class TestOrchestratorPhase3:
         assert "Responsibilities" in r.content
 
     @pytest.mark.asyncio
+    async def test_extensionless_pdf_reuses_static_fetch_bytes(self, monkeypatch):
+        orchestrator = self._wire(monkeypatch)
+        from app.jd.ssrf import FetchedText
+
+        pdf_bytes = _make_text_pdf(40)
+        fetches = {"static": 0, "raw": 0}
+
+        async def fake_static(url, *args, **kwargs):
+            fetches["static"] += 1
+            return FetchedText(
+                pdf_bytes.decode("utf-8", errors="replace"),
+                raw_bytes=pdf_bytes,
+                content_type="application/pdf",
+            )
+
+        async def unexpected_raw(url, *args, **kwargs):
+            fetches["raw"] += 1
+            raise AssertionError("extensionless PDF must not be downloaded twice")
+
+        monkeypatch.setattr(orchestrator, "fetch_url_safely", fake_static)
+        monkeypatch.setattr(orchestrator, "fetch_raw_safely", unexpected_raw)
+
+        result = await orchestrator.orchestrate_v2(
+            "u", "https://x.com/download/job-posting", force_refresh=True
+        )
+        assert result.content
+        assert result.source == "pdf_ocr"
+        assert fetches == {"static": 1, "raw": 0}
+
+    @pytest.mark.asyncio
+    async def test_timeout_message_uses_requested_envelope(self, monkeypatch):
+        orchestrator = self._wire(monkeypatch)
+
+        async def never_finishes(*args, **kwargs):
+            import asyncio
+
+            await asyncio.sleep(1)
+
+        monkeypatch.setattr(orchestrator, "_run_cascade", never_finishes)
+        result = await orchestrator.orchestrate_v2(
+            "u", "https://slow.example.com/job", timeout=0.01
+        )
+        assert result.explanation.summary == "Extraction timed out after 0.01 seconds."
+
+    @pytest.mark.asyncio
     async def test_finalize_adds_fingerprint_and_language(self, monkeypatch):
         orchestrator = self._wire(monkeypatch)
 

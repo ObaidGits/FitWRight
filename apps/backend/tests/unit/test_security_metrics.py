@@ -1,22 +1,9 @@
-"""Unit tests for the Security panel domain (Task 13.4, Req 9).
+"""Unit tests for exact security views and durable closed-day aggregation.
 
-Two units under test, both in :mod:`app.admin.security_metrics`:
-
-- :class:`SecurityMetricsService` - the request-path read model whose ``view()``
-  assembles a :class:`~app.admin.schemas.SecurityView` from the durable ``SEC_*``
-  ``metrics_daily`` keys via an injected :class:`~app.admin.metric_store.MetricStore`.
-- :class:`SecurityAggregateStep` - the rollup-time step that reads a day's
-  ``SEC_*`` counts from :meth:`AdminRepo.security_daily` and UPSERTs each into the
-  store, with per-day + per-key failure isolation over a bounded lookback window.
-
-The headline guarantee (Req 9.6/9.7/15.4) is that the **request path never scans
-``audit_log``**. We prove it two ways: *structurally* - the service holds only a
-``MetricStore`` (no repo / session), so it has nothing through which it *could*
-reach ``audit_log`` - and *behaviourally* - a spy store shows ``view()`` issues
-exactly five ``MetricStore.sum`` reads and touches no other store method, a fixed
-O(1) cost independent of how many days/rows are seeded.
-
-Requirements: 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7, 15.4, 15.8.
+``SecurityMetricsService.view`` delegates one exact trailing ``[start, end)``
+24-hour interval to ``AdminRepo.security_window`` and labels current-role admin
+classification explicitly. ``SecurityAggregateStep`` coverage below remains
+focused on idempotent closed-day UPSERTs and failure isolation.
 """
 
 from __future__ import annotations
@@ -46,23 +33,14 @@ pytestmark = pytest.mark.unit
 # Helpers / test doubles
 # ---------------------------------------------------------------------------
 
-# The five SEC_* keys view()/the step operate over (ordered as view() reads).
-_SEC_KEYS = (
-    SEC_LOGIN_FAILED,
-    SEC_ADMIN_LOGIN,
-    SEC_AUTHZ_DENIED,
-    SEC_RATE_LIMITED,
-    SEC_SUSPICIOUS,
-)
-
 
 def _store(isolated_db) -> MetricStore:
-    """A DB-backed MetricStore on the isolated engine (security reads only)."""
+    """A DB-backed MetricStore used only by ``SecurityAggregateStep`` tests."""
     return MetricStore(isolated_db.session_factory)
 
 
-def _service(store) -> SecurityMetricsService:
-    return SecurityMetricsService(metric_store=store)
+def _service(repo) -> SecurityMetricsService:
+    return SecurityMetricsService(repo=repo)
 
 
 def _day(offset: int = 0) -> str:
@@ -70,42 +48,16 @@ def _day(offset: int = 0) -> str:
     return (datetime.now(timezone.utc) - timedelta(days=offset)).strftime("%Y-%m-%d")
 
 
-class _CountingStore:
-    """A ``MetricStore``-shaped spy that records every method it is asked for.
+class _WindowRepo:
+    """Repository fake recording exact trailing-window reads."""
 
-    Delegates ``sum`` / ``upsert`` to the wrapped real store (so returned data is
-    real) while tallying each call. ``series`` / ``snapshot_get`` / ``snapshot_put``
-    are present so we can assert ``view()`` *never* touches them - a request-path
-    read that only sums indexed aggregates and never scans anything.
-    """
+    def __init__(self, counts: dict[str, int] | None = None) -> None:
+        self._counts = counts or {}
+        self.calls: list[tuple[str, str]] = []
 
-    def __init__(self, inner: MetricStore) -> None:
-        self._inner = inner
-        self.sum_calls: list[tuple[list[str], str, str]] = []
-        self.series_calls = 0
-        self.upsert_calls = 0
-        self.snapshot_get_calls = 0
-        self.snapshot_put_calls = 0
-
-    async def sum(self, keys, day_from: str, day_to: str) -> int:
-        self.sum_calls.append((list(keys), day_from, day_to))
-        return await self._inner.sum(keys, day_from, day_to)
-
-    async def upsert(self, day: str, key: str, value: int) -> None:
-        self.upsert_calls += 1
-        await self._inner.upsert(day, key, value)
-
-    async def series(self, key: str, days: int):
-        self.series_calls += 1
-        return await self._inner.series(key, days)
-
-    async def snapshot_get(self, name: str):
-        self.snapshot_get_calls += 1
-        return await self._inner.snapshot_get(name)
-
-    async def snapshot_put(self, name: str, payload, *, ttl_seconds=None):
-        self.snapshot_put_calls += 1
-        return await self._inner.snapshot_put(name, payload, ttl_seconds=ttl_seconds)
+    async def security_window(self, start: str, end: str) -> dict[str, int]:
+        self.calls.append((start, end))
+        return dict(self._counts)
 
 
 class _SpyRepo:
@@ -167,169 +119,77 @@ async def _seed_day(store: MetricStore, day: str, values: dict[str, int]) -> Non
 
 
 # ===========================================================================
-# 1. view() aggregates vs baseline (Req 9.3) - two-day sum, out-of-window excluded
+# 1. SecurityMetricsService exact trailing-window view (Req 9.3-9.7)
 # ===========================================================================
 
 
-class TestViewAggregates:
-    """Validates: Requirements 9.3"""
+class TestSecurityView:
+    """The request path delegates one exact half-open 24-hour window to the repo."""
 
-    async def test_view_sums_last_two_utc_days_per_field(self, isolated_db):
-        store = _store(isolated_db)
-        # Inside the window: today + yesterday.
-        await _seed_day(store, _day(0), {
-            SEC_LOGIN_FAILED: 5, SEC_ADMIN_LOGIN: 1, SEC_AUTHZ_DENIED: 2,
-            SEC_RATE_LIMITED: 3, SEC_SUSPICIOUS: 4,
-        })
-        await _seed_day(store, _day(1), {
-            SEC_LOGIN_FAILED: 10, SEC_ADMIN_LOGIN: 2, SEC_AUTHZ_DENIED: 1,
-            SEC_RATE_LIMITED: 0, SEC_SUSPICIOUS: 6,
-        })
-        # OUTSIDE the two-day window (two days ago) - must be excluded entirely.
-        await _seed_day(store, _day(2), {
-            SEC_LOGIN_FAILED: 100, SEC_ADMIN_LOGIN: 100, SEC_AUTHZ_DENIED: 100,
-            SEC_RATE_LIMITED: 100, SEC_SUSPICIOUS: 100,
-        })
+    async def test_exact_24_hour_half_open_window_and_response_metadata(self, monkeypatch):
+        end = datetime(2025, 2, 14, 12, 34, 56, 789000, tzinfo=timezone.utc)
+        start = end - timedelta(hours=24)
+        monkeypatch.setattr("app.admin.security_metrics._now", lambda: end)
+        counts = {
+            SEC_LOGIN_FAILED: 5,
+            SEC_ADMIN_LOGIN: 2,
+            SEC_AUTHZ_DENIED: 3,
+            SEC_RATE_LIMITED: 7,
+            SEC_SUSPICIOUS: 11,
+        }
+        repo = _WindowRepo(counts)
+        service = _service(repo)
 
-        view = await _service(store).view()
+        view = await service.view()
 
-        assert view.loginFailed == 15  # 5 + 10  (day -2 excluded)
-        assert view.adminLogin == 3  # 1 + 2
-        assert view.authzDenied == 3  # 2 + 1
-        assert view.rateLimited == 3  # 3 + 0
-        assert view.suspicious == 10  # 4 + 6
-        assert view.windowHours == 24
+        # Exactly one repository read receives the precise [start, end) bounds.
+        assert repo.calls == [(start.isoformat(), end.isoformat())]
+        called_start, called_end = map(datetime.fromisoformat, repo.calls[0])
+        assert called_end - called_start == timedelta(hours=24)
+        assert called_start < called_end
+        assert vars(service) == {"_repo": repo}
+
         assert isinstance(view, SecurityView)
-        # Honesty guard (audit fix): rate-limited + suspicious have no durable
-        # source, so they are surfaced as explicitly not-instrumented rather than
-        # a misleading 0 - never silently return a fabricated zero.
-        assert set(view.notInstrumented) == {"rateLimited", "suspicious"}
-
-    async def test_view_counts_are_non_negative_and_window_fixed(self, isolated_db):
-        store = _store(isolated_db)
-        await _seed_day(store, _day(0), {SEC_LOGIN_FAILED: 7})
-        view = await _service(store).view()
         assert view.windowHours == 24
-        assert all(v >= 0 for v in (
-            view.loginFailed, view.adminLogin, view.authzDenied,
-            view.rateLimited, view.suspicious,
-        ))
-        assert view.computedAt  # ISO timestamp present
+        assert view.windowStart == start.isoformat()
+        assert view.windowEnd == end.isoformat()
+        assert view.windowKind == "exact_trailing"
+        assert view.adminLoginRoleBasis == "current_role_at_query_time"
+        assert view.computedAt == end.isoformat()
+        assert view.notInstrumented == []
+        assert {
+            "loginFailed": view.loginFailed,
+            "adminLogin": view.adminLogin,
+            "authzDenied": view.authzDenied,
+            "rateLimited": view.rateLimited,
+            "suspicious": view.suspicious,
+        } == {
+            "loginFailed": 5,
+            "adminLogin": 2,
+            "authzDenied": 3,
+            "rateLimited": 7,
+            "suspicious": 11,
+        }
 
+    async def test_missing_repo_counts_default_to_measured_zero(self):
+        repo = _WindowRepo()
+        view = await _service(repo).view()
 
-# ===========================================================================
-# 2. Zero-data (Req 9.5) - empty store -> all-zero counts, no error, no fallback
-# ===========================================================================
-
-
-class TestZeroData:
-    """Validates: Requirements 9.5"""
-
-    async def test_empty_store_yields_all_zero_counts(self, isolated_db):
-        view = await _service(_store(isolated_db)).view()
+        assert len(repo.calls) == 1
         assert view.loginFailed == 0
         assert view.adminLogin == 0
         assert view.authzDenied == 0
         assert view.rateLimited == 0
         assert view.suspicious == 0
-        assert view.windowHours == 24
-        assert view.computedAt
+        assert view.notInstrumented == []
 
-
-# ===========================================================================
-# 3. No audit_log scan on the request path (Req 9.6 / 9.7 / 15.4) - CRITICAL
-# ===========================================================================
-
-
-class TestNoAuditLogScan:
-    """Validates: Requirements 9.6, 9.7, 15.4"""
-
-    def test_service_structurally_holds_only_a_store(self, isolated_db):
-        # Structural proof: the service owns ONLY a MetricStore - no repo, no
-        # session/session_factory - so there is nothing through which it could
-        # reach audit_log on the request path.
-        service = _service(_store(isolated_db))
-        attrs = vars(service)
-        assert set(attrs) == {"_metric_store"}
-        assert "_repo" not in attrs
-        assert "_admin_repo" not in attrs
-        assert "_session_factory" not in attrs
-        # The one collaborator it holds is exactly the injected MetricStore.
-        assert isinstance(attrs["_metric_store"], MetricStore)
-
-    async def test_view_issues_exactly_five_sum_reads_and_nothing_else(self, isolated_db):
-        spy = _CountingStore(_store(isolated_db))
-        await spy.upsert(_day(0), SEC_LOGIN_FAILED, 3)
-
-        await SecurityMetricsService(metric_store=spy).view()
-
-        # Behavioural proof: exactly one sum() per SEC_* key, nothing else.
-        assert len(spy.sum_calls) == 5
-        summed_keys = [tuple(keys) for keys, _, _ in spy.sum_calls]
-        assert summed_keys == [(k,) for k in _SEC_KEYS]
-        # No series / snapshot / upsert on the request path (no scan of any kind).
-        assert spy.series_calls == 0
-        assert spy.snapshot_get_calls == 0
-        assert spy.snapshot_put_calls == 0
-        # (the single upsert above was our seed, not view()'s doing)
-        assert spy.upsert_calls == 1
-
-    async def test_every_sum_spans_the_same_two_day_range(self, isolated_db):
-        spy = _CountingStore(_store(isolated_db))
-        await SecurityMetricsService(metric_store=spy).view()
-        # All five reads use the identical [yesterday, today] inclusive range.
-        ranges = {(day_from, day_to) for _, day_from, day_to in spy.sum_calls}
-        assert ranges == {(_day(1), _day(0))}
-
-
-# ===========================================================================
-# 4. O(1) independent of row count (Req 9.7) - fixed 5 reads, any data volume
-# ===========================================================================
-
-
-class TestConstantReadCount:
-    """Validates: Requirements 9.7"""
-
-    async def _seed(self, store: MetricStore, n_days: int) -> None:
-        for offset in range(n_days):
-            for key in _SEC_KEYS:
-                await store.upsert(_day(offset), key, offset + 1)
-
-    async def test_sum_call_count_is_five_regardless_of_seed_size(self, isolated_db):
-        # Tiny seed (2 days).
-        small = _CountingStore(_store(isolated_db))
-        await self._seed(small, 2)
-        small.sum_calls.clear()  # ignore seed writes; count only view()'s reads
-        await SecurityMetricsService(metric_store=small).view()
-
-        # Large seed (60 days, 30x more rows).
-        big = _CountingStore(_store(isolated_db))
-        await self._seed(big, 60)
-        big.sum_calls.clear()
-        await SecurityMetricsService(metric_store=big).view()
-
-        assert len(small.sum_calls) == 5
-        assert len(big.sum_calls) == len(small.sum_calls)  # O(1) w.r.t. volume
-
-
-# ===========================================================================
-# 5. Secret-free serialization (Req 15.8 / Property 3)
-# ===========================================================================
-
-
-class TestSecretFree:
-    """Validates: Requirements 15.8"""
-
-    async def test_view_serialization_has_no_forbidden_fields(self, isolated_db):
-        store = _store(isolated_db)
-        await _seed_day(store, _day(0), {SEC_LOGIN_FAILED: 2, SEC_ADMIN_LOGIN: 1})
-        view = await _service(store).view()
-        assert isinstance(view, SecurityView)
+    async def test_view_serialization_has_no_forbidden_fields(self):
+        view = await _service(_WindowRepo({SEC_LOGIN_FAILED: 2})).view()
         assert_no_forbidden_fields(view.model_dump(by_alias=True))
 
 
 # ===========================================================================
-# 6. SecurityAggregateStep - aggregates the lookback window + idempotent (Req 9.1)
+# 2. SecurityAggregateStep - aggregates the lookback window + idempotent (Req 9.1)
 # ===========================================================================
 
 

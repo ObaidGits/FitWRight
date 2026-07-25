@@ -10,6 +10,7 @@
  * use the toast system directly. Items reference a node but never leak content.
  */
 import * as React from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Bell from 'lucide-react/dist/esm/icons/bell';
 import Inbox from 'lucide-react/dist/esm/icons/inbox';
 import { useRouter } from 'next/navigation';
@@ -22,7 +23,8 @@ import {
 } from '@/components/atelier/dropdown-menu';
 import { Button } from '@/components/atelier/button';
 import { cn } from '@/lib/utils';
-import { notificationsApi, type AppNotification } from '@/lib/api/notifications';
+import { notificationsApi, type AppNotification, type UnreadCount } from '@/lib/api/notifications';
+import { queryKeys } from '@/lib/query/client';
 
 function relativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -36,85 +38,92 @@ function relativeTime(iso: string): string {
 
 export function NotificationCenter() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [open, setOpen] = React.useState(false);
-  const [items, setItems] = React.useState<AppNotification[]>([]);
-  // Server-authoritative unread badge (O(1) counter) - kept fresh by polling
-  // the interval the backend advertises, active tab only.
-  const [serverUnread, setServerUnread] = React.useState<number | null>(null);
 
-  const load = React.useCallback(() => {
-    notificationsApi
-      .list()
-      .then(setItems)
-      .catch(() => setItems([]));
-  }, []);
+  // Both responsive shell instances observe the same query records. The full
+  // list is loaded only when a menu opens; the unread badge remains the sole
+  // background poll. TanStack Query deduplicates simultaneous opens and reuses
+  // the fresh list across the desktop sidebar and mobile header.
+  const listQuery = useQuery<AppNotification[]>({
+    queryKey: queryKeys.notificationsList,
+    queryFn: notificationsApi.list,
+    staleTime: 30_000,
+    enabled: open,
+  });
+  const countQuery = useQuery<UnreadCount>({
+    queryKey: queryKeys.notificationsUnread,
+    queryFn: notificationsApi.unreadCount,
+    staleTime: 15_000,
+    refetchInterval: (query) => {
+      const seconds = query.state.data?.pollIntervalSeconds ?? 60;
+      return Math.max(15, seconds) * 1000;
+    },
+    refetchIntervalInBackground: false,
+  });
 
-  const refreshCount = React.useCallback(() => {
-    notificationsApi
-      .unreadCount()
-      .then((c) => setServerUnread(c.unread))
-      .catch(() => setServerUnread(null));
-  }, []);
+  const items = listQuery.data ?? [];
+  const serverUnread = countQuery.data?.unread ?? null;
 
-  React.useEffect(() => {
-    load();
-    refreshCount();
-  }, [load, refreshCount]);
-
-  React.useEffect(() => {
-    if (open) load();
-  }, [open, load]);
-
-  // Poll the unread counter while the tab is visible. Uses the backend's
-  // advertised interval (falls back to 60s) and pauses when hidden.
-  React.useEffect(() => {
-    let timer: ReturnType<typeof setInterval> | null = null;
-    let cancelled = false;
-    async function schedule() {
-      try {
-        const c = await notificationsApi.unreadCount();
-        if (cancelled) return;
-        setServerUnread(c.unread);
-        const ms = Math.max(15, c.pollIntervalSeconds || 60) * 1000;
-        timer = setInterval(() => {
-          if (document.visibilityState === 'visible') refreshCount();
-        }, ms);
-      } catch {
-        /* leave badge derived from the list */
-      }
-    }
-    schedule();
-    return () => {
-      cancelled = true;
-      if (timer) clearInterval(timer);
-    };
-  }, [refreshCount]);
-
-  // Prefer the server counter; fall back to deriving from the loaded list.
+  // Prefer the server's O(1) counter; derive from the list while unavailable.
   const derivedUnread = items.filter((n) => !n.read).length;
   const unread = serverUnread ?? derivedUnread;
 
+  const setItems = React.useCallback(
+    (updater: (current: AppNotification[]) => AppNotification[]) => {
+      queryClient.setQueryData<AppNotification[]>(queryKeys.notificationsList, (current) =>
+        updater(current ?? [])
+      );
+    },
+    [queryClient]
+  );
+  const setUnread = React.useCallback(
+    (updater: (current: number) => number) => {
+      queryClient.setQueryData<UnreadCount>(queryKeys.notificationsUnread, (current) =>
+        current ? { ...current, unread: updater(current.unread) } : current
+      );
+    },
+    [queryClient]
+  );
+
   async function dismiss(id: string) {
-    const wasUnread = items.find((n) => n.id === id && !n.read);
-    await notificationsApi.dismiss(id).catch(() => undefined);
-    setItems((prev) => prev.filter((n) => n.id !== id));
-    if (wasUnread) setServerUnread((c) => (c != null ? Math.max(0, c - 1) : c));
+    const wasUnread = items.some((n) => n.id === id && !n.read);
+    setItems((current) => current.filter((n) => n.id !== id));
+    if (wasUnread) setUnread((count) => Math.max(0, count - 1));
+    try {
+      await notificationsApi.dismiss(id);
+    } catch {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.notificationsList }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.notificationsUnread }),
+      ]);
+    }
   }
 
   async function markAllRead() {
-    const hadUnread = items.some((n) => !n.read);
-    if (!hadUnread) return;
-    setItems((prev) => prev.map((n) => ({ ...n, read: true })));
-    setServerUnread(0);
-    await notificationsApi.markAllRead().catch(() => refreshCount());
+    if (!items.some((n) => !n.read)) return;
+    setItems((current) => current.map((n) => ({ ...n, read: true })));
+    setUnread(() => 0);
+    try {
+      await notificationsApi.markAllRead();
+    } catch {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.notificationsList }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.notificationsUnread }),
+      ]);
+    }
   }
 
   function openNode(n: AppNotification) {
-    // Mark read on interaction (optimistic), then deep-link if possible.
     if (!n.read) {
-      setItems((prev) => prev.map((it) => (it.id === n.id ? { ...it, read: true } : it)));
-      setServerUnread((c) => (c != null ? Math.max(0, c - 1) : c));
-      notificationsApi.markRead(n.id).catch(() => refreshCount());
+      setItems((current) =>
+        current.map((item) => (item.id === n.id ? { ...item, read: true } : item))
+      );
+      setUnread((count) => Math.max(0, count - 1));
+      void notificationsApi.markRead(n.id).catch(() => {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.notificationsList });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.notificationsUnread });
+      });
     }
     if (!n.nodeRef) return;
     const href =

@@ -351,16 +351,15 @@ class StorageMetricsService:
         query therefore surfaces as stale because the marker stops advancing.
 
     ``avatarCount`` / ``resumeCount`` / ``resumeVersionCount``,
+    ``countsUnavailable`` / ``countsStale`` / ``snapshotAt``,
     ``objectStorageBytes`` / ``objectStorageStale`` (Req 7.2/7.7)
-        From the named ``"storage"`` snapshot. When the snapshot is **present**:
-        the three counts are mapped directly (non-negative ints) and
-        ``objectStorageBytes`` + ``objectStorageStale`` come from the snapshot,
-        with ``objectStorageStale`` additionally forced ``True`` when the
-        snapshot's ``sampledAt`` is older than the stale threshold (``> 2`` days -
-        more than one missed nightly rollup). When the snapshot is **missing**
-        (the rollup never ran) or its read fails -> counts default to ``0``,
-        ``objectStorageBytes`` is ``None``, and ``objectStorageStale`` is ``True``
-        (Req 7.7).
+        From the named ``"storage"`` snapshot. Count availability never depends
+        on count values: an absent/unreadable snapshot sets
+        ``countsUnavailable=True`` while a valid all-zero snapshot remains
+        available. ``countsStale`` is derived only from ``sampledAt`` expiry,
+        and ``snapshotAt`` is populated only when ``sampledAt`` parses. Object
+        storage keeps its independently sampled ``objectStorageStale`` signal;
+        count-snapshot age does not overwrite it.
 
     ``growthBytesPerDay`` / ``growthUnavailable`` / ``growthUnavailableReason``
     (Req 7.3/7.8)
@@ -384,7 +383,7 @@ class StorageMetricsService:
         Current UTC time as an ISO-8601 string.
     """
 
-    # Snapshot staleness threshold: object-storage usage is stale when its
+    # Count-snapshot staleness threshold: counts are stale when their
     # ``sampledAt`` is older than this (more than one missed nightly rollup).
     _SNAPSHOT_STALE_DAYS = 2
 
@@ -441,11 +440,14 @@ class StorageMetricsService:
         # -- 30-day growth estimate (Req 7.3/7.8) -----------------------------
         growth_bytes_per_day, growth_unavailable, growth_reason = self._growth(samples)
 
-        # -- storage counts + object-storage usage from the "storage" snapshot
+        # -- storage counts + independently sampled object-storage usage -------
         (
             avatar_count,
             resume_count,
             resume_version_count,
+            counts_unavailable,
+            counts_stale,
+            snapshot_at,
             object_storage_bytes,
             object_storage_stale,
         ) = self._storage_snapshot(await self._read_storage_snapshot(store), now)
@@ -461,6 +463,9 @@ class StorageMetricsService:
             avatarCount=avatar_count,
             resumeCount=resume_count,
             resumeVersionCount=resume_version_count,
+            countsUnavailable=counts_unavailable,
+            countsStale=counts_stale,
+            snapshotAt=snapshot_at,
             retentionStatus=retention_status,
             growthBytesPerDay=growth_bytes_per_day,
             growthUnavailable=growth_unavailable,
@@ -544,16 +549,17 @@ class StorageMetricsService:
 
     def _storage_snapshot(
         self, snapshot: dict | None, now: datetime
-    ) -> "tuple[int, int, int, int | None, bool]":
-        """Map the ``"storage"`` snapshot -> counts + object-storage usage (Req 7.2/7.7).
+    ) -> "tuple[int, int, int, bool, bool, str | None, int | None, bool]":
+        """Map the cached snapshot without inferring availability from values.
 
-        Missing snapshot -> counts 0, object-storage None + stale True. Present
-        snapshot -> mapped values, with object-storage additionally marked stale
-        when its ``sampledAt`` is older than :attr:`_SNAPSHOT_STALE_DAYS`.
+        Count availability is authoritative: only an absent/unreadable snapshot
+        makes counts unavailable, so a valid all-zero snapshot remains valid.
+        Count freshness and ``snapshotAt`` come solely from ``sampledAt``.
+        Object-storage staleness is its own rollup signal and is deliberately
+        independent of count-snapshot age.
         """
         if not isinstance(snapshot, dict):
-            # Rollup never ran (or read failed): no cached counts/usage yet.
-            return 0, 0, 0, None, True
+            return 0, 0, 0, True, False, None, None, True
 
         def _count(field: str) -> int:
             try:
@@ -561,32 +567,42 @@ class StorageMetricsService:
             except (TypeError, ValueError):
                 return 0
 
+        sampled_at = self._valid_snapshot_at(snapshot.get("sampledAt"))
+        counts_stale = self._snapshot_expired(sampled_at, now)
+
         raw_bytes = snapshot.get("objectStorageBytes")
         try:
             object_storage_bytes = int(raw_bytes) if raw_bytes is not None else None
         except (TypeError, ValueError):
             object_storage_bytes = None
 
-        object_storage_stale = bool(snapshot.get("objectStorageStale", False))
-        if self._snapshot_expired(snapshot.get("sampledAt"), now):
-            object_storage_stale = True
-
         return (
             _count("avatarCount"),
             _count("resumeCount"),
             _count("resumeVersionCount"),
+            False,
+            counts_stale,
+            sampled_at,
             object_storage_bytes,
-            object_storage_stale,
+            bool(snapshot.get("objectStorageStale", False)),
         )
 
-    def _snapshot_expired(self, sampled_at, now: datetime) -> bool:
-        """Whether the snapshot's ``sampledAt`` is older than the stale threshold."""
-        if not sampled_at:
-            return True
+    @staticmethod
+    def _valid_snapshot_at(sampled_at: object) -> str | None:
+        """Return a parseable ``sampledAt`` string, otherwise ``None``."""
+        if not isinstance(sampled_at, str) or not sampled_at:
+            return None
         try:
-            sampled = datetime.fromisoformat(sampled_at)
-        except (TypeError, ValueError):
+            datetime.fromisoformat(sampled_at)
+        except ValueError:
+            return None
+        return sampled_at
+
+    def _snapshot_expired(self, sampled_at: str | None, now: datetime) -> bool:
+        """Whether count snapshot time is absent or beyond its freshness window."""
+        if sampled_at is None:
             return True
+        sampled = datetime.fromisoformat(sampled_at)
         if sampled.tzinfo is None:
             sampled = sampled.replace(tzinfo=timezone.utc)
         return now - sampled > timedelta(days=self._SNAPSHOT_STALE_DAYS)

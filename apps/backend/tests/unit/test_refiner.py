@@ -202,6 +202,38 @@ class TestValidateMasterAlignment:
         company_violations = [v for v in report.violations if v.violation_type == "fabricated_company"]
         assert len(company_violations) >= 1
 
+    def test_user_attested_company_not_flagged(self, sample_resume, master_resume):
+        """A new company the user explicitly asked to add is user-attested, so
+        it must NOT be flagged as fabricated."""
+        tailored = copy.deepcopy(sample_resume)
+        tailored["workExperience"].append({
+            "id": 3,
+            "title": "Freelance Developer",
+            "company": "Self-employed",
+            "years": "2021 - 2022",
+            "description": ["Built client web apps"],
+        })
+        report = validate_master_alignment(
+            tailored,
+            master_resume,
+            user_instructions="Add my role Freelance Developer at Self-employed (2021-2022).",
+        )
+        company_violations = [
+            v for v in report.violations if v.violation_type == "fabricated_company"
+        ]
+        assert company_violations == []
+
+    def test_user_attested_skill_not_flagged(self, sample_resume, master_resume):
+        tailored = copy.deepcopy(sample_resume)
+        tailored["additional"]["technicalSkills"].append("Rust")
+        report = validate_master_alignment(
+            tailored,
+            master_resume,
+            user_instructions="I actually know Rust, please include it.",
+        )
+        rust_violations = [v for v in report.violations if "rust" in v.value.lower()]
+        assert rust_violations == []
+
     def test_allows_skill_variants_as_non_critical(self, sample_resume, master_resume):
         """A variant of an existing skill (e.g. 'Python 3') should be info, not critical."""
         tailored = copy.deepcopy(sample_resume)

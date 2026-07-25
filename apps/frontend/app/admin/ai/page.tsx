@@ -10,11 +10,11 @@
  * selector (7 / 30 / 90 days, default 30) refetches the series when changed
  * (Req 4.3); the backend validates the 1-365 range server-side.
  *
- * This page renders ONLY what `AiAnalytics` provides - aggregate counts, rates
- * and a truncated whole-dollar cost estimate. It deliberately shows no prompt,
- * model, temperature or per-call/id fields (allowlist - Req 4). On fetch failure
- * it shows an explicit error state with a working retry control (never a blank
- * or partial view); rates degrade sensibly to 0% / - when there are no calls.
+ * This page renders ONLY what `AiAnalytics` provides - aggregate counts, rates,
+ * and explicit selected-window cost availability. It deliberately shows no
+ * prompt, model, temperature or per-call/id fields (allowlist - Req 4). On fetch
+ * failure it shows an explicit error state with a working retry control (never a
+ * blank or partial view); rates degrade sensibly to 0% / - when there are no calls.
  */
 import * as React from 'react';
 import { Suspense } from 'react';
@@ -68,9 +68,22 @@ function formatAvg(value: number, totalCalls: number): string {
   return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
 }
 
-/** Whole-dollar cost estimate ("$12"). */
+/** A non-negative dollar estimate, retaining useful fractional precision. */
 function formatDollars(dollars: number): string {
-  return `$${Math.max(0, Math.trunc(dollars)).toLocaleString()}`;
+  return Math.max(0, dollars).toLocaleString(undefined, {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 4,
+  });
+}
+
+/** Convert backend scope identifiers into honest, user-facing wording. */
+function describeDataScope(scope: string): string {
+  if (scope === 'durable_daily_plus_current_process') {
+    return 'Durable daily totals plus live, not-yet-flushed activity from this server process only.';
+  }
+  return 'Aggregate scope reported by the analytics service.';
 }
 
 /** One headline metric card: a label + a formatted value (+ optional sub-text). */
@@ -104,9 +117,13 @@ function ProviderTable({ data }: { data: AiAnalytics }) {
 
   return (
     <Card className="p-5">
-      <h2 className="mb-3 text-sm font-semibold text-[var(--muted-foreground)]">
+      <h2 className="mb-1 text-sm font-semibold text-[var(--muted-foreground)]">
         Provider breakdown
       </h2>
+      <p className="mb-3 text-xs text-[var(--muted-foreground)]">
+        <span className="font-medium">other</span> includes historical, unclassified, or unsupported
+        provider labels.
+      </p>
 
       {providers.length === 0 ? (
         <p className="py-6 text-center text-sm text-[var(--muted-foreground)]">
@@ -233,10 +250,16 @@ function AdminAiPageInner() {
           <LoadingSkeleton rows={3} />
         ) : (
           <>
-            <p className="flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
-              As of <LocalTime iso={data.computedAt} />
-              <span>- last {data.window} days</span>
-            </p>
+            <div className="space-y-1 text-sm text-[var(--muted-foreground)]">
+              <p className="flex flex-wrap items-center gap-2">
+                As of <LocalTime iso={data.computedAt} />
+                <span>- last {data.window} days</span>
+              </p>
+              <p>
+                <span className="font-medium">Data scope:</span>
+                {` ${describeDataScope(data.dataScope)}`}
+              </p>
+            </div>
 
             {/* Headline metric cards. */}
             <section aria-label="AI headline metrics">
@@ -262,8 +285,21 @@ function AdminAiPageInner() {
                 <MetricCard label="Retries" value={data.retries.toLocaleString()} />
                 <MetricCard
                   label="Estimated cost"
-                  value={formatDollars(data.estimatedCostDollars)}
-                  hint="Truncated whole dollars"
+                  value={
+                    data.costUnavailable || data.estimatedCostDollars == null ? (
+                      <span className="inline-flex rounded-full border border-[var(--border)] bg-[var(--muted)] px-2.5 py-1 text-sm font-semibold">
+                        Unavailable
+                      </span>
+                    ) : (
+                      formatDollars(data.estimatedCostDollars)
+                    )
+                  }
+                  hint={
+                    data.costUnavailable || data.estimatedCostDollars == null
+                      ? (data.costUnavailableReason ??
+                        'Selected-window cost tracking is unavailable.')
+                      : 'Selected-window estimate'
+                  }
                 />
               </div>
             </section>

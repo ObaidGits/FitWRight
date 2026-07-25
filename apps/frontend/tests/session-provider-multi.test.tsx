@@ -34,6 +34,10 @@ vi.mock('@/lib/api/client', () => ({
   },
 }));
 
+// session.tsx imports getProfile (used only by the single-user provider); stub
+// it so the multi-user path doesn't pull the real profile->client module graph.
+vi.mock('@/lib/api/profile', () => ({ getProfile: vi.fn() }));
+
 // Imported after the mocks are registered.
 import { SessionProvider, useSession } from '@/lib/context/session';
 

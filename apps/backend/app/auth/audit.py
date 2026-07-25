@@ -87,6 +87,8 @@ class AuditEvent:
     SESSION_REVOKED = "session_revoked"
     STEP_UP = "auth.step_up"
     AUTHZ_DENIED = "authz.denied"
+    RATE_LIMITED = "auth.rate_limited"
+    CAPTCHA_DENIED = "auth.captcha_denied"
     # --- P2 Admin lifecycle + sensitive reads (dotted, admin-namespaced) ---
     ADMIN_USER_VIEWED = "admin.user_viewed"
     # Sensitive config-diagnostics read (admin-panel-upgrade Req 10/15.3/15.9).
@@ -101,6 +103,10 @@ class AuditEvent:
     ADMIN_USER_RESTORED = "user.restored"
     ADMIN_USER_PURGED = "user.purged"
     ADMIN_SETTING_CHANGED = "admin.setting_changed"
+    # --- Secure admin signup: invite lifecycle (Option B) ---
+    ADMIN_INVITE_CREATED = "admin.invite_created"
+    ADMIN_INVITE_REVOKED = "admin.invite_revoked"
+    ADMIN_INVITE_REDEEMED = "admin.invite_redeemed"
 
 
 def sanitize_log_value(value: Any, *, max_length: int = _MAX_VALUE_LENGTH) -> Any:

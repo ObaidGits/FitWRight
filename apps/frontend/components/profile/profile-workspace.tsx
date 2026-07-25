@@ -34,7 +34,7 @@ import { useToast } from '@/components/atelier/toast';
 import { AvatarUploader } from '@/components/profile/avatar-uploader';
 import { useSession } from '@/lib/context/session';
 import { getProfile, type Profile } from '@/lib/api/profile';
-import { queryKeys } from '@/lib/query/client';
+import { queryKeys, invalidateResumeLists } from '@/lib/query/client';
 import { CompletenessCard } from '@/components/profile/completeness-card';
 import { AnalyticsCard } from '@/components/profile/analytics-card';
 import { ImportDialog } from '@/components/profile/import-dialog';
@@ -114,6 +114,10 @@ export function ProfileWorkspace() {
         old ? { ...old, avatar_url: url } : old
       );
       qc.invalidateQueries({ queryKey: queryKeys.profile });
+      // Refresh resume list surfaces so cards reflect the new avatar (canonical
+      // photo is resolved server-side); the open editor detail re-resolves on
+      // next open, so it's intentionally not force-refetched here.
+      invalidateResumeLists(qc);
       void refreshSession();
     },
     [qc, refreshSession]

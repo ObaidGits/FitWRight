@@ -252,6 +252,10 @@ def test_errors_summary_schema_is_grouped_only_no_raw_log_fields():
     fields = set(ErrorsSummary.model_fields)
     expected = {
         "window",
+        "windowStartDate",
+        "windowEndDate",
+        "granularity",
+        "dataScope",
         "counts4xx",
         "counts5xx",
         "topRouteClasses",

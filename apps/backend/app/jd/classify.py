@@ -70,28 +70,30 @@ def classify_page(html: str, http_status: int = 200) -> str:
     Returns one of PageClass constants.
     Latency: < 1ms (string scanning only).
     """
-    if not html:
-        return PageClass.UNKNOWN
-
-    # Check HTTP status first (fastest)
-    if http_status == 401 or http_status == 403:
+    # Unambiguous status signals can be handled without a body.
+    if http_status == 401:
         return PageClass.LOGIN_REQUIRED
     if http_status == 404:
         return PageClass.EXPIRED_JOB
 
     lower = html[:5000].lower()  # Only check first 5KB for speed
 
-    # CAPTCHA detection
+    # Body signals take precedence over ambiguous HTTP 403. Bot-protection
+    # services commonly return 403, so treating status alone as login produces
+    # incorrect guidance for sites such as Indeed.
     if any(s in lower for s in _CAPTCHA_SIGNALS):
         return PageClass.CAPTCHA
 
-    # WAF detection
     if any(s in lower for s in _WAF_SIGNALS):
         return PageClass.WAF_BLOCKED
 
-    # Login detection
     if any(s in lower for s in _LOGIN_SIGNALS):
         return PageClass.LOGIN_REQUIRED
+
+    # A body-less/unrecognized 403 in this server-side fetch context is most
+    # safely described as access protection, not the user's authentication.
+    if http_status == 403:
+        return PageClass.WAF_BLOCKED
 
     # Soft-404: job expired (HTTP 200 but content says gone)
     if any(s in lower for s in _EXPIRY_SIGNALS):

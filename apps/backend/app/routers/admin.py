@@ -50,9 +50,13 @@ from app.admin.schemas import (
     AdminUserRow,
     AuditEntry,
     AuditList,
+    AdminInviteList,
+    AdminInviteView,
     BulkDisableRequest,
     BulkDisableResult,
     ConfigDiagnostics,
+    CreatedInvite,
+    CreateInviteRequest,
     DeleteUserRequest,
     ErrorsSummary,
     FeatureUsage,
@@ -190,14 +194,12 @@ async def get_admin_health(_admin: Principal = Depends(require_admin_read)) -> A
 
 @router.get("/jobs", response_model=JobsPanel)
 async def get_admin_jobs(_admin: Principal = Depends(require_admin_read)) -> JobsPanel:
-    """Background jobs panel: per-job state + stuck detection + gauges (R8).
+    """Background jobs panel from run markers and worker-independent gauges.
 
-    An O(1) read (<500ms, Req 8.4) served from the KV run markers written by the
-    job runner + the worker-independent purge-backlog gauge - it never scans
-    ``audit_log``/``users`` rows. Each row surfaces last/next run, last-success,
-    running-since, current vs expected duration, potentially-stuck (from markers +
-    ``admin_job_stuck_*`` config), and best-effort lock state; queue length is
-    marked unavailable when no admin gauge exists (Req 8.7).
+    Job timing/stuck state comes from KV markers. Purge backlog uses its gauge
+    with an indexed fallback. Queue backlog and dead-letter counts come from the
+    authoritative outbox stats query; either is explicitly unavailable if that
+    query fails. No audit-log or users-table scan is performed.
     """
     return await get_jobs_panel_service().panel()
 
@@ -217,6 +219,23 @@ async def get_admin_config(
     when it is traceable). The endpoint performs no mutation (R10.3 / 21.7).
     """
     diagnostics = get_config_service().diagnostics()
+    saved_providers = await get_admin_repo().distinct_configured_ai_providers()
+    provider_names = sorted(
+        {
+            str(provider).strip().lower()
+            for provider in [*diagnostics.activeAiProviders, *saved_providers]
+            if provider and str(provider).strip()
+        }
+    )
+    diagnostics = diagnostics.model_copy(
+        update={
+            "activeAiProviders": provider_names,
+            "providersSource": (
+                "default configuration plus saved credential provider names "
+                "(connectivity unverified)"
+            ),
+        }
+    )
 
     # Audit the sensitive config read (R15.3). A failed audit is a hard error for
     # this endpoint (R15.9): do not report success or return any config data.
@@ -244,18 +263,13 @@ async def get_admin_ai_analytics(
     window: int = Query(30, ge=1, le=365),
     _admin: Principal = Depends(require_admin_read),
 ) -> AiAnalytics:
-    """AI analytics: allowlisted call aggregates + provider breakdown + cost (R4).
+    """AI analytics: call aggregates and provider breakdown for ``window``.
 
-    An O(1) read (Req 4.9) served from the durable ``AI_*`` ``metrics_daily`` keys
-    (via the shared Metric_Store) plus the current in-process accumulator so
-    today's not-yet-flushed activity is included. ``window`` is validated to the
-    inclusive 1-365 range (default 30, Req 4.3); an out-of-range value is rejected
-    with a 422 by the framework - an authz-independent request validation.
-    ``require_admin_read`` enforces the kill-switch, authN (401), status recheck +
-    capability (403), and the per-admin rate limit (429) before any data is read
-    (Req 4.4 / 15.1). Success + failure rates always sum to 1.0 when calls>0 and
-    are both 0.0 when calls==0 (Req 4.6/4.7); cost is truncated whole dollars
-    (Req 4.5). The response is the allowlisted, secret-free :class:`AiAnalytics`.
+    Durable daily metrics are combined with this process's unflushed activity.
+    Success/failure rates and provider call counts are instrumented; selected-
+    window cost is not, so ``estimatedCostDollars`` is null and the payload marks
+    cost unavailable rather than fabricating a value. The response is allowlisted
+    and secret-free.
     """
     return await get_ai_metrics_service().analytics(window)
 
@@ -298,10 +312,9 @@ async def get_admin_performance(
 ) -> PerformanceSignals:
     """Performance signals: per-route-class latency + slow routes/jobs (R6).
 
-    An O(1) read (Req 6.6) served entirely from aggregates the backend already
-    produces - one in-process ``AdminMetrics`` snapshot (route-class latency +
-    cache ratio) plus a fixed handful of KV job-run marker reads - never a row
-    scan and never new instrumentation (Req 21.4). No query params.
+    The bounded request reads one current ``AdminMetrics`` snapshot (including
+    route-class p95/failure observations and cache population) plus fixed KV job
+    markers. It performs no row scan and does not mutate instrumentation.
     ``require_admin_read`` enforces the kill-switch, authN (401), status recheck +
     capability (403), and the per-admin rate limit (429) before any data is read
     (Req 15.1).
@@ -321,24 +334,12 @@ async def get_admin_performance(
 async def get_admin_storage(
     _admin: Principal = Depends(require_admin_read),
 ) -> StoragePanel:
-    """Storage panel: cached DB size + object storage + counts + growth (R7).
+    """Storage panel from rollup snapshots; never a request-time size probe.
 
-    An O(1) read (Req 7.5) served entirely from cached/pre-aggregated values the
-    Rollup_Job already produced - the ``DB_SIZE_BYTES`` daily series (a bounded
-    30-day read), the ``db_size_last_sample`` freshness marker, and the named
-    ``"storage"`` snapshot (counts + object-storage usage). It NEVER issues a
-    live storage-size or object-enumeration query on the request path
-    (Req 7.4/21.5): the DB-size query and the disk walk both live in the job's
-    rollup steps, not here. No query params.
-
-    Stale/unavailable markers surface a last-cached value rather than erroring:
-    ``dbSizeStale`` when the last successful sample is missing or too old
-    (Req 7.6), ``objectStorageStale`` when the storage snapshot is missing/old or
-    the provider was unavailable at sample time (Req 7.7), and the growth figure
-    is reported unavailable when fewer than two daily samples exist (Req 7.8).
-    ``require_admin_read`` enforces the kill-switch, authN (401), status recheck +
-    capability (403), and the per-admin rate limit (429) before any data is read
-    (Req 15.1).
+    DB size, record counts, and growth include explicit stale/unavailable state.
+    Local object bytes are sampled by an off-request-path filesystem walk;
+    remote provider usage is unavailable because those adapters expose no usage
+    API. No live database-size query or remote object enumeration runs here.
     """
     return await get_storage_metrics_service().panel()
 
@@ -347,36 +348,26 @@ async def get_admin_storage(
 async def get_admin_security(
     _admin: Principal = Depends(require_admin_read),
 ) -> SecurityView:
-    """Security view: trailing-24h security counts from audit aggregates (R9).
+    """Security view from exact indexed audit rows in ``[now - 24h, now)``.
 
-    An O(1) read (Req 9.7) served EXCLUSIVELY from the durable ``SEC_*``
-    ``metrics_daily`` keys (via the shared Metric_Store) - failed logins, admin
-    logins, authz denials, rate-limit hits, and suspicious/blocked requests over
-    a trailing-24h window (approximated as the last two UTC days of daily
-    aggregates; see :class:`~app.admin.security_metrics.SecurityMetricsService`).
-    It NEVER scans ``audit_log`` on the request path (Req 9.6): the day-bounded
-    audit scan that produces these aggregates lives only in the Rollup_Job's
-    ``SecurityAggregateStep``. Missing aggregates read as ``0`` with no fallback
-    to raw rows (Req 9.5). No query params. ``require_admin_read`` enforces the
-    kill-switch, authN (401), status recheck + capability (403), and the
-    per-admin rate limit (429) before any data is read (Req 9.4 / 15.1).
+    Counts failed logins, current-role admin logins, authorization denials,
+    centralized rate-limit denials, and CAPTCHA enforcement denials. The latter
+    two are exact only from deployment of their audit instrumentation onward.
+    ``adminLoginRoleBasis`` discloses that admin role is evaluated at query time;
+    no daily proxy or rollup lag is used.
     """
     return await get_security_metrics_service().view()
 
 
 @router.get("/kpis", response_model=OverviewKpis)
 async def get_admin_kpis(_admin: Principal = Depends(require_admin_read)) -> OverviewKpis:
-    """Overview KPI cards: totals + today's signups/AI calls + 24h error rate +
-    purge backlog (R13).
+    """Overview KPI cards: totals, today's signups/AI calls, error-rate proxy,
+    and purge backlog.
 
-    An O(1) read served from the ``_TOTALS_DAY`` snapshot, durable ``AI_CALLS`` /
-    ``REQUEST_*`` keys, a single day-bounded live signups count, and the in-process
-    purge-backlog gauge - never a full-table scan. Each KPI is computed in
-    isolation, so a source that cannot be computed is returned as an explicit
-    ``unavailable`` card while the rest still return (Req 13.7). All day/window
-    boundaries are UTC (Req 13.3). ``require_admin_read`` enforces the kill-switch,
-    authN (401), status recheck + capability (403), and the per-admin rate limit
-    (429) (Req 15.1).
+    ``errorRate24h`` is named for dashboard compatibility but is a daily-granularity
+    proxy: durable request buckets for today plus yesterday, not an exact rolling
+    24-hour boundary. Other cards use their documented snapshot/live sources and
+    become explicitly unavailable if their source cannot be read.
     """
     return await get_overview_service().kpis()
 
@@ -426,11 +417,12 @@ async def get_resume_analytics(
     window: int = Query(30),
     _admin: Principal = Depends(require_admin_read),
 ) -> ResumeAnalytics:
-    """Resume analytics: source split, top templates, growth series (R14).
+    """Resume inventory split, template inventory, and window activity (R14).
 
-    An O(1) read (Req 14.5) served from the pre-computed ``"resume_snapshot"``
-    KV blob (source counts + popular templates) plus zero-filled daily growth
-    from the four ``RESUMES_*`` durable keys via the shared Metric_Store.
+    An O(1) read served from the current ``resume_snapshot`` (inventory source
+    counts + template counts) plus four zero-filled daily event series. Deletion
+    activity and net inventory change are selected-window values; source and
+    template sections are point-in-time inventory snapshots.
 
     ``window`` must be one of the fixed dashboard windows {7, 30, 90} (default
     30 when omitted); any other value is rejected with a 400 ``invalid_window``
@@ -584,6 +576,117 @@ async def patch_user(
     except (UserNotFoundError, InvalidValueError) as exc:
         raise _map_lifecycle_error(exc)
     return _outcome_response(outcome)
+
+
+# ---------------------------------------------------------------------------
+# Admin invites (secure admin signup - Option B)
+# ---------------------------------------------------------------------------
+
+
+def _invite_view(rec) -> AdminInviteView:
+    """Project an invite lifecycle record (never its token hash)."""
+    return AdminInviteView(
+        id=rec.id,
+        email=rec.email,
+        role=rec.role,
+        createdBy=rec.created_by,
+        createdAt=rec.created_at,
+        expiresAt=rec.expires_at,
+        status=rec.status,
+        usedAt=rec.used_at,
+        usedBy=rec.used_by,
+        revokedAt=rec.revoked_at,
+        revokedBy=rec.revoked_by,
+        revokeReason=rec.revoke_reason,
+    )
+
+
+@router.get("/invites", response_model=AdminInviteList)
+async def list_invites(
+    request: Request,
+    admin: Principal = Depends(require_admin_read),
+) -> AdminInviteList:
+    """List bounded recent admin-invite lifecycle history."""
+    from app.auth.admin_invites import list_invites as list_invite_history
+
+    records = await list_invite_history()
+    return AdminInviteList(items=[_invite_view(r) for r in records])
+
+
+@router.post("/invites", response_model=CreatedInvite)
+async def create_admin_invite(
+    payload: CreateInviteRequest,
+    request: Request,
+    admin: Principal = Depends(require_admin_manage),
+) -> CreatedInvite:
+    """Issue a single-use, email-bound admin invite; returns the shareable URL.
+
+    The raw token is embedded in ``inviteUrl`` and shown ONLY in this response
+    (never stored or retrievable again). Only ``admin.manage`` can call this,
+    and the created invite always mints an ``admin`` account on redemption.
+    """
+    from urllib.parse import quote
+
+    from app.auth.admin_invites import create_invite
+
+    raw_token, rec = await create_invite(
+        email=payload.email,
+        created_by=admin.user_id,
+        ttl_hours=payload.ttlHours,
+    )
+    _record_action("invite_create", "ok")
+    try:
+        await get_audit_service().record(
+            AuditEvent.ADMIN_INVITE_CREATED,
+            actor_user_id=admin.user_id,
+            request_id=getattr(request.state, "request_id", None),
+            ip_hash=_ip_hash(request),
+            meta={"email": rec.email, "invite_id": rec.id, "role": rec.role},
+        )
+    except Exception:  # pragma: no cover - audit must not break the flow
+        logger.debug("Failed to audit invite creation", exc_info=True)
+
+    base = settings.frontend_base_url.rstrip("/")
+    invite_url = (
+        f"{base}/signup?invite={quote(raw_token, safe='')}"
+        f"&email={quote(rec.email, safe='')}"
+    )
+    return CreatedInvite(
+        id=rec.id,
+        email=rec.email,
+        role=rec.role,
+        expiresAt=rec.expires_at,
+        inviteUrl=invite_url,
+    )
+
+
+@router.delete("/invites/{invite_id}", response_model=MutationResult)
+async def revoke_admin_invite(
+    invite_id: str,
+    request: Request,
+    admin: Principal = Depends(require_admin_manage),
+) -> MutationResult:
+    """Revoke an outstanding invite by id (idempotent -> changed:false if gone)."""
+    from app.auth.admin_invites import revoke_invite
+
+    changed = await revoke_invite(
+        invite_id,
+        revoked_by=admin.user_id,
+        reason="manual",
+    )
+    _record_action("invite_revoke", "ok" if changed else "no_op")
+    if changed:
+        try:
+            await get_audit_service().record(
+                AuditEvent.ADMIN_INVITE_REVOKED,
+                actor_user_id=admin.user_id,
+                request_id=getattr(request.state, "request_id", None),
+                ip_hash=_ip_hash(request),
+                meta={"invite_id": invite_id},
+            )
+        except Exception:  # pragma: no cover - audit must not break the flow
+            logger.debug("Failed to audit invite revocation", exc_info=True)
+    return MutationResult(changed=changed)
 
 
 @router.post("/users/{user_id}/disable", response_model=MutationResult)

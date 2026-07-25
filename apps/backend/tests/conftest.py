@@ -21,6 +21,7 @@ _HERMETIC_ENV = {
     "DATABASE_URL": "",
     "MIGRATION_DATABASE_URL": "",
     "DB_SSL": "",
+    "DB_USE_POOLER": "true",
     "KVSTORE_URL": "",
     "STORAGE_PROVIDER": "local",
     "CLOUDINARY_CLOUD_NAME": "",
@@ -33,7 +34,16 @@ _HERMETIC_ENV = {
     "EMAIL_PROVIDER": "",
     "INTERNAL_JOB_TOKEN": "",
     "SESSION_SECRET": "",
+    "SESSION_SECRET_PREV": "",
     "IP_HASH_SECRET": "",
+    # Pinned to their zero-config DEFAULTS (see app/config.py). A developer's
+    # ``.env`` that sets these for a real/hosted or locally-bootstrapped
+    # deployment (e.g. OWNER_EMAIL, an APP_ENCRYPTION_KEY, an owner password)
+    # must not bleed into the suite - CI has none of them, so tests assert the
+    # defaults. os.environ overrides ``.env`` in pydantic-settings.
+    "OWNER_EMAIL": "owner@localhost",
+    "OWNER_PASSWORD": "",
+    "APP_ENCRYPTION_KEY": "",
     "SCHEDULER_MODE": "external_cron",
 }
 for _key, _value in _HERMETIC_ENV.items():
@@ -74,17 +84,11 @@ def _hermetic_jd_robots(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def _reset_status_llm_health_cache():
-    """Clear the /status LLM-health probe cache before each test.
+def _reset_admin_llm_health_cache():
+    """Keep the authenticated admin provider-probe cache isolated by test."""
+    from app.admin.health_service import reset_admin_llm_health_cache
 
-    The endpoint caches its LLM-health probe (short TTL, single-flight) to avoid
-    a live provider round-trip per public /status call. That cache is
-    module-level, so it must be reset between tests or a result from one test
-    would leak into another sharing the same provider/model/key fingerprint.
-    """
-    from app.routers.health import reset_status_llm_health_cache
-
-    reset_status_llm_health_cache()
+    reset_admin_llm_health_cache()
     yield
 
 

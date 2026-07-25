@@ -114,6 +114,10 @@ class TestResumeAnalyticsAuthz:
             "window",
             "sourceSplit",
             "topTemplates",
+            "deletedInWindow",
+            "netChange",
+            "inventoryAsOf",
+            "templatesAsOf",
             "growth",
             "computedAt",
         }

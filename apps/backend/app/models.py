@@ -91,9 +91,10 @@ class Resume(Base):
     __table_args__ = (
         # At most one master resume **per user** (R10.4, Property 2). Partial
         # unique index on ``(user_id, is_master)`` enforces the invariant at the
-        # storage layer; the per-user ``_master_locks`` in the facade remain the
-        # primary (race-free) mechanism. Reconciled to the enforced hosted shape
-        # (migration 0005) now that Task 3 threads ``user_id`` through the repo.
+        # storage layer; facade mutations also lock the durable owner row (or a
+        # SQLite immediate write transaction) before reading the current master.
+        # Reconciled to the enforced hosted shape (migration 0005) now that Task
+        # 3 threads ``user_id`` through the repository.
         Index(
             "ux_resumes_single_master",
             "user_id",
@@ -108,11 +109,11 @@ class Resume(Base):
 class Job(Base):
     """A job description.
 
-    Only the stable columns are first-class; everything the pipeline attaches
-    dynamically (``job_keywords``, ``job_keywords_hash``, ``preview_hash``,
-    ``preview_hashes``, ``preview_prompt_id``, ``company``, ``role``) lives in
-    ``metadata_json``. The facade flattens that map to top-level keys on read
-    and merges non-core keys into it on update, reproducing TinyDB semantics.
+    Stable columns are first-class; pipeline analysis metadata such as
+    ``job_keywords``, ``company``, and ``role`` lives in ``metadata_json``. The
+    durable preview/confirm handshake is stored separately in ``tailor_previews``.
+    The facade flattens metadata to top-level keys on read and merges non-core
+    keys into it on update, reproducing TinyDB semantics.
     """
 
     __tablename__ = "jobs"
@@ -143,6 +144,55 @@ class Improvement(Base):
     job_id: Mapped[str] = mapped_column(String)
     improvements: Mapped[list] = mapped_column(JSON, default=list)
     created_at: Mapped[str] = mapped_column(String, default=_utcnow_iso)
+
+
+class TailorPreview(Base):
+    """Durable, owner-scoped, single-use tailoring confirmation capability."""
+
+    __tablename__ = "tailor_previews"
+
+    preview_id: Mapped[str] = mapped_column(String, primary_key=True, default=_new_uuid)
+    request_id: Mapped[str] = mapped_column(String, nullable=False)
+    user_id: Mapped[str] = mapped_column(
+        String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    resume_id: Mapped[str] = mapped_column(
+        String, ForeignKey("resumes.resume_id", ondelete="CASCADE"), nullable=False
+    )
+    job_id: Mapped[str] = mapped_column(
+        String, ForeignKey("jobs.job_id", ondelete="CASCADE"), nullable=False
+    )
+    prompt_id: Mapped[str] = mapped_column(String, nullable=False)
+    payload_hash: Mapped[str] = mapped_column(String, nullable=False)
+    # Full validated preview envelope used only for bounded recovery when the
+    # stream completed but its terminal SSE event was lost in transit.
+    result_payload: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[str] = mapped_column(String, default=_utcnow_iso)
+    expires_at: Mapped[str] = mapped_column(String, nullable=False)
+    consumed_at: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "request_id", name="uq_tailor_preview_user_request"),
+        Index(
+            "ix_tailor_preview_consume",
+            "preview_id",
+            "user_id",
+            "resume_id",
+            "job_id",
+            "payload_hash",
+            "consumed_at",
+            "expires_at",
+        ),
+        Index(
+            "ix_tailor_preview_scope_created",
+            "user_id",
+            "resume_id",
+            "job_id",
+            "prompt_id",
+            "created_at",
+        ),
+        Index("ix_tailor_preview_expires_at", "expires_at"),
+    )
 
 
 class Application(Base):
@@ -467,6 +517,50 @@ class EmailChangeToken(Base):
     __table_args__ = (
         Index("ix_email_change_tokens_user_id", "user_id"),
         Index("ix_email_change_tokens_expires_at", "expires_at"),
+    )
+
+
+class AdminInvite(Base):
+    """A hashed, single-use, TTL-bound invitation to create an ADMIN account.
+
+    The secure "admin signup" primitive (Option B). An existing admin issues an
+    invite bound to a specific email; only the ``sha256`` of the random token is
+    stored (never the raw token), mirroring the verification/reset token tables.
+    Redeeming the invite at ``/auth/signup`` proves control of the invited inbox
+    (equivalent to email verification) and creates the account with ``role`` from
+    the invite - the role NEVER comes from the signup request body. Redemption
+    and revocation/supersession are distinct lifecycle states. A claim is
+    enforced atomically with matching email, unused, unrevoked, and unexpired
+    predicates. ``id`` is the safe public handle for list/revoke; the
+    ``token_hash`` is never exposed.
+    """
+
+    __tablename__ = "admin_invites"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_new_uuid)
+    token_hash: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    # Normalized email the invite is bound to (redemption email must match).
+    email: Mapped[str] = mapped_column(String, nullable=False)
+    role: Mapped[str] = mapped_column(String, nullable=False, default="admin")
+    # The admin who issued it (audit reference; not an FK so a purged admin never
+    # cascades away the audit trail).
+    created_by: Mapped[str | None] = mapped_column(String, nullable=True)
+    expires_at: Mapped[str] = mapped_column(String, nullable=False)
+    used_at: Mapped[str | None] = mapped_column(String, nullable=True)
+    used_by: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Revocation is distinct from redemption. ``revoke_reason`` is either the
+    # fixed lifecycle value ``manual`` or ``superseded``; no free-form/request
+    # content is stored.
+    revoked_at: Mapped[str | None] = mapped_column(String, nullable=True)
+    revoked_by: Mapped[str | None] = mapped_column(String, nullable=True)
+    revoke_reason: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[str] = mapped_column(String, default=_utcnow_iso)
+
+    __table_args__ = (
+        Index("ix_admin_invites_token_hash", "token_hash", unique=True),
+        Index("ix_admin_invites_email", "email"),
+        Index("ix_admin_invites_expires_at", "expires_at"),
+        Index("ix_admin_invites_created_at", "created_at"),
     )
 
 

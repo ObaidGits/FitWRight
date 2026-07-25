@@ -1,13 +1,19 @@
 /** Auth route group (Task 5) - centered-card layout, Atelier-scoped. */
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import ArrowLeft from 'lucide-react/dist/esm/icons/arrow-left';
 import { NOINDEX } from '@/lib/seo/metadata';
+import { SINGLE_USER_MODE } from '@/lib/config/auth';
 
 // Authentication flows - never indexable.
 export const metadata: Metadata = { robots: NOINDEX };
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
+  // Single-user mode has no login wall - the owner is always signed in. The
+  // login/signup/forgot/reset/verify pages are meaningless here, so send any
+  // visitor straight to the workspace instead of showing a dead auth form.
+  if (SINGLE_USER_MODE) redirect('/home');
   return (
     <div className="atelier flex min-h-screen flex-col bg-[var(--background)] text-[var(--foreground)]">
       <header className="flex h-16 items-center justify-between px-6">

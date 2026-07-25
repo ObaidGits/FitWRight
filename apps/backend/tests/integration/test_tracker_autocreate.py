@@ -38,7 +38,7 @@ async def _preview_then_confirm(isolated_db, sample_resume):
 
     with (
         patch(
-            "app.routers.resumes.extract_job_keywords",
+            "app.routers.resumes.extract_job_keywords_cached",
             new_callable=AsyncMock,
             return_value={
                 "keywords": ["Python", "FastAPI"],
@@ -89,6 +89,7 @@ async def _preview_then_confirm(isolated_db, sample_resume):
             confirm_resp = await client.post(
                 "/api/v1/resumes/improve/confirm",
                 json={
+                    "preview_id": preview_data["preview_id"],
                     "resume_id": resume_id,
                     "job_id": job_id,
                     "improved_data": preview_data["resume_preview"],

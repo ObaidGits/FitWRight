@@ -63,6 +63,7 @@ OWNED_ENDPOINTS: list[tuple[str, str]] = [
     ("POST", "/api/v1/resumes/improve"),
     ("POST", "/api/v1/resumes/improve/preview"),
     ("POST", "/api/v1/resumes/improve/preview/stream"),
+    ("GET", "/api/v1/resumes/improve/preview/result/{request_id}"),
     ("POST", "/api/v1/resumes/improve/confirm"),
     ("PATCH", "/api/v1/resumes/rid"),
     ("GET", "/api/v1/resumes/rid/pdf"),

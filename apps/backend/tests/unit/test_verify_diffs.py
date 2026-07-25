@@ -74,6 +74,8 @@ class TestVerifySectionCounts:
         assert len(section_warnings) == 0
 
 
+
+
 class TestVerifyIdentityFields:
     """Check 3: Identity fields unchanged."""
 

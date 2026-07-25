@@ -11,6 +11,7 @@ import copy
 import json
 import logging
 import re
+from collections.abc import Awaitable, Callable
 from functools import lru_cache
 from typing import Any
 
@@ -20,6 +21,7 @@ from app.prompts.refinement import (
     AI_PHRASE_REPLACEMENTS,
     KEYWORD_INJECTION_PROMPT,
 )
+from app.schemas import ResumeData
 from app.schemas.refinement import (
     AlignmentReport,
     AlignmentViolation,
@@ -79,6 +81,8 @@ async def refine_resume(
     job_description: str,
     job_keywords: dict[str, Any],
     config: RefinementConfig | None = None,
+    cancel_check: Callable[[], Awaitable[bool]] | None = None,
+    user_instructions: str | None = None,
 ) -> RefinementResult:
     """Multi-pass refinement of an initially tailored resume.
 
@@ -88,6 +92,10 @@ async def refine_resume(
         job_description: Raw job description text
         job_keywords: Extracted job keywords
         config: Refinement configuration
+        user_instructions: The candidate's per-run instructions. Content they
+            explicitly asked to add (a new role/company or a named skill) is
+            user-attested and must NOT be flagged as fabricated by the master
+            alignment check, which otherwise only trusts the master resume.
 
     Returns:
         RefinementResult with refined data and analysis
@@ -116,6 +124,7 @@ async def refine_resume(
                     keyword_analysis.injectable_keywords,
                     master_resume,
                     job_description,
+                    cancel_check=cancel_check,
                 )
                 passes += 1
             except Exception as e:
@@ -139,6 +148,7 @@ async def refine_resume(
                 job_keywords,
                 job_description,
             ),
+            user_instructions=user_instructions,
         )
         if not alignment.is_aligned:
             # Count critical violations
@@ -291,6 +301,7 @@ def validate_master_alignment(
     tailored: dict[str, Any],
     master: dict[str, Any],
     allowed_new_skills: set[str] | None = None,
+    user_instructions: str | None = None,
 ) -> AlignmentReport:
     """Verify tailored resume doesn't contain fabricated content.
 
@@ -300,11 +311,18 @@ def validate_master_alignment(
     Args:
         tailored: Tailored resume data
         master: Master resume data (source of truth)
+        allowed_new_skills: JD-derived skills that may legitimately be added.
+        user_instructions: The candidate's per-run instructions; a new skill or
+            company that appears in this text is user-attested (not fabricated)
+            and is therefore not flagged.
 
     Returns:
         AlignmentReport with violations and confidence score
     """
     violations: list[AlignmentViolation] = []
+    # User-attested grounding: content named in the candidate's own instructions
+    # is trusted, mirroring the apply_diffs add_entry/add_skill gate.
+    instructions_norm = (user_instructions or "").casefold()
 
     # Check skills - use full resume text for broader matching
     tailored_skills = set(
@@ -326,6 +344,9 @@ def validate_master_alignment(
 
     for skill in tailored_skills - master_skills:
         if _normalize_skill_key(skill) in allowed_skills:
+            continue
+        # User-attested skill (named in the instructions) is trusted.
+        if instructions_norm and skill in instructions_norm:
             continue
         # Check substring/containment: e.g. "Python" in "Python 3.x"
         has_substring_match = any(
@@ -388,15 +409,20 @@ def validate_master_alignment(
     )
 
     for company in tailored_companies - master_companies:
-        if company:  # Skip empty strings
-            violations.append(
-                AlignmentViolation(
-                    field_path="workExperience",
-                    violation_type="fabricated_company",
-                    value=company,
-                    severity="critical",
-                )
+        # Skip empty strings and user-attested companies (a role the candidate
+        # explicitly asked to add via instructions).
+        if not company:
+            continue
+        if instructions_norm and company in instructions_norm:
+            continue
+        violations.append(
+            AlignmentViolation(
+                field_path="workExperience",
+                violation_type="fabricated_company",
+                value=company,
+                severity="critical",
             )
+        )
 
     is_aligned = len([v for v in violations if v.severity == "critical"]) == 0
     confidence = 1.0 - (len(violations) * 0.1)  # Decrease confidence per violation
@@ -454,6 +480,7 @@ async def inject_keywords(
     keywords_to_inject: list[str],
     master: dict[str, Any],
     job_description: str,
+    cancel_check: Callable[[], Awaitable[bool]] | None = None,
 ) -> dict[str, Any]:
     """Use LLM to inject missing keywords into appropriate sections.
 
@@ -492,6 +519,8 @@ async def inject_keywords(
                 "fabricated content. Return only valid JSON matching the input schema."
             ),
             max_tokens=8192,
+            response_model=ResumeData,
+            cancel_check=cancel_check,
         )
 
         # LLM-014: Validate the result maintains required structure

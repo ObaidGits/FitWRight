@@ -14,7 +14,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.config import settings as app_settings
-from app.jd.ssrf import SsrfError
+from app.jd.ssrf import SsrfError, UpstreamHttpError
 from app.main import app
 
 _JD_HTML = """<html><body><article class="job-description">
@@ -74,13 +74,32 @@ class TestFetchUrl:
              patch("app.jd.orchestrator.fetch_url_safely", new=AsyncMock(side_effect=SsrfError("blocked_ip:169.254.169.254"))):
             async with _client() as c:
                 resp = await c.post("/api/v1/jobs/fetch-url", json={"url": "https://metadata.example.com/"})
-        # v2 orchestrator returns 200 with LOW confidence (opaque - no reason leaked)
-        # The SSRF reason is never in the response regardless of status code.
-        assert "169.254" not in resp.text  # reason never leaked
-        if resp.status_code == 200:
-            assert resp.json()["low_confidence"] is True
-        else:
-            assert resp.status_code == 422
+        # Empty extraction is an honest 422, while the internal SSRF reason
+        # remains opaque so the endpoint cannot be used as a network scanner.
+        assert resp.status_code == 422
+        assert resp.json()["error"]["code"] == "fetch_failed"
+        assert "169.254" not in resp.text
+
+    async def test_indeed_waf_is_typed_422_not_success_or_client_authz(
+        self, isolated_db, owner_id
+    ):
+        denied = UpstreamHttpError(
+            403,
+            "<html><title>Just a moment...</title>Checking your browser</html>",
+        )
+        with patch(
+            "app.jd.orchestrator.fetch_url_safely",
+            new=AsyncMock(side_effect=denied),
+        ):
+            async with _client() as c:
+                resp = await c.post(
+                    "/api/v1/jobs/fetch-url",
+                    json={"url": "https://www.indeed.com/viewjob?jk=abcdef1234"},
+                )
+
+        assert resp.status_code == 422
+        assert resp.json()["error"]["code"] == "waf_blocked"
+        assert "403" not in resp.text
 
     async def test_result_is_cached(self, isolated_db, owner_id):
         mock = AsyncMock(return_value=_JD_HTML)
@@ -95,7 +114,8 @@ class TestFetchUrl:
 
     async def test_rate_limit_429(self, isolated_db, owner_id, monkeypatch):
         monkeypatch.setattr(app_settings, "jd_url_rate_per_min_user", 2)
-        with patch("app.jd.service.fetch_url_safely", new=AsyncMock(return_value=_JD_HTML)):
+        with patch("app.jd.service.fetch_url_safely", new=AsyncMock(return_value=_JD_HTML)), \
+             patch("app.jd.orchestrator.fetch_url_safely", new=AsyncMock(return_value=_JD_HTML)):
             async with _client() as c:
                 # Distinct URLs to bypass the cache and actually consume the limit.
                 r1 = await c.post("/api/v1/jobs/fetch-url", json={"url": "https://a.example.com/1"})
