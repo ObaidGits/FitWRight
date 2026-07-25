@@ -58,6 +58,7 @@ from app.models import (
     SearchDocument,
     TailorPreview,
     User,
+    UserLlmConfig,
     UserUnreadCount,
 )
 from app.repository import Repo
@@ -2177,6 +2178,77 @@ class Database:
         return deleted
 
     # -- Encrypted API key store (sync; read on the LLM hot path) -----------
+
+    # -- Durable per-user LLM configuration -------------------------------
+
+    def get_user_llm_config(self, user_id: str) -> dict[str, Any] | None:
+        """Return one user's non-secret provider/model selection."""
+        with self._sync() as session:
+            row = session.execute(
+                Repo.scoped(select(UserLlmConfig), UserLlmConfig, user_id)
+            ).scalars().first()
+            if row is None:
+                return None
+            return {
+                "provider": row.provider,
+                "model": row.model,
+                "api_base": row.api_base,
+                "reasoning_effort": row.reasoning_effort,
+            }
+
+    def set_user_llm_config(
+        self,
+        user_id: str,
+        *,
+        provider: str,
+        model: str,
+        api_base: str | None,
+        reasoning_effort: str,
+    ) -> None:
+        """Atomically upsert one user's non-secret LLM selection."""
+        value = {
+            "user_id": user_id,
+            "provider": provider,
+            "model": model,
+            "api_base": api_base,
+            "reasoning_effort": reasoning_effort,
+            "updated_at": _now(),
+        }
+        with self._sync() as session:
+            dialect = session.get_bind().dialect.name
+            if dialect == "sqlite":
+                from sqlalchemy.dialects.sqlite import insert as dialect_insert
+            elif dialect == "postgresql":
+                from sqlalchemy.dialects.postgresql import insert as dialect_insert
+            else:  # pragma: no cover - supported deployments are SQLite/Postgres
+                row = session.execute(
+                    Repo.scoped(select(UserLlmConfig), UserLlmConfig, user_id)
+                ).scalars().first()
+                if row is None:
+                    session.add(UserLlmConfig(**value))
+                else:
+                    for field, field_value in value.items():
+                        if field != "user_id":
+                            setattr(row, field, field_value)
+                session.commit()
+                return
+
+            stmt = dialect_insert(UserLlmConfig).values(**value)
+            session.execute(
+                stmt.on_conflict_do_update(
+                    index_elements=[UserLlmConfig.user_id],
+                    set_={
+                        "provider": stmt.excluded.provider,
+                        "model": stmt.excluded.model,
+                        "api_base": stmt.excluded.api_base,
+                        "reasoning_effort": stmt.excluded.reasoning_effort,
+                        "updated_at": stmt.excluded.updated_at,
+                    },
+                )
+            )
+            session.commit()
+
+    # -- Encrypted per-user API keys ---------------------------------------
 
     def _owned_api_key(self, session: Session, user_id: str, provider: str) -> ApiKey | None:
         """Load one provider key scoped to ``user_id`` (sync; None if absent/foreign)."""

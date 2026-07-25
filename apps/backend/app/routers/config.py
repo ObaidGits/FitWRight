@@ -47,6 +47,7 @@ from app.config import (
     clear_all_api_keys,
     load_config_file,
     save_config_file,
+    save_user_llm_config,
 )
 from app.config_cache import invalidate_config_cache
 from app.database import db
@@ -68,9 +69,12 @@ def _load_config(user_id: str | None = None) -> dict:
     return load_config_file(user_id)
 
 
-def _save_config(config: dict) -> None:
-    """Save non-secret config (keys stripped) and invalidate the shared cache."""
-    save_config_file(config)
+def _save_config(config: dict, user_id: str | None = None) -> None:
+    """Persist global config or a caller's durable LLM selection."""
+    if user_id is None:
+        save_config_file(config)
+    else:
+        save_user_llm_config(config, user_id)
     invalidate_config_cache()
 
 
@@ -186,8 +190,9 @@ async def update_llm_config(
         reasoning_effort=resolved_reasoning_effort,
     )
 
-    # Save config regardless of health check outcome (see docstring).
-    _save_config(stored)
+    # Save the caller's provider/model selection in the durable database row;
+    # provider keys are persisted separately by POST /config/api-keys.
+    _save_config(stored, user_id)
 
     # Best-effort health check for server-side logs/diagnostics (do not block response).
     background_tasks.add_task(_log_llm_health_check, test_config)

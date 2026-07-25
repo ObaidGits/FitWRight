@@ -110,10 +110,13 @@ async def lifespan(app: FastAPI):
     if result.get("status") == "migrated":
         logger.info("Startup data migration: %s", result)
     # Fold any legacy plaintext API keys into the encrypted store (idempotent,
-    # non-clobbering), then strip them from config.json.
-    from app.config import migrate_legacy_keys
+    # non-clobbering), then strip them from config.json. Move legacy provider /
+    # model selection into its durable per-user database row as well, so local
+    # installs keep their existing settings and hosted dynos never depend on disk.
+    from app.config import migrate_legacy_keys, migrate_legacy_llm_config
 
     migrate_legacy_keys()
+    migrate_legacy_llm_config()
     # Single-user/local: ensure the bootstrap owner exists and claim any owned
     # rows created by ``create_all`` before scoping was threaded (idempotent,
     # zero data loss). Hosted does this via Alembic migration 0004 instead.

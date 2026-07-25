@@ -153,30 +153,83 @@ def _write_config_json(config: dict[str, Any]) -> None:
     invalidate_config_read_cache()
 
 
-def load_config_file(user_id: str | None = None) -> dict[str, Any]:
-    """Load non-secret configuration, with the caller's decrypted API keys injected.
+_LLM_CONFIG_FIELDS = ("provider", "model", "api_base", "reasoning_effort")
 
-    API keys live in the encrypted SQLite store, not config.json. They are
-    injected here under ``api_keys`` so ``resolve_api_key(stored, provider)``
-    keeps resolving per-provider keys everywhere ``stored`` is built from this
-    function. Keys are scoped to ``user_id`` (or the request-scoped effective
-    user / bootstrap owner), so a request never sees another user's keys (R10.6).
-    ``save_config_file`` strips them again, so they never round-trip to disk.
+
+def load_config_file(user_id: str | None = None) -> dict[str, Any]:
+    """Load global config plus the caller's durable LLM settings and API keys.
+
+    Feature flags/prompts remain in ``config.json`` for backward compatibility.
+    Provider/model/base/reasoning are overlaid from the user-scoped database row,
+    and provider API keys are decrypted from their separate encrypted rows. This
+    split keeps secrets encrypted while ensuring a container filesystem reset
+    cannot reset the provider and make a valid key appear missing.
     """
     config = _read_config_json()
-    config["api_keys"] = get_api_keys_from_config(user_id)
+    uid = resolve_key_user_id(user_id)
+
+    from app.database import db
+
+    durable_llm = db.get_user_llm_config(uid)
+    if durable_llm:
+        config.update(durable_llm)
+    config["api_keys"] = get_api_keys_from_config(uid)
     return config
 
 
 def save_config_file(config: dict[str, Any]) -> None:
-    """Save non-secret configuration to config.json.
+    """Save global non-secret configuration to config.json.
 
     Secrets (``api_keys`` map and the legacy single ``api_key``) are stripped
-    before writing - they belong to the encrypted store only.
+    before writing - they belong to the encrypted store only. Per-user LLM
+    selection is written through :func:`save_user_llm_config` instead.
     """
     config = dict(config)
     config.pop("api_keys", None)
     config.pop("api_key", None)
+    # Never copy caller-specific LLM selection back into the shared filesystem
+    # when a global feature/language/prompt setting is updated.
+    for field in _LLM_CONFIG_FIELDS:
+        config.pop(field, None)
+    _write_config_json(config)
+
+
+def save_user_llm_config(
+    config: dict[str, Any], user_id: str | None = None
+) -> None:
+    """Persist one user's non-secret LLM selection in SQLite/Postgres."""
+    from app.database import db
+
+    uid = resolve_key_user_id(user_id)
+    db.set_user_llm_config(
+        uid,
+        provider=str(config.get("provider") or settings.llm_provider),
+        model=str(config.get("model") or settings.llm_model),
+        api_base=config.get("api_base"),
+        reasoning_effort=str(config.get("reasoning_effort") or ""),
+    )
+
+
+def migrate_legacy_llm_config() -> None:
+    """Move legacy filesystem LLM selection to the bootstrap owner's DB row.
+
+    This is idempotent and non-clobbering. It preserves native/local installs
+    that already have ``data/config.json`` while ensuring subsequent reads use
+    the same durable path as hosted deployments.
+    """
+    config = _read_config_json()
+    legacy = {field: config[field] for field in _LLM_CONFIG_FIELDS if field in config}
+    if not legacy:
+        return
+
+    from app.database import db
+
+    uid = resolve_key_user_id()
+    if db.get_user_llm_config(uid) is None:
+        save_user_llm_config(legacy, uid)
+
+    for field in _LLM_CONFIG_FIELDS:
+        config.pop(field, None)
     _write_config_json(config)
 
 

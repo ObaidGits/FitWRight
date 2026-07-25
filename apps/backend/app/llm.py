@@ -16,7 +16,7 @@ from litellm import Router
 from litellm.router import RetryPolicy
 from pydantic import BaseModel, ValidationError
 
-from app.config import load_config_file, save_config_file, settings
+from app.config import load_config_file, save_user_llm_config, settings
 
 LITELLM_LOGGER_NAMES = ("LiteLLM", "LiteLLM Router", "LiteLLM Proxy")
 
@@ -454,7 +454,7 @@ def get_llm_config(user_id: str | None = None) -> LLMConfig:
     ):
         stored["reasoning_effort"] = "minimal"
         try:
-            save_config_file(stored)
+            save_user_llm_config(stored, user_id)
             logging.info(
                 "Migrated gpt-5 config to preserve reasoning_effort=minimal "
                 "(set REASONING_EFFORT= or clear in Settings to disable)"

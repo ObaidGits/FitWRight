@@ -41,6 +41,7 @@ from app.models import (
     ResumeVersion,
     SearchDocument,
     TailorPreview,
+    UserLlmConfig,
     UserUnreadCount,
 )
 
@@ -65,6 +66,7 @@ class Repo:
             Improvement.__tablename__,
             Application.__tablename__,
             ApiKey.__tablename__,
+            UserLlmConfig.__tablename__,
             ResumeVersion.__tablename__,
             Notification.__tablename__,
             NotificationPref.__tablename__,

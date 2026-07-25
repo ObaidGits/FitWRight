@@ -258,6 +258,34 @@ class ApiKey(Base):
     updated_at: Mapped[str] = mapped_column(String, default=_utcnow_iso)
 
 
+class UserLlmConfig(Base):
+    """Durable per-user non-secret LLM selection and endpoint settings.
+
+    API-key ciphertext remains in :class:`ApiKey`; this row stores the provider,
+    model, custom base URL, and reasoning preference that select which key to
+    use. Keeping both halves in the database prevents container/dyno filesystem
+    replacement from making a valid saved key appear missing after deployment.
+    """
+
+    __tablename__ = "user_llm_configs"
+
+    user_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+        nullable=False,
+    )
+    provider: Mapped[str] = mapped_column(String, nullable=False)
+    model: Mapped[str] = mapped_column(String, nullable=False)
+    api_base: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Empty string is an intentional "provider default" choice and prevents the
+    # one-shot GPT-5 compatibility migration from reapplying after a user clears it.
+    reasoning_effort: Mapped[str] = mapped_column(
+        String, nullable=False, default="", server_default=""
+    )
+    updated_at: Mapped[str] = mapped_column(String, default=_utcnow_iso)
+
+
 # ===========================================================================
 # Auth foundation (P1 Multi-User Foundation) - new tables
 # ===========================================================================
