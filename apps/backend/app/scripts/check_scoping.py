@@ -45,6 +45,7 @@ OWNED_MODELS: frozenset[str] = frozenset(
         "ResumeVersion",
         "Notification",
         "NotificationPref",
+        "UserErrorReport",
         "UserUnreadCount",
         "SearchDocument",
         "Reminder",

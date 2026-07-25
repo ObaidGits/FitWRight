@@ -18,6 +18,7 @@ import {
   type AdminUserList,
   type AdminUserRow,
   type AuditListParams,
+  type ErrorReportListParams,
   type MaintenanceAction,
   type MetricName,
   type MetricWindow,
@@ -36,6 +37,8 @@ export const adminKeys = {
   users: (params: UserListParams) => [...adminKeys.all, 'users', params] as const,
   userDetail: (id: string) => [...adminKeys.all, 'user', id] as const,
   audit: (params: AuditListParams) => [...adminKeys.all, 'audit', params] as const,
+  errorReports: (params: ErrorReportListParams) =>
+    [...adminKeys.all, 'error-reports', params] as const,
   health: () => [...adminKeys.all, 'health'] as const,
   jobs: () => [...adminKeys.all, 'jobs'] as const,
   config: () => [...adminKeys.all, 'config'] as const,
@@ -84,6 +87,14 @@ export function useAdminAudit(params: AuditListParams) {
   return useQuery({
     queryKey: adminKeys.audit(params),
     queryFn: () => adminApi.listAudit(params),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useAdminErrorReports(params: ErrorReportListParams) {
+  return useQuery({
+    queryKey: adminKeys.errorReports(params),
+    queryFn: () => adminApi.listErrorReports(params),
     placeholderData: keepPreviousData,
   });
 }

@@ -17,6 +17,7 @@ import UserPlus from 'lucide-react/dist/esm/icons/user-plus';
 import Sparkles from 'lucide-react/dist/esm/icons/sparkles';
 import Database from 'lucide-react/dist/esm/icons/database';
 import ScrollText from 'lucide-react/dist/esm/icons/scroll-text';
+import TriangleAlert from 'lucide-react/dist/esm/icons/triangle-alert';
 import ArrowLeft from 'lucide-react/dist/esm/icons/arrow-left';
 import { useSession } from '@/lib/context/session';
 import { ThemeToggle } from '@/components/theme/theme-toggle';
@@ -29,6 +30,7 @@ const NAV = [
   { href: '/admin/invites', label: 'Invites', icon: UserPlus },
   { href: '/admin/ai', label: 'AI', icon: Sparkles },
   { href: '/admin/storage', label: 'Storage', icon: Database },
+  { href: '/admin/errors', label: 'Error reports', icon: TriangleAlert },
   { href: '/admin/audit', label: 'Audit', icon: ScrollText },
 ];
 

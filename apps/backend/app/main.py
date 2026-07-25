@@ -30,6 +30,7 @@ from app.routers import (
     auth_router,
     config_router,
     contact_router,
+    error_reports_router,
     reviews_router,
     enrichment_router,
     health_router,
@@ -316,6 +317,7 @@ app.include_router(config_router, prefix="/api/v1")
 app.include_router(resumes_router, prefix="/api/v1")
 app.include_router(versions_router, prefix="/api/v1")
 app.include_router(jobs_router, prefix="/api/v1")
+app.include_router(error_reports_router, prefix="/api/v1")
 app.include_router(contact_router, prefix="/api/v1")
 app.include_router(reviews_router, prefix="/api/v1")
 app.include_router(enrichment_router, prefix="/api/v1")

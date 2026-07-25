@@ -20,13 +20,16 @@ export class ApiError extends Error {
   readonly details?: unknown;
   /** Seconds to wait before retrying, parsed from the `Retry-After` header (429s). */
   readonly retryAfter?: number;
+  /** Backend-generated correlation id from the `X-Request-ID` response header. */
+  readonly requestId?: string;
 
   constructor(
     code: string,
     message: string,
     status: number,
     details?: unknown,
-    retryAfter?: number
+    retryAfter?: number,
+    requestId?: string
   ) {
     super(message);
     this.name = 'ApiError';
@@ -34,6 +37,7 @@ export class ApiError extends Error {
     this.status = status;
     this.details = details;
     this.retryAfter = retryAfter;
+    this.requestId = requestId;
   }
 
   /** True when the backend rejected the call for exceeding a rate limit. */
@@ -121,7 +125,9 @@ export async function parseError(
     if (message === fallbackMessage) message = rateLimitMessage(retryAfter);
   }
 
-  return new ApiError(code, message, response.status, details, retryAfter);
+  const requestId = response.headers.get('X-Request-ID')?.trim() || undefined;
+
+  return new ApiError(code, message, response.status, details, retryAfter, requestId);
 }
 
 /** Parse a successful JSON body, or throw a normalized {@link ApiError}. */

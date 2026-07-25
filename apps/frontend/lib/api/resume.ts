@@ -223,7 +223,10 @@ async function postImprove(
     throw new ApiError(
       'malformed_response',
       'The server returned an unexpected response. Please try again.',
-      response.status
+      response.status,
+      undefined,
+      undefined,
+      response.headers.get('X-Request-ID')?.trim() || undefined
     );
   }
 }
@@ -237,8 +240,10 @@ export async function uploadJobDescriptions(
     job_descriptions: descriptions,
     resume_id: resumeId,
   });
-  if (!res.ok) throw new Error(`Upload failed with status ${res.status}`);
-  const data = await res.json();
+  if (!res.ok) {
+    throw await parseError(res, 'The job description could not be uploaded. Please try again.');
+  }
+  const data = (await res.json()) as { job_id: string[] };
   return data.job_id[0];
 }
 
@@ -376,9 +381,10 @@ export class TailorStreamError extends ApiError {
     public readonly phase: TailorStreamFailurePhase,
     public readonly fallbackSafe: boolean,
     details?: unknown,
-    retryAfter?: number
+    retryAfter?: number,
+    requestId?: string
   ) {
-    super(code, message, status, details, retryAfter);
+    super(code, message, status, details, retryAfter, requestId);
     this.name = 'TailorStreamError';
   }
 
@@ -390,7 +396,8 @@ export class TailorStreamError extends ApiError {
       'open',
       fallbackSafe,
       error.details,
-      error.retryAfter
+      error.retryAfter,
+      error.requestId
     );
   }
 }
@@ -398,10 +405,20 @@ export class TailorStreamError extends ApiError {
 function streamTransportError(
   error: unknown,
   phase: TailorStreamFailurePhase,
-  fallbackSafe: boolean
+  fallbackSafe: boolean,
+  requestId?: string
 ): TailorStreamError {
   const message = error instanceof Error ? error.message : 'The tailoring stream was interrupted.';
-  return new TailorStreamError('stream_transport_error', message, 0, phase, fallbackSafe);
+  return new TailorStreamError(
+    'stream_transport_error',
+    message,
+    0,
+    phase,
+    fallbackSafe,
+    undefined,
+    undefined,
+    requestId
+  );
 }
 
 /**
@@ -457,6 +474,8 @@ export async function streamImproveResume(
     throw streamTransportError(e, 'open', true);
   }
 
+  const apiRequestId = res.headers.get('X-Request-ID')?.trim() || undefined;
+
   if (!res.ok) {
     const error = await parseError(
       res,
@@ -473,7 +492,10 @@ export async function streamImproveResume(
       'The tailoring stream could not be opened.',
       res.status,
       'before-event',
-      true
+      true,
+      undefined,
+      undefined,
+      apiRequestId
     );
   }
 
@@ -509,7 +531,12 @@ export async function streamImproveResume(
     }
   } catch (e) {
     if (opts.signal.aborted) throw new TailorStreamCancelled();
-    throw streamTransportError(e, observedEvent ? 'after-event' : 'before-event', !observedEvent);
+    throw streamTransportError(
+      e,
+      observedEvent ? 'after-event' : 'before-event',
+      !observedEvent,
+      apiRequestId
+    );
   } finally {
     try {
       await reader.cancel();
@@ -526,7 +553,9 @@ export async function streamImproveResume(
       0,
       'after-event',
       false,
-      terminalError.details
+      terminalError.details,
+      undefined,
+      apiRequestId
     );
   }
   if (!result) {
@@ -535,7 +564,10 @@ export async function streamImproveResume(
       'The tailoring stream ended before completion.',
       0,
       observedEvent ? 'after-event' : 'before-event',
-      !observedEvent
+      !observedEvent,
+      undefined,
+      undefined,
+      apiRequestId
     );
   }
   return result;

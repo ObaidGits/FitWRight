@@ -91,6 +91,7 @@ class AuditEvent:
     CAPTCHA_DENIED = "auth.captcha_denied"
     # --- P2 Admin lifecycle + sensitive reads (dotted, admin-namespaced) ---
     ADMIN_USER_VIEWED = "admin.user_viewed"
+    ADMIN_ERROR_REPORTS_VIEWED = "admin.error_reports_viewed"
     # Sensitive config-diagnostics read (admin-panel-upgrade Req 10/15.3/15.9).
     ADMIN_CONFIG_VIEWED = "admin.config_viewed"
     # Maintenance action invocation (admin-panel-upgrade Req 18.2/18.6): one of the

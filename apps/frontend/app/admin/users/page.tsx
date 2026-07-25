@@ -35,6 +35,7 @@ import {
   TableCell,
 } from '@/components/atelier/table';
 import { Sheet, SheetContent, SheetTitle } from '@/components/atelier/sheet';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/atelier/misc';
 import { useToast } from '@/components/atelier/toast';
 import { useSession } from '@/lib/context/session';
 import { LocalTime, RelativeTime } from '@/components/admin/local-time';
@@ -53,6 +54,26 @@ function StatusBadge({ status }: { status: AdminUserRow['status'] }) {
   if (status === 'active') return <Badge variant="success">active</Badge>;
   if (status === 'disabled') return <Badge variant="danger">disabled</Badge>;
   return <Badge variant="ai">pending</Badge>;
+}
+
+function userInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).slice(0, 2);
+  return parts.map((part) => part[0]?.toUpperCase() ?? '').join('') || 'U';
+}
+
+function UserAvatar({
+  user,
+  className,
+}: {
+  user: Pick<AdminUserRow, 'name' | 'avatarUrl'>;
+  className?: string;
+}) {
+  return (
+    <Avatar className={className}>
+      {user.avatarUrl ? <AvatarImage src={user.avatarUrl} alt={`${user.name}'s profile`} /> : null}
+      <AvatarFallback>{userInitials(user.name)}</AvatarFallback>
+    </Avatar>
+  );
 }
 
 function formatAccountMethod(method: string): string {
@@ -344,7 +365,12 @@ function AdminUsersPageInner() {
                           }}
                         />
                       </TableCell>
-                      <TableCell className="font-medium">{u.name}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-3 font-medium">
+                          <UserAvatar user={u} />
+                          <span>{u.name}</span>
+                        </div>
+                      </TableCell>
                       <TableCell className="text-[var(--muted-foreground)]">{u.email}</TableCell>
                       <TableCell>
                         {u.role === 'admin' ? <Badge variant="ai">admin</Badge> : 'user'}
@@ -372,9 +398,12 @@ function AdminUsersPageInner() {
               {rows.map((u) => (
                 <Card key={u.id} className="p-4">
                   <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <p className="font-medium">{u.name}</p>
-                      <p className="text-sm text-[var(--muted-foreground)]">{u.email}</p>
+                    <div className="flex min-w-0 items-center gap-3">
+                      <UserAvatar user={u} />
+                      <div className="min-w-0">
+                        <p className="truncate font-medium">{u.name}</p>
+                        <p className="truncate text-sm text-[var(--muted-foreground)]">{u.email}</p>
+                      </div>
                     </div>
                     <StatusBadge status={u.status} />
                   </div>
@@ -461,7 +490,10 @@ function UserDetailDrawer({
   return (
     <Sheet open={!!userId} onOpenChange={(o) => !o && onClose()}>
       <SheetContent side="right" className="w-full max-w-md overflow-y-auto p-6">
-        <SheetTitle className="text-lg font-semibold">{data?.name ?? 'User'}</SheetTitle>
+        <SheetTitle className="flex items-center gap-3 text-lg font-semibold">
+          {data ? <UserAvatar user={data} className="h-12 w-12" /> : null}
+          <span>{data?.name ?? 'User'}</span>
+        </SheetTitle>
         {isError ? (
           <ErrorState title="Couldn't load user" onRetry={() => refetch()} className="mt-4" />
         ) : isLoading || !data ? (

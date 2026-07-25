@@ -41,6 +41,7 @@ from app.models import (
     ResumeVersion,
     SearchDocument,
     TailorPreview,
+    UserErrorReport,
     UserLlmConfig,
     UserUnreadCount,
 )
@@ -78,6 +79,7 @@ class Repo:
             ProfileVersion.__tablename__,
             AnalysisArtifact.__tablename__,
             TailorPreview.__tablename__,
+            UserErrorReport.__tablename__,
         }
     )
 

@@ -12,6 +12,7 @@
  * allowlisted). No secrets/content ever cross this boundary.
  */
 import { apiDelete, apiFetch, apiPatch, apiPost } from './client';
+import type { ErrorReportPayload } from './error-reports';
 
 export type AdminUserRole = 'user' | 'admin';
 
@@ -68,6 +69,7 @@ export interface AdminUserRow {
   id: string;
   name: string;
   email: string;
+  avatarUrl: string | null;
   role: AdminUserRole;
   status: AdminUserStatus;
   emailVerified: boolean;
@@ -283,6 +285,27 @@ export interface ErrorsSummary {
    *  zero. Route classes are current-process observations and are not listed. */
   notInstrumented: string[];
   computedAt: string;
+}
+
+/** One user-submitted, privacy-minimized Tailor failure report. */
+export interface AdminErrorReport extends ErrorReportPayload {
+  id: string;
+  createdAt: string;
+  user: {
+    id: string;
+    name: string;
+    email: string;
+  };
+}
+
+export interface AdminErrorReportList {
+  items: AdminErrorReport[];
+  nextCursor: string | null;
+}
+
+export interface ErrorReportListParams {
+  cursor?: string | null;
+  limit?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -670,6 +693,15 @@ export async function listAudit(params: AuditListParams = {}): Promise<AuditList
   );
 }
 
+/** Cursor-paginated, privacy-minimized user error reports. */
+export async function listErrorReports(
+  params: ErrorReportListParams = {}
+): Promise<AdminErrorReportList> {
+  return json<AdminErrorReportList>(
+    await apiFetch(`/admin/error-reports${qs({ cursor: params.cursor, limit: params.limit })}`)
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Mutations
 // ---------------------------------------------------------------------------
@@ -746,6 +778,7 @@ export const adminApi = {
   listUsers,
   getUserDetail,
   listAudit,
+  listErrorReports,
   setUserStatus,
   setUserRole,
   deleteUser,

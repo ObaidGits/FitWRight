@@ -58,6 +58,7 @@ from app.models import (
     SearchDocument,
     TailorPreview,
     User,
+    UserErrorReport,
     UserLlmConfig,
     UserUnreadCount,
 )
@@ -324,6 +325,27 @@ class Database:
             "position": row.position,
             "created_at": row.created_at,
             "updated_at": row.updated_at,
+        }
+
+    @staticmethod
+    def _user_error_report_to_dict(row: UserErrorReport) -> dict[str, Any]:
+        return {
+            "id": row.id,
+            "user_id": row.user_id,
+            "client_report_id": row.client_report_id,
+            "issue_type": row.issue_type,
+            "message": row.message,
+            "error_code": row.error_code,
+            "http_status": row.http_status,
+            "retryable": row.retryable,
+            "api_method": row.api_method,
+            "api_route": row.api_route,
+            "operation_request_id": row.operation_request_id,
+            "api_request_id": row.api_request_id,
+            "pipeline_stage": row.pipeline_stage,
+            "stream_phase": row.stream_phase,
+            "fallback_safe": row.fallback_safe,
+            "created_at": row.created_at,
         }
 
     # -- Resume operations --------------------------------------------------
@@ -2420,6 +2442,40 @@ class Database:
                 "has_master_resume": master.first() is not None,
             }
 
+    async def create_user_error_report(
+        self, user_id: str, report: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Create or return an owner-scoped report by client idempotency key."""
+        lookup = Repo.scoped(
+            select(UserErrorReport).where(
+                UserErrorReport.client_report_id == report["client_report_id"]
+            ),
+            UserErrorReport,
+            user_id,
+        )
+        async with self._session() as session:
+            existing = (await session.execute(lookup)).scalars().first()
+            if existing is not None:
+                return self._user_error_report_to_dict(existing)
+
+            row = UserErrorReport(
+                id=str(uuid4()),
+                user_id=user_id,
+                created_at=_now(),
+                **report,
+            )
+            session.add(row)
+            try:
+                await session.commit()
+            except IntegrityError:
+                # A concurrent retry may win the per-user client-report key.
+                await session.rollback()
+                existing = (await session.execute(lookup)).scalars().first()
+                if existing is None:
+                    raise
+                row = existing
+            return self._user_error_report_to_dict(row)
+
     async def reset_database(self, user_id: str) -> None:
         """Reset ``user_id``'s document data and clear uploads.
 
@@ -2495,6 +2551,7 @@ class Database:
         counts: dict[str, int] = {}
         async with self._session() as session:
             for label, model in (
+                ("user_error_reports", UserErrorReport),
                 ("improvements", Improvement),
                 ("applications", Application),
                 ("tailor_previews", TailorPreview),

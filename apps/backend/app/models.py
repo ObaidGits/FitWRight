@@ -13,6 +13,7 @@ from uuid import uuid4
 from sqlalchemy import (
     JSON,
     Boolean,
+    CheckConstraint,
     ForeignKey,
     Index,
     Integer,
@@ -375,6 +376,91 @@ class User(Base):
         # index-served. Email prefix search uses the existing ``ux_users_email``
         # (bare, lowercase-normalized column) + a Postgres text_pattern_ops index.
         Index("ix_users_name_lower", text("lower(name)")),
+    )
+
+
+class UserErrorReport(Base):
+    """Privacy-safe, owner-scoped client error report metadata."""
+
+    __tablename__ = "user_error_reports"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    client_report_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    issue_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    message: Mapped[str] = mapped_column(String(500), nullable=False)
+    error_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    http_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    retryable: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    api_method: Mapped[str] = mapped_column(String(8), nullable=False)
+    api_route: Mapped[str] = mapped_column(String(100), nullable=False)
+    operation_request_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    api_request_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    pipeline_stage: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    stream_phase: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    fallback_safe: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    created_at: Mapped[str] = mapped_column(String(40), default=_utcnow_iso)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "client_report_id", name="uq_user_error_reports_user_client"
+        ),
+        Index("ix_user_error_reports_created_at_id", "created_at", "id"),
+        Index(
+            "ix_user_error_reports_user_created_at_id", "user_id", "created_at", "id"
+        ),
+        CheckConstraint(
+            "length(client_report_id) BETWEEN 1 AND 100",
+            name="ck_user_error_reports_client_report_id_length",
+        ),
+        CheckConstraint(
+            "length(message) BETWEEN 1 AND 500",
+            name="ck_user_error_reports_message_length",
+        ),
+        CheckConstraint(
+            "error_code IS NULL OR length(error_code) BETWEEN 1 AND 100",
+            name="ck_user_error_reports_error_code_length",
+        ),
+        CheckConstraint(
+            "http_status IS NULL OR (http_status BETWEEN 100 AND 599)",
+            name="ck_user_error_reports_http_status",
+        ),
+        CheckConstraint(
+            "issue_type = 'tailor_generation_failed'",
+            name="ck_user_error_reports_issue_type",
+        ),
+        CheckConstraint(
+            "api_method IN ('GET','POST')",
+            name="ck_user_error_reports_api_method",
+        ),
+        CheckConstraint(
+            "api_route IN ("
+            "'/jobs/upload',"
+            "'/resumes/improve/preview/stream',"
+            "'/resumes/improve/preview',"
+            "'/resumes/improve/preview/result/{requestId}')",
+            name="ck_user_error_reports_api_route",
+        ),
+        CheckConstraint(
+            "operation_request_id IS NULL OR length(operation_request_id) BETWEEN 1 AND 100",
+            name="ck_user_error_reports_operation_request_id_length",
+        ),
+        CheckConstraint(
+            "api_request_id IS NULL OR length(api_request_id) BETWEEN 1 AND 100",
+            name="ck_user_error_reports_api_request_id_length",
+        ),
+        CheckConstraint(
+            "pipeline_stage IS NULL OR pipeline_stage IN "
+            "('keywords','plan','rewrite','refine','score')",
+            name="ck_user_error_reports_pipeline_stage",
+        ),
+        CheckConstraint(
+            "stream_phase IS NULL OR stream_phase IN "
+            "('open','before-event','after-event')",
+            name="ck_user_error_reports_stream_phase",
+        ),
     )
 
 

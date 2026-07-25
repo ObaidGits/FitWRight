@@ -7,6 +7,7 @@ from app.routers.auth import router as auth_router
 from app.routers.config import router as config_router
 from app.routers.contact import router as contact_router
 from app.routers.enrichment import router as enrichment_router
+from app.routers.error_reports import router as error_reports_router
 from app.routers.health import router as health_router
 from app.routers.internal import router as internal_router
 from app.routers.interviews import ics_router as interviews_ics_router
@@ -33,6 +34,7 @@ __all__ = [
     "contact_router",
     "reviews_router",
     "health_router",
+    "error_reports_router",
     "enrichment_router",
     "applications_router",
     "resume_wizard_router",

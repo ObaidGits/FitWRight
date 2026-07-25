@@ -41,12 +41,14 @@ from app.models import (
     ResumeVersion,
     Session as SessionRow,
     User,
+    UserErrorReport,
 )
 
 logger = logging.getLogger(__name__)
 
 __all__ = [
     "AdminRepo",
+    "AdminErrorReportData",
     "AdminUserRowData",
     "UserActivity",
     "build_user_row_data",
@@ -66,6 +68,7 @@ class AdminUserRowData:
     id: str
     name: str
     email: str
+    avatar_url: str | None
     role: str
     status: str
     email_verified: bool
@@ -74,6 +77,30 @@ class AdminUserRowData:
     resume_count: int
     application_count: int
     last_active_at: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class AdminErrorReportData:
+    """Allowlisted report data joined to the user's current identity."""
+
+    id: str
+    user_id: str
+    client_report_id: str
+    issue_type: str
+    message: str
+    error_code: str | None
+    http_status: int | None
+    retryable: bool
+    api_method: str
+    api_route: str
+    operation_request_id: str | None
+    api_request_id: str | None
+    pipeline_stage: str | None
+    stream_phase: str | None
+    fallback_safe: bool | None
+    created_at: str
+    user_name: str
+    user_email: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,6 +129,7 @@ def build_user_row_data(row: User) -> AdminUserRowData:
         id=row.id,
         name=row.name,
         email=row.email,
+        avatar_url=row.avatar_url,
         role=row.role,
         status=row.status,
         email_verified=row.email_verified_at is not None,
@@ -223,6 +251,7 @@ class AdminRepo:
                 id=row.id,
                 name=row.name,
                 email=row.email,
+                avatar_url=row.avatar_url,
                 role=row.role,
                 status=row.status,
                 email_verified=row.email_verified_at is not None,
@@ -662,6 +691,67 @@ class AdminRepo:
                 )
             ).all()
         return {uid: int(n) for uid, n in rows if uid is not None}
+
+    # -- privacy-safe user error reports ------------------------------------
+
+    async def list_error_reports(
+        self, *, cursor: str | None = None, limit: int = 50
+    ) -> tuple[list[AdminErrorReportData], str | None]:
+        """Return newest reports with current user identity via keyset pagination."""
+        limit = max(1, min(100, limit))
+        decoded = decode_cursor(cursor)
+        conditions = []
+        if decoded is not None:
+            c_created, c_id = decoded
+            conditions.append(
+                or_(
+                    UserErrorReport.created_at < c_created,
+                    and_(
+                        UserErrorReport.created_at == c_created,
+                        UserErrorReport.id < c_id,
+                    ),
+                )
+            )
+        stmt = (
+            select(UserErrorReport, User.name, User.email)
+            .join(User, User.id == UserErrorReport.user_id)
+            .order_by(UserErrorReport.created_at.desc(), UserErrorReport.id.desc())
+            .limit(limit + 1)
+        )
+        if conditions:
+            stmt = stmt.where(and_(*conditions))
+        async with self._session_factory() as session:
+            rows = (await session.execute(stmt)).all()
+        has_more = len(rows) > limit
+        page = rows[:limit]
+        next_cursor = (
+            encode_cursor(page[-1][0].created_at, page[-1][0].id)
+            if has_more and page
+            else None
+        )
+        return [
+            AdminErrorReportData(
+                id=report.id,
+                user_id=report.user_id,
+                client_report_id=report.client_report_id,
+                issue_type=report.issue_type,
+                message=report.message,
+                error_code=report.error_code,
+                http_status=report.http_status,
+                retryable=report.retryable,
+                api_method=report.api_method,
+                api_route=report.api_route,
+                operation_request_id=report.operation_request_id,
+                api_request_id=report.api_request_id,
+                pipeline_stage=report.pipeline_stage,
+                stream_phase=report.stream_phase,
+                fallback_safe=report.fallback_safe,
+                created_at=report.created_at,
+                user_name=name,
+                user_email=email,
+            )
+            for report, name, email in page
+        ], next_cursor
 
     # -- audit view (append-only; cross-cutting, centralized here) -----------
 

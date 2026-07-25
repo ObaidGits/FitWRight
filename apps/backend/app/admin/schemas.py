@@ -124,6 +124,7 @@ class AdminUserRow(BaseModel):
     id: str
     name: str
     email: str
+    avatarUrl: str | None = None
     role: str
     status: str
     emailVerified: bool
@@ -176,6 +177,7 @@ class AdminUserDetail(BaseModel):
     id: str
     name: str
     email: str
+    avatarUrl: str | None = None
     role: str
     status: str
     emailVerified: bool

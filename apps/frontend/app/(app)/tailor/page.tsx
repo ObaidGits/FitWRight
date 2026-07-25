@@ -88,10 +88,44 @@ import {
   DialogDescription,
 } from '@/components/atelier/dialog';
 import { ApiError, toMessage } from '@/lib/api/errors';
+import {
+  createErrorReport,
+  type ErrorReportPayload,
+  type ErrorReportReceipt,
+} from '@/lib/api/error-reports';
 import Link from 'next/link';
 
 const MIN_JD = 50;
+const TAILOR_ROUTES = {
+  upload: '/jobs/upload',
+  stream: '/resumes/improve/preview/stream',
+  preview: '/resumes/improve/preview',
+  recovery: '/resumes/improve/preview/result/{requestId}',
+} as const;
+
 type Phase = 'input' | 'generating' | 'review' | 'error';
+
+function newClientId(prefix: string): string {
+  return typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function safeReportMessage(message: string): string {
+  const normalized = Array.from(message, (character) => {
+    const code = character.charCodeAt(0);
+    return code < 0x20 || code === 0x7f ? ' ' : character;
+  })
+    .join('')
+    .trim();
+  return (normalized || 'Resume tailoring did not complete.').slice(0, 500);
+}
+
+interface TailorFailure {
+  message: string;
+  retryable: boolean;
+  report: ErrorReportPayload;
+}
 
 /** The full set of tailoring inputs persisted for crash/navigation recovery.
  *  Previously only the JD string was saved, so a restore silently dropped the
@@ -325,13 +359,11 @@ export default function TailorPage() {
   const [preFit, setPreFit] = React.useState<{ score: number | null; missing: number } | null>(
     null
   );
-  // Graceful, structured failure surface (never raw HTML/error text). Input is
-  // preserved so the user can retry or edit without re-entering anything.
-  const [failure, setFailure] = React.useState<{
-    message: string;
-    requestId?: string;
-    retryable: boolean;
-  } | null>(null);
+  // Graceful, structured failure surface. The attached report is a frozen,
+  // privacy-minimized snapshot: it never reads live JD/resume/instruction state.
+  const [failure, setFailure] = React.useState<TailorFailure | null>(null);
+  const [reportStatus, setReportStatus] = React.useState<'idle' | 'pending' | 'reported'>('idle');
+  const [reportReceipt, setReportReceipt] = React.useState<ErrorReportReceipt | null>(null);
 
   // Optional pre-generation fit analysis (Req 15 - explicit, cost-aware AI).
   // Never fires automatically: the user must click "Analyze fit" to spend a
@@ -585,54 +617,70 @@ export default function TailorPage() {
     setPhase('generating');
     setResult(null);
     setFailure(null);
+    setReportStatus('idle');
+    setReportReceipt(null);
     setStages(freshStages());
+
+    // This client operation id is intentionally distinct from the backend's
+    // X-Request-ID. It survives upload, stream, fallback, and recovery calls.
+    const operationRequestId = newClientId('tailor-operation');
+    requestIdRef.current = operationRequestId;
+    let failedRoute: string = TAILOR_ROUTES.upload;
+    let failedMethod: 'GET' | 'POST' = 'POST';
+    let lastPipelineStage: TailorStageName | null = null;
+    let lastStreamPhase: TailorStreamError['phase'] | null = null;
+    let lastFallbackSafe: boolean | null = null;
+
     try {
       const jid = await uploadJobDescriptions([jd.trim()], resumeId);
       setJobId(jid);
 
-      const requestId =
-        typeof crypto !== 'undefined' && 'randomUUID' in crypto
-          ? crypto.randomUUID()
-          : `tailor-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      requestIdRef.current = requestId;
       const controller = new AbortController();
       abortRef.current = controller;
 
       let data;
       try {
+        failedRoute = TAILOR_ROUTES.stream;
         const res = await streamImproveResume(resumeId, jid, promptId || undefined, {
-          requestId,
+          requestId: operationRequestId,
           signal: controller.signal,
           customInstructions: customInstructions.trim() || undefined,
-          onStage: (e) =>
+          onStage: (e) => {
+            lastPipelineStage = e.stage;
             setStages((prev) => ({
               ...prev,
               [e.stage]: e.status === 'done' ? 'done' : 'active',
-            })),
+            }));
+          },
         });
         data = res.data;
       } catch (streamErr) {
         if (streamErr instanceof TailorStreamCancelled) {
-          // User cancelled - preserve input, no error toast or fallback.
           setPhase('input');
           return;
         }
         if (!(streamErr instanceof TailorStreamError)) throw streamErr;
+        lastStreamPhase = streamErr.phase;
+        lastFallbackSafe = streamErr.fallbackSafe;
         if (!streamErr.fallbackSafe) {
           const canRecoverCompletedResult =
             streamErr.phase === 'after-event' &&
             ['stream_incomplete', 'stream_transport_error'].includes(streamErr.code);
           if (!canRecoverCompletedResult) throw streamErr;
 
-          // The server may have completed and committed the preview even though
-          // the terminal SSE event was lost. Recover by request ID; never issue
-          // another provider generation after observed progress.
-          const recovered = await recoverTailorPreview(requestId);
-          if (!recovered) throw streamErr;
+          // Recovery has its own route. If no durable result exists, attribute
+          // the failure to the original stream rather than the successful 404 poll.
+          failedRoute = TAILOR_ROUTES.recovery;
+          failedMethod = 'GET';
+          const recovered = await recoverTailorPreview(operationRequestId);
+          if (!recovered) {
+            failedRoute = TAILOR_ROUTES.stream;
+            failedMethod = 'POST';
+            throw streamErr;
+          }
           data = recovered.data;
         } else {
-          // Only explicit capability negotiation or a transport failure before
-          // the first SSE event can safely use the non-stream endpoint.
+          failedRoute = TAILOR_ROUTES.preview;
           const res = await previewImproveResume(
             resumeId,
             jid,
@@ -644,32 +692,53 @@ export default function TailorPage() {
       }
 
       setResult(data);
-      // Persist just the request id so this completed-but-unsaved preview can be
-      // restored if the user navigates away before saving.
-      rememberPreview(requestId);
+      rememberPreview(operationRequestId);
       setRecoverable(null);
       setPhase('review');
     } catch (e) {
-      // Preserve input (jd/resume stay in state) and show a graceful, structured
-      // failure surface. NEVER render raw error text - a 5xx from the Heroku
-      // router is an HTML page, and `toUserMessage` guarantees a clean message.
       const isApiErr = e instanceof ApiError;
-      // Retryable: network/timeout/5xx/429 could plausibly succeed on retry.
+      const isStreamErr = e instanceof TailorStreamError;
       const retryable = isApiErr ? [0, 408, 425, 429, 500, 502, 503, 504].includes(e.status) : true;
-      setFailure({
-        message: toMessage(
-          e,
-          'Resume tailoring is temporarily unavailable. Please try again in a moment.'
-        ),
-        requestId:
-          isApiErr && typeof e.details === 'object' && e.details
-            ? ((e.details as Record<string, unknown>).request_id as string | undefined)
-            : undefined,
+      const message = toMessage(
+        e,
+        'Resume tailoring is temporarily unavailable. Please try again in a moment.'
+      );
+      const report = Object.freeze<ErrorReportPayload>({
+        clientReportId: newClientId('tailor-report'),
+        issueType: 'tailor_generation_failed',
+        message: safeReportMessage(message),
+        errorCode: isApiErr ? e.code : null,
+        httpStatus: isApiErr && e.status > 0 ? e.status : null,
         retryable,
+        apiMethod: failedMethod,
+        apiRoute: failedRoute,
+        operationRequestId,
+        apiRequestId: isApiErr ? (e.requestId ?? null) : null,
+        pipelineStage: lastPipelineStage,
+        streamPhase: isStreamErr ? e.phase : lastStreamPhase,
+        fallbackSafe: isStreamErr ? e.fallbackSafe : lastFallbackSafe,
       });
+      setFailure({ message, retryable, report });
       setPhase('error');
     } finally {
       abortRef.current = null;
+    }
+  }
+
+  async function onReportError() {
+    if (!failure || reportStatus !== 'idle') return;
+    setReportStatus('pending');
+    try {
+      const receipt = await createErrorReport(failure.report);
+      setReportReceipt(receipt);
+      setReportStatus('reported');
+    } catch {
+      setReportStatus('idle');
+      toast({
+        title: 'Could not send the error report',
+        description: 'Nothing sensitive was sent. Please try reporting again.',
+        variant: 'error',
+      });
     }
   }
 
@@ -1441,11 +1510,21 @@ export default function TailorPage() {
                   <p className="text-xs text-[var(--muted-foreground)]">
                     Your job description and resume selection are saved - nothing was lost.
                   </p>
-                  {failure.requestId && (
+                  {(failure.report.apiRequestId || failure.report.operationRequestId) && (
                     <p className="pt-1 font-mono text-[11px] text-[var(--muted-foreground)]">
-                      Reference: {failure.requestId}
+                      Reference: {failure.report.apiRequestId ?? failure.report.operationRequestId}
                     </p>
                   )}
+                  <p className="pt-1 text-xs text-[var(--muted-foreground)]">
+                    Reporting sends only technical context, never your resume or job description.
+                  </p>
+                  <div aria-live="polite">
+                    {reportStatus === 'reported' && reportReceipt && (
+                      <p className="pt-1 text-sm font-medium text-[var(--at-success)]">
+                        Reported · Reference: {reportReceipt.reportId}
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -1464,8 +1543,17 @@ export default function TailorPage() {
                 >
                   Back to editing
                 </Button>
-                <Button asChild size="sm" variant="ghost">
-                  <Link href="/contact?topic=bug">Report issue</Link>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={onReportError}
+                  disabled={reportStatus !== 'idle'}
+                >
+                  {reportStatus === 'pending'
+                    ? 'Reporting...'
+                    : reportStatus === 'reported'
+                      ? 'Reported'
+                      : 'Report error'}
                 </Button>
               </div>
             </Card>
