@@ -133,8 +133,9 @@ class CloudinaryStorageProvider(StorageProvider):
     """Cloudinary REST adapter (server-signed upload; returns the CDN URL).
 
     Uses the documented signed-upload endpoint over an injectable transport (no
-    SDK dependency). Selected only when ``CLOUDINARY_*`` config is present;
-    otherwise the factory falls back to local so the app always boots.
+    SDK dependency). The factory requires complete ``CLOUDINARY_*``
+    configuration when this adapter is selected; it never silently falls back
+    to ephemeral local storage.
 
     Production hardening: bounded **retries with exponential backoff** on
     transient failures (network errors, 429, 5xx), a hard per-request
@@ -229,17 +230,25 @@ class CloudinaryStorageProvider(StorageProvider):
 def build_storage_provider(config) -> StorageProvider:
     """Construct the ``StorageProvider`` selected by ``STORAGE_PROVIDER`` (pure).
 
-    Cloudinary when configured, else the local disk provider; ``s3`` is
-    reserved. Called only by the composition root (IMPLEMENTATION_PLAN Phase 3).
+    Cloudinary fails closed when selected without all required credentials;
+    silently writing to local disk would lose uploads on ephemeral hosts.
+    Local storage must be selected explicitly. Reserved and unknown providers
+    are rejected. Called only by the composition root.
     """
     choice = config.storage_provider
-    if choice == "cloudinary" and config.cloudinary_configured:
+    if choice == "cloudinary":
+        if not config.cloudinary_configured:
+            raise RuntimeError(
+                "STORAGE_PROVIDER=cloudinary requires complete CLOUDINARY_* configuration."
+            )
         return CloudinaryStorageProvider(
             config.cloudinary_cloud_name, config.cloudinary_api_key, config.cloudinary_api_secret
         )
+    if choice == "local":
+        return LocalStorageProvider(config.data_dir / "avatars", config.frontend_base_url)
     if choice == "s3":
         raise RuntimeError("STORAGE_PROVIDER=s3 is not configured in this build.")
-    return LocalStorageProvider(config.data_dir / "avatars", config.frontend_base_url)
+    raise RuntimeError(f"Unsupported STORAGE_PROVIDER: {choice!r}.")
 
 
 def get_storage_provider() -> StorageProvider:

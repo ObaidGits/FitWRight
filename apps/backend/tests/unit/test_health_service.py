@@ -8,9 +8,10 @@ Dependencies are driven two ways, matching the design's injection points:
   kvstore=)``) so the real per-source ``try/except`` + ``asyncio.wait_for``
   isolation path actually runs (Req 3.6).
 - **AI / Storage / Migrations** are driven by monkeypatching the source the
-  private probe reads (the cached ``/status`` LLM health + ``get_llm_config``,
-  the ``settings`` storage provider, and the Alembic head-vs-applied revisions)
-  so each ``ok|degraded|down`` mapping is asserted deterministically.
+  private probe reads (the authenticated admin-only LLM health cache +
+  ``get_llm_config``, the ``settings`` storage provider, and the Alembic
+  head-vs-applied revisions) so each ``ok|degraded|down`` mapping is asserted
+  deterministically.
 
 Covers: composition + exactly six tiles in order (Req 3.2); degraded/down
 mapping incl. migration-mismatch (Req 3.3); per-source timeout isolation (Req
@@ -90,7 +91,7 @@ class _RaisingKV:
 
 
 def _stub_ai(svc: HealthService, monkeypatch, *, status: str = "ok") -> None:
-    async def _probe_ai():
+    async def _probe_ai(_llm_user_id=None):
         return HealthTile(name="AI provider", status=status, detail="provider test")
 
     monkeypatch.setattr(svc, "_probe_ai", _probe_ai)
@@ -202,6 +203,19 @@ class TestAiTile:
         assert tile.status == "degraded"
         assert tile.detail == "not configured"
 
+    async def test_probe_timeout_is_degraded(self, monkeypatch):
+        monkeypatch.setattr(health_service_mod, "_SOURCE_TIMEOUT_SECONDS", 0.01)
+
+        async def _slow_probe(_llm_user_id=None):
+            await asyncio.sleep(1.0)
+
+        svc = HealthService()
+        monkeypatch.setattr(svc, "_probe_ai", _slow_probe)
+        tile = await svc._compose_ai()
+
+        assert tile.status == "degraded"
+        assert tile.detail == "probe timed out"
+
 
 class TestStorageTile:
     async def test_local_is_ok(self, monkeypatch):
@@ -209,12 +223,32 @@ class TestStorageTile:
         tile = await HealthService()._compose_storage()
         assert tile.name == "Storage provider" and tile.status == "ok"
 
-    async def test_cloudinary_unconfigured_is_degraded(self, monkeypatch):
-        # hermetic env leaves cloudinary_* blank -> cloudinary_configured is False.
+    async def test_cloudinary_configured_and_reachable_is_ok(self, monkeypatch):
         monkeypatch.setattr(app_settings, "storage_provider", "cloudinary")
-        assert app_settings.cloudinary_configured is False
+        monkeypatch.setattr(app_settings, "cloudinary_cloud_name", "cloud")
+        monkeypatch.setattr(app_settings, "cloudinary_api_key", "key")
+        monkeypatch.setattr(app_settings, "cloudinary_api_secret", "secret")
+        svc = HealthService()
+
+        async def _reachable():
+            return True
+
+        monkeypatch.setattr(svc, "_probe_cloudinary", _reachable)
+        tile = await svc._compose_storage()
+
+        assert tile.status == "ok"
+        assert tile.detail == "cloudinary verified"
+
+    async def test_cloudinary_incomplete_is_degraded_with_config_issue(self, monkeypatch):
+        monkeypatch.setattr(app_settings, "storage_provider", "cloudinary")
+        monkeypatch.setattr(app_settings, "cloudinary_cloud_name", "cloud")
+        monkeypatch.setattr(app_settings, "cloudinary_api_key", "")
+        monkeypatch.setattr(app_settings, "cloudinary_api_secret", "secret")
+
         tile = await HealthService()._compose_storage()
+
         assert tile.status == "degraded"
+        assert tile.detail == "cloudinary configuration incomplete"
 
 
 # ===========================================================================
@@ -257,8 +291,11 @@ class TestMigrationsTile:
 
 class TestTimeoutIsolation:
     async def test_one_slow_probe_degrades_only_its_own_tile(self, monkeypatch):
-        # Shrink the per-source budget so the test stays fast.
+        # Shrink both budgets so the test stays fast.
         monkeypatch.setattr(health_service_mod, "_SOURCE_TIMEOUT_SECONDS", 0.05)
+        monkeypatch.setattr(
+            health_service_mod, "_DATABASE_SOURCE_TIMEOUT_SECONDS", 0.05
+        )
 
         svc = _healthy_service(monkeypatch)
 

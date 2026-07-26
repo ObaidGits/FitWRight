@@ -186,11 +186,11 @@ async def get_stats(_admin: Principal = Depends(require_admin_read)) -> AdminSta
 async def get_admin_health(_admin: Principal = Depends(require_admin_read)) -> AdminHealth:
     """System Health: six subsystem tiles + release fields + jobs table (R3, 17).
 
-    Composed from signals the backend already produces (readiness DB/KVStore
-    probes, cached ``/status`` LLM health, storage config, Alembic head-vs-applied)
-    under a per-source 2s timeout - never a new infra probe (R3.1/3.6, R21.3/4/5).
+    Composed from bounded readiness DB/KVStore probes, cached provider health,
+    a cached non-mutating Cloudinary ping, and Alembic head-vs-applied state.
+    Each source is isolated by its own timeout/error boundary.
     """
-    return await get_health_service().compose_health()
+    return await get_health_service().compose_health(llm_user_id=_admin.user_id)
 
 
 @router.get("/jobs", response_model=JobsPanel)

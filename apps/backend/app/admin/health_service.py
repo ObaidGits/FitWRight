@@ -7,18 +7,19 @@ AI provider, Storage provider, Migrations - plus secret-free release metadata
 
 **Bounded (Req 21.3/21.4/21.5):** this service composes ONLY signals the backend
 already emits - the readiness DB/KVStore probes, an authenticated admin-only
-provider-health probe cache, the storage provider configuration, the Alembic
-head-vs-applied comparison, and the release constants. It NEVER adds an
-unbounded per-request infra probe: no CPU/RAM/disk/thread/container/k8s metrics,
-and no live object-storage query (object-storage usage is sampled off the
-request path by the storage job, Task 12).
+provider-health probe cache, a cached non-mutating Cloudinary Admin API ping,
+the Alembic head-vs-applied comparison, and the release constants. It NEVER
+adds unbounded per-request infra probing: no CPU/RAM/disk/thread/container/k8s
+metrics, and no object write/read/delete operation from a dashboard refresh
+(object-storage usage remains sampled off the request path by the storage job,
+Task 12).
 
-**Per-source isolation (Req 3.1/3.6):** every subsystem is bounded by its own
-``asyncio.wait_for(..., 2.0)`` timeout and error boundary. Most source failures
-mark only their tile ``down``; the combined KVStore/Queue tile is more precise:
-KV failure is ``down``, while unavailable outbox stats are ``degraded``. The
-tiles and the two KV/queue probes run concurrently, keeping composition bounded
-by ~2s rather than the sum.
+**Per-source isolation (Req 3.1/3.6):** every subsystem has a bounded timeout
+and error boundary. Hosted database-backed sources receive a longer cold-TLS
+budget than provider probes. Most source failures mark only their tile ``down``;
+the combined KVStore/Queue tile is more precise: KV failure is ``down``, while
+unavailable outbox stats are ``degraded``. Tiles and paired probes run
+concurrently, so one slow dependency does not serialize the dashboard.
 
 **Secret-free (Req 17.3 / Property 3):** every tile detail and release field is a
 count, identifier, short status string, or presence-derived label - never a
@@ -57,10 +58,11 @@ __all__ = [
     "reset_health_service",
 ]
 
-# Per-source probe budget (Req 3.1). Each subsystem must compose within this or
-# its tile degrades to ``down`` (Req 3.6); tiles run concurrently so the whole
-# compose stays ~2s.
-_SOURCE_TIMEOUT_SECONDS = 2.0
+# Bounded budgets keep the dashboard responsive while allowing hosted Postgres
+# poolers to establish cold TLS connections. Database-backed probes need longer
+# than provider/configuration probes, and all tiles still run concurrently.
+_SOURCE_TIMEOUT_SECONDS = 7.0
+_DATABASE_SOURCE_TIMEOUT_SECONDS = 12.0
 
 # KVStore round-trip probe key (mirrors the readiness_check probe; short TTL so a
 # stale value never lingers). Deliberately secret-free.
@@ -166,12 +168,13 @@ class HealthService:
 
     # -- public API ----------------------------------------------------------
 
-    async def compose_health(self) -> AdminHealth:
+    async def compose_health(self, *, llm_user_id: str | None = None) -> AdminHealth:
         """Compose the full :class:`AdminHealth` payload from existing signals.
 
-        The six tiles are probed concurrently, each under its own 2s timeout and
-        error boundary (Req 3.6). The Migrations probe additionally yields the
-        applied/head revision identifiers, which flow into ``ReleaseInfo`` (Req
+        The six tiles are probed concurrently under bounded per-source timeout
+        and error boundaries (Req 3.6). Database-backed probes receive the
+        longer hosted cold-connection budget. The Migrations probe additionally
+        yields the applied/head revision identifiers for ``ReleaseInfo`` (Req
         17.2). ``jobs`` is intentionally empty here - the jobs table is populated
         from KV run markers by a later task (6.2), a separate concern.
         """
@@ -186,7 +189,7 @@ class HealthService:
             self._compose_backend(),
             self._compose_database(),
             self._compose_kvstore(),
-            self._compose_ai(),
+            self._compose_ai(llm_user_id),
             self._compose_storage(),
             self._compose_migrations(),
         )
@@ -271,13 +274,15 @@ class HealthService:
     # -- tile: Database ------------------------------------------------------
 
     async def _compose_database(self) -> HealthTile:
-        """DB reachability via the readiness probe (``SELECT 1``) under 2s.
+        """DB reachability via a bounded readiness probe (``SELECT 1``).
 
-        Reuses the exact readiness_check probe shape (async engine ``SELECT 1``);
+        Reuses the exact readiness-check probe shape (async engine ``SELECT 1``);
         ``ok`` on success, ``down`` on any error or timeout (Req 3.6).
         """
         try:
-            await asyncio.wait_for(self._probe_database(), timeout=_SOURCE_TIMEOUT_SECONDS)
+            await asyncio.wait_for(
+                self._probe_database(), timeout=_DATABASE_SOURCE_TIMEOUT_SECONDS
+            )
             return HealthTile(name="Database", status="ok", detail=None)
         except Exception as exc:  # noqa: BLE001 - isolate to this tile
             logger.warning("Health: database probe failed: %s", exc)
@@ -298,15 +303,15 @@ class HealthService:
         reachable queue with no dead letters is healthy.
         """
 
-        async def bounded(probe):
+        async def bounded(probe, *, timeout: float = _SOURCE_TIMEOUT_SECONDS):
             try:
-                return await asyncio.wait_for(probe(), timeout=_SOURCE_TIMEOUT_SECONDS)
+                return await asyncio.wait_for(probe(), timeout=timeout)
             except Exception as exc:  # noqa: BLE001 - classified below
                 return exc
 
         kv_result, queue_result = await asyncio.gather(
             bounded(self._probe_kvstore),
-            bounded(self._probe_outbox),
+            bounded(self._probe_outbox, timeout=_DATABASE_SOURCE_TIMEOUT_SECONDS),
         )
         if isinstance(kv_result, BaseException):
             logger.warning("Health: KVStore probe failed: %s", kv_result)
@@ -354,29 +359,37 @@ class HealthService:
 
     # -- tile: AI provider ---------------------------------------------------
 
-    async def _compose_ai(self) -> HealthTile:
-        """AI provider health from the authenticated admin-only probe cache.
+    async def _compose_ai(self, llm_user_id: str | None = None) -> HealthTile:
+        """AI provider health for the authenticated admin's configuration.
 
         Public ``/status`` never reaches this path. Admin dashboard refreshes
         reuse a short-lived, single-flighted result to avoid one billable
         provider request per refresh.
 
         Mapping: configured + healthy -> ``ok``; configured + unhealthy ->
-        ``degraded``; not configured -> ``degraded``. Any error/timeout ->
-        ``down`` (Req 3.6).
+        ``degraded``; not configured -> ``degraded``; timeout -> ``degraded``.
+        Other probe errors remain ``down`` (Req 3.6).
         """
         try:
-            return await asyncio.wait_for(self._probe_ai(), timeout=_SOURCE_TIMEOUT_SECONDS)
+            return await asyncio.wait_for(
+                self._probe_ai(llm_user_id), timeout=_SOURCE_TIMEOUT_SECONDS
+            )
+        except TimeoutError:
+            logger.warning("Health: AI provider probe timed out")
+            return HealthTile(
+                name="AI provider", status="degraded", detail="probe timed out"
+            )
         except Exception as exc:  # noqa: BLE001 - isolate to this tile
             logger.warning("Health: AI provider probe failed: %s", exc)
             return HealthTile(name="AI provider", status="down", detail="unavailable")
 
-    async def _probe_ai(self) -> HealthTile:
+    async def _probe_ai(self, llm_user_id: str | None = None) -> HealthTile:
         # Lazy import keeps LiteLLM off this module's import path.
         from app.llm import get_llm_config
 
-        # This path is reachable only through the authenticated admin endpoint.
-        config = get_llm_config(None)
+        # The authenticated endpoint passes the viewing admin explicitly so
+        # health never falls back to another user's persisted provider key.
+        config = get_llm_config(llm_user_id)
         configured = bool(config.api_key) or config.provider in (
             "ollama",
             "openai_compatible",
@@ -399,17 +412,32 @@ class HealthService:
 
     # -- tile: Storage provider ---------------------------------------------
 
-    async def _compose_storage(self) -> HealthTile:
-        """Probe local storage only; never claim an unverified remote is healthy.
+    # Cloudinary's Admin API is rate-limited. Cache the authenticated,
+    # non-mutating ping so dashboard refreshes do not issue one request each.
+    _CLOUDINARY_HEALTH_TTL_SECONDS = 60.0
+    _cloudinary_health_cache: dict[str, Any] = {
+        "key": None,
+        "result": None,
+        "at": 0.0,
+    }
+    _cloudinary_health_lock = asyncio.Lock()
 
-        Local storage performs a bounded, non-destructive temporary
-        write/read/delete round trip. Cloudinary is configuration-only and
-        therefore degraded/unverified without a network or billable call. S3 is
-        explicitly unavailable because this build does not implement it.
+    async def _compose_storage(self) -> HealthTile:
+        """Verify the selected storage provider with a bounded safe probe.
+
+        Local storage performs a temporary write/read/delete round trip.
+        Cloudinary uses its authenticated, non-mutating Admin API ping and
+        caches the result briefly. S3 remains unavailable because this build
+        does not implement it.
         """
         try:
             return await asyncio.wait_for(
                 self._probe_storage(), timeout=_SOURCE_TIMEOUT_SECONDS
+            )
+        except TimeoutError:
+            logger.warning("Health: storage provider probe timed out")
+            return HealthTile(
+                name="Storage provider", status="degraded", detail="probe timed out"
             )
         except Exception as exc:  # noqa: BLE001 - isolate to this tile
             logger.warning("Health: storage provider probe failed: %s", exc)
@@ -418,16 +446,22 @@ class HealthService:
     async def _probe_storage(self) -> HealthTile:
         provider_name = settings.storage_provider
         if provider_name == "cloudinary":
-            if settings.cloudinary_configured:
+            if not settings.cloudinary_configured:
                 return HealthTile(
                     name="Storage provider",
                     status="degraded",
-                    detail="cloudinary configured; connectivity unverified",
+                    detail="cloudinary configuration incomplete",
+                )
+            if await self._probe_cloudinary():
+                return HealthTile(
+                    name="Storage provider",
+                    status="ok",
+                    detail="cloudinary verified",
                 )
             return HealthTile(
                 name="Storage provider",
                 status="degraded",
-                detail="cloudinary configuration incomplete; connectivity unverified",
+                detail="cloudinary unavailable",
             )
         if provider_name == "s3":
             return HealthTile(
@@ -449,6 +483,59 @@ class HealthService:
             raise RuntimeError("local provider unavailable")
         await asyncio.to_thread(self._probe_local_storage, provider._root)
         return HealthTile(name="Storage provider", status="ok", detail="local verified")
+
+    async def _probe_cloudinary(self) -> bool:
+        """Ping Cloudinary without uploading, reading, or deleting an asset."""
+        fingerprint = hashlib.sha256(
+            "|".join(
+                (
+                    settings.cloudinary_cloud_name,
+                    settings.cloudinary_api_key,
+                    settings.cloudinary_api_secret,
+                )
+            ).encode()
+        ).hexdigest()
+        cache = type(self)._cloudinary_health_cache
+        now = time.monotonic()
+        if (
+            cache["key"] == fingerprint
+            and cache["result"] is not None
+            and now - cache["at"] < self._CLOUDINARY_HEALTH_TTL_SECONDS
+        ):
+            return bool(cache["result"])
+
+        async with type(self)._cloudinary_health_lock:
+            now = time.monotonic()
+            if (
+                cache["key"] == fingerprint
+                and cache["result"] is not None
+                and now - cache["at"] < self._CLOUDINARY_HEALTH_TTL_SECONDS
+            ):
+                return bool(cache["result"])
+
+            import httpx
+
+            url = (
+                "https://api.cloudinary.com/v1_1/"
+                f"{settings.cloudinary_cloud_name}/ping"
+            )
+            try:
+                async with httpx.AsyncClient(timeout=_SOURCE_TIMEOUT_SECONDS) as client:
+                    response = await client.get(
+                        url,
+                        auth=(
+                            settings.cloudinary_api_key,
+                            settings.cloudinary_api_secret,
+                        ),
+                    )
+                healthy = response.status_code == 200
+            except httpx.HTTPError:
+                healthy = False
+
+            cache.update(
+                {"key": fingerprint, "result": healthy, "at": time.monotonic()}
+            )
+            return healthy
 
     @staticmethod
     def _probe_local_storage(root: Path) -> None:
@@ -493,7 +580,7 @@ class HealthService:
         """
         try:
             head, applied = await asyncio.wait_for(
-                self._migration_revisions(), timeout=_SOURCE_TIMEOUT_SECONDS
+                self._migration_revisions(), timeout=_DATABASE_SOURCE_TIMEOUT_SECONDS
             )
         except Exception as exc:  # noqa: BLE001 - isolate to this tile
             logger.warning("Health: migrations probe failed: %s", exc)

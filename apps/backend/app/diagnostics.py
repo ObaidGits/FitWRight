@@ -70,7 +70,7 @@ def _email_summary(settings) -> str:
 def _storage_summary(settings) -> str:
     choice = settings.storage_provider
     if choice == "cloudinary":
-        return "cloudinary" if settings.cloudinary_configured else "cloudinary->local (misconfigured)"
+        return "cloudinary" if settings.cloudinary_configured else "cloudinary (misconfigured)"
     return choice
 
 

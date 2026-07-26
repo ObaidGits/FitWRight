@@ -65,7 +65,7 @@ import {
   type JobAnalyzeResult,
   type TailorStageName,
 } from '@/lib/api/resume';
-import type { ImprovedResult } from '@/components/common/resume_previewer_context';
+import type { ImprovedResult, ResumeFieldDiff } from '@/components/common/resume_previewer_context';
 import { ResumeDocument } from '@/components/resume/resume-document';
 import type { ResumeData } from '@/components/dashboard/resume-component';
 import { type TemplateSettings } from '@/lib/types/template-settings';
@@ -229,6 +229,202 @@ function toResumeData(preview: unknown): ResumeData {
     sectionMeta: p.sectionMeta,
     customSections: p.customSections,
   };
+}
+
+type ReviewWord = { text: string; changed: boolean };
+
+const FIELD_LABELS: Record<ResumeFieldDiff['field_type'], string> = {
+  skill: 'Technical skills',
+  description: 'Description',
+  summary: 'Professional summary',
+  certification: 'Certifications',
+  experience: 'Work experience',
+  education: 'Education',
+  project: 'Projects',
+  language: 'Languages',
+  award: 'Awards',
+};
+
+function formatChangeLocation(change: ResumeFieldDiff): string {
+  if (change.field_path === 'summary') return 'Professional summary';
+  const additionalLabels: Record<string, string> = {
+    'additional.technicalSkills': 'Technical skills',
+    'additional.certificationsTraining': 'Certifications and training',
+    'additional.languages': 'Languages',
+    'additional.awards': 'Awards',
+  };
+  if (additionalLabels[change.field_path]) return additionalLabels[change.field_path];
+
+  const indexed = change.field_path.match(
+    /^(workExperience|education|personalProjects)\[(\d+)\](?:\.(\w+))?$/
+  );
+  if (indexed) {
+    const section =
+      indexed[1] === 'workExperience'
+        ? 'Work experience'
+        : indexed[1] === 'personalProjects'
+          ? 'Project'
+          : 'Education';
+    const rawField = indexed[3] ? indexed[3].replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase() : '';
+    const field = rawField ? `${rawField.charAt(0).toUpperCase()}${rawField.slice(1)}` : '';
+    return `${section} ${Number(indexed[2]) + 1}${field ? ` · ${field}` : ''}`;
+  }
+  return FIELD_LABELS[change.field_type];
+}
+
+function buildWordReview(
+  before: string,
+  after: string
+): {
+  before: ReviewWord[];
+  after: ReviewWord[];
+} {
+  const left = before.trim().split(/\s+/).filter(Boolean);
+  const right = after.trim().split(/\s+/).filter(Boolean);
+  const lcs = Array.from({ length: left.length + 1 }, () =>
+    Array<number>(right.length + 1).fill(0)
+  );
+
+  for (let i = left.length - 1; i >= 0; i -= 1) {
+    for (let j = right.length - 1; j >= 0; j -= 1) {
+      lcs[i][j] =
+        left[i] === right[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+    }
+  }
+
+  const beforeWords: ReviewWord[] = [];
+  const afterWords: ReviewWord[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < left.length && j < right.length) {
+    if (left[i] === right[j]) {
+      beforeWords.push({ text: left[i], changed: false });
+      afterWords.push({ text: right[j], changed: false });
+      i += 1;
+      j += 1;
+    } else if (lcs[i + 1][j] >= lcs[i][j + 1]) {
+      beforeWords.push({ text: left[i], changed: true });
+      i += 1;
+    } else {
+      afterWords.push({ text: right[j], changed: true });
+      j += 1;
+    }
+  }
+  while (i < left.length) {
+    beforeWords.push({ text: left[i], changed: true });
+    i += 1;
+  }
+  while (j < right.length) {
+    afterWords.push({ text: right[j], changed: true });
+    j += 1;
+  }
+  return { before: beforeWords, after: afterWords };
+}
+
+function ReviewText({ words, tone }: { words: ReviewWord[]; tone: 'before' | 'after' }) {
+  return (
+    <p className="text-sm leading-relaxed text-[var(--foreground)]">
+      {words.map((word, index) => (
+        <React.Fragment key={`${index}-${word.text}`}>
+          <span
+            className={
+              word.changed
+                ? tone === 'before'
+                  ? 'rounded-[var(--radius-at-sm)] bg-[var(--destructive)]/12 px-0.5 text-[var(--destructive)] line-through decoration-[var(--destructive)]/60'
+                  : 'rounded-[var(--radius-at-sm)] bg-[var(--at-success)]/18 px-0.5 font-medium'
+                : undefined
+            }
+          >
+            {word.text}
+          </span>
+          {index < words.length - 1 ? ' ' : null}
+        </React.Fragment>
+      ))}
+    </p>
+  );
+}
+
+function ChangeReview({ changes }: { changes: ResumeFieldDiff[] }) {
+  const counts = changes.reduce(
+    (total, change) => ({ ...total, [change.change_type]: total[change.change_type] + 1 }),
+    { added: 0, removed: 0, modified: 0 }
+  );
+
+  return (
+    <div className="mt-4 space-y-3">
+      <div className="flex flex-wrap gap-1.5" aria-label="Change summary">
+        {counts.modified > 0 && <Badge variant="primary">{counts.modified} updated</Badge>}
+        {counts.added > 0 && <Badge variant="success">{counts.added} added</Badge>}
+        {counts.removed > 0 && <Badge variant="danger">{counts.removed} removed</Badge>}
+      </div>
+      <ul className="space-y-3">
+        {changes.map((change, index) => {
+          const isModified = change.change_type === 'modified';
+          const wordReview =
+            isModified && change.original_value && change.new_value
+              ? buildWordReview(change.original_value, change.new_value)
+              : null;
+          const actionLabel = isModified
+            ? 'Updated'
+            : change.change_type === 'added'
+              ? 'Added'
+              : 'Removed';
+          return (
+            <li
+              key={`${change.field_path}-${index}`}
+              className="rounded-[var(--radius-at-lg)] border border-[var(--border)] bg-[var(--at-surface-2)] p-4"
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge
+                  variant={
+                    change.change_type === 'added'
+                      ? 'success'
+                      : change.change_type === 'removed'
+                        ? 'danger'
+                        : 'primary'
+                  }
+                >
+                  {actionLabel}
+                </Badge>
+                <p className="text-sm font-medium text-[var(--foreground)]">
+                  {formatChangeLocation(change)}
+                </p>
+              </div>
+
+              {wordReview ? (
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <div className="rounded-[var(--radius-at-md)] border border-[var(--destructive)]/20 bg-[var(--destructive)]/5 p-3">
+                    <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                      Before
+                    </p>
+                    <ReviewText words={wordReview.before} tone="before" />
+                  </div>
+                  <div className="rounded-[var(--radius-at-md)] border border-[var(--at-success)]/25 bg-[var(--at-success)]/6 p-3">
+                    <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--at-success)]">
+                      After
+                    </p>
+                    <ReviewText words={wordReview.after} tone="after" />
+                  </div>
+                </div>
+              ) : change.change_type === 'removed' && change.original_value ? (
+                <div className="mt-3 rounded-[var(--radius-at-md)] border border-[var(--destructive)]/20 bg-[var(--destructive)]/5 p-3">
+                  <p className="text-sm leading-relaxed text-[var(--muted-foreground)] line-through">
+                    {change.original_value}
+                  </p>
+                </div>
+              ) : change.new_value ? (
+                <div className="mt-3 rounded-[var(--radius-at-md)] border border-[var(--at-success)]/25 bg-[var(--at-success)]/6 p-3">
+                  <p className="text-sm font-medium leading-relaxed text-[var(--foreground)]">
+                    {change.new_value}
+                  </p>
+                </div>
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
 }
 
 export default function TailorPage() {
@@ -604,8 +800,6 @@ export default function TailorPage() {
     // user restore the prior attempt if it was better (no silent loss).
     setPrevScore(result?.ats_score?.overall_score ?? null);
     setPrevResult(result ?? null);
-    // Capture the pre-generation fit (if the user analyzed first) to quantify
-    // how much this tailor pass improved coverage.
     setPreFit(
       analysis
         ? {
@@ -1712,43 +1906,7 @@ export default function TailorPage() {
                     experience.
                   </p>
                   {showDetail && result.detailed_changes && (
-                    <ul className="mt-3 space-y-2">
-                      {result.detailed_changes.map((c, i) => (
-                        <li
-                          key={i}
-                          className="rounded-[var(--radius-at-md)] bg-[var(--at-surface-2)] p-2.5 text-xs"
-                        >
-                          <Badge
-                            variant={
-                              c.change_type === 'added'
-                                ? 'success'
-                                : c.change_type === 'removed'
-                                  ? 'danger'
-                                  : 'neutral'
-                            }
-                          >
-                            {c.change_type}
-                          </Badge>{' '}
-                          <span className="text-[var(--muted-foreground)]">{c.field_path}</span>
-                          {/* Modified edits show the before -> after so the user can
-                          judge the rewrite; added/removed show the single value. */}
-                          {c.change_type === 'modified' && c.original_value ? (
-                            <div className="mt-1 space-y-1">
-                              <p className="text-[var(--muted-foreground)] line-through">
-                                {c.original_value}
-                              </p>
-                              {c.new_value && (
-                                <p className="text-[var(--foreground)]">{c.new_value}</p>
-                              )}
-                            </div>
-                          ) : (
-                            c.new_value && (
-                              <p className="mt-1 text-[var(--foreground)]">{c.new_value}</p>
-                            )
-                          )}
-                        </li>
-                      ))}
-                    </ul>
+                    <ChangeReview changes={result.detailed_changes} />
                   )}
                 </Card>
               )}

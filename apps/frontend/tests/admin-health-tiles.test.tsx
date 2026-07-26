@@ -47,7 +47,7 @@ const SNAPSHOT: AdminHealth = {
     { name: 'Database', status: 'ok', detail: null },
     { name: 'KVStore/Queue', status: 'ok', detail: null },
     { name: 'AI provider', status: 'degraded', detail: 'not configured' },
-    { name: 'Storage provider', status: 'ok', detail: 'Local provider configured' },
+    { name: 'Storage provider', status: 'ok', detail: 'local verified' },
     { name: 'Migrations', status: 'down', detail: 'head revision unreadable' },
   ],
   release: {
@@ -120,19 +120,66 @@ describe('AdminHealthPage - tiles render', () => {
     }
   });
 
-  it('shows literal text statuses and labels storage configuration accurately', () => {
+  it('keeps a verified local storage provider as OK', () => {
     useSystemHealthMock.mockReturnValue(query());
     render(<AdminHealthPage />);
 
     expect(screen.getAllByText('OK').length).toBeGreaterThanOrEqual(3);
-    expect(screen.getByText('Configured')).toBeInTheDocument();
+    expect(screen.getByLabelText('Storage provider status: OK')).toBeVisible();
+    expect(screen.getByText('local verified')).toBeVisible();
     expect(screen.getByText('Degraded')).toBeInTheDocument();
     expect(screen.getByText('Down')).toBeInTheDocument();
+  });
+
+  it('shows configured but unverified Cloudinary connectivity as Unverified', () => {
+    useSystemHealthMock.mockReturnValue(
+      query({
+        data: {
+          ...SNAPSHOT,
+          tiles: SNAPSHOT.tiles.map((tile) =>
+            tile.name === 'Storage provider'
+              ? {
+                  ...tile,
+                  status: 'degraded',
+                  detail: 'cloudinary configured; connectivity unverified',
+                }
+              : tile
+          ),
+        },
+      })
+    );
+    render(<AdminHealthPage />);
+
+    expect(screen.getByLabelText('Storage provider connectivity: Unverified')).toBeVisible();
+    expect(screen.queryByText('Config issue')).not.toBeInTheDocument();
     expect(
       screen.getByText(
-        'Local provider configured. Configuration check only; live storage connectivity was not checked.'
+        'cloudinary configured; connectivity unverified. Live storage connectivity was not checked.'
       )
-    ).toBeInTheDocument();
+    ).toBeVisible();
+  });
+
+  it('reserves Config issue for incomplete Cloudinary credentials', () => {
+    useSystemHealthMock.mockReturnValue(
+      query({
+        data: {
+          ...SNAPSHOT,
+          tiles: SNAPSHOT.tiles.map((tile) =>
+            tile.name === 'Storage provider'
+              ? {
+                  ...tile,
+                  status: 'degraded',
+                  detail: 'cloudinary configuration incomplete',
+                }
+              : tile
+          ),
+        },
+      })
+    );
+    render(<AdminHealthPage />);
+
+    expect(screen.getByLabelText('Storage provider configuration: Config issue')).toBeVisible();
+    expect(screen.getByText('Config issue')).toBeVisible();
   });
 
   it('renders the release version', () => {

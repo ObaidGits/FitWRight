@@ -101,19 +101,26 @@ function TileCard({ tile }: { tile: HealthTile }) {
   const presentation = STATUS_PRESENTATION[tile.status] ?? STATUS_PRESENTATION.down;
   const Icon = presentation.icon;
   const isQueueTile = tile.name === 'KVStore/Queue';
-  const storageDetailIsConfiguration =
-    tile.name === 'Storage provider' &&
-    tile.detail != null &&
-    /provider|configur/i.test(tile.detail);
+  const isStorageTile = tile.name === 'Storage provider';
+  const storageConfigurationIncomplete =
+    isStorageTile && tile.detail === 'cloudinary configuration incomplete';
+  const storageConnectivityUnverified =
+    isStorageTile && tile.detail?.includes('connectivity unverified');
   const displayName = tile.name;
-  let statusLabel = presentation.label;
-  if (storageDetailIsConfiguration) {
-    statusLabel = tile.status === 'ok' ? 'Configured' : 'Config issue';
-  }
+  const statusLabel = storageConfigurationIncomplete
+    ? 'Config issue'
+    : storageConnectivityUnverified
+      ? 'Unverified'
+      : presentation.label;
+  const statusKind = storageConfigurationIncomplete
+    ? 'configuration'
+    : storageConnectivityUnverified
+      ? 'connectivity'
+      : 'status';
   const detail = isQueueTile
     ? (tile.detail ?? 'KV round-trip and indexed queue statistics verified.')
-    : storageDetailIsConfiguration
-      ? `${tile.detail}. Configuration check only; live storage connectivity was not checked.`
+    : storageConnectivityUnverified
+      ? `${tile.detail}. Live storage connectivity was not checked.`
       : tile.detail;
 
   return (
@@ -127,7 +134,7 @@ function TileCard({ tile }: { tile: HealthTile }) {
         {/* Text status label in addition to color (Req 3.8). */}
         <Badge
           variant={presentation.badge}
-          aria-label={`${displayName} ${storageDetailIsConfiguration ? 'configuration' : 'status'}: ${statusLabel}`}
+          aria-label={`${displayName} ${statusKind}: ${statusLabel}`}
         >
           <Icon className="h-3.5 w-3.5" aria-hidden />
           {statusLabel}

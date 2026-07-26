@@ -116,3 +116,42 @@ def test_signature_is_deterministic_and_sorted():
     sig1 = p._sign({"b": "2", "a": "1"})
     sig2 = p._sign({"a": "1", "b": "2"})
     assert sig1 == sig2  # order-independent (params sorted before signing)
+
+
+def test_factory_fails_closed_for_incomplete_cloudinary(tmp_path):
+    from types import SimpleNamespace
+
+    from app.storage.provider import build_storage_provider
+
+    config = SimpleNamespace(
+        storage_provider="cloudinary",
+        cloudinary_configured=False,
+        cloudinary_cloud_name="cloud",
+        cloudinary_api_key="",
+        cloudinary_api_secret="secret",
+        data_dir=tmp_path,
+        frontend_base_url="http://localhost:3000",
+    )
+
+    with pytest.raises(RuntimeError, match="requires complete CLOUDINARY"):
+        build_storage_provider(config)
+
+
+def test_factory_builds_cloudinary_when_configuration_is_complete(tmp_path):
+    from types import SimpleNamespace
+
+    from app.storage.provider import build_storage_provider
+
+    config = SimpleNamespace(
+        storage_provider="cloudinary",
+        cloudinary_configured=True,
+        cloudinary_cloud_name="cloud",
+        cloudinary_api_key="key",
+        cloudinary_api_secret="secret",
+        data_dir=tmp_path,
+        frontend_base_url="http://localhost:3000",
+    )
+
+    provider = build_storage_provider(config)
+
+    assert isinstance(provider, CloudinaryStorageProvider)
