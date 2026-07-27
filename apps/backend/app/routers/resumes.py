@@ -2771,7 +2771,13 @@ def _pdf_content_disposition(resume: dict, resume_id: str, kind: str) -> dict[st
     blob downloads override this via their own ``download`` attribute; this is
     the correct name for anyone hitting the URL directly.
     """
-    kind_label = "Cover_Letter" if kind == "cover-letter" else "Resume"
+    kind_label = (
+        "Cover_Letter"
+        if kind == "cover-letter"
+        else "Interview_Prep"
+        if kind == "interview-prep"
+        else "Resume"
+    )
     processed = resume.get("processed_data")
     personal = processed.get("personalInfo") if isinstance(processed, dict) else None
     personal = personal if isinstance(personal, dict) else {}
@@ -3743,6 +3749,71 @@ async def download_cover_letter_pdf(
         pdf_bytes = await render_resume_pdf(
             url, pageSize, selector=".cover-letter-print"
         )
+    except PDFRenderError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+    if cache is not None and cache_key is not None:
+        await cache.set(cache_key, pdf_bytes)
+
+    return Response(content=pdf_bytes, media_type="application/pdf", headers=headers)
+
+
+@router.get("/{resume_id}/interview-prep/pdf")
+async def download_interview_prep_pdf(
+    resume_id: str,
+    pageSize: str = Query("A4", pattern="^(A4|LETTER)$"),
+    lang: str | None = Query(None, pattern="^[a-z]{2}(-[A-Z]{2})?$"),
+    user_id: str = Depends(get_effective_user_id),
+) -> Response:
+    """Generate a PDF for interview preparation using headless Chromium.
+
+    Args:
+        resume_id: The ID of the resume the interview prep was generated for
+        pageSize: A4 or LETTER
+        lang: locale used for print page translations
+    """
+    resume = await db.get_resume(user_id, resume_id)
+    if not resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+
+    interview_prep = _parse_interview_prep(resume.get("interview_prep"), resume_id=resume_id)
+    if interview_prep is None:
+        raise HTTPException(
+            status_code=404, detail="No interview preparation found for this resume"
+        )
+
+    base_params = f"pageSize={pageSize}"
+    if lang:
+        base_params = f"{base_params}&lang={lang}"
+
+    # Reuse an identical previously-rendered PDF (keyed on page size + locale +
+    # the interview prep content) so repeat downloads are instant.
+    from app.pdf_cache import get_pdf_cache, make_pdf_cache_key
+
+    headers = _pdf_content_disposition(resume, resume_id, "interview-prep")
+    cache = get_pdf_cache()
+    cache_key = (
+        make_pdf_cache_key(
+            kind="interview-prep",
+            resume_id=resume_id,
+            params=base_params,
+            content=interview_prep.model_dump(mode="json"),
+        )
+        if cache is not None
+        else None
+    )
+    if cache is not None and cache_key is not None:
+        cached = await cache.get(cache_key)
+        if cached is not None:
+            return Response(content=cached, media_type="application/pdf", headers=headers)
+
+    url = f"{settings.frontend_base_url}/print/interview-prep/{resume_id}?{base_params}"
+    from app.pdf_token import make_print_token
+    print_token = make_print_token(user_id, resume_id)
+    url = f"{url}&print_token={quote(print_token, safe='')}"
+
+    try:
+        pdf_bytes = await render_resume_pdf(url, pageSize, selector=".interview-prep-print")
     except PDFRenderError as e:
         raise HTTPException(status_code=503, detail=str(e))
 

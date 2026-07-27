@@ -257,6 +257,54 @@ export function segmentTextByKeywords(
 }
 
 /**
+ * Minimal resume shape this module needs - kept structurally compatible with
+ * (but independent of) `components/dashboard/resume-component`'s `ResumeData`
+ * so this file has no import-cycle risk.
+ */
+export interface KeywordMatchResumeData {
+  summary?: string;
+  workExperience?: Array<{ title?: string; company?: string; description?: string[] }>;
+  education?: Array<{ degree?: string; institution?: string }>;
+  personalProjects?: Array<{ name?: string; role?: string; description?: string[] }>;
+  additional?: {
+    technicalSkills?: string[];
+    languages?: string[];
+    certificationsTraining?: string[];
+    awards?: string[];
+  };
+}
+
+/**
+ * Flatten every keyword-bearing field of a resume into one string for
+ * matching. Single source of truth for what counts as "resume text" so the
+ * resume-page keyword match and the tailor-flow keyword match can never
+ * silently drift apart (e.g. one scanning fewer sections than the other).
+ */
+export function buildResumeTextForMatch(data: KeywordMatchResumeData): string {
+  const parts: string[] = [];
+  if (data.summary) parts.push(data.summary);
+  data.workExperience?.forEach((e) => {
+    if (e.title) parts.push(e.title);
+    if (e.company) parts.push(e.company);
+    e.description?.forEach((d) => parts.push(d));
+  });
+  data.education?.forEach((e) => {
+    if (e.degree) parts.push(e.degree);
+    if (e.institution) parts.push(e.institution);
+  });
+  data.personalProjects?.forEach((p) => {
+    if (p.name) parts.push(p.name);
+    if (p.role) parts.push(p.role);
+    p.description?.forEach((d) => parts.push(d));
+  });
+  data.additional?.technicalSkills?.forEach((s) => parts.push(s));
+  data.additional?.languages?.forEach((l) => parts.push(l));
+  data.additional?.certificationsTraining?.forEach((c) => parts.push(c));
+  data.additional?.awards?.forEach((a) => parts.push(a));
+  return parts.join(' ');
+}
+
+/**
  * Calculate match statistics between resume text and JD keywords.
  */
 export function calculateMatchStats(

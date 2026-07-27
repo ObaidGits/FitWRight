@@ -815,6 +815,34 @@ export async function downloadCoverLetterPdf(
   return await res.blob();
 }
 
+/** Downloads interview prep as PDF */
+export function getInterviewPrepPdfUrl(
+  resumeId: string,
+  pageSize: 'A4' | 'LETTER' = 'A4',
+  locale?: Locale
+): string {
+  const normalizedId = normalizeResumeId(resumeId);
+  const params = new URLSearchParams({ pageSize });
+  if (locale) {
+    params.set('lang', locale);
+  }
+  return `${API_BASE}/resumes/${encodeURIComponent(normalizedId)}/interview-prep/pdf?${params.toString()}`;
+}
+
+export async function downloadInterviewPrepPdf(
+  resumeId: string,
+  pageSize: 'A4' | 'LETTER' = 'A4',
+  locale?: Locale
+): Promise<Blob> {
+  const url = getInterviewPrepPdfUrl(resumeId, pageSize, locale);
+  const res = await apiFetch(url);
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Failed to download interview preparation (status ${res.status}): ${text}`);
+  }
+  return await res.blob();
+}
+
 /** Generates a cover letter on-demand for a tailored resume.
  *
  * By default the backend returns any previously saved cover letter without a

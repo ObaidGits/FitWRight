@@ -24,12 +24,22 @@ import Download from 'lucide-react/dist/esm/icons/download';
 import Eye from 'lucide-react/dist/esm/icons/eye';
 import ArrowRight from 'lucide-react/dist/esm/icons/arrow-right';
 import TrendingUp from 'lucide-react/dist/esm/icons/trending-up';
+import FileText from 'lucide-react/dist/esm/icons/file-text';
+import Mail from 'lucide-react/dist/esm/icons/mail';
+import MessageSquareText from 'lucide-react/dist/esm/icons/message-square-text';
+import CircleCheck from 'lucide-react/dist/esm/icons/circle-check';
+import Copy from 'lucide-react/dist/esm/icons/copy';
+import Check from 'lucide-react/dist/esm/icons/check';
+import Loader2 from 'lucide-react/dist/esm/icons/loader-2';
 
 import { Button } from '@/components/atelier/button';
 import { Card } from '@/components/atelier/card';
 import { Badge } from '@/components/atelier/badge';
 import { Input, Textarea } from '@/components/atelier/input';
 import { Label } from '@/components/atelier/label';
+import { Switch } from '@/components/atelier/misc';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/atelier/tabs';
+import { ExportButton } from '@/components/resume/export-button';
 import {
   Select,
   SelectTrigger,
@@ -62,10 +72,22 @@ import {
   confirmImproveResume,
   analyzeJob,
   fetchResume,
+  generateCoverLetter,
+  generateOutreachMessage,
+  generateInterviewPrep,
   type JobAnalyzeResult,
   type TailorStageName,
 } from '@/lib/api/resume';
-import type { ImprovedResult, ResumeFieldDiff } from '@/components/common/resume_previewer_context';
+import {
+  extractKeywords,
+  calculateMatchStats,
+  buildResumeTextForMatch,
+} from '@/lib/utils/keyword-matcher';
+import type {
+  ImprovedResult,
+  ResumeFieldDiff,
+  InterviewPrepData,
+} from '@/components/common/resume_previewer_context';
 import { ResumeDocument } from '@/components/resume/resume-document';
 import type { ResumeData } from '@/components/dashboard/resume-component';
 import { type TemplateSettings } from '@/lib/types/template-settings';
@@ -136,7 +158,53 @@ interface TailorDraft {
   promptId?: string;
   resumeId?: string;
   templateId?: string;
+  extras?: ExtrasState;
 }
+
+/** Which companion documents to also generate once the tailored resume is
+ *  saved. Toggled by the user before/while reviewing - never auto-run, so
+ *  every extra LLM call stays an explicit, cost-conscious choice. */
+interface ExtrasState {
+  coverLetter: boolean;
+  outreach: boolean;
+  interviewPrep: boolean;
+  keywordMatch: boolean;
+}
+
+const DEFAULT_EXTRAS: ExtrasState = {
+  coverLetter: false,
+  outreach: false,
+  interviewPrep: false,
+  keywordMatch: false,
+};
+
+type ExtraKind = keyof ExtrasState;
+
+/** Per-extra generation status, keyed the same as {@link ExtrasState}. */
+type ExtraStatus = 'idle' | 'pending' | 'done' | 'error';
+
+const EXTRA_META: Record<ExtraKind, { label: string; Icon: typeof FileText; hint: string }> = {
+  coverLetter: {
+    label: 'Cover letter',
+    Icon: FileText,
+    hint: 'A matching cover letter for this job.',
+  },
+  outreach: {
+    label: 'Outreach message',
+    Icon: Mail,
+    hint: 'A short note for reaching out to a recruiter.',
+  },
+  interviewPrep: {
+    label: 'Interview prep',
+    Icon: MessageSquareText,
+    hint: 'Likely questions, talking points, and skill-gap coaching.',
+  },
+  keywordMatch: {
+    label: 'Keyword match',
+    Icon: Target,
+    hint: 'Check which of the job\u2019s keywords your tailored resume covers.',
+  },
+};
 
 type StageStatus = 'pending' | 'active' | 'done';
 
@@ -451,6 +519,107 @@ export default function TailorPage() {
   // it subordinate to the anti-fabrication rules.
   const [customInstructions, setCustomInstructions] = React.useState('');
   const CUSTOM_INSTRUCTIONS_MAX = 2000;
+
+  // Companion-document toggles (Task: bring cover letter / outreach / interview
+  // prep / keyword match into the tailor flow itself). Off by default - each
+  // is an extra LLM call, so it's opt-in per the cost-consent principle.
+  const [extras, setExtras] = React.useState<ExtrasState>(DEFAULT_EXTRAS);
+  const [extraStatus, setExtraStatus] = React.useState<Record<ExtraKind, ExtraStatus>>({
+    coverLetter: 'idle',
+    outreach: 'idle',
+    interviewPrep: 'idle',
+    keywordMatch: 'idle',
+  });
+  const [keywordMatchJd, setKeywordMatchJd] = React.useState<string | null>(null);
+  const [coverLetterText, setCoverLetterText] = React.useState<string | null>(null);
+  const [outreachText, setOutreachText] = React.useState<string | null>(null);
+  const [interviewPrepData, setInterviewPrepData] = React.useState<InterviewPrepData | null>(null);
+  // The saved resume id + a "saved" sub-state (distinct from `phase`, which
+  // stays 'review' so the preview pane keeps showing the tailored document).
+  // Set once Accept & save completes when at least one extra was requested -
+  // this is what keeps the user ON the tailor page to see the results instead
+  // of bouncing to /applications.
+  const [savedResumeId, setSavedResumeId] = React.useState<string | null>(null);
+  const [activeExtraTab, setActiveExtraTab] = React.useState<ExtraKind>('coverLetter');
+
+  function toggleExtra(kind: ExtraKind, value: boolean) {
+    setExtras((prev) => {
+      const next = { ...prev, [kind]: value };
+      saveDraft({ extras: next });
+      return next;
+    });
+  }
+
+  /** Run every toggled-on extra against the newly saved tailored resume.
+   *  Independent and best-effort per extra - one failing (e.g. rate limit)
+   *  never blocks the others or the save the user already completed. */
+  async function runSelectedExtras(newResumeId: string) {
+    const jobs: Array<Promise<void>> = [];
+    if (extras.coverLetter) {
+      setExtraStatus((s) => ({ ...s, coverLetter: 'pending' }));
+      jobs.push(
+        generateCoverLetter(newResumeId)
+          .then((content) => {
+            setCoverLetterText(content);
+            setExtraStatus((s) => ({ ...s, coverLetter: 'done' }));
+          })
+          .catch(() => setExtraStatus((s) => ({ ...s, coverLetter: 'error' })))
+      );
+    }
+    if (extras.outreach) {
+      setExtraStatus((s) => ({ ...s, outreach: 'pending' }));
+      jobs.push(
+        generateOutreachMessage(newResumeId)
+          .then((content) => {
+            setOutreachText(content);
+            setExtraStatus((s) => ({ ...s, outreach: 'done' }));
+          })
+          .catch(() => setExtraStatus((s) => ({ ...s, outreach: 'error' })))
+      );
+    }
+    if (extras.interviewPrep) {
+      setExtraStatus((s) => ({ ...s, interviewPrep: 'pending' }));
+      jobs.push(
+        generateInterviewPrep(newResumeId)
+          .then((data) => {
+            setInterviewPrepData(data);
+            setExtraStatus((s) => ({ ...s, interviewPrep: 'done' }));
+          })
+          .catch(() => setExtraStatus((s) => ({ ...s, interviewPrep: 'error' })))
+      );
+    }
+    if (extras.keywordMatch) {
+      // No LLM call needed - the job description we already hold is enough
+      // to compute a client-side match against the tailored resume text.
+      setKeywordMatchJd(jd);
+      setExtraStatus((s) => ({ ...s, keywordMatch: 'done' }));
+    }
+    if (jobs.length) await Promise.allSettled(jobs);
+  }
+
+  /** Retry a single failed extra (e.g. after a transient rate-limit) without
+   *  re-running the others. */
+  async function retryExtra(kind: ExtraKind) {
+    if (!savedResumeId) return;
+    if (kind === 'keywordMatch') {
+      setKeywordMatchJd(jd);
+      setExtraStatus((s) => ({ ...s, keywordMatch: 'done' }));
+      return;
+    }
+    setExtraStatus((s) => ({ ...s, [kind]: 'pending' }));
+    try {
+      if (kind === 'coverLetter') {
+        setCoverLetterText(await generateCoverLetter(savedResumeId, true));
+      } else if (kind === 'outreach') {
+        setOutreachText(await generateOutreachMessage(savedResumeId, true));
+      } else if (kind === 'interviewPrep') {
+        setInterviewPrepData(await generateInterviewPrep(savedResumeId, true));
+      }
+      setExtraStatus((s) => ({ ...s, [kind]: 'done' }));
+    } catch {
+      setExtraStatus((s) => ({ ...s, [kind]: 'error' }));
+    }
+  }
   // Presentation template for the tailored result: drives the WYSIWYG preview,
   // the downloaded PDF, and is persisted on save. Seeded from the user's
   // preferred template so most users never need to touch it. Affects layout
@@ -538,10 +707,10 @@ export default function TailorPage() {
   const [phase, setPhase] = React.useState<Phase>('input');
   const [result, setResult] = React.useState<ImprovedResult['data'] | null>(null);
   const [jobId, setJobId] = React.useState('');
-  // Default the change diff to EXPANDED: the list of edits is the core trust
-  // artifact ("grounded in your resume - nothing invented"), so it should be
-  // visible on arrival, not hidden behind a disclosure.
-  const [showDetail, setShowDetail] = React.useState(true);
+  // Collapsed by default to keep the review step compact - the change count
+  // and the "grounded in your resume" note are visible either way; the full
+  // word-by-word diff is one click away via "Expand details".
+  const [showDetail, setShowDetail] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [downloading, setDownloading] = React.useState(false);
   const [editing, setEditing] = React.useState(false);
@@ -664,6 +833,7 @@ export default function TailorPage() {
       promptId: promptId || undefined,
       resumeId: resumeId || undefined,
       templateId: selectedTemplateId,
+      extras,
       ...overrides,
     });
   };
@@ -994,9 +1164,22 @@ export default function TailorPage() {
     setConfirmingDiscard(false);
     setSaving(true);
     try {
-      await confirmPreview();
-      toast({ title: 'Tailored resume saved', variant: 'success' });
-      router.push('/applications');
+      const newResumeId = await confirmPreview();
+      const hasExtras = extras.coverLetter || extras.outreach || extras.interviewPrep;
+      if (newResumeId && hasExtras) {
+        // Stay on this page so the requested extras render here once ready,
+        // instead of bouncing to /applications and hiding the result.
+        setSavedResumeId(newResumeId);
+        const firstOn = (['coverLetter', 'outreach', 'interviewPrep'] as ExtraKind[]).find(
+          (k) => extras[k]
+        );
+        if (firstOn) setActiveExtraTab(firstOn);
+        toast({ title: 'Tailored resume saved', variant: 'success' });
+        void runSelectedExtras(newResumeId);
+      } else {
+        toast({ title: 'Tailored resume saved', variant: 'success' });
+        router.push('/applications');
+      }
     } catch (e) {
       toast({
         title: toMessage(e, 'Could not save your tailored resume. Please try again.'),
@@ -1024,6 +1207,11 @@ export default function TailorPage() {
         return;
       }
       toast({ title: 'Saved - opening the editor', variant: 'success' });
+      if (extras.coverLetter || extras.outreach || extras.interviewPrep) {
+        // The editor page has its own cards for these - just kick generation
+        // off in the background so it's already in progress once we land there.
+        void runSelectedExtras(newId);
+      }
       router.push(`/resumes/${newId}`);
     } catch (e) {
       toast({
@@ -1077,6 +1265,9 @@ export default function TailorPage() {
           variant: 'error',
         });
         return;
+      }
+      if (extras.coverLetter || extras.outreach || extras.interviewPrep) {
+        void runSelectedExtras(newId);
       }
       try {
         const blob = await downloadResumePdf(newId, templateSettings);
@@ -1304,6 +1495,7 @@ export default function TailorPage() {
                       setTemplateSettings(templateToSettings(t));
                     }
                   }
+                  if (d.extras) setExtras(d.extras);
                   // Reveal the Options panel so restored Extra Instructions /
                   // style / template are actually visible (they live behind the
                   // disclosure, otherwise a restore looks like it did nothing).
@@ -1567,6 +1759,34 @@ export default function TailorPage() {
                       the AI won&apos;t invent experience on its own.
                     </p>
                   </div>
+
+                  <div className="space-y-1.5">
+                    <Label>Also generate</Label>
+                    <div className="grid gap-1.5 sm:grid-cols-2">
+                      {(Object.keys(EXTRA_META) as ExtraKind[]).map((kind) => {
+                        const meta = EXTRA_META[kind];
+                        return (
+                          <label
+                            key={kind}
+                            htmlFor={`extra-${kind}`}
+                            title={meta.hint}
+                            className="flex items-center justify-between gap-2 rounded-[var(--radius-at-md)] border border-[var(--border)] px-2.5 py-2 text-sm"
+                          >
+                            <span className="flex items-center gap-2">
+                              <meta.Icon className="h-3.5 w-3.5 shrink-0 text-[var(--muted-foreground)]" />
+                              {meta.label}
+                            </span>
+                            <Switch
+                              id={`extra-${kind}`}
+                              checked={extras[kind]}
+                              onCheckedChange={(v) => toggleExtra(kind, v)}
+                              aria-label={`Also generate ${meta.label.toLowerCase()}`}
+                            />
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -1755,25 +1975,60 @@ export default function TailorPage() {
 
           {/* Review - results render inline below */}
           {phase === 'review' && result && (
-            <div className="space-y-4">
+            <div className="space-y-3">
               {/* The tailored resume and its primary actions (save / download /
               edit / discard) live in the sticky preview pane on the right. Here
               on the left we surface the metrics and the change list. On narrow
               screens the pane stacks below this column. */}
-              <Card className="flex items-center gap-3 p-4">
-                <ShieldCheck className="h-5 w-5 shrink-0 text-[var(--at-success)]" />
-                <div>
-                  <p className="text-sm font-medium">Your tailored resume is ready</p>
-                  <p className="text-xs text-[var(--muted-foreground)]">
-                    Review it in the preview, then save or download it from there.
-                  </p>
-                </div>
+              <Card className="flex items-center gap-2.5 p-3">
+                <ShieldCheck className="h-4 w-4 shrink-0 text-[var(--at-success)]" />
+                <p className="text-sm font-medium">
+                  {savedResumeId
+                    ? 'Saved - your requested extras are generating below'
+                    : 'Your tailored resume is ready - review it in the preview, then save'}
+                </p>
+                {savedResumeId && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="ml-auto shrink-0"
+                    onClick={() => router.push('/applications')}
+                  >
+                    Go to Applications
+                  </Button>
+                )}
               </Card>
+
+              {(extras.coverLetter ||
+                extras.outreach ||
+                extras.interviewPrep ||
+                extras.keywordMatch) && (
+                <CompanionDocuments
+                  extras={extras}
+                  extraStatus={extraStatus}
+                  coverLetterText={coverLetterText}
+                  outreachText={outreachText}
+                  interviewPrepData={interviewPrepData}
+                  savedResumeId={savedResumeId}
+                  personalInfo={
+                    (toResumeData(result.resume_preview).personalInfo ?? {}) as {
+                      name?: string;
+                      title?: string;
+                    }
+                  }
+                  keywordMatchJd={keywordMatchJd}
+                  resumeDataForMatch={toResumeData(result.resume_preview)}
+                  activeTab={activeExtraTab}
+                  onTabChange={setActiveExtraTab}
+                  onRetry={retryExtra}
+                  saving={saving && !savedResumeId}
+                />
+              )}
 
               {/* A/B: a prior attempt is available (user regenerated). Let them
               restore the better one instead of losing it. */}
               {prevResult && (
-                <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
+                <Card className="flex flex-wrap items-center justify-between gap-3 p-3">
                   <p className="text-sm text-[var(--muted-foreground)]">
                     You have a previous attempt
                     {prevResult.ats_score
@@ -1795,7 +2050,7 @@ export default function TailorPage() {
               {/* Before -> after: quantify what tailoring changed. Shown when the
               user analyzed first (fit delta) or regenerated (score delta). */}
               {ats && (preFit || prevScore != null) && (
-                <Card className="flex flex-wrap items-center gap-x-6 gap-y-2 p-4">
+                <Card className="flex flex-wrap items-center gap-x-6 gap-y-2 p-3">
                   <p className="flex items-center gap-1.5 text-sm font-medium">
                     <TrendingUp className="h-4 w-4 text-[var(--at-success)]" />
                     {prevScore != null ? 'Since your last attempt' : 'What tailoring improved'}
@@ -1838,7 +2093,7 @@ export default function TailorPage() {
               did - never internal diff diagnostics - so an addition is never
               silently dropped and the message is always relevant. */}
               {result.instruction_notes && result.instruction_notes.length > 0 && (
-                <Card className="space-y-1.5 border-[var(--at-warning)]/40 bg-[var(--at-warning)]/8 p-4">
+                <Card className="space-y-1.5 border-[var(--at-warning)]/40 bg-[var(--at-warning)]/8 p-3">
                   <p className="text-sm font-medium">Notes on your instructions</p>
                   <ul className="list-disc space-y-0.5 pl-5 text-xs text-[var(--muted-foreground)]">
                     {result.instruction_notes.map((w, i) => (
@@ -1849,42 +2104,53 @@ export default function TailorPage() {
               )}
 
               {ats && (
-                <Card className="flex items-center gap-5 p-5">
-                  <ScoreRing score={ats.overall_score} />
-                  <div className="flex-1 space-y-2">
-                    <p className="flex items-center gap-1.5 text-sm font-medium">
-                      Match score
-                      <Explain label="What is the match score?">
-                        An estimate of how well this tailored resume aligns with the job
-                        description, combining keyword match, skills coverage, and section
-                        completeness. Higher is better - aim for 75+. It is guidance, not a
-                        guarantee of how a specific ATS will parse your resume.
-                      </Explain>
-                    </p>
-                    <div className="grid grid-cols-3 gap-2 text-xs">
-                      <SubScore label="Keywords" value={ats.sub_scores.keyword_match} />
-                      <SubScore label="Skills" value={ats.sub_scores.skills_coverage} />
-                      <SubScore label="Sections" value={ats.sub_scores.section_completeness} />
+                <Card className="space-y-3 p-4">
+                  <div className="flex items-center gap-4">
+                    <ScoreRing score={ats.overall_score} />
+                    <div className="flex-1 space-y-1.5">
+                      <p className="flex items-center gap-1.5 text-sm font-medium">
+                        Match score
+                        <Explain label="What is the match score?">
+                          An estimate of how well this tailored resume aligns with the job
+                          description, combining keyword match, skills coverage, and section
+                          completeness. Higher is better - aim for 75+. It is guidance, not a
+                          guarantee of how a specific ATS will parse your resume.
+                        </Explain>
+                      </p>
+                      <div className="grid grid-cols-3 gap-1.5 text-xs">
+                        <SubScore label="Keywords" value={ats.sub_scores.keyword_match} />
+                        <SubScore label="Skills" value={ats.sub_scores.skills_coverage} />
+                        <SubScore label="Sections" value={ats.sub_scores.section_completeness} />
+                      </div>
                     </div>
                   </div>
-                </Card>
-              )}
-
-              {ats && ats.missing_keywords.length > 0 && (
-                <Card className="p-5">
-                  <p className="mb-2 text-sm font-medium">Missing keywords</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {ats.missing_keywords.slice(0, showDetail ? undefined : 10).map((k) => (
-                      <Badge key={k} variant="warning">
-                        {k}
-                      </Badge>
-                    ))}
-                  </div>
+                  {ats.missing_keywords.length > 0 && (
+                    <div className="border-t border-[var(--border)] pt-3">
+                      <p className="mb-1.5 text-xs font-medium text-[var(--foreground)]">
+                        Missing keywords
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {ats.missing_keywords.slice(0, showDetail ? undefined : 8).map((k) => (
+                          <Badge key={k} variant="warning">
+                            {k}
+                          </Badge>
+                        ))}
+                        {!showDetail && ats.missing_keywords.length > 8 && (
+                          <button
+                            onClick={() => setShowDetail(true)}
+                            className="text-xs text-[var(--primary)] hover:underline"
+                          >
+                            +{ats.missing_keywords.length - 8} more
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </Card>
               )}
 
               {diff && (
-                <Card className="p-5">
+                <Card className="p-4">
                   <div className="flex items-center justify-between">
                     <p className="flex items-center gap-1.5 text-sm font-medium">
                       {diff.total_changes} change{diff.total_changes === 1 ? '' : 's'} proposed
@@ -1945,6 +2211,291 @@ function SubScore({ label, value }: { label: string; value: number }) {
     <div className="rounded-[var(--radius-at-md)] bg-[var(--at-surface-2)] p-2 text-center">
       <p className="font-semibold text-[var(--foreground)]">{Math.round(value)}</p>
       <p className="text-[var(--muted-foreground)]">{label}</p>
+    </div>
+  );
+}
+
+/** Small status pill shared by each companion-document tab trigger. */
+function ExtraStatusDot({ status }: { status: ExtraStatus }) {
+  if (status === 'pending') {
+    return <Loader2 className="h-3 w-3 animate-spin text-[var(--muted-foreground)]" />;
+  }
+  if (status === 'done') {
+    return <CircleCheck className="h-3 w-3 text-[var(--at-success)]" />;
+  }
+  if (status === 'error') {
+    return <span className="h-1.5 w-1.5 rounded-full bg-[var(--destructive)]" />;
+  }
+  return null;
+}
+
+/** Placeholder shown inside a companion-document tab before its content has
+ *  arrived: an idle "generates on save" note, a spinner while pending, or a
+ *  retry affordance on error. Declared at module scope (not inline in
+ *  {@link CompanionDocuments}) so it isn't recreated every render. */
+function ExtraPending({
+  kind,
+  status,
+  saving,
+  onRetry,
+}: {
+  kind: ExtraKind;
+  status: ExtraStatus;
+  saving: boolean;
+  onRetry: (kind: ExtraKind) => Promise<void> | void;
+}) {
+  if (!saving && status === 'idle') {
+    return (
+      <p className="py-4 text-center text-xs text-[var(--muted-foreground)]">
+        Generates automatically once you save this resume.
+      </p>
+    );
+  }
+  if (status === 'pending' || (saving && status === 'idle')) {
+    return (
+      <div className="flex items-center justify-center gap-2 py-4 text-xs text-[var(--muted-foreground)]">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating{' '}
+        {EXTRA_META[kind].label.toLowerCase()}…
+      </div>
+    );
+  }
+  if (status === 'error') {
+    return (
+      <div className="flex items-center justify-between gap-2 py-3">
+        <p className="text-xs text-[var(--destructive)]">Could not generate. Try again?</p>
+        <Button variant="outline" size="sm" onClick={() => onRetry(kind)}>
+          <RotateCw className="h-3.5 w-3.5" /> Retry
+        </Button>
+      </div>
+    );
+  }
+  return null;
+}
+
+/**
+ * Compact companion-documents panel for the tailor review step - cover letter,
+ * outreach message, interview prep, and keyword match, all in one small
+ * tabbed card instead of four separate full-height cards. Only the toggles
+ * the user turned on get a tab. Before the resume is saved, each pending tab
+ * shows a short "generates on save" notice instead of a spinner (nothing has
+ * been requested from the backend yet).
+ */
+function CompanionDocuments({
+  extras,
+  extraStatus,
+  coverLetterText,
+  outreachText,
+  interviewPrepData,
+  savedResumeId,
+  personalInfo,
+  keywordMatchJd,
+  resumeDataForMatch,
+  activeTab,
+  onTabChange,
+  onRetry,
+  saving,
+}: {
+  extras: ExtrasState;
+  extraStatus: Record<ExtraKind, ExtraStatus>;
+  coverLetterText: string | null;
+  outreachText: string | null;
+  interviewPrepData: InterviewPrepData | null;
+  savedResumeId: string | null;
+  personalInfo: { name?: string; title?: string };
+  keywordMatchJd: string | null;
+  resumeDataForMatch: ResumeData;
+  activeTab: ExtraKind;
+  onTabChange: (kind: ExtraKind) => void;
+  onRetry: (kind: ExtraKind) => Promise<void> | void;
+  saving: boolean;
+}) {
+  const { toast } = useToast();
+  const [copiedKind, setCopiedKind] = React.useState<ExtraKind | null>(null);
+
+  const enabledKinds = (Object.keys(EXTRA_META) as ExtraKind[]).filter((k) => extras[k]);
+  if (enabledKinds.length === 0) return null;
+  const tab: ExtraKind = enabledKinds.includes(activeTab) ? activeTab : enabledKinds[0];
+
+  async function copyText(kind: ExtraKind, text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedKind(kind);
+      window.setTimeout(() => setCopiedKind((k) => (k === kind ? null : k)), 1500);
+    } catch {
+      toast({ title: 'Could not copy to clipboard', variant: 'error' });
+    }
+  }
+
+  return (
+    <Card className="p-4">
+      <Tabs value={tab} onValueChange={(v) => onTabChange(v as ExtraKind)}>
+        <TabsList className="w-full flex-wrap justify-start">
+          {enabledKinds.map((kind) => {
+            const meta = EXTRA_META[kind];
+            return (
+              <TabsTrigger key={kind} value={kind} className="gap-1.5">
+                <meta.Icon className="h-3.5 w-3.5" />
+                {meta.label}
+                <ExtraStatusDot status={extraStatus[kind]} />
+              </TabsTrigger>
+            );
+          })}
+        </TabsList>
+
+        {extras.coverLetter && (
+          <TabsContent value="coverLetter" className="mt-3">
+            {coverLetterText ? (
+              <div className="space-y-2">
+                <div className="max-h-40 overflow-y-auto whitespace-pre-wrap rounded-[var(--radius-at-md)] border border-[var(--border)] bg-[var(--at-surface-2)] p-3 text-xs leading-relaxed text-[var(--foreground)]">
+                  {coverLetterText}
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => copyText('coverLetter', coverLetterText)}
+                  >
+                    {copiedKind === 'coverLetter' ? (
+                      <Check className="h-3.5 w-3.5" />
+                    ) : (
+                      <Copy className="h-3.5 w-3.5" />
+                    )}
+                    {copiedKind === 'coverLetter' ? 'Copied' : 'Copy'}
+                  </Button>
+                  {savedResumeId && (
+                    <ExportButton
+                      kind="cover-letter"
+                      resumeId={savedResumeId}
+                      label="Download PDF"
+                      name={personalInfo.name}
+                      role={personalInfo.title}
+                    />
+                  )}
+                </div>
+              </div>
+            ) : (
+              <ExtraPending
+                kind="coverLetter"
+                status={extraStatus.coverLetter}
+                saving={saving}
+                onRetry={onRetry}
+              />
+            )}
+          </TabsContent>
+        )}
+
+        {extras.outreach && (
+          <TabsContent value="outreach" className="mt-3">
+            {outreachText ? (
+              <div className="space-y-2">
+                <div className="max-h-32 overflow-y-auto whitespace-pre-wrap rounded-[var(--radius-at-md)] border border-[var(--border)] bg-[var(--at-surface-2)] p-3 text-xs leading-relaxed text-[var(--foreground)]">
+                  {outreachText}
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => copyText('outreach', outreachText)}
+                >
+                  {copiedKind === 'outreach' ? (
+                    <Check className="h-3.5 w-3.5" />
+                  ) : (
+                    <Copy className="h-3.5 w-3.5" />
+                  )}
+                  {copiedKind === 'outreach' ? 'Copied' : 'Copy'}
+                </Button>
+              </div>
+            ) : (
+              <ExtraPending
+                kind="outreach"
+                status={extraStatus.outreach}
+                saving={saving}
+                onRetry={onRetry}
+              />
+            )}
+          </TabsContent>
+        )}
+
+        {extras.interviewPrep && (
+          <TabsContent value="interviewPrep" className="mt-3">
+            {interviewPrepData ? (
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[var(--muted-foreground)]">
+                  <span>{interviewPrepData.resume_questions.length} likely questions</span>
+                  <span>{interviewPrepData.skill_gaps.length} skill gaps</span>
+                  <span>{interviewPrepData.talking_points.length} talking points</span>
+                </div>
+                {savedResumeId && (
+                  <ExportButton
+                    kind="interview-prep"
+                    resumeId={savedResumeId}
+                    label="Download PDF"
+                    name={personalInfo.name}
+                    role={personalInfo.title}
+                  />
+                )}
+              </div>
+            ) : (
+              <ExtraPending
+                kind="interviewPrep"
+                status={extraStatus.interviewPrep}
+                saving={saving}
+                onRetry={onRetry}
+              />
+            )}
+          </TabsContent>
+        )}
+
+        {extras.keywordMatch && (
+          <TabsContent value="keywordMatch" className="mt-3">
+            {keywordMatchJd ? (
+              <KeywordMatchSummary jd={keywordMatchJd} resumeData={resumeDataForMatch} />
+            ) : (
+              <ExtraPending
+                kind="keywordMatch"
+                status={extraStatus.keywordMatch}
+                saving={saving}
+                onRetry={onRetry}
+              />
+            )}
+          </TabsContent>
+        )}
+      </Tabs>
+    </Card>
+  );
+}
+
+/** Inline keyword-match stats for the tailor review step - the same
+ *  client-side comparison the resume page's JdMatchCard does, computed here
+ *  against the freshly tailored preview so the user sees it without leaving
+ *  the tailor flow. No LLM call. */
+function KeywordMatchSummary({ jd, resumeData }: { jd: string; resumeData: ResumeData }) {
+  const keywords = React.useMemo(() => extractKeywords(jd), [jd]);
+  const resumeText = React.useMemo(() => buildResumeTextForMatch(resumeData), [resumeData]);
+  const stats = React.useMemo(
+    () => calculateMatchStats(resumeText, keywords),
+    [resumeText, keywords]
+  );
+  const pct = stats.matchPercentage;
+  const pctTone =
+    pct >= 50
+      ? 'text-[var(--at-success)]'
+      : pct >= 30
+        ? 'text-[var(--at-warning)]'
+        : 'text-[var(--destructive)]';
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+      <span className="inline-flex items-center gap-1.5">
+        <Target className="h-4 w-4 text-[var(--primary)]" />
+        {keywords.size} keywords
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <CircleCheck className="h-4 w-4 text-[var(--at-success)]" />
+        {stats.matchCount} matched
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <span className="text-[var(--muted-foreground)]">Match rate</span>
+        <span className={`text-base font-bold ${pctTone}`}>{pct}%</span>
+      </span>
     </div>
   );
 }

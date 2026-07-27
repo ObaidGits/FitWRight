@@ -33,12 +33,17 @@ export interface ResumeFilenameParts {
   role?: string | null;
   /** Resume id, used only for the last-resort fallback. */
   id?: string | null;
-  kind?: 'resume' | 'cover-letter';
+  kind?: 'resume' | 'cover-letter' | 'interview-prep';
 }
 
 /** Build a short, meaningful `<...>.pdf` filename from the available fields. */
 export function buildResumeFilename(parts: ResumeFilenameParts): string {
-  const kindLabel = parts.kind === 'cover-letter' ? 'Cover_Letter' : 'Resume';
+  const kindLabel =
+    parts.kind === 'cover-letter'
+      ? 'Cover_Letter'
+      : parts.kind === 'interview-prep'
+        ? 'Interview_Prep'
+        : 'Resume';
   const name = slugifyNamePart(parts.name, 40);
   const tail = slugifyNamePart(parts.company, 30) || slugifyNamePart(parts.role, 30);
 

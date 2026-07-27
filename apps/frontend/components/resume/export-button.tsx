@@ -15,13 +15,18 @@ import { Button, type ButtonProps } from '@/components/atelier/button';
 import { useToast } from '@/components/atelier/toast';
 import { useRotatingMessages } from '@/lib/hooks/use-ai-progress';
 import { EXPORT_MESSAGES } from '@/lib/ai-progress-copy';
-import { downloadResumePdf, downloadCoverLetterPdf } from '@/lib/api/resume';
+import {
+  downloadResumePdf,
+  downloadCoverLetterPdf,
+  downloadInterviewPrepPdf,
+} from '@/lib/api/resume';
 import type { TemplateSettings } from '@/lib/types/template-settings';
 import { buildResumeFilename } from '@/lib/resume/filename';
 
 type ExportKind =
   | { kind: 'resume'; resumeId: string; settings?: TemplateSettings; filename?: string }
-  | { kind: 'cover-letter'; resumeId: string; pageSize?: 'A4' | 'LETTER'; filename?: string };
+  | { kind: 'cover-letter'; resumeId: string; pageSize?: 'A4' | 'LETTER'; filename?: string }
+  | { kind: 'interview-prep'; resumeId: string; pageSize?: 'A4' | 'LETTER'; filename?: string };
 
 type ExportButtonProps = ExportKind & {
   label?: string;
@@ -70,7 +75,7 @@ export function ExportButton(props: ExportButtonProps) {
             id: props.resumeId,
             kind: 'resume',
           });
-      } else {
+      } else if (props.kind === 'cover-letter') {
         blob = await downloadCoverLetterPdf(props.resumeId, props.pageSize ?? 'A4');
         filename =
           props.filename ??
@@ -80,6 +85,17 @@ export function ExportButton(props: ExportButtonProps) {
             role: props.role,
             id: props.resumeId,
             kind: 'cover-letter',
+          });
+      } else {
+        blob = await downloadInterviewPrepPdf(props.resumeId, props.pageSize ?? 'A4');
+        filename =
+          props.filename ??
+          buildResumeFilename({
+            name: props.name,
+            company: props.company,
+            role: props.role,
+            id: props.resumeId,
+            kind: 'interview-prep',
           });
       }
       saveBlob(blob, filename);

@@ -23,31 +23,9 @@ import {
   extractKeywords,
   calculateMatchStats,
   segmentTextByKeywords,
+  buildResumeTextForMatch,
 } from '@/lib/utils/keyword-matcher';
 import type { ResumeData } from '@/components/dashboard/resume-component';
-
-function buildResumeText(data: ResumeData): string {
-  const parts: string[] = [];
-  if (data.summary) parts.push(data.summary);
-  data.workExperience?.forEach((e) => {
-    if (e.title) parts.push(e.title);
-    if (e.company) parts.push(e.company);
-    e.description?.forEach((d) => parts.push(d));
-  });
-  data.education?.forEach((e) => {
-    if (e.degree) parts.push(e.degree);
-    if (e.institution) parts.push(e.institution);
-  });
-  data.personalProjects?.forEach((p) => {
-    if (p.name) parts.push(p.name);
-    if (p.role) parts.push(p.role);
-    p.description?.forEach((d) => parts.push(d));
-  });
-  data.additional?.technicalSkills?.forEach((s) => parts.push(s));
-  data.additional?.languages?.forEach((l) => parts.push(l));
-  data.additional?.certificationsTraining?.forEach((c) => parts.push(c));
-  return parts.join(' ');
-}
 
 function HighlightedText({ text, keywords }: { text: string; keywords: Set<string> }) {
   const segments = React.useMemo(() => segmentTextByKeywords(text, keywords), [text, keywords]);
@@ -99,7 +77,7 @@ export function JdMatchCard({
   const [expanded, setExpanded] = React.useState(false);
 
   const keywords = React.useMemo(() => (jd ? extractKeywords(jd) : new Set<string>()), [jd]);
-  const resumeText = React.useMemo(() => buildResumeText(resumeData), [resumeData]);
+  const resumeText = React.useMemo(() => buildResumeTextForMatch(resumeData), [resumeData]);
   const stats = React.useMemo(
     () => calculateMatchStats(resumeText, keywords),
     [resumeText, keywords]
