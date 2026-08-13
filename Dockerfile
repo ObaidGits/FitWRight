@@ -105,8 +105,9 @@ WORKDIR /app/backend
 # Install the exact Python graph from uv.lock into an isolated environment, then
 # bake Chromium into the image so startup never requires outbound network access.
 RUN pip install "uv==0.11.27" \
-    && uv sync --frozen --no-dev --no-editable \
+    && uv sync --frozen --no-dev --no-editable --extra job-discovery \
     && .venv/bin/python -m playwright install chromium \
+    && .venv/bin/python -m patchright install chromium \
     && chmod -R a+rX "${PLAYWRIGHT_BROWSERS_PATH}"
 ENV VIRTUAL_ENV=/app/backend/.venv \
     PATH="/app/backend/.venv/bin:${PATH}"

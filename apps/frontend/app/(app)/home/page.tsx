@@ -28,9 +28,82 @@ import {
   flattenApplications,
 } from '@/features/home/hooks';
 import { useAgenda, flattenAgenda } from '@/features/agenda/hooks';
+import { useApplyQueue } from '@/features/applications/queue-hooks';
+import { useFieldSummary } from '@/features/application-fields/hooks';
 import CalendarClock from 'lucide-react/dist/esm/icons/calendar-clock';
 import CircleCheck from 'lucide-react/dist/esm/icons/circle-check';
 import Circle from 'lucide-react/dist/esm/icons/circle';
+import ListOrdered from 'lucide-react/dist/esm/icons/list-ordered';
+import MessageSquare from 'lucide-react/dist/esm/icons/message-square-text';
+
+/**
+ * The two things that actually block progress: a job waiting in the queue, and a
+ * question an application form asked that nobody has answered.
+ *
+ * Renders nothing when there is neither. An always-present card reading "0 jobs
+ * queued" trains the user to ignore the space where the real prompt will appear.
+ */
+function NextActions() {
+  const queue = useApplyQueue();
+  const answers = useFieldSummary();
+
+  const next = queue.data?.items?.[0];
+  const queued = queue.data?.total ?? 0;
+  const unanswered = answers.data?.needs_answer ?? 0;
+
+  if (!next && unanswered === 0) return null;
+
+  return (
+    <section className="space-y-2">
+      <h2 className="text-sm font-semibold text-[var(--muted-foreground)]">Next up</h2>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {next && (
+          <Card className="flex items-center gap-3 p-4">
+            <ListOrdered className="h-5 w-5 shrink-0 text-[var(--primary)]" aria-hidden="true" />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium">
+                {next.role || 'Untitled role'}
+                {next.company ? ` · ${next.company}` : ''}
+              </p>
+              <p className="text-xs text-[var(--muted-foreground)]">
+                {queued === 1 ? '1 job queued' : `${queued} jobs queued`}
+              </p>
+            </div>
+            <Button asChild size="sm" variant="outline">
+              <Link href="/applications?view=queue">
+                Open queue <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
+          </Card>
+        )}
+
+        {unanswered > 0 && (
+          <Card className="flex items-center gap-3 p-4">
+            <MessageSquare
+              className="h-5 w-5 shrink-0 text-[var(--at-warning)]"
+              aria-hidden="true"
+            />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium">
+                {unanswered === 1
+                  ? '1 question needs an answer'
+                  : `${unanswered} questions need answers`}
+              </p>
+              <p className="text-xs text-[var(--muted-foreground)]">
+                Answer once and every future form fills it.
+              </p>
+            </div>
+            <Button asChild size="sm" variant="outline">
+              <Link href="/answers">
+                Review <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
+          </Card>
+        )}
+      </div>
+    </section>
+  );
+}
 
 /**
  * Onboarding checklist that reflects live setup state: add an AI key -> add a
@@ -227,6 +300,11 @@ export default function HomePage() {
           </Link>
         </Button>
       </div>
+
+      {/* What to do next. Above "continue where you left off" because a queued
+          job and an unanswered question are both blocking work, while a recent
+          resume is only a convenience. */}
+      <NextActions />
 
       {/* Continue where you left off */}
       {mostRecent && (

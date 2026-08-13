@@ -49,6 +49,9 @@ from app.routers import (
     search_router,
     users_router,
     versions_router,
+    discovery_router,
+    application_fields_router,
+    extension_router,
 )
 
 
@@ -118,6 +121,23 @@ async def lifespan(app: FastAPI):
 
     migrate_legacy_keys()
     migrate_legacy_llm_config()
+    # Say something when the extension allowlist looks wrong. A malformed origin
+    # rejects every extension request through CORS and logs nothing, which is
+    # indistinguishable from a broken extension from the user's side.
+    for warning in settings.extension_origin_warnings:
+        logger.warning("%s", warning)
+    # Give older discovery rows the grouping key that collapses duplicate
+    # listings. Idempotent and bounded - only rows missing one are touched - so
+    # this is a no-op on every boot after the first. Without it, deduplication
+    # would only help future searches while the feed the user already has stays
+    # a quarter repeats.
+    try:
+        filled = await db.backfill_group_fingerprints()
+        if filled:
+            logger.info("Backfilled group fingerprints for %d discovery rows", filled)
+    except Exception:
+        # A feed that shows duplicates is a worse feed, not a broken app.
+        logger.exception("Group fingerprint backfill failed; duplicates may remain")
     # Single-user/local: ensure the bootstrap owner exists and claim any owned
     # rows created by ``create_all`` before scoping was threaded (idempotent,
     # zero data loss). Hosted does this via Alembic migration 0004 instead.
@@ -163,6 +183,14 @@ async def lifespan(app: FastAPI):
         if settings.admin_enabled:
             admin_jobs_task = start_admin_jobs(settings.reaper_interval_seconds)
             logger.info("Started internal admin jobs loop")
+
+    # Start discovery background worker if the feature is enabled
+    discovery_task = None
+    if settings.JOB_DISCOVERY:
+        from app.job_discovery.worker import start_discovery_worker
+        discovery_task = start_discovery_worker()
+        logger.info("Started discovery background worker")
+
     yield
     # Shutdown - wrap each cleanup in try-except to ensure all resources are released
     try:
@@ -174,6 +202,13 @@ async def lifespan(app: FastAPI):
         await stop_reaper(reaper_task)
     except Exception as e:
         logger.error(f"Error stopping scheduled jobs: {e}")
+
+    try:
+        if discovery_task and not discovery_task.done():
+            from app.job_discovery.worker import stop_discovery_worker
+            stop_discovery_worker()
+    except Exception as e:
+        logger.error(f"Error stopping discovery worker: {e}")
 
     try:
         # Ensure the background pre-warm isn't mid-launch while we tear down.
@@ -333,6 +368,9 @@ app.include_router(media_router, prefix="/api/v1")
 app.include_router(resume_wizard_router, prefix="/api/v1")
 app.include_router(profile_router, prefix="/api/v1")
 app.include_router(public_profile_router, prefix="/api/v1")
+app.include_router(discovery_router, prefix="/api/v1")
+app.include_router(extension_router, prefix="/api/v1")
+app.include_router(application_fields_router, prefix="/api/v1")
 
 
 @app.get("/")

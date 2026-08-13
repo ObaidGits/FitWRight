@@ -361,6 +361,19 @@ Job Description:
 Candidate Resume (JSON):
 {resume_data}
 
+WHO IS WHO - read this before writing:
+- The resume above belongs to the CANDIDATE. That is the person WRITING this
+  letter, i.e. the sender. Their name is used to sign off, never to greet.
+- The RECIPIENT is the employer from the job description: a hiring manager,
+  recruiter, or hiring team. You are writing TO them.
+- NEVER address the letter to the candidate. Greeting the candidate by their own
+  name is the single worst mistake you can make here.
+
+Salutation rules:
+- If the job description names a specific hiring contact, use "Dear <that name>,".
+- Otherwise use "Dear Hiring Manager," or "Dear <Company> Hiring Team,".
+- Never invent a person's name, and never use a placeholder like "[Name]".
+
 Requirements:
 - 100-150 words maximum
 - 3-4 short paragraphs
@@ -371,7 +384,7 @@ Requirements:
 - Extract company name from job description - do not use placeholders
 - Do NOT invent information not in the resume
 - Tone: Confident peer, not eager applicant
-- Do NOT use em dash ("-") anywhere in the writing/output, even if it exists, remove it
+- Do NOT use an em dash anywhere in the output; rewrite the sentence instead
 
 Output plain text only. No JSON, no markdown formatting."""
 
@@ -385,15 +398,29 @@ Job Description:
 Candidate Resume (JSON):
 {resume_data}
 
+WHO IS WHO - read this before writing:
+- The resume above belongs to the CANDIDATE, who is SENDING this message. Their
+  name signs off; it is never the greeting.
+- You are writing TO someone at the hiring company - a recruiter, hiring manager,
+  or the team named in the job description.
+- NEVER greet the candidate by their own name. "Hi <candidate's name>" means the
+  message is addressed to the person sending it, which is nonsense.
+
+Greeting rules:
+- If the job description names a contact, use "Hi <that first name>,".
+- Otherwise "Hi <Company> team," or "Hi there,".
+- Never invent a name and never leave a placeholder.
+
 Guidelines:
 - 70-100 words maximum (shorter than a cover letter)
 - First sentence: Reference specific detail from job description (team, product, technical challenge) - never open with "I'm reaching out" or "I saw your posting"
 - One sentence on strongest matching qualification with a concrete metric if available
 - End with low-friction ask: "Worth a quick chat?" not "I'd love the opportunity to discuss"
-- Tone: How you'd message a former colleague, not a stranger
+- Tone: warm and direct, as if writing to a peer you have not met - but it IS a
+  stranger at the hiring company, so no false familiarity
 - Do NOT include placeholder brackets
 - Do NOT use phrases like "excited about" or "passionate about"
-- Do NOT use em dash ("-") anywhere in the writing/output, even if it exists, remove it
+- Do NOT use an em dash anywhere in the output; rewrite the sentence instead
 
 Output plain text only. No JSON, no markdown formatting."""
 

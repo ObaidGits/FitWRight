@@ -99,6 +99,26 @@ def new_uid() -> str:
 # ---------------------------------------------------------------------------
 
 
+class ProfileAddress(BaseModel):
+    """A postal address, broken into the parts application forms ask for.
+
+    ``ProfileIdentity.location`` stays as the human-readable one-liner used for
+    display and resume headers. Application forms are different: an ATS asks for
+    city, state and postal code as separate required inputs, and a single
+    "Pune, India" string cannot be split back apart reliably. So the parts are
+    stored as parts, and the one-liner remains derived/independent.
+
+    Lives inside the profile's JSON document, so adding it needs no migration.
+    """
+
+    line1: str = ""
+    line2: str = ""
+    city: str = ""
+    state: str = ""
+    postalCode: str = ""
+    country: str = ""
+
+
 class ProfileIdentity(BaseModel):
     """The "who am I professionally" header read first by every projection."""
 
@@ -129,6 +149,9 @@ class ProfileIdentity(BaseModel):
     phone: str = ""
     location: str = ""
     timezone: str = ""
+    # Structured postal address for application forms, which ask for the parts
+    # separately. ``location`` above stays the display one-liner.
+    address: ProfileAddress = Field(default_factory=ProfileAddress)
     website: str | None = None
     linkedin: str | None = None
     github: str | None = None

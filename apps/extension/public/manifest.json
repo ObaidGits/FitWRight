@@ -1,0 +1,136 @@
+{
+  "manifest_version": 3,
+  "name": "__MSG_extensionName__",
+  "version": "0.2.0",
+  "description": "__MSG_extensionDescription__",
+  "minimum_chrome_version": "110",
+  "permissions": [
+    "storage",
+    "alarms",
+    "notifications",
+    "scripting"
+  ],
+  "host_permissions": [
+    "*://*.greenhouse.io/*",
+    "*://*.lever.co/*",
+    "*://*.myworkdayjobs.com/*",
+    "*://*.ashbyhq.com/*",
+    "*://*.smartrecruiters.com/*",
+    "*://*.indeed.com/*",
+    "*://smartapply.indeed.com/*",
+    "*://*.indeed.co.in/*",
+    "*://*.linkedin.com/*",
+    "*://*.instahyre.com/*",
+    "*://*.hirist.tech/*",
+    "*://*.foundit.in/*",
+    "*://*.workatastartup.com/*",
+    "*://*.ycombinator.com/*",
+    "*://*.naukri.com/*",
+    "*://*.ziprecruiter.com/*",
+    "*://*.glassdoor.com/*",
+    "*://*.glassdoor.co.in/*",
+    "https://www.google.com/search*",
+    "*://*.icims.com/*",
+    "*://*.taleo.net/*",
+    "*://*.oraclecloud.com/*",
+    "*://*.successfactors.com/*",
+    "*://*.successfactors.eu/*",
+    "*://*.sapsf.com/*",
+    "*://*.myworkdaysite.com/*",
+    "*://*.workable.com/*",
+    "*://*.jobvite.com/*",
+    "*://*.breezy.hr/*",
+    "*://*.recruitee.com/*",
+    "*://*.teamtailor.com/*",
+    "*://*.bamboohr.com/*",
+    "http://localhost:3000/*",
+    "http://127.0.0.1:3000/*"
+  ],
+  "background": {
+    "service_worker": "service-worker.js"
+  },
+  "action": {
+    "default_title": "__MSG_actionTitle__",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "options_page": "options.html",
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.greenhouse.io/*",
+        "*://*.lever.co/*",
+        "*://*.myworkdayjobs.com/*",
+        "*://*.ashbyhq.com/*",
+        "*://*.smartrecruiters.com/*",
+        "*://*.indeed.com/*",
+        "*://smartapply.indeed.com/*",
+        "*://*.indeed.co.in/*",
+        "*://*.linkedin.com/*",
+        "*://*.instahyre.com/*",
+        "*://*.hirist.tech/*",
+        "*://*.foundit.in/*",
+        "*://*.workatastartup.com/*",
+        "*://*.ycombinator.com/*",
+        "*://*.naukri.com/*",
+        "*://*.ziprecruiter.com/*",
+        "*://*.glassdoor.com/*",
+        "*://*.glassdoor.co.in/*",
+        "https://www.google.com/search*",
+        "*://*.icims.com/*",
+        "*://*.taleo.net/*",
+        "*://*.oraclecloud.com/*",
+        "*://*.successfactors.com/*",
+        "*://*.successfactors.eu/*",
+        "*://*.sapsf.com/*",
+        "*://*.myworkdaysite.com/*",
+        "*://*.workable.com/*",
+        "*://*.jobvite.com/*",
+        "*://*.breezy.hr/*",
+        "*://*.recruitee.com/*",
+        "*://*.teamtailor.com/*",
+        "*://*.bamboohr.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "css": [
+        "overlay.css"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    },
+    {
+      "matches": [
+        "http://localhost:3000/*",
+        "http://127.0.0.1:3000/*"
+      ],
+      "js": [
+        "bridge.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": false
+    }
+  ],
+  "optional_host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "commands": {
+    "autofill-current-form": {
+      "description": "__MSG_commandAutofill__"
+    }
+  },
+  "default_locale": "en"
+}

@@ -7,6 +7,7 @@ import Plus from 'lucide-react/dist/esm/icons/plus';
 import FileText from 'lucide-react/dist/esm/icons/file-text';
 import Sparkles from 'lucide-react/dist/esm/icons/sparkles';
 import Trash2 from 'lucide-react/dist/esm/icons/trash-2';
+import Pencil from 'lucide-react/dist/esm/icons/pencil';
 import RefreshCw from 'lucide-react/dist/esm/icons/refresh-cw';
 import PenLine from 'lucide-react/dist/esm/icons/pen-line';
 import Search from 'lucide-react/dist/esm/icons/search';
@@ -15,6 +16,10 @@ import { Button } from '@/components/atelier/button';
 import { Card } from '@/components/atelier/card';
 import { Badge } from '@/components/atelier/badge';
 import { Input } from '@/components/atelier/input';
+import { Label } from '@/components/atelier/label';
+import { useQueryClient } from '@tanstack/react-query';
+import { renameResume } from '@/lib/api/resume';
+import { queryKeys } from '@/lib/query/client';
 import {
   Select,
   SelectTrigger,
@@ -61,6 +66,15 @@ export default function ResumesPage() {
   const { data, isLoading, isError, refetch } = useResumeLibrary();
   const del = useDeleteResume();
   const retry = useRetryProcessing();
+  const qc = useQueryClient();
+  // Which resume is mid-reprocess. The action lives in a dropdown that closes on
+  // click, so without this the user clicks and watches nothing happen for a minute.
+  const [retryingId, setRetryingId] = React.useState<string | null>(null);
+  // Renaming. The endpoint and the API client for this already existed and nothing
+  // ever called them, so a tailored resume could only ever carry its generated name.
+  const [toRename, setToRename] = React.useState<ResumeListItem | null>(null);
+  const [newTitle, setNewTitle] = React.useState('');
+  const [renaming, setRenaming] = React.useState(false);
   const { toast } = useToast();
   const [filter, setFilter] = React.useState<Filter>('all');
   const [search, setSearch] = React.useState('');
@@ -102,12 +116,54 @@ export default function ResumesPage() {
     }
   }
 
-  async function onRetry(id: string) {
+  async function confirmRename() {
+    if (!toRename) return;
+    const title = newTitle.trim();
+    if (!title) return;
+    setRenaming(true);
     try {
-      await retry.mutateAsync(id);
-      toast({ title: 'Reprocessing started', variant: 'info' });
-    } catch {
-      toast({ title: 'Retry failed', variant: 'error' });
+      await renameResume(toRename.resume_id, title);
+      await qc.invalidateQueries({ queryKey: queryKeys.resumes });
+      toast({ title: 'Renamed', variant: 'success' });
+      setToRename(null);
+    } catch (err) {
+      toast({
+        title: 'Could not rename it',
+        description: err instanceof Error ? err.message : undefined,
+        variant: 'error',
+      });
+    } finally {
+      setRenaming(false);
+    }
+  }
+
+  async function onRetry(id: string) {
+    // The endpoint is synchronous - it runs the whole AI parse before answering,
+    // which takes tens of seconds. So the card has to show that something is
+    // happening, and the outcome has to come from the response rather than from
+    // the request merely not throwing.
+    setRetryingId(id);
+    try {
+      const result = await retry.mutateAsync(id);
+      if (result.processing_status === 'ready') {
+        toast({ title: 'Resume processed successfully', variant: 'success' });
+      } else {
+        // A failed parse still answers HTTP 200 with the reason. Reporting that as
+        // "started" told the user it had worked when it had not.
+        toast({
+          title: 'Processing failed again',
+          description: result.message ?? 'The AI could not read this resume.',
+          variant: 'error',
+        });
+      }
+    } catch (err) {
+      toast({
+        title: 'Retry failed',
+        description: err instanceof Error ? err.message : undefined,
+        variant: 'error',
+      });
+    } finally {
+      setRetryingId(null);
     }
   }
 
@@ -238,7 +294,9 @@ export default function ResumesPage() {
                 </p>
               </div>
               {r.is_master && <Badge variant="primary">Master</Badge>}
-              <StatusBadge status={r.processing_status} />
+              <StatusBadge
+                status={retryingId === r.resume_id ? 'processing' : r.processing_status}
+              />
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="icon" aria-label="Resume actions">
@@ -257,10 +315,24 @@ export default function ResumesPage() {
                     </Link>
                   </DropdownMenuItem>
                   {r.processing_status === 'failed' && (
-                    <DropdownMenuItem onClick={() => onRetry(r.resume_id)}>
-                      <RefreshCw className="h-4 w-4" /> Retry processing
+                    <DropdownMenuItem
+                      onClick={() => onRetry(r.resume_id)}
+                      disabled={retryingId !== null}
+                    >
+                      <RefreshCw
+                        className={`h-4 w-4 ${retryingId === r.resume_id ? 'animate-spin' : ''}`}
+                      />
+                      {retryingId === r.resume_id ? 'Processing…' : 'Retry processing'}
                     </DropdownMenuItem>
                   )}
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setToRename(r);
+                      setNewTitle(r.title ?? '');
+                    }}
+                  >
+                    <Pencil className="h-4 w-4" /> Rename
+                  </DropdownMenuItem>
                   <DropdownMenuItem destructive onClick={() => setToDelete(r)}>
                     <Trash2 className="h-4 w-4" /> Delete
                   </DropdownMenuItem>
@@ -270,6 +342,42 @@ export default function ResumesPage() {
           ))}
         </div>
       )}
+
+      <Dialog open={!!toRename} onOpenChange={(o) => !o && setToRename(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rename resume</DialogTitle>
+            <DialogDescription>
+              Only the name changes. The resume content is untouched.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            <Label htmlFor="resume-title">Name</Label>
+            <Input
+              id="resume-title"
+              value={newTitle}
+              onChange={(e) => setNewTitle(e.target.value)}
+              maxLength={80}
+              placeholder="Backend Engineer @ Globex"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && newTitle.trim()) void confirmRename();
+              }}
+            />
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">Cancel</Button>
+            </DialogClose>
+            <Button
+              loading={renaming}
+              disabled={!newTitle.trim()}
+              onClick={() => void confirmRename()}
+            >
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!toDelete} onOpenChange={(o) => !o && setToDelete(null)}>
         <DialogContent>

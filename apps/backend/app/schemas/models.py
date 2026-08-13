@@ -934,6 +934,11 @@ class ApiKeyProviderStatus(BaseModel):
     provider: str  # openai, anthropic, google, etc.
     configured: bool
     masked_key: str | None = None  # Shows last 4 chars if configured
+    # True when a key IS stored but cannot be decrypted - the encryption secret
+    # changed between environments. Reported separately because "no key" and
+    # "unreadable key" need different advice, and conflating them made a
+    # configuration mismatch look like the app had deleted the user's key.
+    unreadable: bool = False
 
 
 class ApiKeyStatusResponse(BaseModel):

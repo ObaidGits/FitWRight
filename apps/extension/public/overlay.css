@@ -1,0 +1,34 @@
+/*
+ * Injected into every matched page.
+ *
+ * Deliberately tiny. All component styling lives inside the shadow root created
+ * by src/content/overlay.ts, so it cannot be reached by the host page's CSS and
+ * cannot leak into it. This file styles only the shadow host itself, which does
+ * live in the page's DOM and would otherwise inherit the page's layout rules.
+ */
+
+#fitwright-companion-root {
+  /* Take the element out of the page's layout entirely. */
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  /* Above practically everything; job boards use very high z-indexes for
+     their own sticky headers and apply modals. */
+  z-index: 2147483000;
+  /* The host is a zero-size anchor - clicks must reach the page through it,
+     while the shadow content re-enables pointer events on itself. */
+  pointer-events: none;
+  /* Guard against a page-wide `* { transform }` or `all: unset`. */
+  transform: none;
+  filter: none;
+  contain: layout style;
+}
+
+#fitwright-companion-root * {
+  pointer-events: auto;
+}

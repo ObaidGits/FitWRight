@@ -368,11 +368,24 @@ function AiSection() {
           }
           autoComplete="off"
         />
-        <p className="text-xs text-[var(--muted-foreground)]">
-          {savedKey?.configured
-            ? 'A key is saved for this provider. Leave blank to keep it.'
-            : 'Stored encrypted. Your key is never shown again after saving.'}
-        </p>
+        {savedKey?.unreadable ? (
+          /* The key was not deleted - it cannot be decrypted, because the
+             encryption secret differs from the one that saved it. Saying so is
+             the difference between a one-line fix and believing the app loses
+             your data. */
+          <p className="text-xs text-[var(--at-warning)]">
+            A key is stored for this provider but cannot be read, because the encryption secret
+            changed since it was saved. This usually means{' '}
+            <code className="rounded bg-[var(--secondary)] px-1">APP_ENCRYPTION_KEY</code> differs
+            between how you ran FitWright then and now. Enter the key again to fix it.
+          </p>
+        ) : (
+          <p className="text-xs text-[var(--muted-foreground)]">
+            {savedKey?.configured
+              ? 'A key is saved for this provider. Leave blank to keep it.'
+              : 'Stored encrypted. Your key is never shown again after saving.'}
+          </p>
+        )}
       </div>
       <div className="space-y-1.5">
         <Label>Reasoning effort</Label>

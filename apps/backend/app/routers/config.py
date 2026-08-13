@@ -42,6 +42,7 @@ from app.prompts import (
 from app.prompts.templates import COVER_LETTER_PROMPT, OUTREACH_MESSAGE_PROMPT
 from app.config import (
     get_api_keys_from_config,
+    get_api_key_health,
     patch_api_keys_in_config,
     delete_api_key_from_config,
     clear_all_api_keys,
@@ -544,6 +545,9 @@ async def get_api_keys_status(
     API keys are masked to show only the last 4 characters.
     """
     stored_keys = get_api_keys_from_config(user_id)
+    # Distinguishes "no key" from "key stored but unreadable". Without this the
+    # two look identical and a secret mismatch presents as data loss.
+    health = get_api_key_health(user_id)
 
     providers = []
     for provider in SUPPORTED_PROVIDERS:
@@ -553,6 +557,7 @@ async def get_api_keys_status(
                 provider=provider,
                 configured=bool(key),
                 masked_key=_mask_key_short(key),
+                unreadable=health.get(provider) == "unreadable",
             )
         )
 

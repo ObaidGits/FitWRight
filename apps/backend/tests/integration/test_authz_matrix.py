@@ -174,6 +174,55 @@ OWNED_ENDPOINTS: list[tuple[str, str]] = [
     ("POST", "/api/v1/profile/unpublish"),
     ("GET", "/api/v1/profile/search"),
     ("GET", "/api/v1/profile/analytics"),
+    # discovery
+    ("POST", "/api/v1/discovery/recommend"),
+    ("GET", "/api/v1/discovery/recommend/rid"),
+    ("POST", "/api/v1/discovery/tailor"),
+    ("GET", "/api/v1/discovery/recipes"),
+    ("POST", "/api/v1/discovery/recipes"),
+    ("PUT", "/api/v1/discovery/recipes/sl"),
+    ("DELETE", "/api/v1/discovery/recipes/sl"),
+    # discovery feed (persisted recommendations shown in the Discover tab)
+    ("GET", "/api/v1/discovery/feed"),
+    ("GET", "/api/v1/discovery/feed/unseen"),
+    ("PATCH", "/api/v1/discovery/feed/resid/status"),
+    ("POST", "/api/v1/discovery/feed/cleanup"),
+    ("POST", "/api/v1/discovery/feed/schedule"),
+    ("PATCH", "/api/v1/discovery/feed/schedule"),
+    ("POST", "/api/v1/discovery/feed/schedule/toggle"),
+    ("POST", "/api/v1/discovery/search"),
+    # browser extension (apps/extension) - same kill-switch as discovery
+    ("GET", "/api/v1/extension/ping"),
+    ("GET", "/api/v1/extension/profile"),
+    ("POST", "/api/v1/extension/capture"),
+    ("POST", "/api/v1/extension/scrape"),
+    ("POST", "/api/v1/extension/match"),
+    ("POST", "/api/v1/extension/draft"),
+    ("POST", "/api/v1/extension/applied"),
+    ("GET", "/api/v1/extension/install-info"),
+    ("POST", "/api/v1/extension/board-health"),
+    # the learning loop: what forms asked, and the answers the user gave
+    ("POST", "/api/v1/extension/form-report"),
+    ("POST", "/api/v1/extension/answers"),
+    ("GET", "/api/v1/application-fields"),
+    ("GET", "/api/v1/application-fields/summary"),
+    ("GET", "/api/v1/application-fields/readiness"),
+    ("PATCH", "/api/v1/application-fields/fid"),
+    ("DELETE", "/api/v1/application-fields/fid"),
+    ("POST", "/api/v1/application-fields/fid/merge"),
+    # apply queue, submission records and outcomes
+    ("GET", "/api/v1/applications/queue"),
+    ("POST", "/api/v1/applications/queue/reorder"),
+    ("POST", "/api/v1/applications/queue/check-duplicate"),
+    ("POST", "/api/v1/applications/aid/submission"),
+    ("GET", "/api/v1/applications/aid/submission"),
+    ("GET", "/api/v1/applications/outcomes"),
+    ("GET", "/api/v1/applications/export.csv"),
+    # feed maintenance and per-board health
+    ("POST", "/api/v1/discovery/feed/score"),
+    ("PATCH", "/api/v1/discovery/feed/bulk-status"),
+    ("GET", "/api/v1/discovery/board-health"),
+    ("DELETE", "/api/v1/discovery/data"),
 ]
 
 # Provider-cost actions gated behind email verification (R5.6). These must 403
@@ -229,8 +278,11 @@ class TestAnonymousRejected:
     async def test_anonymous_gets_401(self, auth_env, hosted, method, path):
         async with _client() as client:
             resp = await client.request(method, path, json={})
-        assert resp.status_code == 401, (
-            f"{method} {path} did not reject an anonymous caller with 401 "
+        # Kill-switch-gated routes (e.g. discovery) return 404 when disabled,
+        # which is MORE restrictive than 401 (no capability leak). Both are
+        # valid anonymous rejection.
+        assert resp.status_code in (401, 404), (
+            f"{method} {path} did not reject an anonymous caller with 401/404 "
             f"(got {resp.status_code}); an owned endpoint is missing its "
             f"user_id scope dependency."
         )
@@ -269,8 +321,11 @@ class TestAnonymousRejected:
                 ("{resume_id}", "rid"),
                 ("{job_id}", "jid"),
                 ("{application_id}", "aid"),
+                ("{field_id}", "fid"),
                 ("{provider}", "prov"),
                 ("{session_id}", "sid"),
+                ("{slug}", "sl"),
+                ("{result_id}", "resid"),
             ):
                 out = out.replace(name, dummy)
             return out

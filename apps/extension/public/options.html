@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>FitWright Companion &mdash; Settings</title>
+    <style>
+      :root {
+        --bg: #faf9f6;
+        --card: #ffffff;
+        --fg: #1a1a17;
+        --muted: #6b6b63;
+        --line: #e7e5df;
+        --accent: #4f46e5;
+        --ok: #15803d;
+        --err: #dc2626;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #17160f;
+          --card: #201f1a;
+          --fg: #f2f0ea;
+          --muted: #a5a294;
+          --line: #302e26;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 32px 20px 64px;
+        background: var(--bg);
+        color: var(--fg);
+        font: 14px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      }
+      main { max-width: 640px; margin: 0 auto; }
+      h1 { font-size: 22px; margin: 0 0 4px; }
+      .sub { color: var(--muted); margin: 0 0 24px; }
+
+      section {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 18px;
+        margin-bottom: 16px;
+      }
+      h2 { font-size: 14px; margin: 0 0 4px; }
+      .hint { color: var(--muted); font-size: 12px; margin: 0 0 14px; }
+
+      label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+      input[type='text'],
+      input[type='number'],
+      input[type='url'],
+      select {
+        width: 100%;
+        padding: 8px 10px;
+        font: inherit;
+        color: var(--fg);
+        background: var(--bg);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+      }
+      input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+      .field { margin-bottom: 14px; }
+      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+      .check { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 12px; }
+      .check input { margin: 3px 0 0; }
+      .check label { margin: 0; font-weight: 600; }
+      .check p { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
+
+      table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+      th, td { text-align: left; padding: 6px 8px; font-size: 12px; border-bottom: 1px solid var(--line); }
+      th { color: var(--muted); font-weight: 600; }
+
+      button {
+        padding: 8px 14px;
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+        border-radius: 6px;
+        border: 1px solid var(--line);
+        background: var(--card);
+        color: var(--fg);
+      }
+      button:hover { border-color: var(--accent); color: var(--accent); }
+      button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+      button.primary:hover { filter: brightness(1.08); color: #fff; }
+      button.link { border: 0; background: none; padding: 2px 4px; color: var(--err); }
+
+      .bar {
+        position: fixed;
+        left: 0; right: 0; bottom: 0;
+        display: flex; align-items: center; gap: 12px;
+        padding: 12px 20px;
+        background: var(--card);
+        border-top: 1px solid var(--line);
+      }
+      .bar .inner { max-width: 640px; margin: 0 auto; width: 100%; display: flex; gap: 12px; align-items: center; }
+      #status { font-size: 12px; }
+      #status.ok { color: var(--ok); }
+      #status.err { color: var(--err); }
+      .note { font-size: 12px; color: var(--muted); border-left: 2px solid var(--accent); padding-left: 10px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>FitWright Companion</h1>
+      <p class="sub">Capture jobs, autofill applications, and score your fit from any job page.</p>
+
+      <section>
+        <h2>Connection</h2>
+        <p class="hint">
+          Where FitWright is running. You must be signed in to FitWright in a normal browser tab &mdash;
+          the extension stores no password and uses that session.
+        </p>
+        <div class="field">
+          <label for="apiBaseUrl">FitWright URL</label>
+          <input type="url" id="apiBaseUrl" placeholder="http://localhost:3000" />
+        </div>
+        <button id="test">Test connection</button>
+        <span id="conn-result" class="hint" style="margin-left: 10px"></span>
+      </section>
+
+      <section>
+        <h2>Behaviour</h2>
+        <p class="hint">What the extension does automatically.</p>
+
+        <div class="check">
+          <input type="checkbox" id="showBadge" />
+          <div>
+            <label for="showBadge">Show match score on job pages</label>
+            <p>A floating badge with your resume match, matched skills, and gaps.</p>
+          </div>
+        </div>
+        <div class="check">
+          <input type="checkbox" id="autoCapture" />
+          <div>
+            <label for="autoCapture">Auto-save every job page I open</label>
+            <p>Off by default. When on, any job page you visit is added to your feed.</p>
+          </div>
+        </div>
+        <div class="check">
+          <input type="checkbox" id="trackApplications" />
+          <div>
+            <label for="trackApplications">Mark jobs applied when I submit</label>
+            <p>Detects the submission and updates the job's status in your pipeline.</p>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Application answers</h2>
+        <p class="hint">
+          Your name, contact details and experience come from your resume in FitWright. These are the
+          answers a resume cannot supply. Leave anything blank and the extension will skip that field
+          rather than guess.
+        </p>
+
+        <div class="grid">
+          <div class="field">
+            <label for="workAuthorization">Work authorization</label>
+            <input type="text" id="workAuthorization" placeholder="e.g. Indian citizen, US H-1B" />
+          </div>
+          <div class="field">
+            <label for="requiresSponsorship">Need visa sponsorship?</label>
+            <select id="requiresSponsorship">
+              <option value="">Not set</option>
+              <option value="No">No</option>
+              <option value="Yes">Yes</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="noticePeriod">Notice period / availability</label>
+            <input type="text" id="noticePeriod" placeholder="e.g. 30 days, Immediate" />
+          </div>
+          <div class="field">
+            <label for="salaryExpectation">Expected salary</label>
+            <input type="text" id="salaryExpectation" placeholder="e.g. 24 LPA" />
+          </div>
+        </div>
+
+        <p class="hint" style="margin-top: 6px">
+          Optional demographic questions (always voluntary on applications):
+        </p>
+        <div class="grid">
+          <div class="field">
+            <label for="gender">Gender</label>
+            <input type="text" id="gender" placeholder="Leave blank to skip" />
+          </div>
+          <div class="field">
+            <label for="ethnicity">Ethnicity</label>
+            <input type="text" id="ethnicity" placeholder="Leave blank to skip" />
+          </div>
+          <div class="field">
+            <label for="veteranStatus">Veteran status</label>
+            <input type="text" id="veteranStatus" placeholder="Leave blank to skip" />
+          </div>
+          <div class="field">
+            <label for="disabilityStatus">Disability status</label>
+            <input type="text" id="disabilityStatus" placeholder="Leave blank to skip" />
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Background scraping</h2>
+        <p class="hint">
+          Opens your saved searches in background tabs on a schedule and adds results to your feed.
+          This runs in your browser with your own session, which is why it reaches boards the server
+          cannot.
+        </p>
+
+        <div class="check">
+          <input type="checkbox" id="backgroundScrape" />
+          <div>
+            <label for="backgroundScrape">Run saved searches on a schedule</label>
+            <p>Background tabs open and close on their own. Nothing is submitted anywhere.</p>
+          </div>
+        </div>
+
+        <div class="field" style="max-width: 200px">
+          <label for="scrapeIntervalMinutes">Interval (minutes)</label>
+          <input type="number" id="scrapeIntervalMinutes" min="30" step="30" />
+        </div>
+
+        <table>
+          <thead>
+            <tr><th>Board</th><th>Search</th><th>Location</th><th></th></tr>
+          </thead>
+          <tbody id="queries"></tbody>
+        </table>
+
+        <div class="grid" style="grid-template-columns: 1fr 1fr 1fr auto; align-items: end">
+          <div>
+            <label for="q-source">Board</label>
+            <select id="q-source">
+              <option value="indeed">Indeed</option>
+              <option value="linkedin">LinkedIn</option>
+              <option value="instahyre">Instahyre</option>
+              <option value="hirist">Hirist</option>
+              <option value="foundit">Foundit</option>
+            </select>
+          </div>
+          <div>
+            <label for="q-query">Keywords</label>
+            <input type="text" id="q-query" placeholder="backend engineer" />
+          </div>
+          <div>
+            <label for="q-location">Location</label>
+            <input type="text" id="q-location" placeholder="Bengaluru" />
+          </div>
+          <button id="q-add">Add</button>
+        </div>
+      </section>
+
+      <p class="note">
+        The extension fills forms but never submits them. You review every application and click
+        submit yourself.
+      </p>
+      <section>
+        <h2>Sites turned off</h2>
+        <p class="hint">
+          Sites where FitWright does nothing, or where the on-page panel is hidden. Set these from
+          the extension popup while you are on the site; undo them here.
+        </p>
+        <div id="sites"></div>
+
+        <h2>Activity</h2>
+        <p class="hint">
+          What the extension has done recently. Worth a look if searching seems to have stopped -
+          background runs happen in tabs you never see, so this is the only place they leave a trace.
+        </p>
+        <div id="runs"></div>
+
+        <h2>Problems</h2>
+        <p class="hint">
+          Anything that failed, most recent first. Copy this if you report a problem - it saves
+          digging through browser internals.
+        </p>
+        <div id="errors"></div>
+        <button id="copy-errors" type="button">Copy problems</button>
+        <button id="clear-errors" type="button">Clear</button>
+      </section>
+    </main>
+
+    <div class="bar">
+      <div class="inner">
+        <button class="primary" id="save">Save settings</button>
+        <span id="status" role="status" aria-live="polite"></span>
+      </div>
+    </div>
+
+    <script src="options.js"></script>
+  </body>
+</html>

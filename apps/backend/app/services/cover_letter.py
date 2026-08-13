@@ -2,7 +2,10 @@
 
 import json
 import logging
+import re
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from app.config import load_config_file
 from app.llm import complete
@@ -104,6 +107,69 @@ def build_outreach_prompt(
     )
 
 
+def _candidate_names(resume_data: dict[str, Any]) -> list[str]:
+    """The candidate's own name and first name, lowercased, if present."""
+    personal = resume_data.get("personal_info")
+    name = ""
+    if isinstance(personal, dict):
+        name = str(personal.get("name") or "").strip()
+    if not name:
+        name = str(resume_data.get("name") or "").strip()
+    if not name:
+        return []
+
+    parts = [name.lower()]
+    first = name.split()[0].lower()
+    # A single-token first name only counts if it is substantial: greeting
+    # "Hi Al," is not evidence of anything when the candidate is Al.
+    if len(first) >= 3 and first != name.lower():
+        parts.append(first)
+    return parts
+
+
+def fix_self_addressed_greeting(text: str, resume_data: dict[str, Any]) -> str:
+    """Replace a greeting that addresses the candidate by their own name.
+
+    The prompts now state plainly who the recipient is, but a prompt is a request
+    and this is a document sent to an employer over the user's name. Greeting the
+    sender ("Hi Obaidullah,") is not a stylistic slip - it makes the letter
+    nonsensical and the applicant look careless, so it is repaired rather than
+    hoped about.
+
+    Only the opening line is examined. The candidate's name appearing later - in a
+    sign-off, which is correct - must not be touched.
+    """
+    if not text:
+        return text
+
+    names = _candidate_names(resume_data)
+    if not names:
+        return text
+
+    lines = text.split("\n")
+    for index, line in enumerate(lines[:2]):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        lowered = stripped.lower()
+        # Only a salutation is a candidate for repair.
+        if not re.match(r"^(hi|hey|hello|dear|greetings)\b", lowered):
+            break
+        if any(name in lowered for name in names):
+            lines[index] = re.sub(
+                r"^(hi|hey|hello|dear|greetings)\b.*$",
+                lambda m: f"{m.group(1).capitalize()} Hiring Manager,",
+                stripped,
+                flags=re.IGNORECASE,
+            )
+            logger.warning(
+                "Rewrote a greeting that addressed the candidate by their own name."
+            )
+        break
+
+    return "\n".join(lines)
+
+
 async def generate_cover_letter(
     resume_data: dict[str, Any],
     job_description: str,
@@ -127,7 +193,7 @@ async def generate_cover_letter(
         max_tokens=2048,
     )
 
-    return result.strip()
+    return fix_self_addressed_greeting(result.strip(), resume_data)
 
 
 async def generate_outreach_message(
@@ -157,7 +223,7 @@ async def generate_outreach_message(
         max_tokens=2048,
     )
 
-    return result.strip()
+    return fix_self_addressed_greeting(result.strip(), resume_data)
 
 
 def _clean_title_fragment(value: str, *, max_len: int = 60) -> str:

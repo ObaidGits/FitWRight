@@ -289,22 +289,28 @@ def get_api_keys_from_config(user_id: str | None = None) -> dict[str, str]:
     return decrypted
 
 
-def save_api_keys_to_config(api_keys: dict[str, str], user_id: str | None = None) -> None:
-    """Replace a user's encrypted key store with ``api_keys`` (encrypting each).
+def get_api_key_health(user_id: str | None = None) -> dict[str, str]:
+    """Per-provider health of the stored key store.
 
-    Replace-all semantics mirror the legacy ``config["api_keys"] = api_keys``;
-    the config router reads-merges-saves the full map. Only the resolved user's
-    keys are replaced.
+    ``ok`` when the stored ciphertext decrypts, ``unreadable`` when a key is
+    present but cannot be decrypted - which happens when the encryption secret
+    changes between environments (most often: running natively with
+    ``APP_ENCRYPTION_KEY`` set, then in Docker without it passed through).
+
+    This exists because the failure was indistinguishable from having no key at
+    all. The status endpoint reported ``configured: false``, the user concluded
+    their key had been deleted, and nothing anywhere said the row was still there
+    and simply unreadable. Telling them lets them fix it in one action instead of
+    wondering whether the app is losing their data.
     """
-    from app.crypto import encrypt
+    from app.crypto import decrypt
     from app.database import db
 
     uid = resolve_key_user_id(user_id)
-    # Encrypt everything first, then swap in a single transaction, so a partial
-    # failure (encryption error or DB write) can never wipe previously stored
-    # keys mid-replace.
-    ciphertexts = {provider: encrypt(key) for provider, key in api_keys.items() if key}
-    db.replace_api_keys(uid, ciphertexts)
+    health: dict[str, str] = {}
+    for provider, ciphertext in db.get_api_key_ciphertexts(uid).items():
+        health[provider] = "ok" if decrypt(ciphertext) else "unreadable"
+    return health
 
 
 def patch_api_keys_in_config(
@@ -554,6 +560,63 @@ class Settings(BaseSettings):
         "http://127.0.0.1:3000",
     ]
 
+    # Browser-extension origins allowed to call the API with credentials.
+    # A packed extension has a stable origin (`chrome-extension://<id>`); an
+    # unpacked dev build gets a fresh id per machine, so the id is supplied by
+    # the operator rather than hardcoded. Comma-separated, blank by default -
+    # the extension surface is opt-in and adds no origin until configured.
+    extension_origins: str = ""
+
+    @property
+    def effective_extension_origins(self) -> list[str]:
+        """``EXTENSION_ORIGINS`` parsed into a clean list of browser origins.
+
+        Repairs the one mistake everybody makes: writing ``chrome-extension:abc``
+        instead of ``chrome-extension://abc``. That single missing pair of slashes
+        produces an origin no browser will ever send, so every extension call is
+        rejected by CORS with nothing in the logs to explain why - a setup failure
+        that looks exactly like a broken extension. It is unambiguous what was
+        meant, so it is fixed rather than reported.
+
+        ``extension_origin_warnings`` collects anything still unusable, which
+        startup logs so the operator sees a sentence instead of silence.
+        """
+        cleaned: list[str] = []
+        for raw in self.extension_origins.split(","):
+            origin = raw.strip().rstrip("/")
+            if not origin:
+                continue
+            # `chrome-extension:abc` -> `chrome-extension://abc`
+            for scheme in ("chrome-extension", "moz-extension", "extension"):
+                prefix = f"{scheme}:"
+                if origin.startswith(prefix) and not origin.startswith(f"{prefix}//"):
+                    origin = f"{prefix}//{origin[len(prefix):].lstrip('/')}"
+                    break
+            cleaned.append(origin)
+        return cleaned
+
+    @property
+    def extension_origin_warnings(self) -> list[str]:
+        """Configured extension origins that still look wrong, with the reason."""
+        warnings: list[str] = []
+        for origin in self.effective_extension_origins:
+            if "://" not in origin:
+                warnings.append(
+                    f"EXTENSION_ORIGINS entry {origin!r} has no scheme - it must look like "
+                    "chrome-extension://<id>. The extension's requests will be rejected."
+                )
+                continue
+            scheme, _, rest = origin.partition("://")
+            if scheme not in {"chrome-extension", "moz-extension", "extension", "http", "https"}:
+                warnings.append(
+                    f"EXTENSION_ORIGINS entry {origin!r} uses an unexpected scheme {scheme!r}."
+                )
+            elif not rest:
+                warnings.append(
+                    f"EXTENSION_ORIGINS entry {origin!r} has no extension id after the scheme."
+                )
+        return warnings
+
     @property
     def effective_cors_origins(self) -> list[str]:
         """CORS origins including frontend_base_url for production deployments."""
@@ -561,6 +624,11 @@ class Settings(BaseSettings):
         url = self.frontend_base_url.strip().rstrip("/")
         if url and url not in origins:
             origins.append(url)
+        # Browser-extension origins (FitWright Companion). Opt-in via
+        # EXTENSION_ORIGINS; nothing is added when unset.
+        for origin in self.effective_extension_origins:
+            if origin not in origins:
+                origins.append(origin)
         return origins
 
     # =====================================================================
@@ -1362,6 +1430,32 @@ class Settings(BaseSettings):
         if value < 1:
             raise ValueError(f"Invalid {info.field_name.upper()}: must be >= 1")
         return value
+
+    # ================================================================== #
+    # Job Discovery & Recommendations (optional feature, §10.5)
+    # ================================================================== #
+    # Master kill-switch. When False the discovery router returns 404 for all
+    # routes and the orchestrator refuses work. Ships OFF.
+    JOB_DISCOVERY: bool = False
+    # Comma-separated JobSpy board slugs queried on the fast lane.
+    JOB_DISCOVERY_JOBSPY_SITES: str = "indeed"
+    # TTL (seconds) for the content-addressed search-result cache.
+    JOB_DISCOVERY_CACHE_TTL_SECONDS: int = 3600
+    # Max listings returned from a single recommend call.
+    JOB_DISCOVERY_MAX_RESULTS: int = 50
+    # Max site recipes a single user may own.
+    JOB_DISCOVERY_MAX_RECIPES: int = 20
+    # Concurrency cap for the stealth (headless-browser) fetch lane.
+    JOB_DISCOVERY_STEALTH_MAX_CONCURRENCY: int = 1
+
+    @property
+    def job_discovery_jobspy_sites(self) -> list[str]:
+        """``JOB_DISCOVERY_JOBSPY_SITES`` parsed into a clean list of slugs."""
+        return [
+            slug.strip()
+            for slug in self.JOB_DISCOVERY_JOBSPY_SITES.split(",")
+            if slug.strip()
+        ]
 
     @model_validator(mode="after")
     def _validate_auth_surface(self) -> "Settings":

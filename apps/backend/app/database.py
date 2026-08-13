@@ -44,6 +44,9 @@ from app.models import (
     AnalysisArtifact,
     ApiKey,
     Application,
+    DiscoveryCache,
+    DiscoveryResult,
+    DiscoveryRun,
     Improvement,
     Interview,
     Job,
@@ -56,6 +59,7 @@ from app.models import (
     Resume,
     ResumeVersion,
     SearchDocument,
+    SiteRecipeModel,
     TailorPreview,
     User,
     UserErrorReport,
@@ -147,6 +151,15 @@ class Database:
             weakref.WeakValueDictionary()
         )
         self._master_locks_guard = asyncio.Lock()
+
+    @classmethod
+    def from_url(cls, url: str | None = None) -> "Database":
+        """Construct a Database from an explicit URL (used by discovery tests)."""
+        return cls(url)
+
+    async def dispose(self) -> None:
+        """Alias for close() — compatibility with discovery tests."""
+        await self.close()
 
     async def _master_lock(self, user_id: str) -> asyncio.Lock:
         """Return a self-evicting local contention lock for ``user_id``."""
@@ -1153,6 +1166,294 @@ class Database:
             "public_theme": row.public_theme,
             "created_at": row.created_at,
             "updated_at": row.updated_at,
+        }
+
+    # ===================================================================== #
+    # Application field registry (the learning loop)
+    # ===================================================================== #
+
+    async def upsert_application_field(
+        self,
+        user_id: str,
+        *,
+        label: str,
+        label_normalized: str,
+        field_type: str = "text",
+        options: list[str] | None = None,
+        status: str = "needs_answer",
+        source: str = "learned",
+        company: str | None = None,
+        last_seen_url: str | None = None,
+        last_seen_ats: str | None = None,
+        last_seen_at: str | None = None,
+    ) -> bool:
+        """Record that a form asked this question. Returns True if newly created.
+
+        Matching is on the normalized label within the same scope, so the same
+        question seen fifty times is one row with ``times_seen`` at fifty rather
+        than fifty rows - which is the difference between a usable Settings page
+        and an unusable one.
+
+        An existing answer is never overwritten here. A later form offering
+        different options or a different input type must not silently discard what
+        the user already told us; only the sighting metadata is refreshed.
+        """
+        from sqlalchemy import select
+
+        from app.models import ApplicationField, _utcnow_iso
+
+        # A reported field is global unless it was seen with a company attached.
+        scope = "company" if company else "global"
+        async with self._session() as session:
+            async with session.begin():
+                existing = (
+                    await session.execute(
+                        select(ApplicationField).where(
+                            (ApplicationField.user_id == user_id)
+                            & (ApplicationField.label_normalized == label_normalized)
+                            & (ApplicationField.scope == scope)
+                            & (ApplicationField.company == company)
+                        )
+                    )
+                ).scalar_one_or_none()
+
+                if existing is not None:
+                    existing.times_seen = (existing.times_seen or 0) + 1
+                    existing.last_seen_at = last_seen_at or _utcnow_iso()
+                    if last_seen_url:
+                        existing.last_seen_url = last_seen_url
+                    if last_seen_ats:
+                        existing.last_seen_ats = last_seen_ats
+                    # Options can legitimately grow between postings; take the
+                    # richer set so Settings can render every choice offered.
+                    if options and len(options) > len(existing.options or []):
+                        existing.options = options
+                    # A field we once could not answer but just filled is answered
+                    # now; the reverse must NOT reopen a question already settled.
+                    if status == "answered" and existing.status == "needs_answer":
+                        existing.status = "answered"
+                    existing.updated_at = _utcnow_iso()
+                    return False
+
+                session.add(
+                    ApplicationField(
+                        user_id=user_id,
+                        label=label,
+                        label_normalized=label_normalized,
+                        field_type=field_type,
+                        options=options or None,
+                        status=status,
+                        source=source,
+                        scope=scope,
+                        company=company,
+                        times_seen=1,
+                        last_seen_at=last_seen_at or _utcnow_iso(),
+                        last_seen_url=last_seen_url,
+                        last_seen_ats=last_seen_ats,
+                    )
+                )
+                return True
+
+    async def list_application_fields(
+        self, user_id: str, *, status: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Known fields. Unanswered first, then by how often they come up."""
+        from sqlalchemy import case, select
+
+        from app.models import ApplicationField, _utcnow_iso
+
+        stmt = select(ApplicationField).where(ApplicationField.user_id == user_id)
+        if status:
+            stmt = stmt.where(ApplicationField.status == status)
+        stmt = stmt.order_by(
+            # Anything awaiting an answer belongs at the top of Settings.
+            case((ApplicationField.status == "needs_answer", 0), else_=1),
+            ApplicationField.times_seen.desc(),
+            ApplicationField.label,
+        )
+        async with self._session() as session:
+            rows = (await session.execute(stmt)).scalars().all()
+            return [self._application_field_to_dict(r) for r in rows]
+
+    async def update_application_field(
+        self, user_id: str, field_id: str, changes: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        """Apply a partial update. Returns the updated row, or None if not found."""
+        from sqlalchemy import select
+
+        from app.models import ApplicationField, _utcnow_iso
+
+        allowed = {
+            "label",
+            "label_normalized",
+            "field_type",
+            "options",
+            "value",
+            "profile_path",
+            "scope",
+            "company",
+            "status",
+            "synonyms",
+        }
+        async with self._session() as session:
+            async with session.begin():
+                row = (
+                    await session.execute(
+                        select(ApplicationField).where(
+                            (ApplicationField.user_id == user_id)
+                            & (ApplicationField.id == field_id)
+                        )
+                    )
+                ).scalar_one_or_none()
+                if row is None:
+                    return None
+
+                # Enforce the value-or-pointer rule here, not just in the router:
+                # any caller (an importer, a future endpoint) that sets one must
+                # not be able to leave the other behind as a stale answer.
+                if changes.get("profile_path"):
+                    changes["value"] = None
+                elif changes.get("value") is not None:
+                    changes["profile_path"] = None
+
+                # Giving a field an answer takes it out of the review queue, even
+                # if the caller forgot to say so - otherwise Settings would keep
+                # asking for something already answered.
+                answered_now = changes.get("value") is not None or changes.get("profile_path")
+                if answered_now and "status" not in changes:
+                    changes["status"] = "answered"
+
+                for key, value in changes.items():
+                    if key in allowed:
+                        setattr(row, key, value)
+                # A global answer has no company; clearing scope must clear it too,
+                # or the unique constraint would treat it as a company row.
+                if changes.get("scope") == "global":
+                    row.company = None
+                row.updated_at = _utcnow_iso()
+                result = self._application_field_to_dict(row)
+            return result
+
+    async def delete_application_field(self, user_id: str, field_id: str) -> bool:
+        from sqlalchemy import delete
+
+        from app.models import ApplicationField, _utcnow_iso
+
+        async with self._session() as session:
+            async with session.begin():
+                result = await session.execute(
+                    delete(ApplicationField).where(
+                        (ApplicationField.user_id == user_id)
+                        & (ApplicationField.id == field_id)
+                    )
+                )
+                return bool(result.rowcount)
+
+    async def merge_application_fields(
+        self, user_id: str, keep_id: str, drop_id: str
+    ) -> dict[str, Any] | None:
+        """Fold ``drop_id``'s wording into ``keep_id``'s synonyms and delete it.
+
+        The kept row's answer wins; the dropped row contributes only its label (and
+        any synonyms it had already absorbed), plus its sighting count so the
+        merged row reflects how often the question really appears.
+        """
+        from sqlalchemy import select
+
+        from app.models import ApplicationField, _utcnow_iso
+
+        async with self._session() as session:
+            async with session.begin():
+                rows = (
+                    (
+                        await session.execute(
+                            select(ApplicationField).where(
+                                (ApplicationField.user_id == user_id)
+                                & (ApplicationField.id.in_([keep_id, drop_id]))
+                            )
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                by_id = {r.id: r for r in rows}
+                keep, drop = by_id.get(keep_id), by_id.get(drop_id)
+                if keep is None or drop is None:
+                    return None
+
+                synonyms = list(keep.synonyms or [])
+                for candidate in [drop.label_normalized, *(drop.synonyms or [])]:
+                    if candidate and candidate != keep.label_normalized:
+                        if candidate not in synonyms:
+                            synonyms.append(candidate)
+                keep.synonyms = synonyms
+                keep.times_seen = (keep.times_seen or 0) + (drop.times_seen or 0)
+                keep.updated_at = _utcnow_iso()
+                await session.delete(drop)
+                result = self._application_field_to_dict(keep)
+            return result
+
+    async def set_application_field_value(
+        self,
+        user_id: str,
+        *,
+        label_normalized: str,
+        company: str | None,
+        value: Any,
+    ) -> bool:
+        """Set the answer for a field addressed by its label, not its id.
+
+        The extension knows the label a form used, never our row id, so this is
+        how "save what I just typed" lands. Unlike ``upsert_application_field``
+        this DOES overwrite an existing answer: the user has explicitly said what
+        it should be, and their latest word wins.
+
+        A field pointing at the Profile is left alone. Overwriting it would
+        reintroduce the stale-copy problem the pointer exists to prevent - the
+        answer belongs to the Profile, and Settings is where that link is changed.
+        """
+        from sqlalchemy import select
+
+        from app.models import ApplicationField, _utcnow_iso
+
+        scope = "company" if company else "global"
+        async with self._session() as session:
+            async with session.begin():
+                row = (
+                    await session.execute(
+                        select(ApplicationField).where(
+                            (ApplicationField.user_id == user_id)
+                            & (ApplicationField.label_normalized == label_normalized)
+                            & (ApplicationField.scope == scope)
+                            & (ApplicationField.company == company)
+                        )
+                    )
+                ).scalar_one_or_none()
+                if row is None or row.profile_path:
+                    return False
+                row.value = value
+                row.status = "answered"
+                row.updated_at = _utcnow_iso()
+                return True
+
+    def _application_field_to_dict(self, row: Any) -> dict[str, Any]:
+        return {
+            "id": row.id,
+            "label": row.label,
+            "label_normalized": row.label_normalized,
+            "synonyms": row.synonyms or [],
+            "field_type": row.field_type,
+            "options": row.options or [],
+            "value": row.value,
+            "profile_path": row.profile_path,
+            "scope": row.scope,
+            "company": row.company,
+            "status": row.status,
+            "source": row.source,
+            "times_seen": row.times_seen,
+            "last_seen_at": row.last_seen_at,
+            "last_seen_url": row.last_seen_url,
+            "last_seen_ats": row.last_seen_ats,
         }
 
     async def get_profile(self, user_id: str) -> dict[str, Any] | None:
@@ -2576,6 +2877,879 @@ class Database:
             counts["outbox"] = int(outbox_result.rowcount or 0)
             await session.commit()
         return counts
+
+
+    # ------------------------------------------------------------------ #
+    # Job Discovery accessors (discovery_cache + site_recipes)
+    # ------------------------------------------------------------------ #
+
+    async def get_discovery_cache(self, cache_key: str) -> Any | None:
+        """Return cached payload if present and unexpired, else None."""
+        from datetime import datetime, timezone
+        async with self._session() as session:
+            row = await session.get(DiscoveryCache, cache_key)
+        if row is None:
+            return None
+        # Expiry check: stored as ISO string
+        now_iso = datetime.now(timezone.utc).isoformat()
+        if row.expires_at <= now_iso:
+            return None
+        return row.payload
+
+    async def put_discovery_cache(
+        self, cache_key: str, payload: Any, ttl_seconds: int
+    ) -> None:
+        """Insert or replace a cache row with a fresh TTL."""
+        from datetime import datetime, timedelta, timezone
+        now = datetime.now(timezone.utc)
+        expires_at = (now + timedelta(seconds=max(0, int(ttl_seconds)))).isoformat()
+        async with self._session() as session:
+            async with session.begin():
+                existing = await session.get(DiscoveryCache, cache_key)
+                if existing:
+                    existing.payload = payload
+                    existing.created_at = now.isoformat()
+                    existing.expires_at = expires_at
+                else:
+                    session.add(DiscoveryCache(
+                        cache_key=cache_key,
+                        payload=payload,
+                        created_at=now.isoformat(),
+                        expires_at=expires_at,
+                    ))
+
+    async def list_site_recipe(self, user_id: str) -> list:
+        """Return all recipes owned by user_id as SiteRecipe dataclasses, ordered by slug."""
+        from sqlalchemy import select
+        from app.job_discovery.models import SiteRecipe
+        async with self._session() as session:
+            stmt = (
+                select(SiteRecipeModel)
+                .where(SiteRecipeModel.user_id == user_id)
+                .order_by(SiteRecipeModel.slug)
+            )
+            result = await session.execute(stmt)
+            rows = result.scalars().all()
+        return [
+            SiteRecipe(
+                id=r.id,
+                user_id=r.user_id,
+                name=r.name,
+                slug=r.slug,
+                base_url=r.base_url,
+                search_url_template=r.search_url_template,
+                schema=r.schema_json or {},
+                fetch_mode=r.fetch_mode,
+                enabled=r.enabled,
+                created_at=r.created_at,
+                updated_at=r.updated_at,
+            )
+            for r in rows
+        ]
+
+    async def upsert_site_recipe(self, recipe_data) -> Any:
+        """Insert or update a recipe by (user_id, slug). Accepts SiteRecipe dataclass."""
+        from datetime import datetime, timezone
+        from sqlalchemy import select
+        from app.job_discovery.models import SiteRecipe
+        now_iso = datetime.now(timezone.utc).isoformat()
+        user_id = recipe_data.user_id
+        slug = recipe_data.slug
+        async with self._session() as session:
+            async with session.begin():
+                stmt = select(SiteRecipeModel).where(
+                    (SiteRecipeModel.user_id == user_id)
+                    & (SiteRecipeModel.slug == slug)
+                )
+                result = await session.execute(stmt)
+                existing = result.scalar_one_or_none()
+                if existing:
+                    existing.name = recipe_data.name
+                    existing.base_url = recipe_data.base_url
+                    existing.search_url_template = recipe_data.search_url_template
+                    existing.schema_json = recipe_data.schema or {}
+                    existing.fetch_mode = recipe_data.fetch_mode
+                    existing.enabled = recipe_data.enabled
+                    existing.updated_at = now_iso
+                    await session.flush()
+                    row = existing
+                else:
+                    row = SiteRecipeModel(
+                        user_id=user_id,
+                        name=recipe_data.name,
+                        slug=slug,
+                        base_url=recipe_data.base_url,
+                        search_url_template=recipe_data.search_url_template,
+                        schema_json=recipe_data.schema or {},
+                        fetch_mode=recipe_data.fetch_mode,
+                        enabled=recipe_data.enabled,
+                        created_at=now_iso,
+                        updated_at=now_iso,
+                    )
+                    session.add(row)
+                    await session.flush()
+        return SiteRecipe(
+            id=row.id,
+            user_id=row.user_id,
+            name=row.name,
+            slug=row.slug,
+            base_url=row.base_url,
+            search_url_template=row.search_url_template,
+            schema=row.schema_json or {},
+            fetch_mode=row.fetch_mode,
+            enabled=row.enabled,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+        )
+
+    async def delete_site_recipe(self, user_id: str, slug: str) -> bool:
+        """Delete a recipe by (user_id, slug). Returns True if a row was deleted."""
+        from sqlalchemy import delete as sa_delete
+        async with self._session() as session:
+            async with session.begin():
+                stmt = sa_delete(SiteRecipeModel).where(
+                    (SiteRecipeModel.user_id == user_id)
+                    & (SiteRecipeModel.slug == slug)
+                )
+                result = await session.execute(stmt)
+        return (result.rowcount or 0) > 0
+
+
+    # ------------------------------------------------------------------ #
+    # Discovery Feed accessors (runs + results)
+    # ------------------------------------------------------------------ #
+
+    async def get_or_create_discovery_run(
+        self, user_id: str, resume_id: str, interval_hours: int = 24
+    ) -> dict[str, Any]:
+        """Get or create a discovery run schedule for a user+resume pair."""
+        from datetime import datetime, timezone
+        from sqlalchemy import select
+        now_iso = datetime.now(timezone.utc).isoformat()
+        async with self._session() as session:
+            async with session.begin():
+                stmt = select(DiscoveryRun).where(
+                    (DiscoveryRun.user_id == user_id)
+                    & (DiscoveryRun.resume_id == resume_id)
+                )
+                result = await session.execute(stmt)
+                row = result.scalar_one_or_none()
+                if row:
+                    return self._run_to_dict(row)
+                run = DiscoveryRun(
+                    user_id=user_id,
+                    resume_id=resume_id,
+                    enabled=True,
+                    interval_hours=interval_hours,
+                    next_run_at=now_iso,
+                    created_at=now_iso,
+                    updated_at=now_iso,
+                )
+                session.add(run)
+                await session.flush()
+                return self._run_to_dict(run)
+
+    async def get_discovery_run(self, user_id: str, resume_id: str) -> dict[str, Any] | None:
+        """Get a discovery run by user+resume."""
+        from sqlalchemy import select
+        async with self._session() as session:
+            stmt = select(DiscoveryRun).where(
+                (DiscoveryRun.user_id == user_id)
+                & (DiscoveryRun.resume_id == resume_id)
+            )
+            result = await session.execute(stmt)
+            row = result.scalar_one_or_none()
+            return self._run_to_dict(row) if row else None
+
+    async def list_due_discovery_runs(self, limit: int = 10) -> list[dict[str, Any]]:
+        """Find enabled runs whose next_run_at <= now (due for execution)."""
+        from datetime import datetime, timezone
+        from sqlalchemy import select
+        now_iso = datetime.now(timezone.utc).isoformat()
+        async with self._session() as session:
+            stmt = (
+                select(DiscoveryRun)
+                .where(
+                    (DiscoveryRun.enabled == True)  # noqa: E712
+                    & (DiscoveryRun.next_run_at <= now_iso)
+                )
+                .order_by(DiscoveryRun.next_run_at)
+                .limit(limit)
+            )
+            result = await session.execute(stmt)
+            return [self._run_to_dict(r) for r in result.scalars().all()]
+
+    async def update_discovery_run_status(
+        self, run_id: str, *, status: str, error: str | None = None,
+        results_count: int = 0, next_run_at: str | None = None,
+    ) -> None:
+        """Update a run after execution."""
+        from datetime import datetime, timezone
+        from sqlalchemy import update
+        now_iso = datetime.now(timezone.utc).isoformat()
+        values: dict[str, Any] = {
+            "last_status": status,
+            "last_run_at": now_iso,
+            "updated_at": now_iso,
+            "results_count": results_count,
+        }
+        if error is not None:
+            values["last_error"] = error[:500]
+        if next_run_at:
+            values["next_run_at"] = next_run_at
+        async with self._session() as session:
+            async with session.begin():
+                await session.execute(
+                    update(DiscoveryRun).where(DiscoveryRun.id == run_id).values(**values)
+                )
+
+    async def toggle_discovery_run(self, user_id: str, resume_id: str, enabled: bool) -> bool:
+        """Enable/disable a discovery run. Returns True if found."""
+        from datetime import datetime, timezone
+        from sqlalchemy import update
+        now_iso = datetime.now(timezone.utc).isoformat()
+        async with self._session() as session:
+            async with session.begin():
+                result = await session.execute(
+                    update(DiscoveryRun)
+                    .where(
+                        (DiscoveryRun.user_id == user_id)
+                        & (DiscoveryRun.resume_id == resume_id)
+                    )
+                    .values(enabled=enabled, updated_at=now_iso)
+                )
+                return (result.rowcount or 0) > 0
+
+    async def upsert_discovery_results(
+        self, user_id: str, run_id: str, results: list[dict[str, Any]]
+    ) -> int:
+        """Insert new results, skipping duplicates by fingerprint. Returns count inserted."""
+        from datetime import datetime, timezone
+        from sqlalchemy import select
+
+        from app.job_discovery.normalize import group_fingerprint as _group_fingerprint
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+        inserted = 0
+        async with self._session() as session:
+            async with session.begin():
+                for r in results:
+                    # Check if fingerprint already exists for this user
+                    exists = await session.execute(
+                        select(DiscoveryResult.id).where(
+                            (DiscoveryResult.user_id == user_id)
+                            & (DiscoveryResult.fingerprint == r["fingerprint"])
+                        )
+                    )
+                    if exists.scalar_one_or_none():
+                        continue
+                    session.add(DiscoveryResult(
+                        user_id=user_id,
+                        run_id=run_id,
+                        fingerprint=r["fingerprint"],
+                        # Computed here rather than trusted from the caller, so
+                        # every row gets one however it arrived - server harvest,
+                        # extension capture or bulk scrape.
+                        group_fingerprint=(
+                            _group_fingerprint(
+                                r.get("title", ""), r.get("company", ""), r.get("location", "")
+                            )
+                            # No title means a failed extraction; a key built from
+                            # nothing would merge unrelated rows.
+                            if r.get("title")
+                            else None
+                        ),
+                        source=r.get("source", ""),
+                        title=r.get("title", ""),
+                        company=r.get("company", ""),
+                        location=r.get("location", ""),
+                        url=r.get("url", ""),
+                        is_remote=r.get("is_remote"),
+                        description=r.get("description"),
+                        salary=r.get("salary"),
+                        posted_at=r.get("posted_at"),
+                        match_score=r.get("match_score", 0),
+                        matched_keywords=r.get("matched", []),
+                        missing_keywords=r.get("missing", []),
+                        partial=r.get("partial", False),
+                        status="new",
+                        seen=False,
+                        created_at=now_iso,
+                    ))
+                    inserted += 1
+        return inserted
+
+    def _discovery_feed_conditions(
+        self,
+        user_id: str,
+        *,
+        status: str | None,
+        sources: list[str] | None,
+        query: str | None,
+        location: str | None,
+        is_remote: bool | None,
+        min_score: float | None,
+        posted_within_hours: int | None,
+    ) -> list[Any]:
+        """Build the WHERE terms shared by the feed list and its count.
+
+        Shared deliberately: when the list and the count filter differently the
+        UI shows "3 of 228" and pagination walks off the end of the real result
+        set, which is exactly the class of bug this replaces.
+
+        Every parameter is keyword-only with no default, so a new filter cannot
+        be wired into the list and forgotten in the count - the call simply
+        fails instead of quietly disagreeing.
+        """
+        from sqlalchemy import and_, func, or_
+
+        conditions: list[Any] = [DiscoveryResult.user_id == user_id]
+        if status:
+            conditions.append(DiscoveryResult.status == status)
+        if sources:
+            conditions.append(DiscoveryResult.source.in_(sources))
+        if is_remote:
+            conditions.append(DiscoveryResult.is_remote.is_(True))
+        if min_score is not None:
+            # Stored on the same 0..100 scale the UI prints, so no conversion.
+            conditions.append(DiscoveryResult.match_score >= min_score)
+        if posted_within_hours is not None and posted_within_hours > 0:
+            cutoff = (
+                datetime.now(timezone.utc) - timedelta(hours=posted_within_hours)
+            ).isoformat()
+            # posted_at is written by datetime.isoformat(), so a lexicographic
+            # compare is a chronological one.
+            #
+            # Boards that publish no date leave posted_at NULL. Dropping those
+            # rows would hide a job harvested twenty minutes ago from a "last
+            # 24 hours" filter, so fall back to when we discovered it - the
+            # nearest honest proxy we hold.
+            conditions.append(
+                or_(
+                    DiscoveryResult.posted_at >= cutoff,
+                    and_(
+                        DiscoveryResult.posted_at.is_(None),
+                        DiscoveryResult.created_at >= cutoff,
+                    ),
+                )
+            )
+        if location:
+            conditions.append(
+                func.lower(DiscoveryResult.location).contains(location.strip().lower())
+            )
+        if query:
+            # Match the words a person would recognise the job by. Every token
+            # must appear somewhere in the title or the company, so "python dev"
+            # does not match a job that merely mentions Python in one of them.
+            for token in query.lower().split():
+                conditions.append(
+                    or_(
+                        func.lower(DiscoveryResult.title).contains(token),
+                        func.lower(DiscoveryResult.company).contains(token),
+                    )
+                )
+        return conditions
+
+    def _dedupe_representative_ids(self, conditions: list[Any]) -> Any:
+        """Subquery of the one row id to keep per job.
+
+        Duplicates have to be removed *inside* the query, not after paging. The
+        same opening harvested in two runs sits far apart in creation order, so a
+        page-local collapse catches almost none of them - measured on a real feed,
+        zero of 33 duplicate groups fell on the same page of 100.
+
+        The survivor is the highest-scoring row, then the newest: whichever board
+        gave us the most to work with. Rows with no group key are their own group,
+        so nothing is ever merged on missing data.
+        """
+        from sqlalchemy import func, select
+
+        group_key = func.coalesce(DiscoveryResult.group_fingerprint, DiscoveryResult.id)
+        ranked = (
+            select(
+                DiscoveryResult.id.label("id"),
+                func.row_number()
+                .over(
+                    partition_by=group_key,
+                    order_by=[
+                        DiscoveryResult.match_score.desc(),
+                        DiscoveryResult.created_at.desc(),
+                    ],
+                )
+                .label("rank"),
+            )
+            .where(*conditions)
+            .subquery()
+        )
+        return select(ranked.c.id).where(ranked.c.rank == 1)
+
+    async def get_discovery_feed(
+        self, user_id: str, *, status: str | None = None,
+        sources: list[str] | None = None, query: str | None = None,
+        location: str | None = None, is_remote: bool | None = None,
+        min_score: float | None = None, posted_within_hours: int | None = None,
+        limit: int = 50, offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        """Get paginated feed results for a user, newest first.
+
+        One row per job: duplicates of the same opening across boards or across
+        harvest runs are removed in the query, so a page holds twenty distinct
+        jobs rather than twenty rows that might be twelve.
+        """
+        from sqlalchemy import select
+        async with self._session() as session:
+            conditions = self._discovery_feed_conditions(
+                user_id,
+                status=status,
+                sources=sources,
+                query=query,
+                location=location,
+                is_remote=is_remote,
+                min_score=min_score,
+                posted_within_hours=posted_within_hours,
+            )
+            stmt = select(DiscoveryResult).where(
+                DiscoveryResult.id.in_(self._dedupe_representative_ids(conditions))
+            )
+            stmt = stmt.order_by(DiscoveryResult.created_at.desc()).offset(offset).limit(limit)
+            result = await session.execute(stmt)
+            return [self._result_to_dict(r) for r in result.scalars().all()]
+
+    async def annotate_duplicate_sources(
+        self, user_id: str, rows: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Tell each row which other boards carry the same job.
+
+        The feed query already returns one row per job, so the siblings it stood in
+        for are no longer on the page - they have to be looked up. Worth the one
+        extra query: naming the other boards is what makes collapsing trustworthy
+        rather than the feed appearing to lose jobs.
+        """
+        from sqlalchemy import select
+
+        keys = [r["group_fingerprint"] for r in rows if r.get("group_fingerprint")]
+        if not keys:
+            return rows
+
+        async with self._session() as session:
+            siblings = (
+                await session.execute(
+                    select(DiscoveryResult.group_fingerprint, DiscoveryResult.source).where(
+                        (DiscoveryResult.user_id == user_id)
+                        & DiscoveryResult.group_fingerprint.in_(keys)
+                    )
+                )
+            ).all()
+
+        by_key: dict[str, list[str]] = {}
+        for key, source in siblings:
+            by_key.setdefault(key, []).append(source or "")
+
+        annotated: list[dict[str, Any]] = []
+        for row in rows:
+            key = row.get("group_fingerprint")
+            all_sources = by_key.get(key, []) if key else []
+            others = sorted({s for s in all_sources if s and s != row.get("source")})
+            # Only labelled when another *board* carries it. Two copies from the
+            # same board are just two harvest runs of one listing: correctly
+            # collapsed, and "also on hirist" while reading a hirist row would be
+            # noise pretending to be information.
+            if not others:
+                annotated.append(row)
+                continue
+            annotated.append(
+                {**row, "also_on": others, "duplicate_count": len(all_sources)}
+            )
+        return annotated
+
+    async def count_discovery_feed(
+        self, user_id: str, *, status: str | None = None,
+        sources: list[str] | None = None, query: str | None = None,
+        location: str | None = None, is_remote: bool | None = None,
+        min_score: float | None = None, posted_within_hours: int | None = None,
+    ) -> int:
+        """Count feed results for a user under the same filters as the list.
+
+        Counts distinct *jobs*, not rows, because the list now returns distinct
+        jobs. Counting rows here would resurrect the exact bug the shared
+        conditions were introduced to kill: "20 of 300" while paging walks off the
+        end of a 207-item set.
+        """
+        from sqlalchemy import select, func
+        async with self._session() as session:
+            conditions = self._discovery_feed_conditions(
+                user_id,
+                status=status,
+                sources=sources,
+                query=query,
+                location=location,
+                is_remote=is_remote,
+                min_score=min_score,
+                posted_within_hours=posted_within_hours,
+            )
+            representative = self._dedupe_representative_ids(conditions).subquery()
+            stmt = select(func.count()).select_from(representative)
+            result = await session.execute(stmt)
+            return result.scalar() or 0
+
+    async def get_discovery_result(
+        self, user_id: str, result_id: str
+    ) -> dict[str, Any] | None:
+        """One feed row, scoped to its owner."""
+        from sqlalchemy import select
+
+        async with self._session() as session:
+            row = (
+                await session.execute(
+                    select(DiscoveryResult).where(
+                        (DiscoveryResult.id == result_id)
+                        & (DiscoveryResult.user_id == user_id)
+                    )
+                )
+            ).scalar_one_or_none()
+            return self._result_to_dict(row) if row else None
+
+    async def set_discovery_result_job(
+        self, user_id: str, result_id: str, job_id: str
+    ) -> None:
+        """Remember which job-description row this feed result created."""
+        from sqlalchemy import update as sa_update
+
+        async with self._session() as session:
+            async with session.begin():
+                await session.execute(
+                    sa_update(DiscoveryResult)
+                    .where(
+                        (DiscoveryResult.id == result_id)
+                        & (DiscoveryResult.user_id == user_id)
+                    )
+                    .values(job_id=job_id)
+                )
+
+    # ----------------------------------------------------------------------- #
+    # Application queries for the apply queue, submissions and outcomes.
+    #
+    # These live here rather than in `app/applications/` because ADR-4 puts every
+    # owned-table query in the repository layer: a query written in a feature
+    # module is one that can forget its `user_id` filter, and the scoping guard
+    # rejects them for that reason. Each method takes `user_id` first and filters
+    # on it, so the scope cannot be omitted by a caller.
+    #
+    # They return plain dicts. Handing ORM objects out of the session would leave
+    # callers holding rows that detach the moment the session closes.
+    # ----------------------------------------------------------------------- #
+    @staticmethod
+    def _application_to_dict(row: Application) -> dict[str, Any]:
+        return {
+            "application_id": row.application_id,
+            "job_id": row.job_id,
+            "resume_id": row.resume_id,
+            # The base resume a tailored one descends from. Omitting it made the
+            # tracker report None for every card that had one.
+            "master_resume_id": row.master_resume_id,
+            "status": row.status,
+            "company": row.company,
+            "role": row.role,
+            "applied_at": row.applied_at,
+            "position": row.position,
+            "notes": row.notes,
+            "submitted_answers": row.submitted_answers or {},
+            "submitted_resume_version_id": row.submitted_resume_version_id,
+            "submitted_via": row.submitted_via,
+            "created_at": row.created_at,
+            "updated_at": row.updated_at,
+        }
+
+    async def get_application_row(
+        self, user_id: str, application_id: str
+    ) -> dict[str, Any] | None:
+        """One application, scoped to its owner."""
+        from sqlalchemy import select
+
+        async with self._session() as session:
+            row = (
+                await session.execute(
+                    select(Application).where(
+                        (Application.user_id == user_id)
+                        & (Application.application_id == application_id)
+                    )
+                )
+            ).scalar_one_or_none()
+            return self._application_to_dict(row) if row else None
+
+    async def list_application_rows(
+        self,
+        user_id: str,
+        *,
+        statuses: list[str] | None = None,
+        order_by_position: bool = False,
+    ) -> list[dict[str, Any]]:
+        """Applications for a user, optionally filtered by status.
+
+        One method rather than four near-identical ones: the queue, the duplicate
+        guard, the CSV export and the outcomes view all want "this user's
+        applications, maybe filtered", and duplicating that query per caller is how
+        one of them ends up missing the scope.
+        """
+        from sqlalchemy import select
+
+        stmt = select(Application).where(Application.user_id == user_id)
+        if statuses:
+            stmt = stmt.where(Application.status.in_(statuses))
+        stmt = (
+            stmt.order_by(Application.position, Application.created_at)
+            if order_by_position
+            else stmt.order_by(Application.created_at.desc())
+        )
+
+        async with self._session() as session:
+            rows = (await session.execute(stmt)).scalars().all()
+            return [self._application_to_dict(r) for r in rows]
+
+    async def record_application_submission(
+        self,
+        user_id: str,
+        application_id: str,
+        *,
+        answers: dict[str, Any] | None,
+        resume_version_id: str | None,
+        submitted_via: str,
+        applied_at: str,
+        advance_statuses: tuple[str, ...],
+    ) -> dict[str, Any] | None:
+        """Store what was submitted and mark the application applied.
+
+        ``advance_statuses`` are the statuses that may move to ``applied``. Anything
+        further along the pipeline keeps its own status: a late submission record
+        must not drag an application back from interview to applied.
+        """
+        from sqlalchemy import select
+
+        async with self._session() as session:
+            async with session.begin():
+                row = (
+                    await session.execute(
+                        select(Application).where(
+                            (Application.user_id == user_id)
+                            & (Application.application_id == application_id)
+                        )
+                    )
+                ).scalar_one_or_none()
+                if row is None:
+                    return None
+
+                row.submitted_answers = answers or {}
+                row.submitted_resume_version_id = resume_version_id
+                row.submitted_via = submitted_via
+                if row.status in advance_statuses:
+                    row.status = "applied"
+                if not row.applied_at:
+                    row.applied_at = applied_at
+                row.updated_at = applied_at
+                return self._application_to_dict(row)
+
+    async def set_application_positions(self, user_id: str, ordered_ids: list[str]) -> int:
+        """Set queue order from a list of ids. Returns how many moved.
+
+        Ids the user does not own are simply absent from the scoped read, so a
+        stale tab cannot reorder someone else's queue or fail the whole request.
+        """
+        from sqlalchemy import select
+
+        async with self._session() as session:
+            async with session.begin():
+                rows = (
+                    (
+                        await session.execute(
+                            select(Application).where(
+                                (Application.user_id == user_id)
+                                & (Application.application_id.in_(ordered_ids))
+                            )
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                by_id = {r.application_id: r for r in rows}
+                moved = 0
+                for position, application_id in enumerate(ordered_ids):
+                    row = by_id.get(application_id)
+                    if row is None:
+                        continue
+                    if row.position != position:
+                        row.position = position
+                        moved += 1
+                return moved
+
+    async def delete_saved_application_for_job(self, user_id: str, job_id: str) -> int:
+        """Remove a queued (``saved``) application for a job. Returns rows removed.
+
+        Only ``saved`` rows: anything further along is history the user earned, and
+        dismissing a listing is no reason to destroy the record that they applied.
+        """
+        from sqlalchemy import delete as sa_delete
+
+        async with self._session() as session:
+            async with session.begin():
+                result = await session.execute(
+                    sa_delete(Application).where(
+                        (Application.user_id == user_id)
+                        & (Application.job_id == job_id)
+                        & (Application.status == "saved")
+                    )
+                )
+                return result.rowcount or 0
+
+    async def get_resume_names(self, user_id: str, resume_ids: list[str]) -> dict[str, str]:
+        """Filenames for the given resumes, scoped to their owner."""
+        from sqlalchemy import select
+
+        if not resume_ids:
+            return {}
+        async with self._session() as session:
+            rows = (
+                await session.execute(
+                    select(Resume.resume_id, Resume.filename).where(
+                        (Resume.user_id == user_id) & (Resume.resume_id.in_(resume_ids))
+                    )
+                )
+            ).all()
+            return {rid: name for rid, name in rows if name}
+
+    async def get_master_resume_ids(self, user_id: str, resume_ids: list[str]) -> set[str]:
+        """Which of ``resume_ids`` are the user's master resume.
+
+        Used to tell a tailored resume from the master when deciding what to attach
+        to an application: a queued-but-untailored job points at the master, and
+        announcing that as "tailored" would be a lie.
+        """
+        from sqlalchemy import select
+
+        if not resume_ids:
+            return set()
+        async with self._session() as session:
+            rows = (
+                await session.execute(
+                    select(Resume.resume_id).where(
+                        (Resume.user_id == user_id)
+                        & Resume.resume_id.in_(resume_ids)
+                        & Resume.is_master.is_(True)
+                    )
+                )
+            ).scalars().all()
+            return set(rows)
+
+    async def backfill_group_fingerprints(self, limit: int = 20000) -> int:
+        """Give older feed rows the group key duplicate collapsing needs.
+
+        Rows harvested before this column existed have none, so without a backfill
+        the deduplication would only ever help future searches - while the feed the
+        user already has stays 25% repeats. Idempotent and bounded: only NULL rows
+        are touched, so re-running costs one indexed scan and changes nothing.
+        """
+        from sqlalchemy import select
+
+        from app.job_discovery.normalize import group_fingerprint as _group_fingerprint
+
+        updated = 0
+        async with self._session() as session:
+            async with session.begin():
+                rows = (
+                    (
+                        await session.execute(
+                            select(DiscoveryResult)
+                            .where(DiscoveryResult.group_fingerprint.is_(None))
+                            .limit(limit)
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                for row in rows:
+                    if not row.title:
+                        # A row with no title is a failed extraction, not a job.
+                        # Grouping on an empty title would merge unrelated rows.
+                        continue
+                    # Company is not required: some boards (We Work Remotely) put
+                    # the employer inside the title and leave the field blank, and
+                    # demanding one left those rows as permanent duplicates.
+                    row.group_fingerprint = _group_fingerprint(
+                        row.title, row.company or "", row.location or ""
+                    )
+                    updated += 1
+        return updated
+
+    async def count_scored_discovery_results(self, user_id: str) -> int:
+        """How many feed rows carry a real match score.
+
+        Scores exist only for jobs matched against a resume; a keyword harvest
+        stores 0.0. Without this count the UI would offer a "70%+ match" filter
+        that silently returns nothing on a feed where nothing has been scored -
+        a control that looks broken because it is being honest.
+        """
+        from sqlalchemy import func, select
+
+        async with self._session() as session:
+            result = await session.execute(
+                select(func.count(DiscoveryResult.id)).where(
+                    (DiscoveryResult.user_id == user_id) & (DiscoveryResult.match_score > 0)
+                )
+            )
+            return result.scalar() or 0
+
+    async def count_unseen_discovery_results(self, user_id: str) -> int:
+        """Count new unseen results since last visit."""
+        from sqlalchemy import select, func
+        async with self._session() as session:
+            result = await session.execute(
+                select(func.count(DiscoveryResult.id)).where(
+                    (DiscoveryResult.user_id == user_id)
+                    & (DiscoveryResult.seen == False)  # noqa: E712
+                )
+            )
+            return result.scalar() or 0
+
+    async def mark_discovery_results_seen(self, user_id: str) -> None:
+        """Mark all unseen results as seen for a user."""
+        from sqlalchemy import update
+        async with self._session() as session:
+            async with session.begin():
+                await session.execute(
+                    update(DiscoveryResult)
+                    .where(
+                        (DiscoveryResult.user_id == user_id)
+                        & (DiscoveryResult.seen == False)  # noqa: E712
+                    )
+                    .values(seen=True)
+                )
+
+    @staticmethod
+    def _run_to_dict(row: DiscoveryRun) -> dict[str, Any]:
+        return {
+            "id": row.id, "user_id": row.user_id, "resume_id": row.resume_id,
+            "enabled": row.enabled, "interval_hours": row.interval_hours,
+            "last_run_at": row.last_run_at, "next_run_at": row.next_run_at,
+            "last_status": row.last_status, "last_error": row.last_error,
+            "results_count": row.results_count,
+            "created_at": row.created_at, "updated_at": row.updated_at,
+        }
+
+    @staticmethod
+    def _result_to_dict(row: DiscoveryResult) -> dict[str, Any]:
+        return {
+            "id": row.id, "user_id": row.user_id, "run_id": row.run_id,
+            "fingerprint": row.fingerprint, "source": row.source,
+            "title": row.title, "company": row.company, "location": row.location,
+            "url": row.url, "is_remote": row.is_remote,
+            "description": row.description, "salary": row.salary,
+            "posted_at": row.posted_at, "match_score": row.match_score,
+            "matched_keywords": row.matched_keywords or [],
+            "missing_keywords": row.missing_keywords or [],
+            "partial": row.partial, "status": row.status, "seen": row.seen,
+            "job_id": row.job_id,
+            "group_fingerprint": row.group_fingerprint,
+            "created_at": row.created_at,
+        }
 
 
 # Global database instance

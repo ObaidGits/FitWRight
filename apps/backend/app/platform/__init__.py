@@ -16,6 +16,7 @@ composition root, config, diagnostics, and startup wiring may.
 
 from app.platform.capabilities import (
     Capability,
+    allows_local_filesystem_hints,
     capability_report,
     detect_capabilities,
     profile_consistency_error,
@@ -33,6 +34,7 @@ __all__ = [
     "get_container",
     "reset_container",
     "Capability",
+    "allows_local_filesystem_hints",
     "detect_capabilities",
     "required_capabilities",
     "validate_deployment",

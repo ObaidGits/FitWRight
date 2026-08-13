@@ -72,6 +72,22 @@ Export your tailored resume and cover letter as PDF.
 - **Multi-Language UI**: Interface available in English, Spanish, Chinese, Japanese, French, and Portuguese (Brazilian)
 - **Multi-Language Content**: Generate resumes and cover letters in your preferred language
 
+### Browser Extension
+
+A Chrome extension (`apps/extension`) that brings FitWright to the pages where job hunting actually happens:
+
+- **Save any job** you're viewing straight to your feed, from a job board or a company career page
+- **Autofill applications** on Greenhouse, Lever, Ashby, Workday, and SmartRecruiters from your master resume
+- **See your match score** on a job page before you spend twenty minutes on the form
+- **Draft answers** to open-ended application questions with your configured LLM
+- **Track applications** automatically — submitting a form marks the job applied
+
+It also reaches boards a server cannot. Running in your own browser means a residential IP, a real browser fingerprint, and the sessions you're already signed in to.
+
+The extension fills forms but never submits them — you review everything and click submit yourself.
+
+Setup instructions: **[apps/extension/README.md](apps/extension/README.md)**
+
 ### Roadmap
 
 If you have any suggestions or feature requests, please feel free to open an issue on GitHub.

@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Query, Request
 
 from app.admin.cursor import CursorError
 from app.admin.deps import require_admin_read
-from app.admin.repo import AdminErrorReportData, get_admin_repo
+from app.admin.error_reports_service import AdminErrorReportData, list_error_reports_page
 from app.auth import Principal, get_principal, require_verified_user_id
 from app.auth.audit import AuditEvent, get_audit_service
 from app.auth.ratelimit import RateLimitRule, get_rate_limiter
@@ -109,9 +109,7 @@ async def list_error_reports(
 ) -> AdminErrorReportList:
     """Return a newest-first audited page of reports across users."""
     try:
-        rows, next_cursor = await get_admin_repo().list_error_reports(
-            cursor=cursor, limit=limit
-        )
+        rows, next_cursor = await list_error_reports_page(cursor=cursor, limit=limit)
     except CursorError:
         raise ApiError(400, "bad_cursor", "The pagination cursor is invalid.")
 
