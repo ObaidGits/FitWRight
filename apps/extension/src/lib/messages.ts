@@ -37,6 +37,28 @@ export type ToWorker =
   | { type: 'applied'; fingerprint?: string; url?: string }
   | { type: 'scrape-results'; source: string; jobs: CapturedJob[] }
   | {
+      /** Tell FitWright what a form asked. Labels and types only, no values. */
+      type: 'report-form';
+      fields: {
+        label: string;
+        field_type: string;
+        options: string[];
+        filled: boolean;
+        matched_key: string | null;
+      }[];
+      company?: string;
+      ats?: string;
+      url?: string;
+    }
+  | {
+      /** Remember answers the user typed and explicitly chose to keep. */
+      type: 'save-answers';
+      answers: { label: string; value: unknown; field_type: string; options: string[] }[];
+      company?: string;
+      ats?: string;
+      url?: string;
+    }
+  | {
       type: 'bridge-scrape';
       sites: string[];
       query: string;
@@ -68,6 +90,8 @@ export interface ReplyMap {
   draft: DraftResult;
   applied: { updated: boolean };
   'scrape-results': ScrapeResponse;
+  'report-form': { seen: number; created: number; updated: number; needs_answer: number };
+  'save-answers': { saved: number };
   'bridge-scrape': {
     /** Rows harvested off the boards. */
     total: number;

@@ -55,6 +55,7 @@ import {
   DropdownMenuSeparator,
 } from '@/components/atelier/dropdown-menu';
 import { useToast } from '@/components/atelier/toast';
+import { ApplyQueue } from '@/components/applications/apply-queue';
 import {
   APPLICATION_STATUS_ORDER,
   updateApplication,
@@ -253,7 +254,7 @@ export default function ApplicationsPage() {
   const { data, isLoading, isError, refetch } = useApplicationsBoard();
   const { toast } = useToast();
   const qc = useQueryClient();
-  const [view, setView] = React.useState<'board' | 'list'>('board');
+  const [view, setView] = React.useState<'board' | 'list' | 'queue'>('board');
   // On phones the horizontal board is cramped, so default to the list view once
   // after mount (post-hydration to avoid a mismatch; only if the user hasn't
   // already chosen). Guarded so it's a no-op where matchMedia is unavailable.
@@ -386,6 +387,13 @@ export default function ApplicationsPage() {
               >
                 <ListIcon className="h-4 w-4" /> List
               </button>
+              <button
+                onClick={() => setView('queue')}
+                aria-pressed={view === 'queue'}
+                className={`flex items-center gap-1.5 rounded-[var(--radius-at-md)] px-3 py-1.5 text-sm ${view === 'queue' ? 'bg-[var(--card)] shadow-[var(--shadow-at-e1)]' : 'text-[var(--muted-foreground)]'}`}
+              >
+                <CircleArrowRight className="h-4 w-4" /> Queue
+              </button>
             </div>
           </div>
         )}
@@ -408,6 +416,8 @@ export default function ApplicationsPage() {
             </Button>
           }
         />
+      ) : view === 'queue' ? (
+        <ApplyQueue />
       ) : view === 'board' ? (
         <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={onDragEnd}>
           <div className="flex gap-3 overflow-x-auto pb-4">

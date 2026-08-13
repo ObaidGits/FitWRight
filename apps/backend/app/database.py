@@ -1393,6 +1393,49 @@ class Database:
                 result = self._application_field_to_dict(keep)
             return result
 
+    async def set_application_field_value(
+        self,
+        user_id: str,
+        *,
+        label_normalized: str,
+        company: str | None,
+        value: Any,
+    ) -> bool:
+        """Set the answer for a field addressed by its label, not its id.
+
+        The extension knows the label a form used, never our row id, so this is
+        how "save what I just typed" lands. Unlike ``upsert_application_field``
+        this DOES overwrite an existing answer: the user has explicitly said what
+        it should be, and their latest word wins.
+
+        A field pointing at the Profile is left alone. Overwriting it would
+        reintroduce the stale-copy problem the pointer exists to prevent - the
+        answer belongs to the Profile, and Settings is where that link is changed.
+        """
+        from sqlalchemy import select
+
+        from app.models import ApplicationField, _utcnow_iso
+
+        scope = "company" if company else "global"
+        async with self._session() as session:
+            async with session.begin():
+                row = (
+                    await session.execute(
+                        select(ApplicationField).where(
+                            (ApplicationField.user_id == user_id)
+                            & (ApplicationField.label_normalized == label_normalized)
+                            & (ApplicationField.scope == scope)
+                            & (ApplicationField.company == company)
+                        )
+                    )
+                ).scalar_one_or_none()
+                if row is None or row.profile_path:
+                    return False
+                row.value = value
+                row.status = "answered"
+                row.updated_at = _utcnow_iso()
+                return True
+
     def _application_field_to_dict(self, row: Any) -> dict[str, Any]:
         return {
             "id": row.id,

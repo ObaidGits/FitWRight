@@ -4,7 +4,9 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 
+from app.applications import submissions
 from app.auth import get_effective_user_id
 from app.database import db
 from app.services.improver import extract_job_keywords
@@ -104,6 +106,104 @@ async def create_application(
             logger.warning("Failed to cache company/role on job %s: %s", job["job_id"], e)
 
     return ApplicationResponse(**application)
+
+
+# --------------------------------------------------------------------------- #
+# Apply queue and submission records (Phase 5)
+#
+# These are declared BEFORE `/{application_id}` on purpose. FastAPI matches routes
+# in definition order, so a `/queue` route added after it would never be reached -
+# "queue" would be captured as an application id and 404.
+# --------------------------------------------------------------------------- #
+class SubmissionRequest(BaseModel):
+    """What was actually submitted to the employer."""
+
+    answers: dict[str, Any] = Field(default_factory=dict)
+    resume_version_id: str | None = None
+    # extension | manual | api
+    submitted_via: str = "manual"
+
+
+class ReorderRequest(BaseModel):
+    """The queue in the order it should be worked through."""
+
+    application_ids: list[str] = Field(default_factory=list, max_length=500)
+
+
+class DuplicateCheckRequest(BaseModel):
+    company: str | None = None
+    role: str | None = None
+
+
+@router.get("/queue", summary="Jobs to work through, in order")
+async def get_apply_queue(user_id: str = Depends(get_effective_user_id)):
+    """The apply queue: saved applications in the order to open them.
+
+    Holds jobs, not part-filled forms - an employer's form cannot be persisted
+    across tabs, so the queue decides what you open next and the extension fills
+    each one when you get there.
+    """
+    items = await submissions.list_queue(user_id)
+    return {"items": items, "total": len(items)}
+
+
+@router.post("/queue/reorder", summary="Reorder the apply queue")
+async def reorder_apply_queue(
+    body: ReorderRequest, user_id: str = Depends(get_effective_user_id)
+):
+    moved = await submissions.reorder_queue(user_id, body.application_ids)
+    return {"reordered": moved}
+
+
+@router.post("/queue/check-duplicate", summary="Have I already applied to this?")
+async def check_duplicate(
+    body: DuplicateCheckRequest, user_id: str = Depends(get_effective_user_id)
+):
+    """Warn before queueing a role already applied to.
+
+    Advisory, not a block: the user may have a legitimate reason (a referral, a
+    genuinely re-opened req), and refusing outright would be the tool overruling
+    someone with more context than it has.
+    """
+    duplicate = await submissions.find_duplicate(
+        user_id, company=body.company, role=body.role
+    )
+    return {"duplicate": duplicate, "is_duplicate": duplicate is not None}
+
+
+@router.post("/{application_id}/submission", summary="Record what was submitted")
+async def create_submission(
+    application_id: str,
+    body: SubmissionRequest,
+    user_id: str = Depends(get_effective_user_id),
+):
+    """Store the answers, resume version and channel, and mark it applied."""
+    record = await submissions.record_submission(
+        user_id,
+        application_id,
+        answers=body.answers,
+        resume_version_id=body.resume_version_id,
+        submitted_via=body.submitted_via,
+    )
+    if record is None:
+        raise HTTPException(status_code=404, detail="Application not found")
+    logger.info(
+        "Recorded submission for %s (%d answers, via %s)",
+        application_id,
+        len(body.answers),  # count only - the answers themselves are never logged
+        body.submitted_via,
+    )
+    return record
+
+
+@router.get("/{application_id}/submission", summary="What was submitted")
+async def read_submission(
+    application_id: str, user_id: str = Depends(get_effective_user_id)
+):
+    record = await submissions.get_submission(user_id, application_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Application not found")
+    return record
 
 
 @router.get("/{application_id}", response_model=ApplicationDetailResponse)

@@ -241,6 +241,96 @@ async def report_form(
     )
 
 
+class SubmittedAnswer(BaseModel):
+    """One answer the user typed on a form and chose to keep."""
+
+    label: str
+    value: Any
+    field_type: str = "text"
+    options: list[str] = Field(default_factory=list)
+
+    @field_validator("field_type")
+    @classmethod
+    def _known_type(cls, value: str) -> str:
+        value = (value or "text").strip().lower()
+        return value if value in _FIELD_TYPES else "text"
+
+    @field_validator("label")
+    @classmethod
+    def _label_present(cls, value: str) -> str:
+        if not (value or "").strip():
+            raise ValueError("label is required")
+        return value.strip()[:400]
+
+
+class SaveAnswers(BaseModel):
+    """Answers the user explicitly asked to remember."""
+
+    answers: list[SubmittedAnswer] = Field(default_factory=list, max_length=100)
+    company: str | None = None
+    ats: str | None = None
+    url: str | None = None
+
+
+class SaveAnswersResult(BaseModel):
+    saved: int
+
+
+@router.post(
+    "/extension/answers",
+    response_model=SaveAnswersResult,
+    summary="Remember answers the user typed on a form",
+)
+async def save_answers(
+    body: SaveAnswers,
+    user_id: str = Depends(get_effective_user_id),
+    db: Database = Depends(get_db),
+) -> SaveAnswersResult:
+    """Store answers the user typed on a form and chose to keep.
+
+    This is the one place values are accepted, and the distinction from
+    ``/form-report`` is consent rather than convenience. Form reporting happens
+    automatically on every application the user opens, so it takes labels only.
+    Saving answers happens because they pressed a button that says so, which is
+    the whole point of the feature: teach FitWright from the form in front of you
+    instead of retyping it in Settings later.
+
+    An answer that maps onto a Profile field is still stored here rather than
+    written into the Profile: silently rewriting curated Profile data from a form
+    would be a surprise, and Settings can offer that promotion explicitly.
+    """
+    saved = 0
+    for answer in body.answers:
+        normalized = normalize_label(answer.label)
+        if not normalized:
+            continue
+
+        await db.upsert_application_field(
+            user_id,
+            label=answer.label,
+            label_normalized=normalized,
+            field_type=answer.field_type,
+            options=answer.options,
+            status="answered",
+            source="user",
+            company=body.company,
+            last_seen_url=body.url,
+            last_seen_ats=body.ats,
+            last_seen_at=_now(),
+        )
+        # Set the value in a second step: upsert deliberately never overwrites an
+        # existing answer, but here the user has just told us what it should be.
+        await db.set_application_field_value(
+            user_id,
+            label_normalized=normalized,
+            company=body.company,
+            value=answer.value,
+        )
+        saved += 1
+
+    return SaveAnswersResult(saved=saved)
+
+
 @router.get("/application-fields", response_model=list[FieldOut], summary="List answers")
 async def list_fields(
     status_filter: str | None = None,

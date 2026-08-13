@@ -221,6 +221,80 @@ class TestMerge:
         assert await db.merge_application_fields(USER, fid, "does-not-exist") is None
 
 
+class TestSavingTypedAnswers:
+    """`POST /extension/answers` - the learn-in-place path.
+
+    This is the one endpoint that accepts values, and the distinction from
+    form-report is consent: it runs because the user pressed "save my answers",
+    not automatically on every form they open.
+    """
+
+    async def test_saving_an_answer_records_the_value(self, db):
+        await db.upsert_application_field(
+            USER, label="Preferred pronouns", label_normalized="preferred pronouns"
+        )
+        assert await db.set_application_field_value(
+            USER, label_normalized="preferred pronouns", company=None, value="they/them"
+        )
+        row = (await db.list_application_fields(USER))[0]
+        assert row["value"] == "they/them"
+        assert row["status"] == "answered"
+
+    async def test_saving_again_overwrites_because_the_user_said_so(self, db):
+        """Unlike a form sighting, an explicit save is the user's latest word."""
+        await db.upsert_application_field(USER, label="Notice", label_normalized="notice")
+        await db.set_application_field_value(
+            USER, label_normalized="notice", company=None, value="30 days"
+        )
+        await db.set_application_field_value(
+            USER, label_normalized="notice", company=None, value="60 days"
+        )
+        assert (await db.list_application_fields(USER))[0]["value"] == "60 days"
+
+    async def test_a_profile_backed_field_is_left_alone(self, db):
+        """The answer belongs to the Profile; overwriting here would reintroduce
+        exactly the stale copy the pointer exists to prevent."""
+        await db.upsert_application_field(
+            USER, label="Work Authorization", label_normalized="work authorization"
+        )
+        fid = (await db.list_application_fields(USER))[0]["id"]
+        await db.update_application_field(
+            USER, fid, {"profile_path": "identity.workAuthorization"}
+        )
+
+        assert (
+            await db.set_application_field_value(
+                USER, label_normalized="work authorization", company=None, value="OVERWRITE"
+            )
+            is False
+        )
+        row = (await db.list_application_fields(USER))[0]
+        assert row["value"] is None
+        assert row["profile_path"] == "identity.workAuthorization"
+
+    async def test_unknown_label_is_not_created_silently(self, db):
+        """The value setter answers an existing question; it does not invent one."""
+        assert (
+            await db.set_application_field_value(
+                USER, label_normalized="never seen", company=None, value="x"
+            )
+            is False
+        )
+        assert await db.list_application_fields(USER) == []
+
+    async def test_company_scoped_answer_is_addressed_by_company(self, db):
+        await db.upsert_application_field(USER, label="Team", label_normalized="team")
+        await db.upsert_application_field(
+            USER, label="Team", label_normalized="team", company="Acme"
+        )
+        await db.set_application_field_value(
+            USER, label_normalized="team", company="Acme", value="Platform"
+        )
+        rows = {(r["scope"], r["value"]) for r in await db.list_application_fields(USER)}
+        assert ("company", "Platform") in rows
+        assert ("global", None) in rows
+
+
 class TestStatusFilter:
     async def test_filter_returns_only_that_status(self, db):
         await db.upsert_application_field(USER, label="Open", label_normalized="open")

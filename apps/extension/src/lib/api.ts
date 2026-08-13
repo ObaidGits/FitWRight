@@ -167,8 +167,47 @@ export async function sendScrapeResults(source: string, jobs: CapturedJob[]): Pr
   return totals;
 }
 
-export function matchJob(description: string, title: string): Promise<MatchResult> {
-  return request<MatchResult>('/extension/match', {
+/**
+ * Tell FitWright what a form asked for.
+ *
+ * Sent automatically after every autofill, which is exactly why it carries
+ * labels, types and options but never values: this fires on every application
+ * the user opens, and a record of what they typed is not ours to keep. The
+ * server refuses a payload that contains one.
+ */
+export function reportForm(payload: {
+  fields: {
+    label: string;
+    field_type: string;
+    options: string[];
+    filled: boolean;
+    matched_key: string | null;
+  }[];
+  company?: string;
+  ats?: string;
+  url?: string;
+}): Promise<{ seen: number; created: number; updated: number; needs_answer: number }> {
+  return request('/extension/form-report', { method: 'POST', body: payload });
+}
+
+/**
+ * Remember answers the user typed on the page and asked to keep.
+ *
+ * The counterpart to `reportForm`, and the only call that sends values. The
+ * difference is consent: this one happens because they pressed a button saying
+ * so, which is what makes teaching from the form in front of you preferable to
+ * retyping it in Settings later.
+ */
+export function saveAnswers(payload: {
+  answers: { label: string; value: unknown; field_type: string; options: string[] }[];
+  company?: string;
+  ats?: string;
+  url?: string;
+}): Promise<{ saved: number }> {
+  return request('/extension/answers', { method: 'POST', body: payload });
+}
+
+export function matchJob(description: string, title: string): Promise<MatchResult> {  return request<MatchResult>('/extension/match', {
     method: 'POST',
     body: { description, title },
   });
@@ -220,6 +259,5 @@ export async function fetchResumePdf(): Promise<{ dataUrl: string; filename: str
 }
 
 /** Reset cached auth state - called when the base URL changes. */
-export function resetAuthCache(): void {
-  csrfToken = null;
+export function resetAuthCache(): void {  csrfToken = null;
 }

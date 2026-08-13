@@ -27,12 +27,62 @@ import { sendToWorker } from '@/lib/messages';
 import { getSettings } from '@/lib/storage';
 import type { AutofillProfile } from '@/lib/types';
 
+/** One field the form asked for, as the registry needs to hear about it. */
+export interface SeenField {
+  label: string;
+  field_type: string;
+  options: string[];
+  filled: boolean;
+  matched_key: string | null;
+}
+
 export interface AutofillReport {
   filled: number;
   skipped: number;
   /** Open-ended questions found but left for the user / AI drafting. */
   questions: string[];
   resumeAttached: boolean;
+  /**
+   * Every field encountered, so the learning loop can record what this form
+   * asked and queue whatever we could not answer. Labels, types and options
+   * only - never the values, which stay on the page unless the user explicitly
+   * saves them.
+   */
+  seen: SeenField[];
+}
+
+/** The visible question for a field, as a person reads it. Re-exported so the
+ *  content script can describe fields without importing from two modules. */
+export { labelFor } from '@/lib/dom';
+
+/** The choices a select or radio group offers, so Settings can render them. */
+export function optionsFor(el: Fillable, root: ParentNode = document): string[] {
+  if (el.tagName === 'SELECT') {
+    return Array.from((el as HTMLSelectElement).options)
+      .map((o) => o.textContent?.trim() ?? '')
+      .filter((text) => text && !/^(select|choose|--)/i.test(text));
+  }
+  const name = el.getAttribute('name');
+  const type = (el as HTMLInputElement).type;
+  if (name && (type === 'radio' || type === 'checkbox')) {
+    return Array.from(
+      root.querySelectorAll<HTMLInputElement>(
+        `input[name="${CSS.escape(name)}"]`,
+      ),
+    )
+      .map((input) => labelFor(input))
+      .filter(Boolean);
+  }
+  return [];
+}
+
+/** The input kind, in the vocabulary the registry stores. */
+export function typeFor(el: Fillable): string {
+  if (el.tagName === 'TEXTAREA') return 'textarea';
+  if (el.tagName === 'SELECT') return 'select';
+  const type = (el as HTMLInputElement).type?.toLowerCase();
+  if (type === 'radio' || type === 'checkbox' || type === 'date' || type === 'number') return type;
+  return 'text';
 }
 
 /** True when a field already holds a user-entered value. */
@@ -49,6 +99,7 @@ export async function autofill(root: ParentNode = document): Promise<AutofillRep
     skipped: 0,
     questions: [],
     resumeAttached: false,
+    seen: [],
   };
 
   const profileReply = await sendToWorker({ type: 'get-profile' });
@@ -56,24 +107,50 @@ export async function autofill(root: ParentNode = document): Promise<AutofillRep
   const profile: AutofillProfile = profileReply.data;
   const { preferences } = await getSettings();
 
+  /** Record what a field asked and whether we answered it. */
+  function note(el: Fillable, key: string | null, filled: boolean): void {
+    const label = labelFor(el);
+    if (!label) return; // nothing a person could recognise it by
+    // A password field is never reported at all, not even its label.
+    if ((el as HTMLInputElement).type === 'password') return;
+    report.seen.push({
+      label,
+      field_type: typeFor(el),
+      options: optionsFor(el, root),
+      filled,
+      matched_key: key,
+    });
+  }
+
   // --- Text / select fields -------------------------------------------------
   for (const el of collectFields(root)) {
     if (hasValue(el)) {
       report.skipped += 1;
+      // Already answered - by us on an earlier step, or by the user. Either way
+      // this question is not outstanding, so it is reported as filled.
+      note(el, classify(el), true);
       continue;
     }
     const key = classify(el);
-    if (!key) continue;
+    if (!key) {
+      // Unrecognised: the single most useful thing to learn about, since this is
+      // exactly what the user will have to answer by hand.
+      note(el, null, false);
+      continue;
+    }
 
     const value = valueFor(key, profile, preferences);
     if (!value) {
       // Classified but we have nothing to say - e.g. the user left EEO answers
       // blank. Leaving it empty is correct; guessing is not.
       report.skipped += 1;
+      note(el, key, false);
       continue;
     }
-    if (setValue(el, value)) report.filled += 1;
+    const ok = setValue(el, value);
+    if (ok) report.filled += 1;
     else report.skipped += 1;
+    note(el, key, ok);
   }
 
   // --- Radio / checkbox groups ---------------------------------------------
@@ -88,10 +165,18 @@ export async function autofill(root: ParentNode = document): Promise<AutofillRep
   }
   for (const [name, sample] of groups) {
     const key = classify(sample);
-    if (!key) continue;
+    if (!key) {
+      note(sample, null, false);
+      continue;
+    }
     const value = valueFor(key, profile, preferences);
-    if (!value) continue;
-    if (setRadioGroup(name, value, root)) report.filled += 1;
+    if (!value) {
+      note(sample, key, false);
+      continue;
+    }
+    const ok = setRadioGroup(name, value, root);
+    if (ok) report.filled += 1;
+    note(sample, key, ok);
   }
 
   // --- Resume upload -------------------------------------------------------

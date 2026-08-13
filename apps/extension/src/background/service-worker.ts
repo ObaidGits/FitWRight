@@ -114,6 +114,27 @@ async function handle(message: ToWorker, sender: chrome.runtime.MessageSender): 
       return ok({ total, saved, perSite: results });
     }
 
+    case 'report-form':
+      return ok(
+        await api.reportForm({
+          fields: message.fields,
+          company: message.company,
+          ats: message.ats,
+          url: message.url,
+        }),
+      );
+
+    case 'save-answers': {
+      const result = await api.saveAnswers({
+        answers: message.answers,
+        company: message.company,
+        ats: message.ats,
+        url: message.url,
+      });
+      if (result.saved > 0) await flashBadge(String(result.saved));
+      return ok(result);
+    }
+
     case 'get-profile':
       return ok(await api.getProfile());
 

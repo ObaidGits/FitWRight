@@ -15,13 +15,29 @@
 import { genericAdapter, resolveAdapter } from '@/adapters/registry';
 import type { SiteAdapter } from '@/adapters/types';
 import { waitFor } from '@/lib/dom';
+import { collectFields } from '@/lib/fields';
 import { fail, ok } from '@/lib/messages';
 import type { Reply, ToContent } from '@/lib/messages';
 import { getCachedMatch, getSettings, setCachedMatch } from '@/lib/storage';
 import { sendToWorker } from '@/lib/messages';
 import type { CapturedJob, MatchResult, PageContext, PageKind } from '@/lib/types';
-import { autofill, draftOpenQuestions, listOpenQuestions } from './autofill';
-import { hideBadge, showBadge, showBadgeLoading, toast } from './overlay';
+import {
+  autofill,
+  draftOpenQuestions,
+  labelFor,
+  listOpenQuestions,
+  optionsFor,
+  typeFor,
+  type AutofillReport,
+} from './autofill';
+import {
+  hideBadge,
+  hideFillPanel,
+  showBadge,
+  showBadgeLoading,
+  showFillPanel,
+  toast,
+} from './overlay';
 import { watchForSubmission } from './tracking';
 
 let adapter: SiteAdapter = resolveAdapter(new URL(location.href));
@@ -206,6 +222,10 @@ async function handleMessage(message: ToContent): Promise<Reply<unknown>> {
       if (report.resumeAttached) parts.push('resume attached');
       toast(parts.join(', '), report.filled ? 'ok' : 'err');
 
+      // Report what this form asked, and offer to remember whatever the user
+      // answers by hand from here.
+      void reportAndOfferToLearn(root, report);
+
       // Drafting is opt-in per page and only worth doing when we know the JD.
       const job = currentJob ?? extractJob();
       if (report.questions.length && job?.description) {
@@ -276,6 +296,78 @@ async function harvestList(deadlineMs = 20000): Promise<CapturedJob[]> {
 // --------------------------------------------------------------------------- //
 
 /**
+ * Report what a form asked, and offer to learn what the user answers.
+ *
+ * Runs after every fill. The report itself carries labels only; the panel is what
+ * turns a blank field into a remembered answer, at the one moment the user
+ * actually knows it.
+ */
+async function reportAndOfferToLearn(root: ParentNode, report: AutofillReport): Promise<void> {
+  const company = currentJob?.company || undefined;
+
+  if (report.seen.length) {
+    // Fire and forget: a failed report must never disrupt an application.
+    void sendToWorker({
+      type: 'report-form',
+      fields: report.seen,
+      company,
+      ats: adapter.id,
+      url: location.href,
+    });
+  }
+
+  // Only questions still blank are worth the user's attention.
+  const unanswered: { label: string; element: HTMLElement }[] = [];
+  for (const el of collectFields(root)) {
+    if ((el as HTMLInputElement).value?.trim()) continue;
+    if ((el as HTMLInputElement).type === 'password') continue;
+    const label = labelFor(el);
+    if (label) unanswered.push({ label, element: el as HTMLElement });
+  }
+
+  showFillPanel(
+    { filled: report.filled, unanswered },
+    {
+      onSaveAnswers: async () => {
+        // Read the page fresh: the user has been typing since the fill.
+        const answers: {
+          label: string;
+          value: unknown;
+          field_type: string;
+          options: string[];
+        }[] = [];
+        for (const el of collectFields(root)) {
+          if ((el as HTMLInputElement).type === 'password') continue;
+          const value = (el as HTMLInputElement).value?.trim();
+          if (!value) continue;
+          const label = labelFor(el);
+          if (!label) continue;
+          answers.push({
+            label,
+            value,
+            field_type: typeFor(el),
+            options: optionsFor(el, root),
+          });
+        }
+        if (!answers.length) {
+          toast('Nothing filled in to save yet', 'info');
+          return;
+        }
+        const reply = await sendToWorker({
+          type: 'save-answers',
+          answers,
+          company,
+          ats: adapter.id,
+          url: location.href,
+        });
+        if (!reply.ok) toast(reply.error, 'err');
+        else toast(`${reply.data.saved} answer(s) saved to FitWright`, 'ok');
+      },
+    },
+  );
+}
+
+/**
  * Job boards are SPAs: LinkedIn and Indeed swap the posting without a page load,
  * so re-run on URL change. `popstate` alone misses pushState navigations, hence
  * the polled comparison.
@@ -290,6 +382,7 @@ setInterval(() => {
   teardownTracking?.();
   teardownTracking = null;
   stopStepWatch();
+  hideFillPanel();
   void initialise();
 }, 1200);
 
@@ -343,6 +436,7 @@ async function fillCurrentStep(): Promise<void> {
   try {
     const report = await autofill(root);
     lastFieldSignature = fieldSignature(root);
+    void reportAndOfferToLearn(root, report);
     if (report.filled > 0) {
       toast(`${report.filled} field${report.filled === 1 ? '' : 's'} filled on this step`, 'ok');
     }

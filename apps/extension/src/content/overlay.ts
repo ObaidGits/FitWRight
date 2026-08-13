@@ -39,6 +39,21 @@ const STYLES = `
   :host { all: initial; }
   * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
 
+  /* The fill panel sits above the match badge when both are on screen. */
+  .fillpanel { bottom: 20px; width: 290px; }
+  .fillpanel .unanswered { display: flex; flex-direction: column; gap: 4px; }
+  .fillpanel .jump {
+    text-align: left; padding: 5px 7px; font-size: 12px; cursor: pointer;
+    background: #f6f5f1; color: #1a1a17;
+    border: 1px solid #e7e5df; border-radius: 6px;
+  }
+  .fillpanel .jump:hover { background: #efeee9; }
+  .fillpanel .save {
+    margin-top: 2px; padding: 7px 9px; font-size: 12px; font-weight: 600; cursor: pointer;
+    background: #4f46e5; color: #fff; border: 0; border-radius: 6px;
+  }
+  .fillpanel .save:disabled { opacity: .6; cursor: default; }
+
   .badge {
     position: fixed; right: 20px; bottom: 20px; z-index: 2147483000;
     display: flex; flex-direction: column; gap: 8px;
@@ -169,6 +184,93 @@ export function hideBadge(): void {
 }
 
 /** Transient status message. */
+/** What the fill panel needs to describe a pass over the form. */
+export interface FillSummary {
+  filled: number;
+  /** Questions we had nothing to answer with - the ones worth the user's eyes. */
+  unanswered: { label: string; element: HTMLElement }[];
+}
+
+export interface FillPanelActions {
+  /** Save the answers the user has typed since the fill. */
+  onSaveAnswers: () => Promise<void> | void;
+  onDismiss?: () => void;
+}
+
+/**
+ * Summarise a fill and offer to learn from what the user types next.
+ *
+ * This is the whole point of learn-in-place: the moment a person is looking at a
+ * form is the moment they know the answer, so asking then - and offering to
+ * remember it - beats making them retype it in Settings later. Clicking an
+ * unanswered question scrolls to it and focuses it, because "2 fields need you"
+ * is useless if finding them is the hard part.
+ */
+export function showFillPanel(summary: FillSummary, actions: FillPanelActions): void {
+  const root = ensureShadow();
+  root.querySelector('.fillpanel')?.remove();
+
+  const panel = document.createElement('div');
+  panel.className = 'badge fillpanel';
+
+  const outstanding = summary.unanswered.length;
+  panel.innerHTML = `
+    <div class="row">
+      <span class="brand">FitWright</span>
+      <button class="close" title="Hide">&times;</button>
+    </div>
+    <div><strong>${summary.filled}</strong> field${summary.filled === 1 ? '' : 's'} filled${
+      outstanding ? ` &middot; <strong>${outstanding}</strong> need${outstanding === 1 ? 's' : ''} you` : ''
+    }</div>
+    ${
+      outstanding
+        ? `<div class="muted">Click a question to jump to it. Answer them here, then save so the
+             next form fills itself.</div>
+           <div class="unanswered">${summary.unanswered
+             .slice(0, 6)
+             .map(
+               (item, index) =>
+                 `<button class="jump" data-index="${index}">${escapeHtml(item.label)}</button>`,
+             )
+             .join('')}</div>`
+        : '<div class="muted">Nothing left unanswered on this step.</div>'
+    }
+    <button class="save">Save my answers to FitWright</button>
+  `;
+
+  panel.querySelector('.close')?.addEventListener('click', () => {
+    panel.remove();
+    actions.onDismiss?.();
+  });
+
+  for (const button of panel.querySelectorAll<HTMLButtonElement>('.jump')) {
+    button.addEventListener('click', () => {
+      const target = summary.unanswered[Number(button.dataset.index)]?.element;
+      if (!target) return;
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      (target as HTMLInputElement).focus?.();
+    });
+  }
+
+  const save = panel.querySelector<HTMLButtonElement>('.save');
+  save?.addEventListener('click', async () => {
+    save.disabled = true;
+    save.textContent = 'Saving...';
+    try {
+      await actions.onSaveAnswers();
+    } finally {
+      save.disabled = false;
+      save.textContent = 'Save my answers to FitWright';
+    }
+  });
+
+  root.appendChild(panel);
+}
+
+export function hideFillPanel(): void {
+  shadow?.querySelector('.fillpanel')?.remove();
+}
+
 export function toast(message: string, kind: 'ok' | 'err' | 'info' = 'info'): void {
   const root = ensureShadow();
   root.querySelectorAll('.toast').forEach((n) => n.remove());
