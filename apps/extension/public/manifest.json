@@ -1,14 +1,15 @@
 {
   "manifest_version": 3,
   "name": "FitWright Companion",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Capture jobs, autofill applications, and see resume match scores while you browse - powered by your FitWright account.",
   "minimum_chrome_version": "110",
   "permissions": [
     "storage",
     "tabs",
     "alarms",
-    "notifications"
+    "notifications",
+    "scripting"
   ],
   "host_permissions": [
     "*://*.greenhouse.io/*",
@@ -30,6 +31,19 @@
     "*://*.glassdoor.com/*",
     "*://*.glassdoor.co.in/*",
     "https://www.google.com/search*",
+    "*://*.icims.com/*",
+    "*://*.taleo.net/*",
+    "*://*.oraclecloud.com/*",
+    "*://*.successfactors.com/*",
+    "*://*.successfactors.eu/*",
+    "*://*.sapsf.com/*",
+    "*://*.myworkdaysite.com/*",
+    "*://*.workable.com/*",
+    "*://*.jobvite.com/*",
+    "*://*.breezy.hr/*",
+    "*://*.recruitee.com/*",
+    "*://*.teamtailor.com/*",
+    "*://*.bamboohr.com/*",
     "http://localhost:3000/*",
     "http://127.0.0.1:3000/*"
   ],
@@ -74,7 +88,20 @@
         "*://*.ziprecruiter.com/*",
         "*://*.glassdoor.com/*",
         "*://*.glassdoor.co.in/*",
-        "https://www.google.com/search*"
+        "https://www.google.com/search*",
+        "*://*.icims.com/*",
+        "*://*.taleo.net/*",
+        "*://*.oraclecloud.com/*",
+        "*://*.successfactors.com/*",
+        "*://*.successfactors.eu/*",
+        "*://*.sapsf.com/*",
+        "*://*.myworkdaysite.com/*",
+        "*://*.workable.com/*",
+        "*://*.jobvite.com/*",
+        "*://*.breezy.hr/*",
+        "*://*.recruitee.com/*",
+        "*://*.teamtailor.com/*",
+        "*://*.bamboohr.com/*"
       ],
       "js": [
         "content.js"
@@ -96,5 +123,9 @@
       "run_at": "document_start",
       "all_frames": false
     }
+  ],
+  "optional_host_permissions": [
+    "http://*/*",
+    "https://*/*"
   ]
 }

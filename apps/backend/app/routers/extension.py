@@ -48,6 +48,11 @@ logger = logging.getLogger(__name__)
 # own manifest version's supported range.
 EXTENSION_API_VERSION = 1
 
+# The extension build shipped with this server. Bump alongside the extension's
+# manifest version - it is what lets a client that never auto-updates discover it
+# is behind, which for an unpacked extension is otherwise unknowable.
+EXTENSION_LATEST_VERSION = "0.2.0"
+
 
 # --------------------------------------------------------------------------- #
 # Dependencies
@@ -190,6 +195,12 @@ class PingResponse(BaseModel):
     user_id: str
     has_resume: bool
     resume_count: int
+    # The extension build this server was released alongside. Loaded unpacked,
+    # extensions do not auto-update, so without this the user has no way to learn
+    # a newer build exists - every fix would reach nobody until told in person.
+    latest_extension_version: str = EXTENSION_LATEST_VERSION
+    # None when the client did not say which build it is.
+    client_current: bool | None = None
 
 
 class AutofillProfile(BaseModel):
@@ -348,6 +359,7 @@ def _years_of_experience(processed: dict[str, Any]) -> float | None:
 # --------------------------------------------------------------------------- #
 @router.get("/ping", response_model=PingResponse, summary="Extension handshake")
 async def ping(
+    client_version: str | None = None,
     user_id: str = Depends(get_effective_user_id),
     db: Database = Depends(get_db),
 ) -> PingResponse:
@@ -355,6 +367,13 @@ async def ping(
 
     The extension calls this on startup and on every popup open: a 401 tells it
     to show "sign in to FitWright" instead of failing later mid-autofill.
+
+    ``client_version`` lets the extension learn it is behind. An unpacked
+    extension never auto-updates, so a user can run a build from weeks ago
+    indefinitely and report bugs that were already fixed. Comparison is exact
+    equality rather than semver ordering: the only question worth answering is
+    "is this the build this server expects", and a wrong guess about ordering
+    would nag someone running a newer build.
     """
     resumes = await db.list_resumes(user_id)
     return PingResponse(
@@ -363,6 +382,8 @@ async def ping(
         user_id=user_id,
         has_resume=bool(resumes),
         resume_count=len(resumes),
+        latest_extension_version=EXTENSION_LATEST_VERSION,
+        client_current=(client_version == EXTENSION_LATEST_VERSION) if client_version else None,
     )
 
 

@@ -8,8 +8,14 @@
  * easier to reason about when the extension owns the value.
  */
 import { sendToWorker } from '@/lib/messages';
+import {
+  originPattern,
+  requestPermission,
+  syncBridgeRegistration,
+} from '@/lib/bridge-registration';
+import { clearErrors, listErrors, listRuns, timeAgo } from '@/lib/diagnostics';
 import { getSettings, saveSettings } from '@/lib/storage';
-import type { LocalPreferences, ScrapeQuery } from '@/lib/types';
+import type { FormAnswers, ScrapeQuery } from '@/lib/types';
 
 const el = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
@@ -19,7 +25,7 @@ const queriesBody = el<HTMLTableSectionElement>('queries');
 /** Working copy - committed to storage only on Save. */
 let queries: ScrapeQuery[] = [];
 
-const PREFERENCE_IDS: Array<keyof Omit<LocalPreferences, 'custom'>> = [
+const PREFERENCE_IDS: Array<keyof Omit<FormAnswers, 'custom'>> = [
   'workAuthorization',
   'requiresSponsorship',
   'noticePeriod',
@@ -37,6 +43,15 @@ const BOARD_LABELS: Record<string, string> = {
   hirist: 'Hirist',
   foundit: 'Foundit',
 };
+
+/** Escape values before they go into innerHTML on this page. */
+function escapeHtml(value: string): string {
+  return value.replace(
+    /[&<>"']/g,
+    (c) =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string,
+  );
+}
 
 function setStatus(message: string, kind: '' | 'ok' | 'err' = ''): void {
   statusBox.textContent = message;
@@ -105,7 +120,7 @@ async function load(): Promise<void> {
 }
 
 async function save(): Promise<void> {
-  const preferences = {} as Omit<LocalPreferences, 'custom'>;
+  const preferences = {} as Omit<FormAnswers, 'custom'>;
   for (const id of PREFERENCE_IDS) {
     const input = document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null;
     preferences[id] = input?.value.trim() ?? '';
@@ -116,19 +131,54 @@ async function save(): Promise<void> {
   // more than a couple of times an hour; clamp rather than reject.
   const interval = Number.isFinite(rawInterval) ? Math.max(30, Math.round(rawInterval)) : 360;
 
+  const baseUrl = el<HTMLInputElement>('apiBaseUrl').value.trim() || 'http://localhost:3000';
+
   await saveSettings({
-    apiBaseUrl: el<HTMLInputElement>('apiBaseUrl').value.trim() || 'http://localhost:3000',
+    apiBaseUrl: baseUrl,
     showBadge: el<HTMLInputElement>('showBadge').checked,
     autoCapture: el<HTMLInputElement>('autoCapture').checked,
     trackApplications: el<HTMLInputElement>('trackApplications').checked,
     backgroundScrape: el<HTMLInputElement>('backgroundScrape').checked,
     scrapeIntervalMinutes: interval,
     scrapeQueries: queries,
-    preferences: preferences as LocalPreferences,
+    preferences: preferences as FormAnswers,
   });
 
   el<HTMLInputElement>('scrapeIntervalMinutes').value = String(interval);
-  setStatus('Saved.', 'ok');
+
+  // Make the web-app bridge work on whatever URL was just entered. Runs from the
+  // save click on purpose: asking for a host permission requires a user gesture,
+  // and this is the moment the user chose that origin.
+  const bridge = await ensureBridge(baseUrl);
+  setStatus(bridge ? `Saved. ${bridge}` : 'Saved.', 'ok');
+}
+
+/**
+ * Register the bridge for a non-default FitWright URL, asking for permission if
+ * needed. Returns a sentence to append to the save confirmation, or null when
+ * there is nothing worth saying.
+ *
+ * Every branch says something, because the failure this replaces was silence: the
+ * Discover page insisting the extension was missing while it sat there installed.
+ */
+async function ensureBridge(baseUrl: string): Promise<string | null> {
+  const pattern = originPattern(baseUrl);
+  if (!pattern) return 'That URL could not be read, so the FitWright page link is off.';
+
+  let state = await syncBridgeRegistration(baseUrl);
+
+  if (state === 'needs-permission') {
+    const granted = await requestPermission(pattern);
+    if (!granted) {
+      return `Permission for ${pattern} was declined, so the FitWright page cannot talk to the extension.`;
+    }
+    state = await syncBridgeRegistration(baseUrl);
+  }
+
+  if (state === 'registered') return `Connected to FitWright at ${baseUrl}.`;
+  if (state === 'unsupported') return 'This browser cannot register the page link.';
+  // 'static': the default localhost origin, already handled by the manifest.
+  return null;
 }
 
 function wire(): void {
@@ -179,3 +229,58 @@ function wire(): void {
 
 wire();
 void load();
+
+/**
+ * Render the activity and problems lists.
+ *
+ * Plain text, no interaction beyond copy and clear: this screen exists so a
+ * non-technical person can answer "is it working?" and "what went wrong?" without
+ * being told to inspect a service worker.
+ */
+async function renderDiagnostics(): Promise<void> {
+  const runsBox = document.getElementById('runs');
+  const errorsBox = document.getElementById('errors');
+  if (!runsBox || !errorsBox) return;
+
+  const [runs, errors] = await Promise.all([listRuns(), listErrors()]);
+
+  runsBox.innerHTML = runs.length
+    ? runs
+        .slice(0, 8)
+        .map((run) => {
+          const trouble = run.boards.filter((b) => b.error);
+          const detail = trouble.length
+            ? ` &middot; trouble on ${trouble.map((b) => escapeHtml(b.source)).join(', ')}`
+            : '';
+          return `<p class="hint">${timeAgo(run.at)} &middot; ${run.found} found, ${run.saved} new${detail}</p>`;
+        })
+        .join('')
+    : '<p class="hint">No background runs recorded yet.</p>';
+
+  errorsBox.innerHTML = errors.length
+    ? errors
+        .slice(0, 8)
+        .map(
+          (e) =>
+            `<p class="hint">${timeAgo(e.at)} &middot; <strong>${escapeHtml(e.context)}</strong>: ${escapeHtml(e.message)}</p>`,
+        )
+        .join('')
+    : '<p class="hint">Nothing has failed. </p>';
+
+  document.getElementById('copy-errors')?.addEventListener('click', () => {
+    const text = errors
+      .map((e) => `${new Date(e.at).toISOString()} ${e.context}: ${e.message}`)
+      .join('\n');
+    void navigator.clipboard.writeText(text || 'No problems recorded.');
+    setStatus('Copied.', 'ok');
+  });
+
+  document.getElementById('clear-errors')?.addEventListener('click', () => {
+    void clearErrors().then(() => {
+      void renderDiagnostics();
+      setStatus('Cleared.', 'ok');
+    });
+  });
+}
+
+void renderDiagnostics();

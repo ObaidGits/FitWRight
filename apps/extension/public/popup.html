@@ -92,6 +92,11 @@
       #status.ok { color: var(--ok); }
       #status.err { color: var(--err); }
       .muted { color: var(--muted); }
+      /* What the extension did while nobody was watching. Quiet by design: it is
+         reassurance and diagnostics, never the main event. */
+      .diag { border-top: 1px solid var(--border); margin-top: 10px; padding-top: 8px; }
+      .diag p { margin: 0 0 4px; font-size: 11px; line-height: 1.4; }
+      .diag .err-line { color: var(--danger, #b91c1c); }
     </style>
   </head>
   <body>

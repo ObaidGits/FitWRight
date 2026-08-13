@@ -121,6 +121,11 @@ async def lifespan(app: FastAPI):
 
     migrate_legacy_keys()
     migrate_legacy_llm_config()
+    # Say something when the extension allowlist looks wrong. A malformed origin
+    # rejects every extension request through CORS and logs nothing, which is
+    # indistinguishable from a broken extension from the user's side.
+    for warning in settings.extension_origin_warnings:
+        logger.warning("%s", warning)
     # Give older discovery rows the grouping key that collapses duplicate
     # listings. Idempotent and bounded - only rows missing one are touched - so
     # this is a no-op on every boot after the first. Without it, deduplication

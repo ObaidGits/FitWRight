@@ -128,6 +128,11 @@ export function showBadge(match: MatchResult, actions: BadgeActions): void {
 
   const badge = document.createElement('div');
   badge.className = 'badge';
+  // A floating score box over someone else's page needs to identify itself, and
+  // the score is the content - so it is announced politely rather than silently
+  // drawn. `complementary`, not `dialog`: nothing here demands a response.
+  badge.setAttribute('role', 'complementary');
+  badge.setAttribute('aria-label', 'FitWright resume match');
 
   const score = Math.round(match.match_score);
   const matched = match.matched.slice(0, 4);
@@ -137,12 +142,12 @@ export function showBadge(match: MatchResult, actions: BadgeActions): void {
   badge.innerHTML = `
     <div class="row">
       <span class="brand">FitWright</span>
-      <button class="close" title="Hide">&times;</button>
+      <button class="close" aria-label="Hide the FitWright match badge" title="Hide">&times;</button>
     </div>
     ${
       match.degraded
         ? '<div class="muted">Match unavailable - add a parsed resume in FitWright.</div>'
-        : `<div class="score">${score}%<small>resume match</small></div>
+        : `<div class="score" role="status" aria-live="polite" aria-label="${score} percent resume match">${score}%<small>resume match</small></div>
            <div class="pills">
              ${matched.map((k) => `<span class="pill hit">${escapeHtml(k)}</span>`).join('')}
              ${missing.map((k) => `<span class="pill miss">${escapeHtml(k)}</span>`).join('')}
@@ -216,21 +221,28 @@ export function showFillPanel(summary: FillSummary, actions: FillPanelActions): 
 
   const panel = document.createElement('div');
   panel.className = 'badge fillpanel';
+  // Announced, not just drawn. This panel appears over someone else's page
+  // without being asked for, so assistive technology has to be told what it is
+  // and be able to leave it. `dialog` rather than `alertdialog`: it is
+  // informative, and interrupting is not warranted.
+  panel.setAttribute('role', 'dialog');
+  panel.setAttribute('aria-modal', 'false');
+  panel.setAttribute('aria-label', 'FitWright autofill summary');
 
   const outstanding = summary.unanswered.length;
   panel.innerHTML = `
     <div class="row">
       <span class="brand">FitWright</span>
-      <button class="close" title="Hide">&times;</button>
+      <button class="close" aria-label="Hide the FitWright panel" title="Hide">&times;</button>
     </div>
-    <div><strong>${summary.filled}</strong> field${summary.filled === 1 ? '' : 's'} filled${
+    <div role="status" aria-live="polite"><strong>${summary.filled}</strong> field${summary.filled === 1 ? '' : 's'} filled${
       outstanding ? ` &middot; <strong>${outstanding}</strong> need${outstanding === 1 ? 's' : ''} you` : ''
     }</div>
     ${
       outstanding
-        ? `<div class="muted">Click a question to jump to it. Answer them here, then save so the
+        ? `<div class="muted" id="fw-panel-help">Click a question to jump to it. Answer them here, then save so the
              next form fills itself.</div>
-           <div class="unanswered">${summary.unanswered
+           <div class="unanswered" role="group" aria-labelledby="fw-panel-help">${summary.unanswered
              .slice(0, 6)
              .map(
                (item, index) =>
@@ -243,10 +255,21 @@ export function showFillPanel(summary: FillSummary, actions: FillPanelActions): 
     <div class="promise">Nothing is submitted. Review, then press the employer's submit button.</div>
   `;
 
-  panel.querySelector('.close')?.addEventListener('click', () => {
+  function dismiss(): void {
+    document.removeEventListener('keydown', onKeydown, true);
     panel.remove();
     actions.onDismiss?.();
-  });
+  }
+
+  // Escape closes it. Anything that covers part of a page the user is trying to
+  // fill in must be dismissible without hunting for a small × - and capture phase
+  // so a form that swallows keys on its own inputs cannot trap the user in here.
+  function onKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Escape') dismiss();
+  }
+  document.addEventListener('keydown', onKeydown, true);
+
+  panel.querySelector('.close')?.addEventListener('click', dismiss);
 
   for (const button of panel.querySelectorAll<HTMLButtonElement>('.jump')) {
     button.addEventListener('click', () => {
@@ -282,6 +305,12 @@ export function toast(message: string, kind: 'ok' | 'err' | 'info' = 'info'): vo
 
   const el = document.createElement('div');
   el.className = `toast ${kind === 'info' ? '' : kind}`.trim();
+  // Every toast this extension shows is a result the user asked for ("12 fields
+  // filled", "sign in to this site first"), so it has to reach a screen reader.
+  // `alert` for errors because they change what the user must do next; `status`
+  // for the rest, which would otherwise interrupt their reading for good news.
+  el.setAttribute('role', kind === 'err' ? 'alert' : 'status');
+  el.setAttribute('aria-live', kind === 'err' ? 'assertive' : 'polite');
   el.textContent = message;
   root.appendChild(el);
 

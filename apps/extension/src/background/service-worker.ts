@@ -17,6 +17,8 @@ import { SCRAPEABLE_BOARDS, searchUrlFor } from '@/adapters/registry';
 import * as api from '@/lib/api';
 import { fail, ok, sendToTab } from '@/lib/messages';
 import type { PerSiteResult, Reply, ReplyMap, ToWorker } from '@/lib/messages';
+import { syncBridgeRegistration } from '@/lib/bridge-registration';
+import { recordError, recordRun as recordRunHistory } from '@/lib/diagnostics';
 import { jitteredGap, recordRun, remainingToday } from '@/lib/pacing';
 import { getSettings, normalizeBaseUrl, rememberCaptured, wasCaptured } from '@/lib/storage';
 
@@ -43,6 +45,8 @@ async function handle(message: ToWorker, sender: chrome.runtime.MessageSender): 
         signedIn: result.ok,
         hasResume: result.has_resume,
         versionOk: result.versionOk,
+        buildCurrent: result.buildCurrent,
+        latestVersion: result.latest_extension_version,
       });
     }
 
@@ -336,8 +340,17 @@ async function runScheduledScrape(): Promise<void> {
   // and then throw the results away.
   try {
     const health = await api.ping();
-    if (!health.ok) return;
-  } catch {
+    if (!health.ok) {
+      await recordError(
+        'Scheduled search',
+        'FitWright reported it was not ready, so the run was skipped.',
+      );
+      return;
+    }
+  } catch (error) {
+    // The most common real cause of "scheduled searching stopped working": the
+    // app is not running. Silently returning is what made it undiagnosable.
+    await recordError('Scheduled search', error);
     return;
   }
 
@@ -345,8 +358,15 @@ async function runScheduledScrape(): Promise<void> {
   const total = results.reduce((sum, r) => sum + r.found, 0);
   const saved = results.reduce((sum, r) => sum + r.saved, 0);
 
-  await chrome.storage.local.set({
-    lastScrape: { at: Date.now(), found: total, saved },
+  // Recorded where the UI can read it. The previous `lastScrape` key was written
+  // and never read by anything, so a user could not tell whether scheduled
+  // searching had run today, worked, or quietly stopped weeks ago.
+  await recordRunHistory({
+    at: Date.now(),
+    kind: 'scheduled',
+    found: total,
+    saved,
+    boards: results.map((r) => ({ source: r.source, found: r.found, error: r.error })),
   });
   // Notify on NEW rows only: a scheduled run that re-harvests the same jobs it
   // saw an hour ago has nothing to tell the user.
@@ -392,12 +412,29 @@ function sleep(ms: number): Promise<void> {
 
 chrome.runtime.onInstalled.addListener((details) => {
   void syncAlarm();
+  // An update may add a bridge origin, or restore one lost with the old worker.
+  void reassertBridge();
   // Open options on first install so the user sets their API URL and answers
   // the questions a resume cannot supply (visa status, notice period).
   if (details.reason === 'install') void chrome.runtime.openOptionsPage();
 });
 
-chrome.runtime.onStartup.addListener(() => void syncAlarm());
+chrome.runtime.onStartup.addListener(() => {
+  void syncAlarm();
+  // Dynamic registrations survive restarts, but the configured URL may have been
+  // changed on another machine via synced settings - so re-assert it.
+  void reassertBridge();
+});
+
+/** Re-register the web-app bridge for the configured FitWright URL. */
+async function reassertBridge(): Promise<void> {
+  try {
+    const { apiBaseUrl } = await getSettings();
+    await syncBridgeRegistration(apiBaseUrl);
+  } catch {
+    /* the bridge is an enhancement; a failure must not break the worker */
+  }
+}
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'sync' || !changes.settings) return;

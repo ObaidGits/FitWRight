@@ -563,12 +563,53 @@ class Settings(BaseSettings):
 
     @property
     def effective_extension_origins(self) -> list[str]:
-        """``EXTENSION_ORIGINS`` parsed into a clean list of browser origins."""
-        return [
-            origin.strip().rstrip("/")
-            for origin in self.extension_origins.split(",")
-            if origin.strip()
-        ]
+        """``EXTENSION_ORIGINS`` parsed into a clean list of browser origins.
+
+        Repairs the one mistake everybody makes: writing ``chrome-extension:abc``
+        instead of ``chrome-extension://abc``. That single missing pair of slashes
+        produces an origin no browser will ever send, so every extension call is
+        rejected by CORS with nothing in the logs to explain why - a setup failure
+        that looks exactly like a broken extension. It is unambiguous what was
+        meant, so it is fixed rather than reported.
+
+        ``extension_origin_warnings`` collects anything still unusable, which
+        startup logs so the operator sees a sentence instead of silence.
+        """
+        cleaned: list[str] = []
+        for raw in self.extension_origins.split(","):
+            origin = raw.strip().rstrip("/")
+            if not origin:
+                continue
+            # `chrome-extension:abc` -> `chrome-extension://abc`
+            for scheme in ("chrome-extension", "moz-extension", "extension"):
+                prefix = f"{scheme}:"
+                if origin.startswith(prefix) and not origin.startswith(f"{prefix}//"):
+                    origin = f"{prefix}//{origin[len(prefix):].lstrip('/')}"
+                    break
+            cleaned.append(origin)
+        return cleaned
+
+    @property
+    def extension_origin_warnings(self) -> list[str]:
+        """Configured extension origins that still look wrong, with the reason."""
+        warnings: list[str] = []
+        for origin in self.effective_extension_origins:
+            if "://" not in origin:
+                warnings.append(
+                    f"EXTENSION_ORIGINS entry {origin!r} has no scheme - it must look like "
+                    "chrome-extension://<id>. The extension's requests will be rejected."
+                )
+                continue
+            scheme, _, rest = origin.partition("://")
+            if scheme not in {"chrome-extension", "moz-extension", "extension", "http", "https"}:
+                warnings.append(
+                    f"EXTENSION_ORIGINS entry {origin!r} uses an unexpected scheme {scheme!r}."
+                )
+            elif not rest:
+                warnings.append(
+                    f"EXTENSION_ORIGINS entry {origin!r} has no extension id after the scheme."
+                )
+        return warnings
 
     @property
     def effective_cors_origins(self) -> list[str]:

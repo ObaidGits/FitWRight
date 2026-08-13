@@ -110,18 +110,29 @@ export interface PingResult {
   user_id: string;
   has_resume: boolean;
   resume_count: number;
+  /** Build the server expects; absent on older servers. */
+  latest_extension_version?: string;
+  /** Null when the client did not identify itself. */
+  client_current?: boolean | null;
 }
 
 // --------------------------------------------------------------------------- //
-// Local settings (extension-owned, never derived from the resume)
+// Extension-owned settings (never derived from the resume)
 // --------------------------------------------------------------------------- //
 
 /**
- * Answers a resume cannot supply. These live only in `chrome.storage.sync` so
- * the user controls them, and they are the reason the autofill profile is a
- * merge of server data + local answers rather than one server object.
+ * Answers a resume cannot supply.
+ *
+ * Named for what they are - answers to form questions - rather than for where
+ * they live. The previous name, `LocalPreferences`, said "local" while every field
+ * was written to `chrome.storage.sync` and therefore to the user's Google
+ * account. A type name that misdescribes its own storage is how a privacy bug
+ * survives code review.
+ *
+ * Storage is now split by sensitivity in `lib/storage.ts`: the fields listed in
+ * `SENSITIVE_KEYS` never leave the machine.
  */
-export interface LocalPreferences {
+export interface FormAnswers {
   workAuthorization: string;
   requiresSponsorship: string;
   noticePeriod: string;
@@ -133,6 +144,23 @@ export interface LocalPreferences {
   /** Free-form extras keyed by a normalized question label. */
   custom: Record<string, string>;
 }
+
+/**
+ * Answers that must never leave this machine.
+ *
+ * Special-category personal data under GDPR. A job-application helper has a
+ * reason to remember them - the forms ask every time - and no reason whatsoever
+ * to replicate them into a cloud account the user was never asked about.
+ */
+export const SENSITIVE_KEYS = [
+  'gender',
+  'ethnicity',
+  'veteranStatus',
+  'disabilityStatus',
+] as const;
+
+/** @deprecated Use {@link FormAnswers}. Kept so existing imports keep compiling. */
+export type LocalPreferences = FormAnswers;
 
 /**
  * One saved search for background scraping.

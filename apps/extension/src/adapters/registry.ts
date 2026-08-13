@@ -8,11 +8,23 @@
  */
 import { atsAdapters } from './ats';
 import { boardAdapters } from './boards';
+import { enterpriseAtsAdapters } from './enterprise-ats';
 import { genericAdapter } from './generic';
 import type { SiteAdapter } from './types';
 
-/** Every site-specific adapter, in match priority order. */
-export const adapters: SiteAdapter[] = [...atsAdapters, ...boardAdapters];
+/**
+ * Every site-specific adapter, in match priority order.
+ *
+ * ATS platforms before job boards: a form is where an application is actually
+ * submitted, and an ATS adapter scopes the fill correctly where a board adapter
+ * would classify the page `unknown`. The enterprise platforms sit with the other
+ * ATS entries for the same reason.
+ */
+export const adapters: SiteAdapter[] = [
+  ...atsAdapters,
+  ...enterpriseAtsAdapters,
+  ...boardAdapters,
+];
 
 export { genericAdapter };
 

@@ -5,6 +5,7 @@
  * that page actually supports - an "Autofill" button on a page with no form is
  * worse than no button, because it teaches the user the extension is unreliable.
  */
+import { lastRunSummary, listErrors } from '@/lib/diagnostics';
 import { sendToTab, sendToWorker } from '@/lib/messages';
 import type { PageContext } from '@/lib/types';
 
@@ -43,6 +44,11 @@ async function checkConnection(): Promise<{ signedIn: boolean; hasResume: boolea
     : 'Connected - no resume uploaded yet';
   if (!reply.data.versionOk) {
     setStatus('Extension is out of date with this FitWright version.', 'err');
+  } else if (!reply.data.buildCurrent) {
+    // A newer build exists. Unpacked extensions never auto-update, so without
+    // this the user runs a months-old copy and reports fixed bugs.
+    const latest = reply.data.latestVersion ? ` (${reply.data.latestVersion})` : '';
+    setStatus(`A newer FitWright extension${latest} is available - rebuild and reload it.`, 'err');
   } else if (!reply.data.hasResume) {
     setStatus('Upload a resume in FitWright to enable autofill.', 'err');
   }
@@ -169,9 +175,37 @@ async function main(): Promise<void> {
     // No content script here - this site is outside our host permissions.
     jobBox.innerHTML =
       '<p class="muted">FitWright does not run on this site. Open a supported job board or an ATS application page.</p>';
+    await showDiagnostics();
     return;
   }
   render(tab.id, reply.data, health);
+  await showDiagnostics();
+}
+
+/**
+ * What the extension has been doing when nobody was watching.
+ *
+ * Background searching used to leave no visible trace at all, so a user could not
+ * tell a working schedule from one that stopped weeks ago. A recent failure is
+ * shown ahead of the run summary, because it is the more actionable of the two.
+ */
+async function showDiagnostics(): Promise<void> {
+  const [summary, errors] = await Promise.all([lastRunSummary(), listErrors()]);
+  const recent = errors[0];
+
+  const lines: string[] = [];
+  if (recent) {
+    lines.push(
+      `<p class="muted err-line">${escapeHtml(recent.context)}: ${escapeHtml(recent.message)}</p>`,
+    );
+  }
+  if (summary) lines.push(`<p class="muted">${escapeHtml(summary)}</p>`);
+  if (!lines.length) return;
+
+  const box = document.createElement('div');
+  box.className = 'diag';
+  box.innerHTML = lines.join('');
+  document.body.appendChild(box);
 }
 
 void main();

@@ -256,6 +256,23 @@
         The extension fills forms but never submits them. You review every application and click
         submit yourself.
       </p>
+      <section>
+        <h2>Activity</h2>
+        <p class="hint">
+          What the extension has done recently. Worth a look if searching seems to have stopped -
+          background runs happen in tabs you never see, so this is the only place they leave a trace.
+        </p>
+        <div id="runs"></div>
+
+        <h2>Problems</h2>
+        <p class="hint">
+          Anything that failed, most recent first. Copy this if you report a problem - it saves
+          digging through browser internals.
+        </p>
+        <div id="errors"></div>
+        <button id="copy-errors" type="button">Copy problems</button>
+        <button id="clear-errors" type="button">Clear</button>
+      </section>
     </main>
 
     <div class="bar">

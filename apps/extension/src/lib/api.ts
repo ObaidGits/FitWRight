@@ -127,9 +127,23 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 // Endpoints
 // --------------------------------------------------------------------------- //
 
-export async function ping(): Promise<PingResult & { versionOk: boolean }> {
-  const result = await request<PingResult>('/extension/ping');
-  return { ...result, versionOk: result.api_version === API_VERSION };
+export async function ping(): Promise<
+  PingResult & { versionOk: boolean; buildCurrent: boolean }
+> {
+  // Send our own build so the server can say whether it is the one it expects.
+  // An unpacked extension never auto-updates, so this is the only way a user
+  // learns a newer build exists.
+  const own = chrome.runtime.getManifest().version;
+  const result = await request<PingResult>(
+    `/extension/ping?client_version=${encodeURIComponent(own)}`,
+  );
+  return {
+    ...result,
+    versionOk: result.api_version === API_VERSION,
+    // Absent field (older server) is treated as current: nagging someone because
+    // their server is old would be the wrong end of the problem.
+    buildCurrent: result.client_current !== false,
+  };
 }
 
 /**

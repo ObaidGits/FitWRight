@@ -113,7 +113,14 @@ export interface PerSiteResult {
 
 /** Per-message reply payloads. */
 export interface ReplyMap {
-  ping: { signedIn: boolean; hasResume: boolean; versionOk: boolean };
+  ping: {
+    signedIn: boolean;
+    hasResume: boolean;
+    versionOk: boolean;
+    /** False when a newer extension build exists than the one running. */
+    buildCurrent: boolean;
+    latestVersion?: string;
+  };
   capture: CaptureResponse;
   match: MatchResult;
   draft: DraftResult;
