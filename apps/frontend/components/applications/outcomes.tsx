@@ -78,9 +78,7 @@ export function Outcomes() {
                   <p className="truncate text-sm font-medium">{row.name}</p>
                   <p className="text-xs text-[var(--muted-foreground)]">
                     {row.sent} sent · {row.replied} replied
-                    {row.concluded < row.sent
-                      ? ` · ${row.sent - row.concluded} still waiting`
-                      : ''}
+                    {row.concluded < row.sent ? ` · ${row.sent - row.concluded} still waiting` : ''}
                   </p>
                 </div>
 

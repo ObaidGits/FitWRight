@@ -92,7 +92,7 @@ describe('Outcomes', () => {
         resumes: [resumeRow({ sent: 1, replied: 1, concluded: 1, rate: null })],
         sent: 1,
         replied: 1,
-      }),
+      })
     );
     const { Outcomes } = await import('@/components/applications/outcomes');
     wrap(<Outcomes />);
@@ -104,7 +104,7 @@ describe('Outcomes', () => {
 
   it('reports in-flight applications as waiting, not as failures', async () => {
     getOutcomesMock.mockResolvedValue(
-      outcomes({ resumes: [resumeRow({ sent: 8, replied: 3, concluded: 6, rate: 0.5 })] }),
+      outcomes({ resumes: [resumeRow({ sent: 8, replied: 3, concluded: 6, rate: 0.5 })] })
     );
     const { Outcomes } = await import('@/components/applications/outcomes');
     wrap(<Outcomes />);
@@ -143,7 +143,7 @@ describe('Answers page readiness card', () => {
           { key: 'work_authorization', label: 'Work authorization', group: 'eligibility' },
           { key: 'salary_expectation', label: 'Salary expectation', group: 'eligibility' },
         ],
-      }),
+      })
     );
     getSummaryMock.mockResolvedValue({ needs_answer: 0, answered: 0, total: 0 });
     const AnswersPage = (await import('@/app/(app)/answers/page')).default;
@@ -170,7 +170,7 @@ describe('Answers page readiness card', () => {
     wrap(<AnswersPage />);
 
     expect(
-      await screen.findByText(/Every question forms usually ask is stored/),
+      await screen.findByText(/Every question forms usually ask is stored/)
     ).toBeInTheDocument();
   });
 });
@@ -198,7 +198,7 @@ describe('mobile bottom nav', () => {
     await waitFor(() => {
       expect(screen.getByRole('link', { name: 'Applications' })).toHaveAttribute(
         'aria-current',
-        'page',
+        'page'
       );
     });
   });

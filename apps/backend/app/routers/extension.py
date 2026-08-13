@@ -491,6 +491,10 @@ class InstallInfo(BaseModel):
 @router.get("/install-info", response_model=InstallInfo, summary="Where to load the extension from")
 async def get_install_info(
     config: Settings = Depends(get_settings_dep),
+    # Authenticated like every other extension endpoint. It answers with a path on
+    # the host's filesystem, and an unauthenticated caller has no business learning
+    # anything about the machine - the authz matrix caught this as a missing 401.
+    _user_id: str = Depends(get_effective_user_id),
 ) -> InstallInfo:
     """Resolve the extension's ``dist`` folder for the setup page.
 

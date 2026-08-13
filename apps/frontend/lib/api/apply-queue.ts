@@ -110,7 +110,7 @@ export async function checkDuplicate(input: {
 
 export async function getSubmission(
   applicationId: string,
-  signal?: AbortSignal,
+  signal?: AbortSignal
 ): Promise<SubmissionRecord> {
   const res = await apiFetch(`${PREFIX}/${applicationId}/submission`, { method: 'GET', signal });
   if (!res.ok) throw new Error(`Loading the submission failed: ${res.status}`);

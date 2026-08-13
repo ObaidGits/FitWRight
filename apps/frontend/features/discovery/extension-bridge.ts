@@ -67,7 +67,7 @@ function nextId(): string {
  */
 function ask<T>(
   payload: Record<string, unknown>,
-  timeoutMs: number,
+  timeoutMs: number
 ): Promise<{ ok: true; data: T } | { ok: false; error: string }> {
   if (typeof window === 'undefined') {
     return Promise.resolve({ ok: false as const, error: 'Not in a browser' });
@@ -91,7 +91,7 @@ function ask<T>(
 
     const timer = setTimeout(
       () => settle({ ok: false, error: 'The extension did not respond' }),
-      timeoutMs,
+      timeoutMs
     );
 
     window.addEventListener('message', onMessage);
@@ -123,7 +123,7 @@ export interface ExtensionJobDescription {
  */
 export async function requestJobDescription(
   url: string,
-  timeoutMs = 45_000,
+  timeoutMs = 45_000
 ): Promise<{ ok: true; data: ExtensionJobDescription } | { ok: false; error: string }> {
   return ask<ExtensionJobDescription>({ type: 'read-jd', url }, timeoutMs);
 }
@@ -168,7 +168,7 @@ export async function requestExtensionScrape(request: {
       query: request.query,
       location: request.location ?? '',
     },
-    timeoutMs,
+    timeoutMs
   );
 }
 

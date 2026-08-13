@@ -3426,6 +3426,219 @@ class Database:
                     .values(job_id=job_id)
                 )
 
+    # ----------------------------------------------------------------------- #
+    # Application queries for the apply queue, submissions and outcomes.
+    #
+    # These live here rather than in `app/applications/` because ADR-4 puts every
+    # owned-table query in the repository layer: a query written in a feature
+    # module is one that can forget its `user_id` filter, and the scoping guard
+    # rejects them for that reason. Each method takes `user_id` first and filters
+    # on it, so the scope cannot be omitted by a caller.
+    #
+    # They return plain dicts. Handing ORM objects out of the session would leave
+    # callers holding rows that detach the moment the session closes.
+    # ----------------------------------------------------------------------- #
+    @staticmethod
+    def _application_to_dict(row: Application) -> dict[str, Any]:
+        return {
+            "application_id": row.application_id,
+            "job_id": row.job_id,
+            "resume_id": row.resume_id,
+            # The base resume a tailored one descends from. Omitting it made the
+            # tracker report None for every card that had one.
+            "master_resume_id": row.master_resume_id,
+            "status": row.status,
+            "company": row.company,
+            "role": row.role,
+            "applied_at": row.applied_at,
+            "position": row.position,
+            "notes": row.notes,
+            "submitted_answers": row.submitted_answers or {},
+            "submitted_resume_version_id": row.submitted_resume_version_id,
+            "submitted_via": row.submitted_via,
+            "created_at": row.created_at,
+            "updated_at": row.updated_at,
+        }
+
+    async def get_application_row(
+        self, user_id: str, application_id: str
+    ) -> dict[str, Any] | None:
+        """One application, scoped to its owner."""
+        from sqlalchemy import select
+
+        async with self._session() as session:
+            row = (
+                await session.execute(
+                    select(Application).where(
+                        (Application.user_id == user_id)
+                        & (Application.application_id == application_id)
+                    )
+                )
+            ).scalar_one_or_none()
+            return self._application_to_dict(row) if row else None
+
+    async def list_application_rows(
+        self,
+        user_id: str,
+        *,
+        statuses: list[str] | None = None,
+        order_by_position: bool = False,
+    ) -> list[dict[str, Any]]:
+        """Applications for a user, optionally filtered by status.
+
+        One method rather than four near-identical ones: the queue, the duplicate
+        guard, the CSV export and the outcomes view all want "this user's
+        applications, maybe filtered", and duplicating that query per caller is how
+        one of them ends up missing the scope.
+        """
+        from sqlalchemy import select
+
+        stmt = select(Application).where(Application.user_id == user_id)
+        if statuses:
+            stmt = stmt.where(Application.status.in_(statuses))
+        stmt = (
+            stmt.order_by(Application.position, Application.created_at)
+            if order_by_position
+            else stmt.order_by(Application.created_at.desc())
+        )
+
+        async with self._session() as session:
+            rows = (await session.execute(stmt)).scalars().all()
+            return [self._application_to_dict(r) for r in rows]
+
+    async def record_application_submission(
+        self,
+        user_id: str,
+        application_id: str,
+        *,
+        answers: dict[str, Any] | None,
+        resume_version_id: str | None,
+        submitted_via: str,
+        applied_at: str,
+        advance_statuses: tuple[str, ...],
+    ) -> dict[str, Any] | None:
+        """Store what was submitted and mark the application applied.
+
+        ``advance_statuses`` are the statuses that may move to ``applied``. Anything
+        further along the pipeline keeps its own status: a late submission record
+        must not drag an application back from interview to applied.
+        """
+        from sqlalchemy import select
+
+        async with self._session() as session:
+            async with session.begin():
+                row = (
+                    await session.execute(
+                        select(Application).where(
+                            (Application.user_id == user_id)
+                            & (Application.application_id == application_id)
+                        )
+                    )
+                ).scalar_one_or_none()
+                if row is None:
+                    return None
+
+                row.submitted_answers = answers or {}
+                row.submitted_resume_version_id = resume_version_id
+                row.submitted_via = submitted_via
+                if row.status in advance_statuses:
+                    row.status = "applied"
+                if not row.applied_at:
+                    row.applied_at = applied_at
+                row.updated_at = applied_at
+                return self._application_to_dict(row)
+
+    async def set_application_positions(self, user_id: str, ordered_ids: list[str]) -> int:
+        """Set queue order from a list of ids. Returns how many moved.
+
+        Ids the user does not own are simply absent from the scoped read, so a
+        stale tab cannot reorder someone else's queue or fail the whole request.
+        """
+        from sqlalchemy import select
+
+        async with self._session() as session:
+            async with session.begin():
+                rows = (
+                    (
+                        await session.execute(
+                            select(Application).where(
+                                (Application.user_id == user_id)
+                                & (Application.application_id.in_(ordered_ids))
+                            )
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                by_id = {r.application_id: r for r in rows}
+                moved = 0
+                for position, application_id in enumerate(ordered_ids):
+                    row = by_id.get(application_id)
+                    if row is None:
+                        continue
+                    if row.position != position:
+                        row.position = position
+                        moved += 1
+                return moved
+
+    async def delete_saved_application_for_job(self, user_id: str, job_id: str) -> int:
+        """Remove a queued (``saved``) application for a job. Returns rows removed.
+
+        Only ``saved`` rows: anything further along is history the user earned, and
+        dismissing a listing is no reason to destroy the record that they applied.
+        """
+        from sqlalchemy import delete as sa_delete
+
+        async with self._session() as session:
+            async with session.begin():
+                result = await session.execute(
+                    sa_delete(Application).where(
+                        (Application.user_id == user_id)
+                        & (Application.job_id == job_id)
+                        & (Application.status == "saved")
+                    )
+                )
+                return result.rowcount or 0
+
+    async def get_resume_names(self, user_id: str, resume_ids: list[str]) -> dict[str, str]:
+        """Filenames for the given resumes, scoped to their owner."""
+        from sqlalchemy import select
+
+        if not resume_ids:
+            return {}
+        async with self._session() as session:
+            rows = (
+                await session.execute(
+                    select(Resume.resume_id, Resume.filename).where(
+                        (Resume.user_id == user_id) & (Resume.resume_id.in_(resume_ids))
+                    )
+                )
+            ).all()
+            return {rid: name for rid, name in rows if name}
+
+    async def get_master_resume_ids(self, user_id: str, resume_ids: list[str]) -> set[str]:
+        """Which of ``resume_ids`` are the user's master resume.
+
+        Used to tell a tailored resume from the master when deciding what to attach
+        to an application: a queued-but-untailored job points at the master, and
+        announcing that as "tailored" would be a lie.
+        """
+        from sqlalchemy import select
+
+        if not resume_ids:
+            return set()
+        async with self._session() as session:
+            rows = (
+                await session.execute(
+                    select(Resume.resume_id).where(
+                        (Resume.user_id == user_id)
+                        & Resume.resume_id.in_(resume_ids)
+                        & Resume.is_master.is_(True)
+                    )
+                )
+            ).scalars().all()
+            return set(rows)
+
     async def backfill_group_fingerprints(self, limit: int = 20000) -> int:
         """Give older feed rows the group key duplicate collapsing needs.
 

@@ -52,22 +52,27 @@ function QueueRow({
   index: number;
   onInspect: (id: string) => void;
 }) {
-  const sortable = useSortable({ id: item.application_id });
+  // Destructured at the call site, matching `components/builder/draggable-list-item`.
+  // Reading these off the hook's result object during render trips the React
+  // Compiler's ref rule, because `setNodeRef` is a ref setter.
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: item.application_id,
+  });
   const style = {
-    transform: CSS.Transform.toString(sortable.transform),
-    transition: sortable.transition,
-    opacity: sortable.isDragging ? 0.6 : 1,
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.6 : 1,
   };
 
   return (
     <div
-      ref={sortable.setNodeRef}
+      ref={setNodeRef}
       style={style}
       className="flex items-center gap-3 rounded-[var(--radius-at-md)] border border-[var(--border)] bg-[var(--card)] p-3"
     >
       <button
-        {...sortable.attributes}
-        {...sortable.listeners}
+        {...attributes}
+        {...listeners}
         aria-label={`Reorder ${item.role ?? 'this job'}`}
         className="cursor-grab text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
       >
@@ -99,7 +104,13 @@ function QueueRow({
 }
 
 /** What was actually sent for one application. */
-function SubmissionPanel({ applicationId, onClose }: { applicationId: string; onClose: () => void }) {
+function SubmissionPanel({
+  applicationId,
+  onClose,
+}: {
+  applicationId: string;
+  onClose: () => void;
+}) {
   const { data, isLoading, isError, error } = useSubmission(applicationId);
 
   return (
@@ -227,7 +238,7 @@ export function ApplyQueue() {
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
   const items = data?.items ?? [];
@@ -246,7 +257,7 @@ export function ApplyQueue() {
 
     reorder.mutate(
       next.map((i) => i.application_id),
-      { onError: (err) => toast({ title: err.message, variant: 'error' }) },
+      { onError: (err) => toast({ title: err.message, variant: 'error' }) }
     );
   }
 

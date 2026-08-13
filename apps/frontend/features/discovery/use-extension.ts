@@ -81,7 +81,7 @@ export function useExtension(): UseExtensionResult {
       }
       return result.data;
     },
-    [],
+    []
   );
 
   return {

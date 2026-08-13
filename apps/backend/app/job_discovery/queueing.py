@@ -90,16 +90,4 @@ async def unqueue_application(db: Database, user_id: str, job_id: str | None) ->
     if not job_id:
         return
 
-    from sqlalchemy import delete
-
-    from app.models import Application
-
-    async with db._session() as session:  # noqa: SLF001
-        async with session.begin():
-            await session.execute(
-                delete(Application).where(
-                    (Application.user_id == user_id)
-                    & (Application.job_id == job_id)
-                    & (Application.status == "saved")
-                )
-            )
+    await db.delete_saved_application_for_job(user_id, job_id)

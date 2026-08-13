@@ -103,7 +103,7 @@ async function renderSection() {
   return render(
     <QueryClientProvider client={client}>
       <ApplicationAnswers />
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
 }
 

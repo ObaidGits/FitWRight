@@ -374,8 +374,8 @@ function AiSection() {
              the difference between a one-line fix and believing the app loses
              your data. */
           <p className="text-xs text-[var(--at-warning)]">
-            A key is stored for this provider but cannot be read, because the
-            encryption secret changed since it was saved. This usually means{' '}
+            A key is stored for this provider but cannot be read, because the encryption secret
+            changed since it was saved. This usually means{' '}
             <code className="rounded bg-[var(--secondary)] px-1">APP_ENCRYPTION_KEY</code> differs
             between how you ran FitWright then and now. Enter the key again to fix it.
           </p>

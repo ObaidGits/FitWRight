@@ -368,7 +368,11 @@ export default function ResumesPage() {
             <DialogClose asChild>
               <Button variant="outline">Cancel</Button>
             </DialogClose>
-            <Button loading={renaming} disabled={!newTitle.trim()} onClick={() => void confirmRename()}>
+            <Button
+              loading={renaming}
+              disabled={!newTitle.trim()}
+              onClick={() => void confirmRename()}
+            >
               Save
             </Button>
           </DialogFooter>

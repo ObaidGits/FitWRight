@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import asdict, is_dataclass
+from dataclasses import asdict, fields as dataclass_fields, is_dataclass
 from typing import Any
 
 from app.config import settings
@@ -70,6 +70,34 @@ def _query_component(query: SearchQuery | dict | str | None) -> Any:
     return data
 
 
+def _filters_component(filters: SearchFilters | dict | None) -> Any:
+    """Reduce filters to a canonical shape, whichever form they arrived in.
+
+    A dict and the equivalent dataclass must produce the same key, or the same
+    search cached by one call style is a guaranteed miss for the other. They did
+    not: `asdict()` on the dataclass emits every field, including the ones a
+    caller's dict simply omits (`distance`, `job_type`), so two descriptions of one
+    search hashed differently. Coercing the dict through `SearchFilters` first
+    gives both paths the same field set - and means adding a field to the dataclass
+    can never silently split the keyspace again.
+
+    Unknown keys are dropped rather than rejected: a caller passing an extra field
+    is describing the same search, and refusing it would turn a cache-key helper
+    into a validator.
+    """
+    if filters is None:
+        return None
+    if isinstance(filters, dict):
+        known = {f.name for f in dataclass_fields(SearchFilters)}
+        try:
+            filters = SearchFilters(**{k: v for k, v in filters.items() if k in known})
+        except TypeError:
+            # Not coercible (missing a required field) - fall back to the raw dict
+            # rather than failing a cache lookup over it.
+            return _normalize(filters)
+    return _normalize(filters)
+
+
 def make_cache_key(
     resume_version: str | None,
     query: SearchQuery | dict | str | None,
@@ -84,7 +112,7 @@ def make_cache_key(
     material = {
         "resume_version": resume_version,
         "query": _query_component(query),
-        "filters": _normalize(filters),
+        "filters": _filters_component(filters),
     }
     encoded = json.dumps(
         material, sort_keys=True, separators=(",", ":"), default=str

@@ -62,7 +62,7 @@ async function renderQueue() {
   return render(
     <QueryClientProvider client={client}>
       <ApplyQueue />
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
 }
 
@@ -102,7 +102,7 @@ describe('ApplyQueue', () => {
     getQueueMock.mockResolvedValue({ items: [item({ role: 'Backend Engineer' })], total: 1 });
     await renderQueue();
     expect(
-      await screen.findByRole('button', { name: 'Reorder Backend Engineer' }),
+      await screen.findByRole('button', { name: 'Reorder Backend Engineer' })
     ).toBeInTheDocument();
   });
 
@@ -129,7 +129,9 @@ describe('ApplyQueue', () => {
 
     (await screen.findByText('What I submitted')).click();
     await waitFor(() =>
-      expect(screen.getByText(/before FitWright started keeping submission records/)).toBeInTheDocument(),
+      expect(
+        screen.getByText(/before FitWright started keeping submission records/)
+      ).toBeInTheDocument()
     );
   });
 
@@ -141,7 +143,7 @@ describe('ApplyQueue', () => {
         submitted_via: 'extension',
         resume_version_id: 'v3',
         answers: { 'Notice period': '30 days' },
-      }),
+      })
     );
     await renderQueue();
 

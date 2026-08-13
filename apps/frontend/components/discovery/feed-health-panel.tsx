@@ -76,7 +76,7 @@ export function FeedHealthPanel({ unscored }: { unscored: number }) {
             description: `${err.message}. A master resume is needed to score against.`,
             variant: 'error',
           }),
-      },
+      }
     );
   }
 

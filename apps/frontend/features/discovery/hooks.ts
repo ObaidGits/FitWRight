@@ -113,7 +113,6 @@ export function useDeleteSiteRecipe() {
   });
 }
 
-
 // -------------------------------------------------------------------------- //
 // Feed (Phase 1 — background discovery)
 // -------------------------------------------------------------------------- //
@@ -180,7 +179,6 @@ export function useToggleSchedule() {
   });
 }
 
-
 // -------------------------------------------------------------------------- //
 // Manual search (no resume required)
 // -------------------------------------------------------------------------- //
@@ -197,7 +195,6 @@ export function useManualSearch() {
     mutationFn: (params) => manualSearch(params),
   });
 }
-
 
 // -------------------------------------------------------------------------- //
 // Status management + cleanup
@@ -234,18 +231,16 @@ export function useUpdateResultStatus() {
 /** Move several feed results at once - triaging a long feed one click at a time is the pain. */
 export function useBulkUpdateResultStatus() {
   const qc = useQueryClient();
-  return useMutation<
-    { updated: number; queued: number },
-    Error,
-    { ids: string[]; status: string }
-  >({
-    mutationFn: ({ ids, status }) => bulkUpdateResultStatus(ids, status),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['discovery', 'feed'] });
-      void qc.invalidateQueries({ queryKey: ['discovery', 'unseen'] });
-      void qc.invalidateQueries({ queryKey: ['applications'] });
-    },
-  });
+  return useMutation<{ updated: number; queued: number }, Error, { ids: string[]; status: string }>(
+    {
+      mutationFn: ({ ids, status }) => bulkUpdateResultStatus(ids, status),
+      onSuccess: () => {
+        void qc.invalidateQueries({ queryKey: ['discovery', 'feed'] });
+        void qc.invalidateQueries({ queryKey: ['discovery', 'unseen'] });
+        void qc.invalidateQueries({ queryKey: ['applications'] });
+      },
+    }
+  );
 }
 
 /** Per-board health: which boards are actually returning jobs. */

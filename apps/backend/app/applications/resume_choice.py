@@ -21,11 +21,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import select
-
 from app.applications.submissions import _norm
 from app.database import Database
-from app.models import Application, Resume
 
 __all__ = ["resolve_resume_id_for_role"]
 
@@ -53,41 +50,17 @@ async def resolve_resume_id_for_role(
     if not target_company or not target_role:
         return None
 
-    async with db._session() as session:  # noqa: SLF001
-        rows = (
-            (
-                await session.execute(
-                    select(Application)
-                    .where(Application.user_id == user_id)
-                    # Newest first: if the user re-tailored for the same role, the
-                    # later attempt is the one they meant.
-                    .order_by(Application.created_at.desc())
-                )
-            )
-            .scalars()
-            .all()
-        )
+    # Newest first, so a re-tailored role returns the later attempt.
+    rows = await db.list_application_rows(user_id)
+    candidates = [
+        row["resume_id"]
+        for row in rows
+        if _norm(row["company"]) == target_company and _norm(row["role"]) == target_role
+    ]
+    if not candidates:
+        return None
 
-        candidates = [
-            row.resume_id
-            for row in rows
-            if _norm(row.company) == target_company and _norm(row.role) == target_role
-        ]
-        if not candidates:
-            return None
-
-        masters = set(
-            (
-                await session.execute(
-                    select(Resume.resume_id).where(
-                        Resume.resume_id.in_(candidates) & Resume.is_master.is_(True)
-                    )
-                )
-            )
-            .scalars()
-            .all()
-        )
-
+    masters = await db.get_master_resume_ids(user_id, candidates)
     for resume_id in candidates:
         if resume_id not in masters:
             return resume_id

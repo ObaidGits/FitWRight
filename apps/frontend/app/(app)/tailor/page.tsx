@@ -774,9 +774,8 @@ export default function TailorPage() {
    * the server's failure - which would be technically accurate and useless.
    */
   async function tryExtensionFetch(url: string): Promise<boolean> {
-    const { detectExtension, requestJobDescription } = await import(
-      '@/features/discovery/extension-bridge'
-    );
+    const { detectExtension, requestJobDescription } =
+      await import('@/features/discovery/extension-bridge');
     if (!(await detectExtension())) return false;
 
     toast({ title: 'Trying again through your browser…', variant: 'info' });

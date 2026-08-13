@@ -31,7 +31,7 @@ function reply(id: string, payload: Record<string, unknown>): void {
       data: { source: 'fitwright-extension', id, ...payload },
       origin: window.location.origin,
       source: window,
-    }),
+    })
   );
 }
 
@@ -61,7 +61,7 @@ afterEach(() => {
 describe('detectExtension', () => {
   it('returns capabilities when the extension answers', async () => {
     const stop = fakeExtension((req) =>
-      req.type === 'hello' ? { ok: true, data: CAPABILITIES } : null,
+      req.type === 'hello' ? { ok: true, data: CAPABILITIES } : null
     );
     document.documentElement.dataset.fitwrightExtension = '0.1.0';
 

@@ -199,6 +199,30 @@ OWNED_ENDPOINTS: list[tuple[str, str]] = [
     ("POST", "/api/v1/extension/match"),
     ("POST", "/api/v1/extension/draft"),
     ("POST", "/api/v1/extension/applied"),
+    ("GET", "/api/v1/extension/install-info"),
+    ("POST", "/api/v1/extension/board-health"),
+    # the learning loop: what forms asked, and the answers the user gave
+    ("POST", "/api/v1/extension/form-report"),
+    ("POST", "/api/v1/extension/answers"),
+    ("GET", "/api/v1/application-fields"),
+    ("GET", "/api/v1/application-fields/summary"),
+    ("GET", "/api/v1/application-fields/readiness"),
+    ("PATCH", "/api/v1/application-fields/fid"),
+    ("DELETE", "/api/v1/application-fields/fid"),
+    ("POST", "/api/v1/application-fields/fid/merge"),
+    # apply queue, submission records and outcomes
+    ("GET", "/api/v1/applications/queue"),
+    ("POST", "/api/v1/applications/queue/reorder"),
+    ("POST", "/api/v1/applications/queue/check-duplicate"),
+    ("POST", "/api/v1/applications/aid/submission"),
+    ("GET", "/api/v1/applications/aid/submission"),
+    ("GET", "/api/v1/applications/outcomes"),
+    ("GET", "/api/v1/applications/export.csv"),
+    # feed maintenance and per-board health
+    ("POST", "/api/v1/discovery/feed/score"),
+    ("PATCH", "/api/v1/discovery/feed/bulk-status"),
+    ("GET", "/api/v1/discovery/board-health"),
+    ("DELETE", "/api/v1/discovery/data"),
 ]
 
 # Provider-cost actions gated behind email verification (R5.6). These must 403
@@ -297,6 +321,7 @@ class TestAnonymousRejected:
                 ("{resume_id}", "rid"),
                 ("{job_id}", "jid"),
                 ("{application_id}", "aid"),
+                ("{field_id}", "fid"),
                 ("{provider}", "prov"),
                 ("{session_id}", "sid"),
                 ("{slug}", "sl"),

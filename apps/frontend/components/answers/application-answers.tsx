@@ -20,7 +20,13 @@
 import * as React from 'react';
 
 import { Button } from '@/components/atelier/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/atelier/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/atelier/card';
 import { Input, Textarea } from '@/components/atelier/input';
 import { Label } from '@/components/atelier/label';
 import { EmptyState, ErrorState, LoadingSkeleton } from '@/components/atelier/states';
@@ -125,7 +131,9 @@ function AnswerEditor({
   return (
     <Input
       id={id}
-      type={field.field_type === 'number' ? 'number' : field.field_type === 'date' ? 'date' : 'text'}
+      type={
+        field.field_type === 'number' ? 'number' : field.field_type === 'date' ? 'date' : 'text'
+      }
       value={value}
       disabled={disabled}
       onChange={(e) => onChange(e.target.value)}
@@ -156,10 +164,7 @@ function Badges({ field }: { field: ApplicationField }) {
         <span className="text-[var(--muted-foreground)]">seen {field.times_seen}×</span>
       )}
       {field.synonyms.length > 0 && (
-        <span
-          className="text-[var(--muted-foreground)]"
-          title={field.synonyms.join(' · ')}
-        >
+        <span className="text-[var(--muted-foreground)]" title={field.synonyms.join(' · ')}>
           +{field.synonyms.length} wording{field.synonyms.length === 1 ? '' : 's'}
         </span>
       )}
@@ -190,7 +195,7 @@ function FieldRow({ field, emphasise }: { field: ApplicationField; emphasise?: b
       {
         onSuccess: () => toast({ title: 'Answer saved', variant: 'success' }),
         onError: (error) => toast({ title: error.message, variant: 'error' }),
-      },
+      }
     );
   }
 
@@ -236,9 +241,7 @@ function FieldRow({ field, emphasise }: { field: ApplicationField; emphasise?: b
                 size="sm"
                 variant="outline"
                 title="Stop asking me this question"
-                onClick={() =>
-                  update.mutate({ id: field.id, patch: { status: 'ignored' } })
-                }
+                onClick={() => update.mutate({ id: field.id, patch: { status: 'ignored' } })}
               >
                 Never ask
               </Button>
@@ -295,7 +298,10 @@ export function ApplicationAnswers() {
   const inbox = fields.filter((f) => f.status === 'needs_answer');
   const answered = fields.filter((f) => f.status === 'answered');
 
-  const grouped = React.useMemo(() => {
+  // Not memoized: `answered` is a fresh array on every render, so a useMemo keyed
+  // on it never hit its cache - it only claimed to. The compiler memoizes this
+  // correctly on its own.
+  const grouped = ((): Map<FieldGroup, ApplicationField[]> => {
     const map = new Map<FieldGroup, ApplicationField[]>();
     for (const field of answered) {
       const group = groupForField(field);
@@ -304,7 +310,7 @@ export function ApplicationAnswers() {
       map.set(group, list);
     }
     return map;
-  }, [answered]);
+  })();
 
   if (isLoading) return <LoadingSkeleton rows={4} />;
   if (isError) {
@@ -323,8 +329,8 @@ export function ApplicationAnswers() {
         <CardHeader>
           <CardTitle>Application answers</CardTitle>
           <CardDescription>
-            What job application forms ask you, and how the extension should answer. Fill a
-            question once here and every future form uses it.
+            What job application forms ask you, and how the extension should answer. Fill a question
+            once here and every future form uses it.
           </CardDescription>
         </CardHeader>
 
@@ -347,9 +353,7 @@ export function ApplicationAnswers() {
               description="Once you autofill a job application with the FitWright extension, every question it meets shows up here - and anything it could not answer waits for you."
             />
           ) : (
-            <p className="text-xs text-[var(--at-success)]">
-              Every question so far has an answer.
-            </p>
+            <p className="text-xs text-[var(--at-success)]">Every question so far has an answer.</p>
           )}
 
           {answered.length > 0 && (

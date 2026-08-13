@@ -26,9 +26,8 @@ import Puzzle from 'lucide-react/dist/esm/icons/puzzle';
 import Link from 'next/link';
 
 import { Button } from '@/components/atelier/button';
-import { Card } from '@/components/atelier/card';
 import { Badge } from '@/components/atelier/badge';
-import { EmptyState, LoadingSkeleton, ErrorState } from '@/components/atelier/states';
+import { EmptyState, ErrorState } from '@/components/atelier/states';
 import { Input } from '@/components/atelier/input';
 import { useToast } from '@/components/atelier/toast';
 import { FeedHealthPanel } from '@/components/discovery/feed-health-panel';
@@ -79,9 +78,7 @@ const RECENCY_LABELS: Record<number, string> = {
   168: 'last week',
 };
 
-const EXTENSION_LANE = new Set(
-  PLATFORMS.filter((p) => p.lane === 'extension').map((p) => p.id),
-);
+const EXTENSION_LANE = new Set(PLATFORMS.filter((p) => p.lane === 'extension').map((p) => p.id));
 
 export default function DiscoveryPage() {
   const router = useRouter();
@@ -321,14 +318,12 @@ export default function DiscoveryPage() {
               status === 'dismissed'
                 ? `Dismissed ${data.updated} job${data.updated === 1 ? '' : 's'}`
                 : `Saved ${data.updated} job${data.updated === 1 ? '' : 's'}`,
-            description: data.queued
-              ? `${data.queued} added to your apply queue.`
-              : undefined,
+            description: data.queued ? `${data.queued} added to your apply queue.` : undefined,
           });
           exitSelecting();
         },
         onError: (err) => toast({ title: err.message, variant: 'error' }),
-      },
+      }
     );
   }
 
@@ -354,7 +349,7 @@ export default function DiscoveryPage() {
             });
           }
         },
-      },
+      }
     );
     if (selectedResult?.id === id) setSelectedResult({ ...selectedResult, status });
   }
@@ -374,7 +369,7 @@ export default function DiscoveryPage() {
                 {hasFeed
                   ? `${feedTotal} ${activeFilters.length ? 'matching' : ''} opportunit${feedTotal === 1 ? 'y' : 'ies'}`.replace(
                       '  ',
-                      ' ',
+                      ' '
                     )
                   : 'Find your next role'}
               </p>
@@ -408,282 +403,288 @@ export default function DiscoveryPage() {
           {/* Search panel. Open by default only when there is no feed yet: a
               first-time user needs it, and everyone else came to read results. */}
           {searchOpen && (
-          <div className="space-y-3 rounded-[var(--radius-at-lg)] border border-[var(--border)] bg-[var(--card)] p-4">
-            {/* Mode switch */}
-            <div className="flex gap-1 rounded-[var(--radius-at-md)] bg-[var(--muted)] p-0.5">
-              <button
-                onClick={() => setUseResume(false)}
-                className={`flex-1 rounded-[var(--radius-at-sm)] px-3 py-1.5 text-xs font-medium transition-all ${
-                  !useResume
-                    ? 'bg-[var(--card)] text-[var(--foreground)] shadow-sm'
-                    : 'text-[var(--muted-foreground)]'
-                }`}
-              >
-                Search by Role
-              </button>
-              <button
-                onClick={() => setUseResume(true)}
-                className={`flex-1 rounded-[var(--radius-at-sm)] px-3 py-1.5 text-xs font-medium transition-all ${
-                  useResume
-                    ? 'bg-[var(--card)] text-[var(--foreground)] shadow-sm'
-                    : 'text-[var(--muted-foreground)]'
-                }`}
-              >
-                Match Resume
-              </button>
-            </div>
-
-            {/* Search input */}
-            {!useResume ? (
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Job title, e.g. Backend Engineer"
-                  value={queryText}
-                  onChange={(e) => setQueryText(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && canSearch && handleSearch()}
-                  className="flex-1"
-                />
-                <Button onClick={handleSearch} disabled={!canSearch || isSearching}>
-                  {isSearching ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Search className="h-4 w-4" />
-                  )}
-                </Button>
-              </div>
-            ) : (
-              <div className="flex gap-2">
-                {resumesLoading ? (
-                  <div className="h-9 flex-1 animate-pulse rounded-[var(--radius-at-md)] bg-[var(--muted)]" />
-                ) : resumes?.length ? (
-                  <select
-                    className="flex-1 rounded-[var(--radius-at-md)] border border-[var(--input)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)]"
-                    value={resumeId ?? ''}
-                    onChange={(e) => setResumeId(e.target.value || null)}
-                  >
-                    <option value="">Select resume…</option>
-                    {resumes.map((r) => (
-                      <option key={r.resume_id} value={r.resume_id}>
-                        {r.title || r.filename || 'Untitled'}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <div className="flex flex-1 items-center gap-2 rounded-[var(--radius-at-md)] border border-dashed border-[var(--border)] p-3 text-sm text-[var(--muted-foreground)]">
-                    <Upload className="h-4 w-4" />
-                    <Link href="/resumes" className="text-[var(--primary)] hover:underline">
-                      Upload a resume first
-                    </Link>
-                  </div>
-                )}
-                <Button onClick={handleSearch} disabled={!canSearch || isSearching}>
-                  {isSearching ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Search className="h-4 w-4" />
-                  )}
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    const rid = resumeId || resumes?.[0]?.resume_id;
-                    if (rid) enableSchedule.mutate({ resumeId: rid });
-                  }}
-                  disabled={!resumeId && !resumes?.[0]}
-                  title="Auto-discover daily"
+            <div className="space-y-3 rounded-[var(--radius-at-lg)] border border-[var(--border)] bg-[var(--card)] p-4">
+              {/* Mode switch */}
+              <div className="flex gap-1 rounded-[var(--radius-at-md)] bg-[var(--muted)] p-0.5">
+                <button
+                  onClick={() => setUseResume(false)}
+                  className={`flex-1 rounded-[var(--radius-at-sm)] px-3 py-1.5 text-xs font-medium transition-all ${
+                    !useResume
+                      ? 'bg-[var(--card)] text-[var(--foreground)] shadow-sm'
+                      : 'text-[var(--muted-foreground)]'
+                  }`}
                 >
-                  <Bell className="h-4 w-4" />
-                </Button>
-              </div>
-            )}
-
-            {/* Filters — always visible, no toggle needed */}
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
-              {/* Location */}
-              <div className="flex items-center gap-1.5 text-[var(--muted-foreground)]">
-                <MapPin className="h-3.5 w-3.5" />
-                <input
-                  placeholder="Location"
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
-                  className="w-28 border-b border-[var(--border)] bg-transparent py-0.5 text-xs text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] focus:border-[var(--primary)]"
-                />
-              </div>
-              {/* Remote */}
-              <label className="flex items-center gap-1.5 text-[var(--muted-foreground)]">
-                <input
-                  type="checkbox"
-                  checked={isRemote}
-                  onChange={(e) => setIsRemote(e.target.checked)}
-                  className="rounded-sm border-[var(--input)] accent-[var(--primary)]"
-                />
-                Remote
-              </label>
-              {/* Country */}
-              <select
-                value={countryIndeed}
-                onChange={(e) => setCountryIndeed(e.target.value)}
-                className="border-b border-[var(--border)] bg-transparent py-0.5 text-xs text-[var(--foreground)] outline-none"
-              >
-                <option value="">Any country</option>
-                <option value="usa">USA</option>
-                <option value="india">India</option>
-                <option value="uk">UK</option>
-                <option value="canada">Canada</option>
-                <option value="australia">Australia</option>
-                <option value="germany">Germany</option>
-              </select>
-              {/* Date */}
-              <select
-                value={hoursOld}
-                onChange={(e) => setHoursOld(e.target.value)}
-                className="border-b border-[var(--border)] bg-transparent py-0.5 text-xs text-[var(--foreground)] outline-none"
-              >
-                <option value="">Any time</option>
-                <option value="24">24h</option>
-                <option value="168">Week</option>
-                <option value="720">Month</option>
-              </select>
-              {/* Job Type */}
-              <select
-                value={jobType}
-                onChange={(e) => setJobType(e.target.value)}
-                className="border-b border-[var(--border)] bg-transparent py-0.5 text-xs text-[var(--foreground)] outline-none"
-              >
-                <option value="">Any type</option>
-                <option value="fulltime">Full-time</option>
-                <option value="parttime">Part-time</option>
-                <option value="contract">Contract</option>
-                <option value="internship">Internship</option>
-              </select>
-              {/* Results */}
-              <span className="text-[var(--muted-foreground)]">
-                {resultsWanted} results
-                <input
-                  type="range"
-                  min={10}
-                  max={100}
-                  step={10}
-                  value={resultsWanted}
-                  onChange={(e) => setResultsWanted(parseInt(e.target.value))}
-                  className="ml-1.5 w-16 align-middle accent-[var(--primary)]"
-                />
-              </span>
-              {/* Apply narrows the list without re-scraping; Search does both. */}
-              {hasFeed && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={applyFeedFilters}
-                  title="Filter the jobs already in your feed. Search fetches new ones."
-                  className="ml-auto h-6 px-2.5 text-[10px]"
-                >
-                  Filter feed
-                </Button>
-              )}
-              {activeFilters.length > 0 && (
-                <button onClick={clearFeedFilters} className="text-[10px] text-[var(--primary)] hover:underline">
-                  Clear
+                  Search by Role
                 </button>
-              )}
-            </div>
+                <button
+                  onClick={() => setUseResume(true)}
+                  className={`flex-1 rounded-[var(--radius-at-sm)] px-3 py-1.5 text-xs font-medium transition-all ${
+                    useResume
+                      ? 'bg-[var(--card)] text-[var(--foreground)] shadow-sm'
+                      : 'text-[var(--muted-foreground)]'
+                  }`}
+                >
+                  Match Resume
+                </button>
+              </div>
 
-            {/* Platforms — always visible */}
-            {!useResume && (
-              <div className="space-y-2">
-                <div className="flex flex-wrap gap-1.5">
-                  {PLATFORMS.map((p) => {
-                    const selected = selectedPlatforms.includes(p.id);
-                    const viaExtension = p.lane === 'extension';
-                    return (
-                      <button
-                        key={p.id}
-                        onClick={() => togglePlatform(p.id)}
-                        aria-pressed={selected}
-                        title={
-                          viaExtension
-                            ? extension.installed || extension.detecting
-                              ? `${p.label} is searched by the FitWright browser extension`
-                              : `${p.label} blocks servers, so it needs the browser extension. Selecting it will return nothing until the extension is installed.`
-                            : undefined
-                        }
-                        className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium transition-all ${
-                          selected
-                            ? 'bg-[var(--primary)] text-[var(--primary-foreground)]'
-                            : 'bg-[var(--muted)] text-[var(--muted-foreground)] hover:bg-[var(--accent)]'
-                        } ${
-                          /* Dimmed, not disabled: the user may be about to install
+              {/* Search input */}
+              {!useResume ? (
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Job title, e.g. Backend Engineer"
+                    value={queryText}
+                    onChange={(e) => setQueryText(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && canSearch && handleSearch()}
+                    className="flex-1"
+                  />
+                  <Button onClick={handleSearch} disabled={!canSearch || isSearching}>
+                    {isSearching ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Search className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  {resumesLoading ? (
+                    <div className="h-9 flex-1 animate-pulse rounded-[var(--radius-at-md)] bg-[var(--muted)]" />
+                  ) : resumes?.length ? (
+                    <select
+                      className="flex-1 rounded-[var(--radius-at-md)] border border-[var(--input)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)]"
+                      value={resumeId ?? ''}
+                      onChange={(e) => setResumeId(e.target.value || null)}
+                    >
+                      <option value="">Select resume…</option>
+                      {resumes.map((r) => (
+                        <option key={r.resume_id} value={r.resume_id}>
+                          {r.title || r.filename || 'Untitled'}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="flex flex-1 items-center gap-2 rounded-[var(--radius-at-md)] border border-dashed border-[var(--border)] p-3 text-sm text-[var(--muted-foreground)]">
+                      <Upload className="h-4 w-4" />
+                      <Link href="/resumes" className="text-[var(--primary)] hover:underline">
+                        Upload a resume first
+                      </Link>
+                    </div>
+                  )}
+                  <Button onClick={handleSearch} disabled={!canSearch || isSearching}>
+                    {isSearching ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Search className="h-4 w-4" />
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      const rid = resumeId || resumes?.[0]?.resume_id;
+                      if (rid) enableSchedule.mutate({ resumeId: rid });
+                    }}
+                    disabled={!resumeId && !resumes?.[0]}
+                    title="Auto-discover daily"
+                  >
+                    <Bell className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
+
+              {/* Filters — always visible, no toggle needed */}
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
+                {/* Location */}
+                <div className="flex items-center gap-1.5 text-[var(--muted-foreground)]">
+                  <MapPin className="h-3.5 w-3.5" />
+                  <input
+                    placeholder="Location"
+                    value={location}
+                    onChange={(e) => setLocation(e.target.value)}
+                    className="w-28 border-b border-[var(--border)] bg-transparent py-0.5 text-xs text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] focus:border-[var(--primary)]"
+                  />
+                </div>
+                {/* Remote */}
+                <label className="flex items-center gap-1.5 text-[var(--muted-foreground)]">
+                  <input
+                    type="checkbox"
+                    checked={isRemote}
+                    onChange={(e) => setIsRemote(e.target.checked)}
+                    className="rounded-sm border-[var(--input)] accent-[var(--primary)]"
+                  />
+                  Remote
+                </label>
+                {/* Country */}
+                <select
+                  value={countryIndeed}
+                  onChange={(e) => setCountryIndeed(e.target.value)}
+                  className="border-b border-[var(--border)] bg-transparent py-0.5 text-xs text-[var(--foreground)] outline-none"
+                >
+                  <option value="">Any country</option>
+                  <option value="usa">USA</option>
+                  <option value="india">India</option>
+                  <option value="uk">UK</option>
+                  <option value="canada">Canada</option>
+                  <option value="australia">Australia</option>
+                  <option value="germany">Germany</option>
+                </select>
+                {/* Date */}
+                <select
+                  value={hoursOld}
+                  onChange={(e) => setHoursOld(e.target.value)}
+                  className="border-b border-[var(--border)] bg-transparent py-0.5 text-xs text-[var(--foreground)] outline-none"
+                >
+                  <option value="">Any time</option>
+                  <option value="24">24h</option>
+                  <option value="168">Week</option>
+                  <option value="720">Month</option>
+                </select>
+                {/* Job Type */}
+                <select
+                  value={jobType}
+                  onChange={(e) => setJobType(e.target.value)}
+                  className="border-b border-[var(--border)] bg-transparent py-0.5 text-xs text-[var(--foreground)] outline-none"
+                >
+                  <option value="">Any type</option>
+                  <option value="fulltime">Full-time</option>
+                  <option value="parttime">Part-time</option>
+                  <option value="contract">Contract</option>
+                  <option value="internship">Internship</option>
+                </select>
+                {/* Results */}
+                <span className="text-[var(--muted-foreground)]">
+                  {resultsWanted} results
+                  <input
+                    type="range"
+                    min={10}
+                    max={100}
+                    step={10}
+                    value={resultsWanted}
+                    onChange={(e) => setResultsWanted(parseInt(e.target.value))}
+                    className="ml-1.5 w-16 align-middle accent-[var(--primary)]"
+                  />
+                </span>
+                {/* Apply narrows the list without re-scraping; Search does both. */}
+                {hasFeed && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={applyFeedFilters}
+                    title="Filter the jobs already in your feed. Search fetches new ones."
+                    className="ml-auto h-6 px-2.5 text-[10px]"
+                  >
+                    Filter feed
+                  </Button>
+                )}
+                {activeFilters.length > 0 && (
+                  <button
+                    onClick={clearFeedFilters}
+                    className="text-[10px] text-[var(--primary)] hover:underline"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+
+              {/* Platforms — always visible */}
+              {!useResume && (
+                <div className="space-y-2">
+                  <div className="flex flex-wrap gap-1.5">
+                    {PLATFORMS.map((p) => {
+                      const selected = selectedPlatforms.includes(p.id);
+                      const viaExtension = p.lane === 'extension';
+                      return (
+                        <button
+                          key={p.id}
+                          onClick={() => togglePlatform(p.id)}
+                          aria-pressed={selected}
+                          title={
+                            viaExtension
+                              ? extension.installed || extension.detecting
+                                ? `${p.label} is searched by the FitWright browser extension`
+                                : `${p.label} blocks servers, so it needs the browser extension. Selecting it will return nothing until the extension is installed.`
+                              : undefined
+                          }
+                          className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium transition-all ${
+                            selected
+                              ? 'bg-[var(--primary)] text-[var(--primary-foreground)]'
+                              : 'bg-[var(--muted)] text-[var(--muted-foreground)] hover:bg-[var(--accent)]'
+                          } ${
+                            /* Dimmed, not disabled: the user may be about to install
                              the extension, and a board they cannot even select is
                              harder to understand than one that explains itself. */
-                          viaExtension && !extension.installed && !extension.detecting
-                            ? 'opacity-50'
-                            : ''
-                        }`}
-                      >
-                        {p.label}
-                        {viaExtension && (
-                          <Puzzle
-                            className={`h-2.5 w-2.5 ${
-                              extension.installed ? 'opacity-70' : 'opacity-40'
-                            }`}
-                            aria-hidden="true"
-                          />
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* Extension lane status. Only shown once it is relevant. */}
-                {selectedExtensionSites.length > 0 && (
-                  <p className="flex items-start gap-1.5 text-[11px] text-[var(--muted-foreground)]">
-                    <Puzzle className="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
-                    {extension.detecting ? (
-                      <span>Checking for the FitWright extension…</span>
-                    ) : extension.installed ? (
-                      <span>
-                        {selectedExtensionSites.length} board
-                        {selectedExtensionSites.length === 1 ? '' : 's'} will be searched by the
-                        extension (v{extension.capabilities?.version}) in background tabs — results
-                        land in your feed.
-                      </span>
-                    ) : (
-                      <span>
-                        <strong className="font-medium text-[var(--foreground)]">
-                          Extension required.
-                        </strong>{' '}
-                        Hirist, Foundit, YC and Instahyre block server-side scraping, so they are
-                        searched from your own browser.{' '}
-                        <Link
-                          href="/setup/extension"
-                          className="font-medium text-[var(--primary)] hover:underline"
+                            viaExtension && !extension.installed && !extension.detecting
+                              ? 'opacity-50'
+                              : ''
+                          }`}
                         >
-                          Set up the extension
-                        </Link>{' '}
-                        — it takes a minute, and this page notices on its own when it is ready.
-                      </span>
-                    )}
-                  </p>
-                )}
+                          {p.label}
+                          {viaExtension && (
+                            <Puzzle
+                              className={`h-2.5 w-2.5 ${
+                                extension.installed ? 'opacity-70' : 'opacity-40'
+                              }`}
+                              aria-hidden="true"
+                            />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
 
-                {extension.error && (
-                  <p className="text-[11px] text-[var(--at-danger)]">{extension.error}</p>
-                )}
+                  {/* Extension lane status. Only shown once it is relevant. */}
+                  {selectedExtensionSites.length > 0 && (
+                    <p className="flex items-start gap-1.5 text-[11px] text-[var(--muted-foreground)]">
+                      <Puzzle className="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
+                      {extension.detecting ? (
+                        <span>Checking for the FitWright extension…</span>
+                      ) : extension.installed ? (
+                        <span>
+                          {selectedExtensionSites.length} board
+                          {selectedExtensionSites.length === 1 ? '' : 's'} will be searched by the
+                          extension (v{extension.capabilities?.version}) in background tabs —
+                          results land in your feed.
+                        </span>
+                      ) : (
+                        <span>
+                          <strong className="font-medium text-[var(--foreground)]">
+                            Extension required.
+                          </strong>{' '}
+                          Hirist, Foundit, YC and Instahyre block server-side scraping, so they are
+                          searched from your own browser.{' '}
+                          <Link
+                            href="/setup/extension"
+                            className="font-medium text-[var(--primary)] hover:underline"
+                          >
+                            Set up the extension
+                          </Link>{' '}
+                          — it takes a minute, and this page notices on its own when it is ready.
+                        </span>
+                      )}
+                    </p>
+                  )}
 
-                {extension.lastResult && !extension.scraping && (
-                  <p className="text-[11px] text-[var(--muted-foreground)]">
-                    Extension searched{' '}
-                    {extension.lastResult.perSite
-                      .map((s) => `${s.source} (${s.found} found${s.saved ? `, ${s.saved} new` : ''})`)
-                      .join(' · ')}
-                    {extension.lastResult.total > 0 && extension.lastResult.saved === 0 && (
-                      <> — all already in your feed.</>
-                    )}
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
+                  {extension.error && (
+                    <p className="text-[11px] text-[var(--at-danger)]">{extension.error}</p>
+                  )}
+
+                  {extension.lastResult && !extension.scraping && (
+                    <p className="text-[11px] text-[var(--muted-foreground)]">
+                      Extension searched{' '}
+                      {extension.lastResult.perSite
+                        .map(
+                          (s) =>
+                            `${s.source} (${s.found} found${s.saved ? `, ${s.saved} new` : ''})`
+                        )
+                        .join(' · ')}
+                      {extension.lastResult.total > 0 && extension.lastResult.saved === 0 && (
+                        <> — all already in your feed.</>
+                      )}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
           )}
 
           {/* Status banner */}
@@ -706,9 +707,12 @@ export default function DiscoveryPage() {
             <div className="flex items-center gap-3 rounded-[var(--radius-at-md)] border border-[var(--border)] bg-[var(--card)] p-4">
               <Loader2 className="h-5 w-5 animate-spin text-[var(--primary)]" />
               <div>
-                <p className="text-sm font-medium text-[var(--foreground)]">Searching job boards…</p>
+                <p className="text-sm font-medium text-[var(--foreground)]">
+                  Searching job boards…
+                </p>
                 <p className="text-xs text-[var(--muted-foreground)]">
-                  Checking {selectedPlatforms.join(', ') || 'all platforms'}. This may take 10–15 seconds.
+                  Checking {selectedPlatforms.join(', ') || 'all platforms'}. This may take 10–15
+                  seconds.
                 </p>
               </div>
             </div>
@@ -720,9 +724,7 @@ export default function DiscoveryPage() {
           {/* What is true about this feed but invisible: a broken board, jobs
               with no score, and the retention window. Renders nothing when there
               is nothing to report. */}
-          {!isSearching && hasFeed && (
-            <FeedHealthPanel unscored={feed.data?.unscored ?? 0} />
-          )}
+          {!isSearching && hasFeed && <FeedHealthPanel unscored={feed.data?.unscored ?? 0} />}
 
           {!isSearching && (hasFeed || activeFilters.length > 0 || statusFilter) && (
             <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2 border-b border-[var(--border)]">
@@ -757,22 +759,22 @@ export default function DiscoveryPage() {
                     stores none, so on a fresh feed this control could only ever
                     return an empty list. */}
                 {scoredCount > 0 && (
-                <label className="flex items-center gap-1.5 text-[11px] text-[var(--muted-foreground)]">
-                  Match
-                  <select
-                    value={minScore}
-                    onChange={(e) => {
-                      setMinScore(parseInt(e.target.value, 10));
-                      setFeedLimit(20);
-                    }}
-                    className="rounded-[var(--radius-at-sm)] border border-[var(--border)] bg-[var(--card)] px-1.5 py-0.5 text-[11px]"
-                  >
-                    <option value={0}>any</option>
-                    <option value={50}>50%+</option>
-                    <option value={70}>70%+</option>
-                    <option value={85}>85%+</option>
-                  </select>
-                </label>
+                  <label className="flex items-center gap-1.5 text-[11px] text-[var(--muted-foreground)]">
+                    Match
+                    <select
+                      value={minScore}
+                      onChange={(e) => {
+                        setMinScore(parseInt(e.target.value, 10));
+                        setFeedLimit(20);
+                      }}
+                      className="rounded-[var(--radius-at-sm)] border border-[var(--border)] bg-[var(--card)] px-1.5 py-0.5 text-[11px]"
+                    >
+                      <option value={0}>any</option>
+                      <option value={50}>50%+</option>
+                      <option value={70}>70%+</option>
+                      <option value={85}>85%+</option>
+                    </select>
+                  </label>
                 )}
                 <label className="flex items-center gap-1.5 text-[11px] text-[var(--muted-foreground)]">
                   Posted
@@ -904,73 +906,75 @@ export default function DiscoveryPage() {
                       className="mt-4 h-4 w-4 shrink-0 accent-[var(--primary)]"
                     />
                   )}
-                <button
-                  onClick={() => setSelectedResult(r)}
-                  className={`w-full rounded-[var(--radius-at-md)] border p-3 text-left transition-all hover:border-[var(--primary)]/30 hover:shadow-sm ${
-                    selectedResult?.id === r.id
-                      ? 'border-[var(--primary)]/40 bg-[var(--accent)]'
-                      : 'border-[var(--border)] bg-[var(--card)]'
-                  } ${r.status === 'dismissed' ? 'opacity-40' : ''}`}
-                >
-                  <div className="flex items-start gap-3">
-                    {/* Platform badge */}
-                    <PlatformBadge source={r.source} />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="truncate text-sm font-medium text-[var(--foreground)]">
-                          {r.title}
-                        </span>
-                        {!r.seen && (
-                          <span className="h-1.5 w-1.5 rounded-full bg-[var(--primary)]" />
-                        )}
-                      </div>
-                      <p className="mt-0.5 truncate text-xs text-[var(--muted-foreground)]">
-                        {r.company || 'Company not listed'}
-                        {r.location ? ` · ${r.location}` : ''}
-                        {r.is_remote ? ' · Remote' : ''}
-                        {/* Naming the other boards is what makes collapsing
-                            trustworthy: the user can see nothing was hidden. */}
-                        {r.also_on?.length ? ` · also on ${r.also_on.join(', ')}` : ''}
-                      </p>
-                      {/* Salary + posted date row */}
-                      <div className="mt-1 flex items-center gap-2 text-[10px]">
-                        {r.salary && (
-                          <span className="font-medium text-[var(--at-success)]">{r.salary}</span>
-                        )}
-                        {r.posted_at && (
-                          <span className="text-[var(--muted-foreground)]">{timeAgo(r.posted_at)}</span>
-                        )}
-                      </div>
-                      {(r.matched_keywords?.length ?? 0) > 0 && (
-                        <div className="mt-1.5 flex flex-wrap gap-1">
-                          {r.matched_keywords!.slice(0, 3).map((kw) => (
-                            <span
-                              key={kw}
-                              className="rounded bg-[var(--at-success)]/10 px-1.5 py-0.5 text-[9px] font-medium text-[var(--at-success)]"
-                            >
-                              {kw}
-                            </span>
-                          ))}
+                  <button
+                    onClick={() => setSelectedResult(r)}
+                    className={`w-full rounded-[var(--radius-at-md)] border p-3 text-left transition-all hover:border-[var(--primary)]/30 hover:shadow-sm ${
+                      selectedResult?.id === r.id
+                        ? 'border-[var(--primary)]/40 bg-[var(--accent)]'
+                        : 'border-[var(--border)] bg-[var(--card)]'
+                    } ${r.status === 'dismissed' ? 'opacity-40' : ''}`}
+                  >
+                    <div className="flex items-start gap-3">
+                      {/* Platform badge */}
+                      <PlatformBadge source={r.source} />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="truncate text-sm font-medium text-[var(--foreground)]">
+                            {r.title}
+                          </span>
+                          {!r.seen && (
+                            <span className="h-1.5 w-1.5 rounded-full bg-[var(--primary)]" />
+                          )}
                         </div>
-                      )}
-                    </div>
-                    {r.match_score > 0 ? (
-                      <span className="text-sm font-semibold tabular-nums text-[var(--primary)]">
-                        {Math.round(r.match_score)}%
-                      </span>
-                    ) : (
-                      /* An empty space where a score belongs reads as a zero.
+                        <p className="mt-0.5 truncate text-xs text-[var(--muted-foreground)]">
+                          {r.company || 'Company not listed'}
+                          {r.location ? ` · ${r.location}` : ''}
+                          {r.is_remote ? ' · Remote' : ''}
+                          {/* Naming the other boards is what makes collapsing
+                            trustworthy: the user can see nothing was hidden. */}
+                          {r.also_on?.length ? ` · also on ${r.also_on.join(', ')}` : ''}
+                        </p>
+                        {/* Salary + posted date row */}
+                        <div className="mt-1 flex items-center gap-2 text-[10px]">
+                          {r.salary && (
+                            <span className="font-medium text-[var(--at-success)]">{r.salary}</span>
+                          )}
+                          {r.posted_at && (
+                            <span className="text-[var(--muted-foreground)]">
+                              {timeAgo(r.posted_at)}
+                            </span>
+                          )}
+                        </div>
+                        {(r.matched_keywords?.length ?? 0) > 0 && (
+                          <div className="mt-1.5 flex flex-wrap gap-1">
+                            {r.matched_keywords!.slice(0, 3).map((kw) => (
+                              <span
+                                key={kw}
+                                className="rounded bg-[var(--at-success)]/10 px-1.5 py-0.5 text-[9px] font-medium text-[var(--at-success)]"
+                              >
+                                {kw}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      {r.match_score > 0 ? (
+                        <span className="text-sm font-semibold tabular-nums text-[var(--primary)]">
+                          {Math.round(r.match_score)}%
+                        </span>
+                      ) : (
+                        /* An empty space where a score belongs reads as a zero.
                          Naming the absence is what stops "no score" being
                          mistaken for "bad match". */
-                      <span
-                        className="text-[10px] text-[var(--muted-foreground)]"
-                        title="Scores compare a job against your resume. Score your feed to fill these in."
-                      >
-                        not scored
-                      </span>
-                    )}
-                  </div>
-                </button>
+                        <span
+                          className="text-[10px] text-[var(--muted-foreground)]"
+                          title="Scores compare a job against your resume. Score your feed to fill these in."
+                        >
+                          not scored
+                        </span>
+                      )}
+                    </div>
+                  </button>
                 </div>
               ))}
               {/* Count against rows actually loaded, not the page size: with a
@@ -1056,7 +1060,11 @@ export default function DiscoveryPage() {
                 <CheckCircle className="mr-1 h-3.5 w-3.5" /> Applied
               </Button>
               {/* Dual apply links */}
-              <ApplyLinks url={selectedResult.url} source={selectedResult.source} description={selectedResult.description} />
+              <ApplyLinks
+                url={selectedResult.url}
+                source={selectedResult.source}
+                description={selectedResult.description}
+              />
               <Button
                 size="sm"
                 variant="outline"
@@ -1143,7 +1151,7 @@ export default function DiscoveryPage() {
  */
 function formatJobDescription(text: string): string {
   // Step 1: Clean up scraper artifacts
-  let cleaned = text
+  const cleaned = text
     // Remove escaped backslashes from markdown (\\- → -, \- → -)
     .replace(/\\\\-/g, '-')
     .replace(/\\-/g, '-')
@@ -1159,7 +1167,7 @@ function formatJobDescription(text: string): string {
   let listType: 'ul' | 'ol' | null = null;
 
   for (let i = 0; i < lines.length; i++) {
-    let line = lines[i].trim();
+    const line = lines[i].trim();
 
     // Skip empty lines (add spacing)
     if (!line) {
@@ -1174,7 +1182,10 @@ function formatJobDescription(text: string): string {
 
     // Horizontal rules (--- or ===)
     if (/^[-=]{3,}$/.test(line)) {
-      if (inList) { html.push(listType === 'ol' ? '</ol>' : '</ul>'); inList = false; }
+      if (inList) {
+        html.push(listType === 'ol' ? '</ol>' : '</ul>');
+        inList = false;
+      }
       html.push('<hr class="my-3 border-[var(--border)]" />');
       continue;
     }
@@ -1182,19 +1193,40 @@ function formatJobDescription(text: string): string {
     // Markdown headers: # ## ### ####
     const headerMatch = line.match(/^(#{1,4})\s+(.+)$/);
     if (headerMatch) {
-      if (inList) { html.push(listType === 'ol' ? '</ol>' : '</ul>'); inList = false; }
+      if (inList) {
+        html.push(listType === 'ol' ? '</ol>' : '</ul>');
+        inList = false;
+      }
       const level = headerMatch[1].length;
       const content = escapeAndFormat(headerMatch[2]);
-      const sizes = ['text-base font-bold', 'text-sm font-bold', 'text-sm font-semibold', 'text-xs font-semibold uppercase tracking-wide'];
-      html.push(`<h${level + 2} class="${sizes[level - 1] || sizes[2]} mt-4 mb-1.5 text-[var(--foreground)]">${content}</h${level + 2}>`);
+      const sizes = [
+        'text-base font-bold',
+        'text-sm font-bold',
+        'text-sm font-semibold',
+        'text-xs font-semibold uppercase tracking-wide',
+      ];
+      html.push(
+        `<h${level + 2} class="${sizes[level - 1] || sizes[2]} mt-4 mb-1.5 text-[var(--foreground)]">${content}</h${level + 2}>`
+      );
       continue;
     }
 
     // Bold-only line as a section header: **Some Header**
-    if (/^\*\*(.+)\*\*\s*$/.test(line) && !line.includes('**', line.indexOf('**') + 2 + line.match(/^\*\*(.+?)\*\*/)?.[1]?.length!)) {
-      if (inList) { html.push(listType === 'ol' ? '</ol>' : '</ul>'); inList = false; }
+    if (
+      /^\*\*(.+)\*\*\s*$/.test(line) &&
+      !line.includes(
+        '**',
+        line.indexOf('**') + 2 + (line.match(/^\*\*(.+?)\*\*/)?.[1]?.length ?? 0)
+      )
+    ) {
+      if (inList) {
+        html.push(listType === 'ol' ? '</ol>' : '</ul>');
+        inList = false;
+      }
       const content = line.replace(/^\*\*(.+)\*\*\s*$/, '$1');
-      html.push(`<h4 class="mt-4 mb-1.5 text-sm font-semibold text-[var(--foreground)]">${escapeHtml(content)}</h4>`);
+      html.push(
+        `<h4 class="mt-4 mb-1.5 text-sm font-semibold text-[var(--foreground)]">${escapeHtml(content)}</h4>`
+      );
       continue;
     }
 
@@ -1207,7 +1239,9 @@ function formatJobDescription(text: string): string {
         inList = true;
         listType = 'ul';
       }
-      html.push(`<li class="text-sm text-[var(--foreground)] leading-relaxed list-disc">${escapeAndFormat(bulletMatch[1])}</li>`);
+      html.push(
+        `<li class="text-sm text-[var(--foreground)] leading-relaxed list-disc">${escapeAndFormat(bulletMatch[1])}</li>`
+      );
       continue;
     }
 
@@ -1220,13 +1254,21 @@ function formatJobDescription(text: string): string {
         inList = true;
         listType = 'ol';
       }
-      html.push(`<li class="text-sm text-[var(--foreground)] leading-relaxed">${escapeAndFormat(numMatch[1])}</li>`);
+      html.push(
+        `<li class="text-sm text-[var(--foreground)] leading-relaxed">${escapeAndFormat(numMatch[1])}</li>`
+      );
       continue;
     }
 
     // Regular paragraph
-    if (inList) { html.push(listType === 'ol' ? '</ol>' : '</ul>'); inList = false; listType = null; }
-    html.push(`<p class="text-sm text-[var(--foreground)] leading-relaxed">${escapeAndFormat(line)}</p>`);
+    if (inList) {
+      html.push(listType === 'ol' ? '</ol>' : '</ul>');
+      inList = false;
+      listType = null;
+    }
+    html.push(
+      `<p class="text-sm text-[var(--foreground)] leading-relaxed">${escapeAndFormat(line)}</p>`
+    );
   }
 
   // Close any open list
@@ -1248,10 +1290,12 @@ function escapeAndFormat(s: string): string {
   // Italic: *text*
   out = out.replace(/\*(.+?)\*/g, '<em>$1</em>');
   // Inline code: `text`
-  out = out.replace(/`(.+?)`/g, '<code class="rounded bg-[var(--muted)] px-1 py-0.5 text-xs">$1</code>');
+  out = out.replace(
+    /`(.+?)`/g,
+    '<code class="rounded bg-[var(--muted)] px-1 py-0.5 text-xs">$1</code>'
+  );
   return out;
 }
-
 
 /** Platform badge with brand color. */
 const PLATFORM_COLORS: Record<string, { bg: string; text: string; label: string }> = {
@@ -1303,7 +1347,6 @@ function timeAgo(dateStr: string): string {
   return `${Math.floor(diffDays / 30)}mo ago`;
 }
 
-
 /** Known job board domains — if the URL is on one of these, it's not a "direct" link. */
 const BOARD_DOMAINS = ['indeed.com', 'linkedin.com', 'glassdoor.com', 'naukri.com', 'google.com'];
 
@@ -1323,7 +1366,10 @@ const ATS_PATTERNS = [
 ];
 
 /** Extract a direct apply URL from the job description text. */
-function extractDirectUrl(description: string | null | undefined, sourceUrl: string): string | null {
+function extractDirectUrl(
+  description: string | null | undefined,
+  sourceUrl: string
+): string | null {
   if (!description) return null;
   // Check if the main URL is already direct (not a board)
   const isBoard = BOARD_DOMAINS.some((d) => sourceUrl.includes(d));

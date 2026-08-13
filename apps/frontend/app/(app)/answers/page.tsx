@@ -48,14 +48,16 @@ function ReadinessCard() {
   // Grouped so the card can lead with what actually costs the user something,
   // rather than listing twenty-one fields in schema order.
   const groups = ['essential', 'eligibility', 'common'].filter((group) =>
-    missing.some((field) => field.group === group),
+    missing.some((field) => field.group === group)
   );
 
   return (
     <Card className="space-y-4 p-5">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-sm font-semibold">Your profile answers {covered} of {total}</h2>
+          <h2 className="text-sm font-semibold">
+            Your profile answers {covered} of {total}
+          </h2>
           <p className="mt-1 text-sm text-[var(--muted-foreground)]">
             {complete
               ? 'Every question forms usually ask is stored. Autofill can finish a typical application.'

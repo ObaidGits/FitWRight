@@ -64,7 +64,7 @@ export interface FieldUpdate {
 
 export async function listApplicationFields(
   params?: { status?: FieldStatus },
-  signal?: AbortSignal,
+  signal?: AbortSignal
 ): Promise<ApplicationField[]> {
   const qs = params?.status ? `?status_filter=${encodeURIComponent(params.status)}` : '';
   const res = await apiFetch(`${PREFIX}${qs}`, { method: 'GET', signal });
@@ -109,7 +109,7 @@ export async function getAutofillReadiness(signal?: AbortSignal): Promise<Readin
 
 export async function updateApplicationField(
   id: string,
-  patch: FieldUpdate,
+  patch: FieldUpdate
 ): Promise<ApplicationField> {
   const res = await apiFetch(`${PREFIX}/${id}`, {
     method: 'PATCH',
@@ -132,7 +132,7 @@ export async function deleteApplicationField(id: string): Promise<void> {
 /** Fold a duplicate wording into `id`, keeping this field's answer. */
 export async function mergeApplicationFields(
   id: string,
-  otherId: string,
+  otherId: string
 ): Promise<ApplicationField> {
   const res = await apiFetch(`${PREFIX}/${id}/merge`, {
     method: 'POST',
@@ -186,7 +186,9 @@ export function groupForField(field: Pick<ApplicationField, 'label_normalized'>)
   ) {
     return 'Eligibility & Work Authorization';
   }
-  if (/salary|compensation|ctc|notice period|available|start date|relocat|remote|hybrid/.test(label)) {
+  if (
+    /salary|compensation|ctc|notice period|available|start date|relocat|remote|hybrid/.test(label)
+  ) {
     return 'Compensation & Availability';
   }
   if (/degree|education|university|college|school|graduat|gpa|qualification/.test(label)) {

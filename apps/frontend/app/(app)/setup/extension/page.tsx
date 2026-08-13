@@ -110,11 +110,18 @@ export default function ExtensionSetupPage() {
         {installed ? (
           <Check className="mt-0.5 h-5 w-5 shrink-0 text-[var(--at-success)]" aria-hidden="true" />
         ) : (
-          <Puzzle className="mt-0.5 h-5 w-5 shrink-0 text-[var(--muted-foreground)]" aria-hidden="true" />
+          <Puzzle
+            className="mt-0.5 h-5 w-5 shrink-0 text-[var(--muted-foreground)]"
+            aria-hidden="true"
+          />
         )}
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium">
-            {detecting ? 'Looking for the extension…' : installed ? 'Connected' : 'Not detected yet'}
+            {detecting
+              ? 'Looking for the extension…'
+              : installed
+                ? 'Connected'
+                : 'Not detected yet'}
           </p>
           <p className="mt-0.5 text-sm text-[var(--muted-foreground)]">
             {installed
@@ -137,9 +144,8 @@ export default function ExtensionSetupPage() {
           It never submits an application
         </h2>
         <p className="text-sm text-[var(--muted-foreground)]">
-          The extension fills the form and stops. Nothing is sent until you have read it and
-          pressed the employer&apos;s own submit button yourself. There is no setting that changes
-          this.
+          The extension fills the form and stops. Nothing is sent until you have read it and pressed
+          the employer&apos;s own submit button yourself. There is no setting that changes this.
         </p>
       </Card>
 
@@ -161,8 +167,8 @@ export default function ExtensionSetupPage() {
               <p className="font-medium">1. Open your extensions page</p>
               <p className="text-[var(--muted-foreground)]">
                 Copy <code className="rounded bg-[var(--secondary)] px-1">chrome://extensions</code>{' '}
-                into the address bar and press Enter. Browsers block links to that page, so it has to
-                be pasted by hand.
+                into the address bar and press Enter. Browsers block links to that page, so it has
+                to be pasted by hand.
               </p>
             </li>
             <li className="space-y-1.5">
@@ -266,7 +272,7 @@ function ForgetExtensionData() {
       setResult(
         `Removed ${data.captured_jobs} captured job${data.captured_jobs === 1 ? '' : 's'}, ` +
           `${data.learned_answers} learned answer${data.learned_answers === 1 ? '' : 's'} and ` +
-          `${data.board_health} board record${data.board_health === 1 ? '' : 's'}.`,
+          `${data.board_health} board record${data.board_health === 1 ? '' : 's'}.`
       );
     } catch (err) {
       setResult(err instanceof Error ? err.message : 'Could not delete it.');

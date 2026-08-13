@@ -202,7 +202,6 @@ export async function deleteRecipe(slug: string): Promise<void> {
   if (!res.ok) throw new Error(`Delete recipe failed: ${res.status}`);
 }
 
-
 // -------------------------------------------------------------------------- //
 // Feed endpoints (Phase 1 — background discovery)
 // -------------------------------------------------------------------------- //
@@ -285,10 +284,7 @@ export interface FeedParams {
   offset?: number;
 }
 
-export async function getFeed(
-  params?: FeedParams,
-  signal?: AbortSignal,
-): Promise<FeedResponse> {
+export async function getFeed(params?: FeedParams, signal?: AbortSignal): Promise<FeedResponse> {
   const qs = new URLSearchParams();
   if (params?.status) qs.set('status', params.status);
   if (params?.sources?.length) qs.set('sources', params.sources.join(','));
@@ -300,7 +296,10 @@ export async function getFeed(
   if (params?.limit) qs.set('limit', String(params.limit));
   if (params?.offset) qs.set('offset', String(params.offset));
   const query = qs.toString();
-  const res = await apiFetch(`${PREFIX}/feed${query ? `?${query}` : ''}`, { method: 'GET', signal });
+  const res = await apiFetch(`${PREFIX}/feed${query ? `?${query}` : ''}`, {
+    method: 'GET',
+    signal,
+  });
   if (!res.ok) throw new Error(`Feed failed: ${res.status}`);
   return res.json();
 }
@@ -315,12 +314,15 @@ export async function getUnseenCount(signal?: AbortSignal): Promise<{ unseen: nu
 /** POST /discovery/feed/schedule — enable background discovery. */
 export async function enableSchedule(
   resumeId: string,
-  intervalHours: number = 24,
+  intervalHours: number = 24
 ): Promise<ScheduleResponse> {
-  const res = await apiFetch(`${PREFIX}/feed/schedule?resume_id=${encodeURIComponent(resumeId)}&interval_hours=${intervalHours}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-  });
+  const res = await apiFetch(
+    `${PREFIX}/feed/schedule?resume_id=${encodeURIComponent(resumeId)}&interval_hours=${intervalHours}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    }
+  );
   if (!res.ok) throw new Error(`Enable schedule failed: ${res.status}`);
   return res.json();
 }
@@ -328,16 +330,15 @@ export async function enableSchedule(
 /** POST /discovery/feed/schedule/toggle — pause/resume background discovery. */
 export async function toggleSchedule(
   resumeId: string,
-  enabled: boolean,
+  enabled: boolean
 ): Promise<{ enabled: boolean; message: string }> {
   const res = await apiFetch(
     `${PREFIX}/feed/schedule/toggle?resume_id=${encodeURIComponent(resumeId)}&enabled=${enabled}`,
-    { method: 'POST', headers: { 'Content-Type': 'application/json' } },
+    { method: 'POST', headers: { 'Content-Type': 'application/json' } }
   );
   if (!res.ok) throw new Error(`Toggle schedule failed: ${res.status}`);
   return res.json();
 }
-
 
 // -------------------------------------------------------------------------- //
 // Manual search (no resume required)
@@ -374,7 +375,7 @@ export interface ManualSearchResponse {
 /** POST /discovery/search — manual job search (no resume needed). */
 export async function manualSearch(
   body: ManualSearchRequest,
-  signal?: AbortSignal,
+  signal?: AbortSignal
 ): Promise<ManualSearchResponse> {
   const res = await apiFetch(`${PREFIX}/search`, {
     method: 'POST',
@@ -385,7 +386,6 @@ export async function manualSearch(
   if (!res.ok) throw new Error(`Manual search failed: ${res.status}`);
   return res.json();
 }
-
 
 // -------------------------------------------------------------------------- //
 // Status + Cleanup + Schedule editing
@@ -437,7 +437,7 @@ export async function scoreFeed(input: {
 
 export async function bulkUpdateResultStatus(
   resultIds: string[],
-  status: string,
+  status: string
 ): Promise<{ updated: number; queued: number }> {
   const res = await apiFetch(`${PREFIX}/feed/bulk-status`, {
     method: 'PATCH',
@@ -450,7 +450,7 @@ export async function bulkUpdateResultStatus(
 
 export async function updateResultStatus(
   resultId: string,
-  status: string,
+  status: string
 ): Promise<{ id: string; status: string; queued?: boolean }> {
   const res = await apiFetch(`${PREFIX}/feed/${encodeURIComponent(resultId)}/status`, {
     method: 'PATCH',
@@ -474,7 +474,7 @@ export async function cleanupFeed(days: number = 30): Promise<{ deleted: number 
 /** PATCH /discovery/feed/schedule — edit schedule. */
 export async function editSchedule(
   resumeId: string,
-  updates: { interval_hours?: number; resume_id?: string },
+  updates: { interval_hours?: number; resume_id?: string }
 ): Promise<{ message: string }> {
   const res = await apiFetch(`${PREFIX}/feed/schedule?resume_id=${encodeURIComponent(resumeId)}`, {
     method: 'PATCH',
