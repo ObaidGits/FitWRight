@@ -64,6 +64,55 @@ def fingerprint(title: str, company: str, location: str, url: str) -> str:
     """
     normalized_url = _normalize_url_for_fingerprint(url) if url else ""
     return _content_fingerprint(title, company, location, normalized_url)
+
+
+# Decorations boards bolt onto a title that do not change what the job is.
+_TITLE_NOISE = re.compile(
+    r"\b(urgent(ly)?\s+hiring|immediate\s+joiner|hiring\s+now|apply\s+now|"
+    r"work\s+from\s+home|wfh|remote|hybrid|onsite|full[\s-]?time|part[\s-]?time|"
+    r"contract|permanent|new|featured|\d+\s*-\s*\d+\s*yrs?)\b",
+    re.IGNORECASE,
+)
+
+
+def group_fingerprint(title: str, company: str, location: str) -> str:
+    """Identity of the *job*, independent of which board it came from.
+
+    The same opening listed on LinkedIn, Indeed and Glassdoor has three different
+    URLs, so the URL-aware ``fingerprint`` above correctly reports three distinct
+    listings - and the user correctly perceives one job shown three times. This is
+    the second identity that lets the feed collapse them.
+
+    Deliberately coarse: boards decorate titles ("Urgent Hiring: Backend Engineer
+    (Remote) 3-5 yrs"), and the decorations are exactly what must not split a
+    group. Location keeps only its first segment, because "Pune" and
+    "Pune, Maharashtra, India" are the same place to a job seeker.
+
+    Coarse cuts both ways: two genuinely different openings with the same title at
+    the same company in the same city will merge. That is the accepted trade -
+    seeing one row and missing a near-identical twin is a smaller harm than a feed
+    where every job appears four times.
+    """
+    clean_title = _TITLE_NOISE.sub(" ", title or "")
+    # Drop bracketed asides and punctuation entirely.
+    clean_title = re.sub(r"[\(\[\{].*?[\)\]\}]", " ", clean_title)
+    clean_title = re.sub(r"[^a-z0-9\s]", " ", clean_title.lower())
+    clean_title = _WS.sub(" ", clean_title).strip()
+
+    clean_company = re.sub(r"[^a-z0-9\s]", " ", (company or "").lower())
+    # Legal suffixes are noise: "Acme" and "Acme Inc." are one employer.
+    clean_company = re.sub(
+        r"\b(inc|llc|ltd|limited|pvt|private|corp|corporation|gmbh|plc|co)\b",
+        " ",
+        clean_company,
+    )
+    clean_company = _WS.sub(" ", clean_company).strip()
+
+    first_locality = (location or "").split(",")[0]
+    clean_location = re.sub(r"[^a-z0-9\s]", " ", first_locality.lower())
+    clean_location = _WS.sub(" ", clean_location).strip()
+
+    return _content_fingerprint(clean_title, clean_company, clean_location, "")
 from app.job_discovery.connectors.base import RawListing
 from app.job_discovery.models import JobListing
 

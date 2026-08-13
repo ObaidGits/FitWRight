@@ -219,12 +219,10 @@ export const indeedApplyAdapter: SiteAdapter = {
   matches: (url) =>
     url.hostname === 'smartapply.indeed.com' || url.hostname.endsWith('.smartapply.indeed.com'),
 
-  classify(url): PageKind {
-    // The whole SmartApply origin exists to host the application flow, so any
-    // page under /applyingasjobseeker or /form is a step of that form.
-    if (/appl(y|ying)|form|resume|questions|review/i.test(url.pathname)) {
-      return 'application-form';
-    }
+  classify(): PageKind {
+    // The whole SmartApply origin exists to host the application flow, so every
+    // page under it is a step of that form. Stated plainly rather than as a path
+    // test whose branches both returned the same answer.
     return 'application-form';
   },
 

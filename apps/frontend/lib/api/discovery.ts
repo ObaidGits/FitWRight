@@ -226,11 +226,26 @@ export interface FeedResult {
   status: string;
   seen: boolean;
   created_at: string;
+  /** The job-description row created when this was saved, if it has been. */
+  job_id?: string | null;
+  /**
+   * Other boards carrying this same job. Present only when duplicates were
+   * collapsed, so its absence means "seen once", not "unknown".
+   */
+  also_on?: string[];
+  /** How many board listings collapsed into this row, including this one. */
+  duplicate_count?: number;
 }
 
 export interface FeedResponse {
   results: FeedResult[];
   total: number;
+  /**
+   * Rows on this page after same-job duplicates collapsed. Lower than the page
+   * size when boards overlapped - reported separately so the page can explain
+   * the difference instead of looking like it lost jobs.
+   */
+  shown?: number;
   unseen: number;
   /**
    * How many jobs in the whole feed carry a real match score. Zero means nothing
@@ -375,7 +390,7 @@ export async function manualSearch(
 export async function updateResultStatus(
   resultId: string,
   status: string,
-): Promise<{ id: string; status: string }> {
+): Promise<{ id: string; status: string; queued?: boolean }> {
   const res = await apiFetch(`${PREFIX}/feed/${encodeURIComponent(resultId)}/status`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },

@@ -43,6 +43,18 @@ export interface AutofillReport {
   questions: string[];
   resumeAttached: boolean;
   /**
+   * True when the attached resume was the one tailored for this company+role
+   * rather than the master. Reported so the panel can tell the user which of the
+   * two actually happened instead of implying the better one.
+   */
+  resumeTailored: boolean;
+  /**
+   * Set when the form had fields but none could be filled - the signature of a
+   * stale adapter or a flow never run against before, as opposed to a form that
+   * was simply already complete. Holds how many fields were seen.
+   */
+  unrecognised?: number;
+  /**
    * Every field encountered, so the learning loop can record what this form
    * asked and queue whatever we could not answer. Labels, types and options
    * only - never the values, which stay on the page unless the user explicitly
@@ -92,13 +104,21 @@ function hasValue(el: Fillable): boolean {
 
 /**
  * Fill every field we can confidently classify inside `root`.
+ *
+ * `job` names the posting this form belongs to. It is what lets the resume
+ * tailored for this role be attached instead of the master one, so callers
+ * should pass it whenever the page told us which job it is.
  */
-export async function autofill(root: ParentNode = document): Promise<AutofillReport> {
+export async function autofill(
+  root: ParentNode = document,
+  job?: { company?: string; title?: string },
+): Promise<AutofillReport> {
   const report: AutofillReport = {
     filled: 0,
     skipped: 0,
     questions: [],
     resumeAttached: false,
+    resumeTailored: false,
     seen: [],
   };
 
@@ -182,11 +202,16 @@ export async function autofill(root: ParentNode = document): Promise<AutofillRep
   // --- Resume upload -------------------------------------------------------
   const fileInput = findResumeInput(root);
   if (fileInput && !fileInput.files?.length) {
-    const pdfReply = await sendToWorker({ type: 'get-resume-pdf' });
+    const pdfReply = await sendToWorker({
+      type: 'get-resume-pdf',
+      company: job?.company,
+      title: job?.title,
+    });
     if (pdfReply.ok && pdfReply.data) {
       const file = fileFromDataUrl(pdfReply.data.dataUrl, pdfReply.data.filename);
       if (file && setFileInput(fileInput, file)) {
         report.resumeAttached = true;
+        report.resumeTailored = pdfReply.data.tailored;
         report.filled += 1;
       }
     }
@@ -196,6 +221,19 @@ export async function autofill(root: ParentNode = document): Promise<AutofillRep
   // Reported, not answered: drafting costs an LLM call each, so the user opts in
   // per question from the popup rather than firing N calls on every autofill.
   report.questions = findOpenQuestions(root).map((q) => q.question);
+
+  // A form that is plainly a form, where nothing was recognised, is a different
+  // event from a form that was already complete - and the difference matters,
+  // because the first one means an adapter has gone stale (a site redesign, or a
+  // flow we have never run against). Reporting "0 fields filled" for both is how
+  // a broken adapter stays broken for weeks: the user reads it as their own
+  // mistake and stops trying.
+  //
+  // Nothing is lost when this fires: every label was still sent to the learning
+  // loop, so the questions land in Answers and the next attempt can fill them.
+  if (report.filled === 0 && report.seen.length > 0) {
+    report.unrecognised = report.seen.length;
+  }
 
   return report;
 }

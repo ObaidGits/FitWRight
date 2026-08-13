@@ -132,8 +132,20 @@ export async function ping(): Promise<PingResult & { versionOk: boolean }> {
   return { ...result, versionOk: result.api_version === API_VERSION };
 }
 
-export function getProfile(): Promise<AutofillProfile> {
-  return request<AutofillProfile>('/extension/profile');
+/**
+ * The profile forms are filled from.
+ *
+ * Pass the job's company and title when they are known: the server then attaches
+ * the resume tailored for that role instead of the master one. Omitting them is
+ * not an error, it just means the generic resume goes out - which is the whole
+ * thing FitWright exists to avoid.
+ */
+export function getProfile(job?: { company?: string; title?: string }): Promise<AutofillProfile> {
+  const qs = new URLSearchParams();
+  if (job?.company?.trim()) qs.set('company', job.company.trim());
+  if (job?.title?.trim()) qs.set('title', job.title.trim());
+  const query = qs.toString();
+  return request<AutofillProfile>(`/extension/profile${query ? `?${query}` : ''}`);
 }
 
 export function captureJob(job: CapturedJob): Promise<CaptureResponse> {
@@ -236,8 +248,12 @@ export function markApplied(input: {
  * `chrome.runtime.sendMessage` (structured clone drops Blobs across contexts),
  * and the content script rebuilds a `File` from it to attach to the form.
  */
-export async function fetchResumePdf(): Promise<{ dataUrl: string; filename: string } | null> {
-  const profile = await getProfile();
+export async function fetchResumePdf(job?: {
+  company?: string;
+  title?: string;
+}): Promise<{ dataUrl: string; filename: string; tailored: boolean } | null> {
+  // Passing the job through is what makes the tailored resume reach the form.
+  const profile = await getProfile(job);
   if (!profile.resume_pdf_path) return null;
 
   const base = await baseUrl();
@@ -255,9 +271,10 @@ export async function fetchResumePdf(): Promise<{ dataUrl: string; filename: str
   });
 
   const filename = (profile.resume_filename || 'resume.pdf').replace(/\.\w+$/, '') + '.pdf';
-  return { dataUrl, filename };
+  return { dataUrl, filename, tailored: Boolean(profile.resume_tailored_for_role) };
 }
 
 /** Reset cached auth state - called when the base URL changes. */
-export function resetAuthCache(): void {  csrfToken = null;
+export function resetAuthCache(): void {
+  csrfToken = null;
 }

@@ -65,7 +65,15 @@ export type ToWorker =
       location?: string;
     }
   | { type: 'get-profile' }
-  | { type: 'get-resume-pdf' }
+  | {
+      type: 'get-resume-pdf';
+      /**
+       * The job this form belongs to. Carried so the server can attach the
+       * resume tailored for it rather than the master resume.
+       */
+      company?: string;
+      title?: string;
+    }
   | { type: 'open-fitwright'; path?: string };
 
 // --------------------------------------------------------------------------- //
@@ -94,8 +102,13 @@ export interface PerSiteResult {
   found: number;
   saved: number;
   error?: string;
-  /** Set when we can name why nothing came back. See lib/login-wall.ts. */
-  reason?: 'signed-out' | 'empty';
+  /**
+   * Set when we can name why nothing came back:
+   * `signed-out` - a login wall (see lib/login-wall.ts)
+   * `capped`     - the board's daily allowance is spent (see lib/pacing.ts)
+   * `empty`      - the search genuinely matched nothing
+   */
+  reason?: 'signed-out' | 'capped' | 'empty';
 }
 
 /** Per-message reply payloads. */
@@ -116,7 +129,7 @@ export interface ReplyMap {
     perSite: PerSiteResult[];
   };
   'get-profile': import('./types').AutofillProfile;
-  'get-resume-pdf': { dataUrl: string; filename: string } | null;
+  'get-resume-pdf': { dataUrl: string; filename: string; tailored: boolean } | null;
   'open-fitwright': null;
   'describe-page': PageContext;
   autofill: {
@@ -125,6 +138,11 @@ export interface ReplyMap {
     questions: string[];
     /** Set when the form filled nothing and we can say why. */
     reason?: 'signed-out' | 'empty';
+    /**
+     * Fields present but unreadable - a stale adapter rather than a complete
+     * form. See content/autofill.ts.
+     */
+    unrecognised?: number;
   };
   'capture-current': CaptureResponse;
   'scrape-list': { found: number; saved: number; reason?: 'signed-out' | 'empty' };

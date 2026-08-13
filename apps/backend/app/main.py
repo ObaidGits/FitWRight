@@ -121,6 +121,18 @@ async def lifespan(app: FastAPI):
 
     migrate_legacy_keys()
     migrate_legacy_llm_config()
+    # Give older discovery rows the grouping key that collapses duplicate
+    # listings. Idempotent and bounded - only rows missing one are touched - so
+    # this is a no-op on every boot after the first. Without it, deduplication
+    # would only help future searches while the feed the user already has stays
+    # a quarter repeats.
+    try:
+        filled = await db.backfill_group_fingerprints()
+        if filled:
+            logger.info("Backfilled group fingerprints for %d discovery rows", filled)
+    except Exception:
+        # A feed that shows duplicates is a worse feed, not a broken app.
+        logger.exception("Group fingerprint backfill failed; duplicates may remain")
     # Single-user/local: ensure the bootstrap owner exists and claim any owned
     # rows created by ``create_all`` before scoping was threaded (idempotent,
     # zero data loss). Hosted does this via Alembic migration 0004 instead.

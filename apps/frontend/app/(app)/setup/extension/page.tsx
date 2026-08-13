@@ -19,11 +19,20 @@ import CircleAlert from 'lucide-react/dist/esm/icons/circle-alert';
 import Copy from 'lucide-react/dist/esm/icons/copy';
 import Puzzle from 'lucide-react/dist/esm/icons/puzzle';
 import RefreshCw from 'lucide-react/dist/esm/icons/refresh-cw';
+import ShieldCheck from 'lucide-react/dist/esm/icons/shield-check';
 
 import { Button } from '@/components/atelier/button';
 import { Card } from '@/components/atelier/card';
 import { useExtension } from '@/features/discovery/use-extension';
 import { apiFetch } from '@/lib/api/client';
+
+/**
+ * Searches allowed per board per day. Mirrors `DEFAULT_DAILY_CAP` in
+ * `apps/extension/src/lib/pacing.ts`, which is the value actually enforced -
+ * this copy exists only because the page must explain the limit before the
+ * extension is installed and able to report anything.
+ */
+const DEFAULT_DAILY_CAP = 6;
 
 interface InstallInfo {
   dist_path: string | null;
@@ -118,6 +127,22 @@ export default function ExtensionSetupPage() {
         </Button>
       </Card>
 
+      {/* The promise that matters most, stated before the instructions rather
+          than after them. It is the answer to "what is this thing going to do
+          in my browser", and it is also the strongest argument for trusting it
+          at all - so burying it under a numbered list would be a mistake. */}
+      <Card className="space-y-2 border-[var(--at-success)]/40 bg-[var(--at-success)]/8 p-5">
+        <h2 className="flex items-center gap-2 text-sm font-semibold">
+          <ShieldCheck className="h-4 w-4 text-[var(--at-success)]" aria-hidden="true" />
+          It never submits an application
+        </h2>
+        <p className="text-sm text-[var(--muted-foreground)]">
+          The extension fills the form and stops. Nothing is sent until you have read it and
+          pressed the employer&apos;s own submit button yourself. There is no setting that changes
+          this.
+        </p>
+      </Card>
+
       {!installed && (
         <Card className="space-y-4 p-5">
           <h2 className="text-sm font-semibold">Install it</h2>
@@ -169,12 +194,37 @@ export default function ExtensionSetupPage() {
         </Card>
       )}
 
-      <Card className="space-y-2 p-5">
-        <h2 className="text-sm font-semibold">Two things worth knowing</h2>
+      <Card className="space-y-3 p-5">
+        <h2 className="text-sm font-semibold">How it treats the job sites</h2>
         <p className="text-sm text-[var(--muted-foreground)]">
-          <span className="font-medium text-[var(--foreground)]">It never submits anything.</span>{' '}
-          The extension fills a form and stops. You read it and press submit yourself.
+          <span className="font-medium text-[var(--foreground)]">
+            It uses your browser and your own accounts.
+          </span>{' '}
+          Searches run in tabs on your machine, signed in as you — the same pages you could open by
+          hand. Nothing is collected on a server on your behalf, and your logins never leave your
+          browser.
         </p>
+        <p className="text-sm text-[var(--muted-foreground)]">
+          <span className="font-medium text-[var(--foreground)]">
+            It is paced to keep your accounts safe.
+          </span>{' '}
+          Each board is searched at most {DEFAULT_DAILY_CAP} times a day, with randomised gaps
+          between requests. Sites like LinkedIn and Naukri watch for automated activity, and a
+          restricted account would cost you far more than a missed listing — so the limit cannot be
+          switched off, only lowered.
+        </p>
+        <p className="text-sm text-[var(--muted-foreground)]">
+          <span className="font-medium text-[var(--foreground)]">
+            Most job boards&apos; terms prohibit automated collection.
+          </span>{' '}
+          Running as you, in your browser, at human pace, is what keeps this reasonable — but it is
+          your account and your call. If a site matters to you, read its terms and skip it here if
+          you would rather not.
+        </p>
+      </Card>
+
+      <Card className="space-y-2 p-5">
+        <h2 className="text-sm font-semibold">One thing to remember</h2>
         <p className="text-sm text-[var(--muted-foreground)]">
           <span className="font-medium text-[var(--foreground)]">After an update, reload it.</span>{' '}
           Open <code className="rounded bg-[var(--secondary)] px-1">chrome://extensions</code> and

@@ -102,11 +102,20 @@ function render(tabId: number, context: PageContext, health: { hasResume: boolea
           setStatus(reply.error, 'err');
           return;
         }
-        const { filled, questions, reason } = reply.data;
+        const { filled, questions, reason, unrecognised } = reply.data;
         if (reason === 'signed-out') {
           // The most common cause of "it did nothing", and the one the user can
           // fix in one click on a tab they already have open.
           setStatus('You appear signed out of this site. Sign in, then autofill.', 'err');
+          return;
+        }
+        if (unrecognised) {
+          // Distinguishes a stale adapter from an already-complete form. The
+          // fields were still recorded, so the next attempt can fill them.
+          setStatus(
+            `Could not read this form's ${unrecognised} field(s). They were saved as questions in FitWright - answer them there and try again.`,
+            'err',
+          );
           return;
         }
         setStatus(

@@ -99,6 +99,8 @@ export interface AutofillProfile {
   resume_id: string | null;
   resume_filename: string;
   resume_pdf_path: string | null;
+  /** True when the attached resume was tailored for this company+role. */
+  resume_tailored_for_role?: boolean;
   preferences: Record<string, unknown>;
 }
 

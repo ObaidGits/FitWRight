@@ -208,11 +208,18 @@ import { updateResultStatus, cleanupFeed } from '@/lib/api/discovery';
 /** Update a feed result's status (interested/dismissed/applied). */
 export function useUpdateResultStatus() {
   const qc = useQueryClient();
-  return useMutation<{ id: string; status: string }, Error, { id: string; status: string }>({
+  return useMutation<
+    { id: string; status: string; queued?: boolean },
+    Error,
+    { id: string; status: string }
+  >({
     mutationFn: ({ id, status }) => updateResultStatus(id, status),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['discovery', 'feed'] });
       void qc.invalidateQueries({ queryKey: ['discovery', 'unseen'] });
+      // Saving a job now creates an apply-queue entry, so the queue, the tracker
+      // board and Home's "Next up" card are all stale until refetched.
+      void qc.invalidateQueries({ queryKey: ['applications'] });
     },
   });
 }

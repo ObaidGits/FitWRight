@@ -1420,6 +1420,13 @@ class DiscoveryResult(Base):
     # Status tracking (Phase 2 prep)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="new")
     seen: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # The job-description row created when this was saved, so the feed knows which
+    # apply-queue entry belongs to it.
+    job_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    # URL-free identity: the same posting on three boards shares this. `fingerprint`
+    # above stays URL-aware, which is what makes it right for "same listing" and
+    # wrong for "same job".
+    group_fingerprint: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     created_at: Mapped[str] = mapped_column(String, default=_utcnow_iso)
 
     __table_args__ = (

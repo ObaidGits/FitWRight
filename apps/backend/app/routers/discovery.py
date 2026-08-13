@@ -602,13 +602,20 @@ async def get_discovery_feed(
     # set, so switching filters does not make the control flicker in and out.
     scored = await db.count_scored_discovery_results(user_id)
 
+    # One row per job already, from the query. This only adds the labels naming
+    # the other boards that carry it, so collapsing is visible rather than silent.
+    annotated = await db.annotate_duplicate_sources(user_id, results)
+
     # Mark results as seen on read
     if not offset:
         await db.mark_discovery_results_seen(user_id)
 
     return {
-        "results": results,
+        "results": annotated,
+        # Distinct jobs, matching what the list returns, so pagination cannot walk
+        # past the end of the real set.
         "total": total,
+        "shown": len(annotated),
         "unseen": unseen,
         "scored": scored,
         "limit": limit,
@@ -864,7 +871,17 @@ async def update_result_status(
     user_id: str = Depends(require_verified_user_id),
     db: Database = Depends(get_db),
 ):
-    """Move a feed result between statuses: new → interested → applied → dismissed."""
+    """Move a feed result between statuses: new → interested → applied → dismissed.
+
+    Saving a job (``interested``) also puts it in the apply queue. Before this, the
+    feed and the tracker were separate tables that never met: a user could save
+    twenty jobs and find an empty queue. Marking it interested *is* the intent to
+    apply, so it creates the queue entry rather than making them say it twice.
+
+    Dismissing removes it from the queue again, but only if it is still waiting.
+    An application already sent is history, and changing your mind about the
+    listing is no reason to erase it.
+    """
     valid_statuses = {"new", "interested", "dismissed", "tailored", "applied"}
     if payload.status not in valid_statuses:
         raise HTTPException(status_code=422, detail=f"Invalid status. Must be one of: {valid_statuses}")
@@ -872,6 +889,8 @@ async def update_result_status(
     from sqlalchemy import update as sa_update
     from app.models import DiscoveryResult
     from datetime import datetime, timezone
+
+    from app.job_discovery.queueing import ensure_queued_application, unqueue_application
 
     async with db._session() as session:
         async with session.begin():
@@ -886,7 +905,21 @@ async def update_result_status(
             if (result.rowcount or 0) == 0:
                 raise HTTPException(status_code=404, detail="Result not found")
 
-    return {"id": result_id, "status": payload.status}
+    row = await db.get_discovery_result(user_id, result_id)
+    queued = False
+
+    if payload.status == "interested" and row:
+        created = await ensure_queued_application(db, user_id, row)
+        if created:
+            queued = True
+            # Remember the link so dismissing later knows exactly what to remove
+            # instead of guessing from company and role.
+            if not row.get("job_id"):
+                await db.set_discovery_result_job(user_id, result_id, created["job_id"])
+    elif payload.status == "dismissed" and row:
+        await unqueue_application(db, user_id, row.get("job_id"))
+
+    return {"id": result_id, "status": payload.status, "queued": queued}
 
 
 # 6. Rate limiting on /search (simple in-memory per-user throttle)

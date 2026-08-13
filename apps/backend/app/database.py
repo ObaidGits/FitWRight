@@ -3126,6 +3126,9 @@ class Database:
         """Insert new results, skipping duplicates by fingerprint. Returns count inserted."""
         from datetime import datetime, timezone
         from sqlalchemy import select
+
+        from app.job_discovery.normalize import group_fingerprint as _group_fingerprint
+
         now_iso = datetime.now(timezone.utc).isoformat()
         inserted = 0
         async with self._session() as session:
@@ -3144,6 +3147,18 @@ class Database:
                         user_id=user_id,
                         run_id=run_id,
                         fingerprint=r["fingerprint"],
+                        # Computed here rather than trusted from the caller, so
+                        # every row gets one however it arrived - server harvest,
+                        # extension capture or bulk scrape.
+                        group_fingerprint=(
+                            _group_fingerprint(
+                                r.get("title", ""), r.get("company", ""), r.get("location", "")
+                            )
+                            # No title means a failed extraction; a key built from
+                            # nothing would merge unrelated rows.
+                            if r.get("title")
+                            else None
+                        ),
                         source=r.get("source", ""),
                         title=r.get("title", ""),
                         company=r.get("company", ""),
@@ -3235,6 +3250,39 @@ class Database:
                 )
         return conditions
 
+    def _dedupe_representative_ids(self, conditions: list[Any]) -> Any:
+        """Subquery of the one row id to keep per job.
+
+        Duplicates have to be removed *inside* the query, not after paging. The
+        same opening harvested in two runs sits far apart in creation order, so a
+        page-local collapse catches almost none of them - measured on a real feed,
+        zero of 33 duplicate groups fell on the same page of 100.
+
+        The survivor is the highest-scoring row, then the newest: whichever board
+        gave us the most to work with. Rows with no group key are their own group,
+        so nothing is ever merged on missing data.
+        """
+        from sqlalchemy import func, select
+
+        group_key = func.coalesce(DiscoveryResult.group_fingerprint, DiscoveryResult.id)
+        ranked = (
+            select(
+                DiscoveryResult.id.label("id"),
+                func.row_number()
+                .over(
+                    partition_by=group_key,
+                    order_by=[
+                        DiscoveryResult.match_score.desc(),
+                        DiscoveryResult.created_at.desc(),
+                    ],
+                )
+                .label("rank"),
+            )
+            .where(*conditions)
+            .subquery()
+        )
+        return select(ranked.c.id).where(ranked.c.rank == 1)
+
     async def get_discovery_feed(
         self, user_id: str, *, status: str | None = None,
         sources: list[str] | None = None, query: str | None = None,
@@ -3242,27 +3290,77 @@ class Database:
         min_score: float | None = None, posted_within_hours: int | None = None,
         limit: int = 50, offset: int = 0,
     ) -> list[dict[str, Any]]:
-        """Get paginated feed results for a user, newest first."""
+        """Get paginated feed results for a user, newest first.
+
+        One row per job: duplicates of the same opening across boards or across
+        harvest runs are removed in the query, so a page holds twenty distinct
+        jobs rather than twenty rows that might be twelve.
+        """
         from sqlalchemy import select
         async with self._session() as session:
-            stmt = (
-                select(DiscoveryResult)
-                .where(
-                    *self._discovery_feed_conditions(
-                        user_id,
-                        status=status,
-                        sources=sources,
-                        query=query,
-                        location=location,
-                        is_remote=is_remote,
-                        min_score=min_score,
-                        posted_within_hours=posted_within_hours,
-                    )
-                )
+            conditions = self._discovery_feed_conditions(
+                user_id,
+                status=status,
+                sources=sources,
+                query=query,
+                location=location,
+                is_remote=is_remote,
+                min_score=min_score,
+                posted_within_hours=posted_within_hours,
+            )
+            stmt = select(DiscoveryResult).where(
+                DiscoveryResult.id.in_(self._dedupe_representative_ids(conditions))
             )
             stmt = stmt.order_by(DiscoveryResult.created_at.desc()).offset(offset).limit(limit)
             result = await session.execute(stmt)
             return [self._result_to_dict(r) for r in result.scalars().all()]
+
+    async def annotate_duplicate_sources(
+        self, user_id: str, rows: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Tell each row which other boards carry the same job.
+
+        The feed query already returns one row per job, so the siblings it stood in
+        for are no longer on the page - they have to be looked up. Worth the one
+        extra query: naming the other boards is what makes collapsing trustworthy
+        rather than the feed appearing to lose jobs.
+        """
+        from sqlalchemy import select
+
+        keys = [r["group_fingerprint"] for r in rows if r.get("group_fingerprint")]
+        if not keys:
+            return rows
+
+        async with self._session() as session:
+            siblings = (
+                await session.execute(
+                    select(DiscoveryResult.group_fingerprint, DiscoveryResult.source).where(
+                        (DiscoveryResult.user_id == user_id)
+                        & DiscoveryResult.group_fingerprint.in_(keys)
+                    )
+                )
+            ).all()
+
+        by_key: dict[str, list[str]] = {}
+        for key, source in siblings:
+            by_key.setdefault(key, []).append(source or "")
+
+        annotated: list[dict[str, Any]] = []
+        for row in rows:
+            key = row.get("group_fingerprint")
+            all_sources = by_key.get(key, []) if key else []
+            others = sorted({s for s in all_sources if s and s != row.get("source")})
+            # Only labelled when another *board* carries it. Two copies from the
+            # same board are just two harvest runs of one listing: correctly
+            # collapsed, and "also on hirist" while reading a hirist row would be
+            # noise pretending to be information.
+            if not others:
+                annotated.append(row)
+                continue
+            annotated.append(
+                {**row, "also_on": others, "duplicate_count": len(all_sources)}
+            )
+        return annotated
 
     async def count_discovery_feed(
         self, user_id: str, *, status: str | None = None,
@@ -3270,23 +3368,103 @@ class Database:
         location: str | None = None, is_remote: bool | None = None,
         min_score: float | None = None, posted_within_hours: int | None = None,
     ) -> int:
-        """Count feed results for a user under the same filters as the list."""
+        """Count feed results for a user under the same filters as the list.
+
+        Counts distinct *jobs*, not rows, because the list now returns distinct
+        jobs. Counting rows here would resurrect the exact bug the shared
+        conditions were introduced to kill: "20 of 300" while paging walks off the
+        end of a 207-item set.
+        """
         from sqlalchemy import select, func
         async with self._session() as session:
-            stmt = select(func.count(DiscoveryResult.id)).where(
-                *self._discovery_feed_conditions(
-                    user_id,
-                    status=status,
-                    sources=sources,
-                    query=query,
-                    location=location,
-                    is_remote=is_remote,
-                    min_score=min_score,
-                    posted_within_hours=posted_within_hours,
-                )
+            conditions = self._discovery_feed_conditions(
+                user_id,
+                status=status,
+                sources=sources,
+                query=query,
+                location=location,
+                is_remote=is_remote,
+                min_score=min_score,
+                posted_within_hours=posted_within_hours,
             )
+            representative = self._dedupe_representative_ids(conditions).subquery()
+            stmt = select(func.count()).select_from(representative)
             result = await session.execute(stmt)
             return result.scalar() or 0
+
+    async def get_discovery_result(
+        self, user_id: str, result_id: str
+    ) -> dict[str, Any] | None:
+        """One feed row, scoped to its owner."""
+        from sqlalchemy import select
+
+        async with self._session() as session:
+            row = (
+                await session.execute(
+                    select(DiscoveryResult).where(
+                        (DiscoveryResult.id == result_id)
+                        & (DiscoveryResult.user_id == user_id)
+                    )
+                )
+            ).scalar_one_or_none()
+            return self._result_to_dict(row) if row else None
+
+    async def set_discovery_result_job(
+        self, user_id: str, result_id: str, job_id: str
+    ) -> None:
+        """Remember which job-description row this feed result created."""
+        from sqlalchemy import update as sa_update
+
+        async with self._session() as session:
+            async with session.begin():
+                await session.execute(
+                    sa_update(DiscoveryResult)
+                    .where(
+                        (DiscoveryResult.id == result_id)
+                        & (DiscoveryResult.user_id == user_id)
+                    )
+                    .values(job_id=job_id)
+                )
+
+    async def backfill_group_fingerprints(self, limit: int = 20000) -> int:
+        """Give older feed rows the group key duplicate collapsing needs.
+
+        Rows harvested before this column existed have none, so without a backfill
+        the deduplication would only ever help future searches - while the feed the
+        user already has stays 25% repeats. Idempotent and bounded: only NULL rows
+        are touched, so re-running costs one indexed scan and changes nothing.
+        """
+        from sqlalchemy import select
+
+        from app.job_discovery.normalize import group_fingerprint as _group_fingerprint
+
+        updated = 0
+        async with self._session() as session:
+            async with session.begin():
+                rows = (
+                    (
+                        await session.execute(
+                            select(DiscoveryResult)
+                            .where(DiscoveryResult.group_fingerprint.is_(None))
+                            .limit(limit)
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                for row in rows:
+                    if not row.title:
+                        # A row with no title is a failed extraction, not a job.
+                        # Grouping on an empty title would merge unrelated rows.
+                        continue
+                    # Company is not required: some boards (We Work Remotely) put
+                    # the employer inside the title and leave the field blank, and
+                    # demanding one left those rows as permanent duplicates.
+                    row.group_fingerprint = _group_fingerprint(
+                        row.title, row.company or "", row.location or ""
+                    )
+                    updated += 1
+        return updated
 
     async def count_scored_discovery_results(self, user_id: str) -> int:
         """How many feed rows carry a real match score.
@@ -3355,6 +3533,8 @@ class Database:
             "matched_keywords": row.matched_keywords or [],
             "missing_keywords": row.missing_keywords or [],
             "partial": row.partial, "status": row.status, "seen": row.seen,
+            "job_id": row.job_id,
+            "group_fingerprint": row.group_fingerprint,
             "created_at": row.created_at,
         }
 

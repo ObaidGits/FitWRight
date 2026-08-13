@@ -227,10 +227,30 @@ async function handleMessage(message: ToContent): Promise<Reply<unknown>> {
         return ok({ filled: 0, skipped: 0, questions: [], reason: 'signed-out' });
       }
 
-      const report = await autofill(root);
+      // Name the job so the resume tailored for it is the one attached.
+      const formJob = currentJob ?? extractJob();
+      const report = await autofill(root, {
+        company: formJob?.company,
+        title: formJob?.title,
+      });
       const parts = [`${report.filled} field${report.filled === 1 ? '' : 's'} filled`];
-      if (report.resumeAttached) parts.push('resume attached');
-      toast(parts.join(', '), report.filled ? 'ok' : 'err');
+      if (report.resumeAttached) {
+        // Say which resume, not just that one was attached. "Tailored resume
+        // attached" is the promise being kept; the master resume is the
+        // fallback, and conflating them hides a real difference.
+        parts.push(report.resumeTailored ? 'tailored resume attached' : 'master resume attached');
+      }
+      if (report.unrecognised) {
+        // Not a silent zero: this form's fields exist and we could not read them.
+        toast(
+          `Could not read this form's ${report.unrecognised} field${
+            report.unrecognised === 1 ? '' : 's'
+          } - saved as questions in FitWright`,
+          'err',
+        );
+      } else {
+        toast(parts.join(', '), report.filled ? 'ok' : 'err');
+      }
 
       // Report what this form asked, and offer to remember whatever the user
       // answers by hand from here.
@@ -251,6 +271,7 @@ async function handleMessage(message: ToContent): Promise<Reply<unknown>> {
         filled: report.filled,
         skipped: report.skipped,
         questions: listOpenQuestions(root),
+        unrecognised: report.unrecognised,
       });
     }
 
@@ -446,7 +467,11 @@ async function fillCurrentStep(): Promise<void> {
   const root = adapter.formRoot?.() ?? document;
   filling = true;
   try {
-    const report = await autofill(root);
+    const stepJob = currentJob ?? extractJob();
+    const report = await autofill(root, {
+      company: stepJob?.company,
+      title: stepJob?.title,
+    });
     lastFieldSignature = fieldSignature(root);
     void reportAndOfferToLearn(root, report);
     if (report.filled > 0) {

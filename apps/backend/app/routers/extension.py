@@ -250,6 +250,11 @@ class AutofillProfile(BaseModel):
     resume_filename: str = ""
     # Relative API path the extension fetches to attach the PDF to a form.
     resume_pdf_path: str | None = None
+    # True when this resume was tailored for the company+role the extension named,
+    # rather than the master resume. Surfaced to the user, because "we attached
+    # your tailored resume" and "we attached your generic one" are different
+    # promises and they deserve to know which one happened.
+    resume_tailored_for_role: bool = False
     # Legacy escape hatch: answers the older extension stored locally. Kept for
     # backwards compatibility, but Profile values above take precedence - the
     # server is the source of truth now.
@@ -447,17 +452,28 @@ async def get_install_info(
 @router.get("/profile", response_model=AutofillProfile, summary="Autofill profile")
 async def get_autofill_profile(
     resume_id: str | None = None,
+    company: str | None = None,
+    title: str | None = None,
     user_id: str = Depends(get_effective_user_id),
     db: Database = Depends(get_db),
 ) -> AutofillProfile:
-    """Serve the profile the extension fills forms from."""
-    return await build_autofill_profile(db, user_id, resume_id)
+    """Serve the profile the extension fills forms from.
+
+    ``company`` and ``title`` let the extension name the job the form belongs to,
+    so the resume attached is the one tailored for it. Without them the master
+    resume goes out - correct, but the generic answer, and the whole point of
+    tailoring is lost at the one moment it counts.
+    """
+    return await build_autofill_profile(db, user_id, resume_id, company=company, title=title)
 
 
 async def build_autofill_profile(
     db: Database,
     user_id: str,
     resume_id: str | None = None,
+    *,
+    company: str | None = None,
+    title: str | None = None,
 ) -> AutofillProfile:
     """Build the autofill profile: **Profile first, resume as fallback**.
 
@@ -476,6 +492,19 @@ async def build_autofill_profile(
     document = _profile_document(profile_row)
     identity = document.get("identity") if isinstance(document.get("identity"), dict) else {}
     address = identity.get("address") if isinstance(identity.get("address"), dict) else {}
+
+    # Which resume goes out. An explicit id wins; otherwise, if the extension
+    # named the job, use the resume tailored for that company+role; only then
+    # fall back to the master. This is the difference between FitWright's whole
+    # premise working at the apply step and being quietly discarded there.
+    tailored_for_role = False
+    if resume_id is None and (company or title):
+        from app.applications.resume_choice import resolve_resume_id_for_role
+
+        matched = await resolve_resume_id_for_role(db, user_id, company=company, role=title)
+        if matched:
+            resume_id = matched
+            tailored_for_role = True
 
     resume = await _resolve_resume(db, user_id, resume_id)
     processed: dict[str, Any] = {}
@@ -575,6 +604,9 @@ async def build_autofill_profile(
         resume_id=rid,
         resume_filename=str(resume.get("filename") or "resume.pdf") if resume else "",
         resume_pdf_path=f"/api/v1/resumes/{rid}/pdf" if rid else None,
+        # Only claim "tailored" when the lookup actually matched and that resume
+        # is the one being returned.
+        resume_tailored_for_role=tailored_for_role and rid is not None,
     )
 
 

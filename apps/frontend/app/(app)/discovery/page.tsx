@@ -30,6 +30,7 @@ import { Card } from '@/components/atelier/card';
 import { Badge } from '@/components/atelier/badge';
 import { EmptyState, LoadingSkeleton, ErrorState } from '@/components/atelier/states';
 import { Input } from '@/components/atelier/input';
+import { useToast } from '@/components/atelier/toast';
 
 import {
   useDiscoveryFeed,
@@ -143,6 +144,7 @@ export default function DiscoveryPage() {
   const tailor = useTailorForJob();
   const enableSchedule = useEnableSchedule();
   const updateStatus = useUpdateResultStatus();
+  const { toast } = useToast();
   const [tailoringFp, setTailoringFp] = useState<string | null>(null);
 
   // Companion extension: serves the boards the backend cannot reach.
@@ -272,7 +274,29 @@ export default function DiscoveryPage() {
   }
 
   function handleStatusChange(id: string, status: string) {
-    updateStatus.mutate({ id, status });
+    updateStatus.mutate(
+      { id, status },
+      {
+        onSuccess: (data) => {
+          // Saving a job now also queues it. Saying so is what connects the two
+          // halves of the product in the user's head - otherwise they open the
+          // queue later with no idea why anything is in it.
+          if (data.queued) {
+            toast({
+              title: 'Saved and added to your apply queue',
+              description: 'Open Applications → Queue to work through them in order.',
+            });
+          } else if (status === 'interested') {
+            // The one reason queuing can fail is having no resume yet, and that
+            // is worth saying out loud rather than silently saving less.
+            toast({
+              title: 'Saved to your feed',
+              description: 'Upload a resume to start queuing jobs to apply to.',
+            });
+          }
+        },
+      },
+    );
     if (selectedResult?.id === id) setSelectedResult({ ...selectedResult, status });
   }
 
@@ -748,6 +772,9 @@ export default function DiscoveryPage() {
                         {r.company || 'Company not listed'}
                         {r.location ? ` · ${r.location}` : ''}
                         {r.is_remote ? ' · Remote' : ''}
+                        {/* Naming the other boards is what makes collapsing
+                            trustworthy: the user can see nothing was hidden. */}
+                        {r.also_on?.length ? ` · also on ${r.also_on.join(', ')}` : ''}
                       </p>
                       {/* Salary + posted date row */}
                       <div className="mt-1 flex items-center gap-2 text-[10px]">

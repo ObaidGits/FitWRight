@@ -17,6 +17,7 @@ import { SCRAPEABLE_BOARDS, searchUrlFor } from '@/adapters/registry';
 import * as api from '@/lib/api';
 import { fail, ok, sendToTab } from '@/lib/messages';
 import type { PerSiteResult, Reply, ReplyMap, ToWorker } from '@/lib/messages';
+import { jitteredGap, recordRun, remainingToday } from '@/lib/pacing';
 import { getSettings, normalizeBaseUrl, rememberCaptured, wasCaptured } from '@/lib/storage';
 
 const SCRAPE_ALARM = 'fitwright-scrape';
@@ -139,7 +140,7 @@ async function handle(message: ToWorker, sender: chrome.runtime.MessageSender): 
       return ok(await api.getProfile());
 
     case 'get-resume-pdf':
-      return ok(await api.fetchResumePdf());
+      return ok(await api.fetchResumePdf({ company: message.company, title: message.title }));
 
     case 'open-fitwright': {
       const settings = await getSettings();
@@ -220,8 +221,25 @@ async function scrapeEntries(
       continue;
     }
 
+    // Protect the user's account before protecting the run. A board that has
+    // already been searched its daily allowance is skipped and says so - the
+    // cost of one missed search is a missed listing, and the cost of ignoring
+    // this is their LinkedIn or Naukri account being restricted.
+    const left = await remainingToday(entry.source);
+    if (left <= 0) {
+      results.push({
+        source: entry.source,
+        found: 0,
+        saved: 0,
+        reason: 'capped',
+        error: `Daily limit reached for ${entry.source} - resumes tomorrow`,
+      });
+      continue;
+    }
+
     let tabId: number | undefined;
     try {
+      await recordRun(entry.source);
       const tab = await chrome.tabs.create({ url, active: false });
       tabId = tab.id;
       if (tabId === undefined) {
@@ -232,7 +250,7 @@ async function scrapeEntries(
       await waitForTabLoad(tabId);
       // A short settle only; the content script itself polls until the board's
       // results render, because these boards differ by many seconds.
-      await sleep(1500);
+      await sleep(jitteredGap(1500));
 
       const reply = await scrapeTabWithRetry(tabId);
       if (reply.ok) {
@@ -272,7 +290,9 @@ async function scrapeEntries(
         }
       }
     }
-    await sleep(2000);
+    // A randomised gap between boards. A fixed interval is a machine
+    // signature; nothing human searches exactly every two seconds.
+    await sleep(jitteredGap(2500));
   }
   return results;
 }

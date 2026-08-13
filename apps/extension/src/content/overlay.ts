@@ -53,6 +53,10 @@ const STYLES = `
     background: #4f46e5; color: #fff; border: 0; border-radius: 6px;
   }
   .fillpanel .save:disabled { opacity: .6; cursor: default; }
+  /* The promise, restated where the user is actually about to act. */
+  .fillpanel .promise {
+    margin-top: 6px; font-size: 11px; line-height: 1.4; opacity: .75; text-align: center;
+  }
 
   .badge {
     position: fixed; right: 20px; bottom: 20px; z-index: 2147483000;
@@ -236,6 +240,7 @@ export function showFillPanel(summary: FillSummary, actions: FillPanelActions): 
         : '<div class="muted">Nothing left unanswered on this step.</div>'
     }
     <button class="save">Save my answers to FitWright</button>
+    <div class="promise">Nothing is submitted. Review, then press the employer's submit button.</div>
   `;
 
   panel.querySelector('.close')?.addEventListener('click', () => {
