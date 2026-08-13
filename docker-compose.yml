@@ -23,6 +23,10 @@ services:
       LLM_MODEL: ${LLM_MODEL:-}
       LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_API_BASE: ${LLM_API_BASE:-}
+      JOB_DISCOVERY: "true"
+      CF_BYPASS_URL: "http://cf-bypass:8000"
+    depends_on:
+      - cf-bypass
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3000/api/v1/health"]
       interval: 10s
@@ -30,6 +34,13 @@ services:
       start_period: 30s
       retries: 5
     restart: unless-stopped
+
+  cf-bypass:
+    image: ghcr.io/sarperavci/cloudflarebypassforscraping:latest
+    restart: unless-stopped
+    # Internal only — not exposed to host. Used by the app for Akamai/CF-protected sites.
+    expose:
+      - "8000"
 
 volumes:
   resume-data:

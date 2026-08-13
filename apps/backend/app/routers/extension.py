@@ -1,0 +1,623 @@
+"""HTTP surface for the FitWright Companion browser extension.
+
+The extension runs inside the user's own browser, which gives it three things
+the server-side scrapers cannot have: a residential IP, a real browser
+fingerprint, and the user's existing logins. That makes it the reliable path
+for the job boards that block datacenter traffic (Cloudflare / Akamai / login
+walls), and the only sane place to autofill an application form.
+
+This router is the narrow, audited boundary between that browser code and
+FitWright. It deliberately owns no scraping logic of its own: the extension
+sends already-extracted data, and everything here reuses the existing
+discovery/resume/LLM machinery.
+
+Endpoints (all under ``/extension``):
+
+| Method & path                   | Purpose                              | Auth           |
+|---------------------------------|--------------------------------------|----------------|
+| ``GET  /extension/ping``        | Handshake: is the user signed in?    | effective user |
+| ``GET  /extension/profile``     | Autofill profile from the resume     | effective user |
+| ``POST /extension/capture``     | Save one captured job to the feed    | verified user  |
+| ``POST /extension/scrape``      | Bulk-ingest browser-scraped jobs     | verified user  |
+| ``POST /extension/match``       | Score one JD against a resume        | verified user  |
+| ``POST /extension/draft``       | LLM-draft an application answer      | verified user  |
+| ``POST /extension/applied``     | Mark a job applied (by fingerprint)  | verified user  |
+
+Gated by the same ``JOB_DISCOVERY`` kill-switch as the discovery router: while
+the feature is off every route returns 404, so a disabled deployment is
+indistinguishable from one where this surface does not exist.
+"""
+
+from __future__ import annotations
+
+import logging
+from typing import Any
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field, field_validator
+
+from app.auth import get_effective_user_id, require_verified_user_id
+from app.config import Settings, settings
+from app.database import Database
+from app.llm_ratelimit import llm_rate_limit_dep
+
+logger = logging.getLogger(__name__)
+
+# Bumped when the wire contract changes so an old extension build can warn the
+# user instead of failing in confusing ways. The extension compares this to its
+# own manifest version's supported range.
+EXTENSION_API_VERSION = 1
+
+
+# --------------------------------------------------------------------------- #
+# Dependencies
+# --------------------------------------------------------------------------- #
+def get_settings_dep() -> Settings:
+    """Return the active settings snapshot (overridable in tests)."""
+    return settings
+
+
+def get_db() -> Database:
+    """Return the process-wide database (overridable in tests)."""
+    from app.database import db
+
+    return db
+
+
+def require_extension_enabled(
+    config: Settings = Depends(get_settings_dep),
+) -> None:
+    """Kill-switch gate for the whole router.
+
+    Shares ``JOB_DISCOVERY`` with the discovery surface because the extension is
+    a client of that feature - enabling one without the other has no meaning.
+    """
+    if not config.JOB_DISCOVERY:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="not_found"
+        )
+
+
+# Router-level dependency: the kill-switch runs before every route below, so a
+# disabled deployment 404s the whole surface rather than leaking its shape.
+router = APIRouter(
+    prefix="/extension",
+    tags=["Extension"],
+    dependencies=[Depends(require_extension_enabled)],
+)
+
+
+# --------------------------------------------------------------------------- #
+# Wire models
+# --------------------------------------------------------------------------- #
+class CapturedJob(BaseModel):
+    """One job as the extension extracted it from a live page."""
+
+    # A title is the one field that must be present: an empty title means DOM
+    # extraction failed, and storing a blank row is worse than telling the
+    # extension to fall back to its generic adapter.
+    title: str = Field(min_length=1, max_length=500)
+    company: str = ""
+    location: str = ""
+    url: str
+    source: str = "extension"
+    description: str | None = None
+    salary: str | None = None
+    posted_at: str | None = None
+    is_remote: bool | None = None
+
+    @field_validator("title", "company", "location", "source", mode="before")
+    @classmethod
+    def _strip(cls, value: object) -> object:
+        """Collapse scraped whitespace before validation.
+
+        Page text arrives full of newlines and non-breaking spaces, and a title
+        of only whitespace has to fail `min_length` rather than pass it.
+        """
+        if isinstance(value, str):
+            return " ".join(value.replace("\u00a0", " ").split())
+        return value
+
+
+class CaptureResponse(BaseModel):
+    saved: int
+    duplicate: bool
+    fingerprint: str
+
+
+# One batch is one page of search results. Enforced rather than truncated: a
+# silent `[:200]` would report every job as received while dropping the rest,
+# leaving the extension no way to notice it lost data.
+MAX_SCRAPE_BATCH = 200
+
+
+class ScrapeBatch(BaseModel):
+    """A batch of jobs the extension scraped from a board in a background tab."""
+
+    source: str
+    jobs: list[CapturedJob] = Field(default_factory=list, max_length=MAX_SCRAPE_BATCH)
+
+
+class ScrapeResponse(BaseModel):
+    received: int
+    saved: int
+    source: str
+
+
+class MatchRequest(BaseModel):
+    description: str
+    title: str = ""
+    resume_id: str | None = None
+
+
+class MatchResponse(BaseModel):
+    match_score: float
+    matched: list[str] = Field(default_factory=list)
+    missing: list[str] = Field(default_factory=list)
+    resume_id: str | None = None
+    degraded: bool = False
+
+
+class DraftRequest(BaseModel):
+    question: str
+    description: str = ""
+    company: str = ""
+    title: str = ""
+    resume_id: str | None = None
+    max_words: int = 150
+
+
+class DraftResponse(BaseModel):
+    answer: str
+    degraded: bool = False
+
+
+class AppliedRequest(BaseModel):
+    """Mark a job applied. Identified by fingerprint, else by URL."""
+
+    fingerprint: str | None = None
+    url: str | None = None
+
+
+class AppliedResponse(BaseModel):
+    updated: bool
+    fingerprint: str | None = None
+
+
+class PingResponse(BaseModel):
+    ok: bool
+    api_version: int
+    user_id: str
+    has_resume: bool
+    resume_count: int
+
+
+class AutofillProfile(BaseModel):
+    """Everything the extension needs to fill a standard application form."""
+
+    full_name: str = ""
+    first_name: str = ""
+    last_name: str = ""
+    email: str = ""
+    phone: str = ""
+    location: str = ""
+    linkedin: str = ""
+    github: str = ""
+    website: str = ""
+    current_title: str = ""
+    current_company: str = ""
+    years_experience: float | None = None
+    resume_id: str | None = None
+    resume_filename: str = ""
+    # Relative API path the extension fetches to attach the PDF to a form.
+    resume_pdf_path: str | None = None
+    # Operator/user-supplied answers that never live in a resume. Stored on the
+    # extension side; echoed here when present so one profile object is enough.
+    preferences: dict[str, Any] = Field(default_factory=dict)
+
+
+# --------------------------------------------------------------------------- #
+# Helpers
+# --------------------------------------------------------------------------- #
+def _fingerprint(job: CapturedJob) -> str:
+    """Fingerprint a captured job with the same function the pipeline uses."""
+    from app.job_discovery.normalize import fingerprint
+
+    return fingerprint(job.title, job.company, job.location, job.url)
+
+
+def _to_feed_row(job: CapturedJob, *, match_score: float = 0.0) -> dict[str, Any]:
+    """Map a captured job onto the ``discovery_results`` row shape."""
+    return {
+        "fingerprint": _fingerprint(job),
+        "source": job.source or "extension",
+        "title": job.title,
+        "company": job.company,
+        "location": job.location,
+        "url": job.url,
+        "is_remote": job.is_remote,
+        "description": job.description,
+        "salary": job.salary,
+        "posted_at": job.posted_at,
+        "match_score": match_score,
+        "matched": [],
+        "missing": [],
+        # A capture without a JD body is a partial row: the tailor handoff
+        # back-fills the full description on demand.
+        "partial": not job.description,
+    }
+
+
+async def _resolve_resume(
+    db: Database, user_id: str, resume_id: str | None
+) -> dict[str, Any] | None:
+    """Return the requested resume, else the user's master resume."""
+    if resume_id:
+        return await db.get_resume(user_id, resume_id)
+    return await db.get_master_resume(user_id)
+
+
+def _years_of_experience(processed: dict[str, Any]) -> float | None:
+    """Best-effort total years across experience entries.
+
+    Resume date fields are free text, so this parses leading years out of the
+    common ``YYYY``/``MM/YYYY``/``Mon YYYY`` shapes and gives up quietly rather
+    than guessing. ``None`` means "unknown" - the extension then leaves the
+    field for the user instead of filling a wrong number.
+    """
+    import re
+    from datetime import date
+
+    entries = processed.get("experience")
+    if not isinstance(entries, list) or not entries:
+        return None
+
+    def year_of(value: Any) -> int | None:
+        if not isinstance(value, str):
+            return None
+        match = re.search(r"(19|20)\d{2}", value)
+        return int(match.group(0)) if match else None
+
+    this_year = date.today().year
+    total = 0.0
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        start = year_of(entry.get("start_date"))
+        if start is None:
+            continue
+        end_raw = str(entry.get("end_date") or "")
+        end = (
+            this_year
+            if not end_raw or re.search(r"present|current", end_raw, re.I)
+            else year_of(end_raw)
+        )
+        if end is None or end < start:
+            continue
+        total += end - start
+    return round(total, 1) if total else None
+
+
+# --------------------------------------------------------------------------- #
+# Handshake
+# --------------------------------------------------------------------------- #
+@router.get("/ping", response_model=PingResponse, summary="Extension handshake")
+async def ping(
+    user_id: str = Depends(get_effective_user_id),
+    db: Database = Depends(get_db),
+) -> PingResponse:
+    """Confirm the extension is talking to a signed-in FitWright.
+
+    The extension calls this on startup and on every popup open: a 401 tells it
+    to show "sign in to FitWright" instead of failing later mid-autofill.
+    """
+    resumes = await db.list_resumes(user_id)
+    return PingResponse(
+        ok=True,
+        api_version=EXTENSION_API_VERSION,
+        user_id=user_id,
+        has_resume=bool(resumes),
+        resume_count=len(resumes),
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Autofill profile
+# --------------------------------------------------------------------------- #
+@router.get("/profile", response_model=AutofillProfile, summary="Autofill profile")
+async def get_autofill_profile(
+    resume_id: str | None = None,
+    user_id: str = Depends(get_effective_user_id),
+    db: Database = Depends(get_db),
+) -> AutofillProfile:
+    """Build the autofill profile from the user's resume.
+
+    Deliberately derived rather than separately stored: the resume is already
+    the canonical record of name/contact/experience, so there is no second copy
+    to drift. Fields the resume cannot know (visa status, notice period, salary
+    expectation) live in the extension's own options page.
+    """
+    resume = await _resolve_resume(db, user_id, resume_id)
+    if resume is None:
+        # Not an error: a fresh account has no resume yet. The extension shows
+        # an "upload a resume first" state rather than an error toast.
+        return AutofillProfile()
+
+    processed = resume.get("processed_data")
+    if isinstance(processed, str):
+        import json
+
+        try:
+            processed = json.loads(processed)
+        except json.JSONDecodeError:
+            processed = None
+    if not isinstance(processed, dict):
+        processed = {}
+
+    personal = processed.get("personal_info")
+    personal = personal if isinstance(personal, dict) else {}
+
+    name = str(personal.get("name") or "").strip()
+    parts = name.split()
+    experience = processed.get("experience")
+    latest = (
+        experience[0]
+        if isinstance(experience, list) and experience and isinstance(experience[0], dict)
+        else {}
+    )
+
+    rid = resume.get("resume_id")
+    return AutofillProfile(
+        full_name=name,
+        first_name=parts[0] if parts else "",
+        last_name=" ".join(parts[1:]) if len(parts) > 1 else "",
+        email=str(personal.get("email") or ""),
+        phone=str(personal.get("phone") or ""),
+        location=str(personal.get("location") or ""),
+        linkedin=str(personal.get("linkedin") or ""),
+        github=str(personal.get("github") or ""),
+        website=str(personal.get("website") or ""),
+        current_title=str(latest.get("title") or personal.get("title") or ""),
+        current_company=str(latest.get("company") or ""),
+        years_experience=_years_of_experience(processed),
+        resume_id=rid,
+        resume_filename=str(resume.get("filename") or "resume.pdf"),
+        resume_pdf_path=f"/api/v1/resumes/{rid}/pdf" if rid else None,
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Capture + bulk scrape
+# --------------------------------------------------------------------------- #
+@router.post("/capture", response_model=CaptureResponse, summary="Capture one job")
+async def capture_job(
+    job: CapturedJob,
+    user_id: str = Depends(require_verified_user_id),
+    db: Database = Depends(get_db),
+) -> CaptureResponse:
+    """Save a job the user hit "Save to FitWright" on.
+
+    Writes through the same deduplicated feed table as background discovery, so
+    a captured job is indistinguishable downstream from a scraped one.
+    """
+    row = _to_feed_row(job)
+    saved = await db.upsert_discovery_results(user_id, "extension-capture", [row])
+    return CaptureResponse(
+        saved=saved, duplicate=saved == 0, fingerprint=row["fingerprint"]
+    )
+
+
+@router.post("/scrape", response_model=ScrapeResponse, summary="Bulk-ingest scraped jobs")
+async def ingest_scraped(
+    batch: ScrapeBatch,
+    user_id: str = Depends(require_verified_user_id),
+    db: Database = Depends(get_db),
+) -> ScrapeResponse:
+    """Ingest a batch the extension scraped in a background tab.
+
+    This is the path that fixes the boards the server cannot reach: the browser
+    already holds the residential IP and the user's session, so the rows arrive
+    here as plain data with no anti-bot problem to solve.
+    """
+    if not batch.jobs:
+        return ScrapeResponse(received=0, saved=0, source=batch.source)
+
+    rows = []
+    for job in batch.jobs:  # size already capped by ScrapeBatch validation
+        job.source = job.source or batch.source
+        rows.append(_to_feed_row(job))
+
+    saved = await db.upsert_discovery_results(
+        user_id, f"extension-scrape:{batch.source}", rows
+    )
+    logger.info(
+        "Extension scrape from %s for user %s: %d received, %d new",
+        batch.source, user_id, len(rows), saved,
+    )
+    return ScrapeResponse(received=len(rows), saved=saved, source=batch.source)
+
+
+# --------------------------------------------------------------------------- #
+# Inline match score
+# --------------------------------------------------------------------------- #
+@router.post(
+    "/match",
+    response_model=MatchResponse,
+    summary="Score a JD against the resume",
+    dependencies=[Depends(llm_rate_limit_dep)],
+)
+async def match_job(
+    payload: MatchRequest,
+    user_id: str = Depends(require_verified_user_id),
+    db: Database = Depends(get_db),
+) -> MatchResponse:
+    """Score one job description against a resume for the inline badge.
+
+    Reuses the tailor pipeline's cached keyword extraction and scorer, so the
+    number the badge shows is the same number the Discover feed shows - not a
+    second, subtly different implementation.
+    """
+    resume = await _resolve_resume(db, user_id, payload.resume_id)
+    if resume is None:
+        raise HTTPException(status_code=404, detail="resume_not_found")
+
+    processed = resume.get("processed_data")
+    if not isinstance(processed, dict):
+        # Unparsed resume: no structured skills to compare against.
+        return MatchResponse(
+            match_score=0.0, resume_id=resume.get("resume_id"), degraded=True
+        )
+
+    jd_text = f"{payload.title}\n\n{payload.description}".strip()
+
+    from app.services.improver import extract_job_keywords_cached
+    from app.services.refiner import calculate_keyword_match
+
+    try:
+        keywords = await extract_job_keywords_cached(user_id, jd_text)
+    except Exception as exc:  # noqa: BLE001 - LLM outage must not break the badge
+        logger.warning("Extension match: keyword extraction failed (%s)", exc)
+        return MatchResponse(
+            match_score=0.0, resume_id=resume.get("resume_id"), degraded=True
+        )
+
+    score = calculate_keyword_match(processed, keywords)
+
+    # ``keywords`` carries the JD's required skills; split them by presence in
+    # the resume so the badge can show what is matched vs missing.
+    required = keywords.get("required_skills") or keywords.get("keywords") or []
+    if not isinstance(required, list):
+        required = []
+    blob = str(processed).lower()
+    matched = [k for k in required if isinstance(k, str) and k.lower() in blob]
+    missing = [k for k in required if isinstance(k, str) and k.lower() not in blob]
+
+    return MatchResponse(
+        match_score=float(score),
+        matched=matched[:20],
+        missing=missing[:20],
+        resume_id=resume.get("resume_id"),
+    )
+
+
+# --------------------------------------------------------------------------- #
+# AI answer drafting
+# --------------------------------------------------------------------------- #
+_DRAFT_SYSTEM_PROMPT = (
+    "You draft answers to job-application questions on behalf of a candidate. "
+    "Write in the candidate's first person, plainly and specifically, grounded "
+    "ONLY in the resume facts you are given. Never invent employers, dates, "
+    "metrics, or credentials. If the resume does not support an answer, say so "
+    "in one short sentence instead of inventing detail. Return the answer text "
+    "only - no preamble, no quotes, no markdown."
+)
+
+
+@router.post(
+    "/draft",
+    response_model=DraftResponse,
+    summary="Draft an application answer",
+    dependencies=[Depends(llm_rate_limit_dep)],
+)
+async def draft_answer(
+    payload: DraftRequest,
+    user_id: str = Depends(require_verified_user_id),
+    db: Database = Depends(get_db),
+) -> DraftResponse:
+    """Draft an answer to a free-text application question.
+
+    The draft is returned, never submitted: the extension fills it into the
+    field and the user edits before sending. That boundary is deliberate - an
+    unreviewed generated answer going to a real employer is not a tradeoff
+    worth making.
+    """
+    question = payload.question.strip()
+    if not question:
+        raise HTTPException(status_code=422, detail="question_required")
+
+    resume = await _resolve_resume(db, user_id, payload.resume_id)
+    if resume is None:
+        raise HTTPException(status_code=404, detail="resume_not_found")
+
+    processed = resume.get("processed_data")
+    resume_context = (
+        str(processed)[:6000]
+        if isinstance(processed, dict)
+        else str(resume.get("content") or "")[:6000]
+    )
+
+    prompt = (
+        f"Question from the application form:\n{question}\n\n"
+        f"Role: {payload.title or 'unspecified'} at "
+        f"{payload.company or 'unspecified company'}\n\n"
+        f"Job description (may be truncated):\n{payload.description[:4000]}\n\n"
+        f"Candidate resume facts:\n{resume_context}\n\n"
+        f"Write the answer in at most {max(40, min(payload.max_words, 400))} words."
+    )
+
+    from app.llm import complete
+
+    try:
+        answer = await complete(
+            prompt,
+            system_prompt=_DRAFT_SYSTEM_PROMPT,
+            max_tokens=700,
+            temperature=0.5,
+        )
+    except Exception as exc:  # noqa: BLE001 - surface a usable message, not a 500
+        logger.warning("Extension draft failed (%s)", exc)
+        raise HTTPException(status_code=503, detail="llm_unavailable") from exc
+
+    return DraftResponse(answer=(answer or "").strip())
+
+
+# --------------------------------------------------------------------------- #
+# Application tracking
+# --------------------------------------------------------------------------- #
+@router.post("/applied", response_model=AppliedResponse, summary="Mark a job applied")
+async def mark_applied(
+    payload: AppliedRequest,
+    user_id: str = Depends(require_verified_user_id),
+    db: Database = Depends(get_db),
+) -> AppliedResponse:
+    """Flip a feed row to ``applied`` after the extension saw a submission.
+
+    Identified by fingerprint when the extension captured the job, else matched
+    on URL. A miss is not an error - the user may have applied to something that
+    never entered the feed - so this reports ``updated: false`` instead of 404.
+    """
+    from sqlalchemy import select, update as sa_update
+
+    from app.models import DiscoveryResult
+
+    fingerprint = payload.fingerprint
+    if not fingerprint and not payload.url:
+        raise HTTPException(status_code=422, detail="fingerprint_or_url_required")
+
+    async with db._session() as session:
+        async with session.begin():
+            if not fingerprint:
+                found = await session.execute(
+                    select(DiscoveryResult.fingerprint).where(
+                        (DiscoveryResult.user_id == user_id)
+                        & (DiscoveryResult.url == payload.url)
+                    )
+                )
+                fingerprint = found.scalar_one_or_none()
+                if not fingerprint:
+                    return AppliedResponse(updated=False, fingerprint=None)
+
+            result = await session.execute(
+                sa_update(DiscoveryResult)
+                .where(
+                    (DiscoveryResult.user_id == user_id)
+                    & (DiscoveryResult.fingerprint == fingerprint)
+                )
+                .values(status="applied")
+            )
+            updated = (result.rowcount or 0) > 0
+
+    return AppliedResponse(updated=updated, fingerprint=fingerprint)
+
+
+__all__ = ["router", "EXTENSION_API_VERSION"]

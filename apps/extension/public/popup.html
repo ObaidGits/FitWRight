@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>FitWright Companion</title>
+    <style>
+      :root {
+        --bg: #ffffff;
+        --fg: #1a1a17;
+        --muted: #6b6b63;
+        --line: #e7e5df;
+        --accent: #4f46e5;
+        --ok: #15803d;
+        --err: #dc2626;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #201f1a;
+          --fg: #f2f0ea;
+          --muted: #a5a294;
+          --line: #302e26;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        width: 320px;
+        margin: 0;
+        padding: 14px;
+        background: var(--bg);
+        color: var(--fg);
+        font: 13px/1.45 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 12px;
+      }
+      .brand {
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+      .dot.on { background: var(--ok); }
+      .dot.off { background: var(--err); }
+
+      .job { padding: 10px 0; border-top: 1px solid var(--line); }
+      .job h1 { font-size: 14px; font-weight: 600; margin: 0 0 2px; }
+      .job p { margin: 0; color: var(--muted); font-size: 12px; }
+      .kind {
+        display: inline-block;
+        margin-top: 6px;
+        padding: 2px 6px;
+        border-radius: 999px;
+        background: rgba(79, 70, 229, 0.12);
+        color: var(--accent);
+        font-size: 10px;
+        font-weight: 600;
+      }
+
+      .actions { display: grid; gap: 6px; margin-top: 12px; }
+      button {
+        width: 100%;
+        padding: 8px 10px;
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+        border-radius: 6px;
+        border: 1px solid var(--line);
+        background: var(--bg);
+        color: var(--fg);
+      }
+      button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+      button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+      button.primary:hover:not(:disabled) { filter: brightness(1.08); color: #fff; }
+      button:disabled { opacity: 0.5; cursor: default; }
+
+      footer {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 12px;
+        padding-top: 10px;
+        border-top: 1px solid var(--line);
+        font-size: 11px;
+      }
+      a { color: var(--muted); text-decoration: none; cursor: pointer; }
+      a:hover { color: var(--accent); }
+      #status { margin-top: 8px; font-size: 12px; min-height: 16px; }
+      #status.ok { color: var(--ok); }
+      #status.err { color: var(--err); }
+      .muted { color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <header>
+      <span class="brand">FitWright</span>
+      <span class="dot" id="conn" title="Checking connection"></span>
+    </header>
+
+    <div class="job" id="job">
+      <p class="muted">Reading page&hellip;</p>
+    </div>
+
+    <div class="actions" id="actions"></div>
+    <div id="status" role="status" aria-live="polite"></div>
+
+    <footer>
+      <a id="open-app">Open FitWright</a>
+      <a id="open-options">Settings</a>
+    </footer>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

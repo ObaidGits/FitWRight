@@ -44,6 +44,9 @@ from app.models import (
     AnalysisArtifact,
     ApiKey,
     Application,
+    DiscoveryCache,
+    DiscoveryResult,
+    DiscoveryRun,
     Improvement,
     Interview,
     Job,
@@ -56,6 +59,7 @@ from app.models import (
     Resume,
     ResumeVersion,
     SearchDocument,
+    SiteRecipeModel,
     TailorPreview,
     User,
     UserErrorReport,
@@ -147,6 +151,15 @@ class Database:
             weakref.WeakValueDictionary()
         )
         self._master_locks_guard = asyncio.Lock()
+
+    @classmethod
+    def from_url(cls, url: str | None = None) -> "Database":
+        """Construct a Database from an explicit URL (used by discovery tests)."""
+        return cls(url)
+
+    async def dispose(self) -> None:
+        """Alias for close() — compatibility with discovery tests."""
+        await self.close()
 
     async def _master_lock(self, user_id: str) -> asyncio.Lock:
         """Return a self-evicting local contention lock for ``user_id``."""
@@ -2576,6 +2589,433 @@ class Database:
             counts["outbox"] = int(outbox_result.rowcount or 0)
             await session.commit()
         return counts
+
+
+    # ------------------------------------------------------------------ #
+    # Job Discovery accessors (discovery_cache + site_recipes)
+    # ------------------------------------------------------------------ #
+
+    async def get_discovery_cache(self, cache_key: str) -> Any | None:
+        """Return cached payload if present and unexpired, else None."""
+        from datetime import datetime, timezone
+        async with self._session() as session:
+            row = await session.get(DiscoveryCache, cache_key)
+        if row is None:
+            return None
+        # Expiry check: stored as ISO string
+        now_iso = datetime.now(timezone.utc).isoformat()
+        if row.expires_at <= now_iso:
+            return None
+        return row.payload
+
+    async def put_discovery_cache(
+        self, cache_key: str, payload: Any, ttl_seconds: int
+    ) -> None:
+        """Insert or replace a cache row with a fresh TTL."""
+        from datetime import datetime, timedelta, timezone
+        now = datetime.now(timezone.utc)
+        expires_at = (now + timedelta(seconds=max(0, int(ttl_seconds)))).isoformat()
+        async with self._session() as session:
+            async with session.begin():
+                existing = await session.get(DiscoveryCache, cache_key)
+                if existing:
+                    existing.payload = payload
+                    existing.created_at = now.isoformat()
+                    existing.expires_at = expires_at
+                else:
+                    session.add(DiscoveryCache(
+                        cache_key=cache_key,
+                        payload=payload,
+                        created_at=now.isoformat(),
+                        expires_at=expires_at,
+                    ))
+
+    async def list_site_recipe(self, user_id: str) -> list:
+        """Return all recipes owned by user_id as SiteRecipe dataclasses, ordered by slug."""
+        from sqlalchemy import select
+        from app.job_discovery.models import SiteRecipe
+        async with self._session() as session:
+            stmt = (
+                select(SiteRecipeModel)
+                .where(SiteRecipeModel.user_id == user_id)
+                .order_by(SiteRecipeModel.slug)
+            )
+            result = await session.execute(stmt)
+            rows = result.scalars().all()
+        return [
+            SiteRecipe(
+                id=r.id,
+                user_id=r.user_id,
+                name=r.name,
+                slug=r.slug,
+                base_url=r.base_url,
+                search_url_template=r.search_url_template,
+                schema=r.schema_json or {},
+                fetch_mode=r.fetch_mode,
+                enabled=r.enabled,
+                created_at=r.created_at,
+                updated_at=r.updated_at,
+            )
+            for r in rows
+        ]
+
+    async def upsert_site_recipe(self, recipe_data) -> Any:
+        """Insert or update a recipe by (user_id, slug). Accepts SiteRecipe dataclass."""
+        from datetime import datetime, timezone
+        from sqlalchemy import select
+        from app.job_discovery.models import SiteRecipe
+        now_iso = datetime.now(timezone.utc).isoformat()
+        user_id = recipe_data.user_id
+        slug = recipe_data.slug
+        async with self._session() as session:
+            async with session.begin():
+                stmt = select(SiteRecipeModel).where(
+                    (SiteRecipeModel.user_id == user_id)
+                    & (SiteRecipeModel.slug == slug)
+                )
+                result = await session.execute(stmt)
+                existing = result.scalar_one_or_none()
+                if existing:
+                    existing.name = recipe_data.name
+                    existing.base_url = recipe_data.base_url
+                    existing.search_url_template = recipe_data.search_url_template
+                    existing.schema_json = recipe_data.schema or {}
+                    existing.fetch_mode = recipe_data.fetch_mode
+                    existing.enabled = recipe_data.enabled
+                    existing.updated_at = now_iso
+                    await session.flush()
+                    row = existing
+                else:
+                    row = SiteRecipeModel(
+                        user_id=user_id,
+                        name=recipe_data.name,
+                        slug=slug,
+                        base_url=recipe_data.base_url,
+                        search_url_template=recipe_data.search_url_template,
+                        schema_json=recipe_data.schema or {},
+                        fetch_mode=recipe_data.fetch_mode,
+                        enabled=recipe_data.enabled,
+                        created_at=now_iso,
+                        updated_at=now_iso,
+                    )
+                    session.add(row)
+                    await session.flush()
+        return SiteRecipe(
+            id=row.id,
+            user_id=row.user_id,
+            name=row.name,
+            slug=row.slug,
+            base_url=row.base_url,
+            search_url_template=row.search_url_template,
+            schema=row.schema_json or {},
+            fetch_mode=row.fetch_mode,
+            enabled=row.enabled,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+        )
+
+    async def delete_site_recipe(self, user_id: str, slug: str) -> bool:
+        """Delete a recipe by (user_id, slug). Returns True if a row was deleted."""
+        from sqlalchemy import delete as sa_delete
+        async with self._session() as session:
+            async with session.begin():
+                stmt = sa_delete(SiteRecipeModel).where(
+                    (SiteRecipeModel.user_id == user_id)
+                    & (SiteRecipeModel.slug == slug)
+                )
+                result = await session.execute(stmt)
+        return (result.rowcount or 0) > 0
+
+
+    # ------------------------------------------------------------------ #
+    # Discovery Feed accessors (runs + results)
+    # ------------------------------------------------------------------ #
+
+    async def get_or_create_discovery_run(
+        self, user_id: str, resume_id: str, interval_hours: int = 24
+    ) -> dict[str, Any]:
+        """Get or create a discovery run schedule for a user+resume pair."""
+        from datetime import datetime, timezone
+        from sqlalchemy import select
+        now_iso = datetime.now(timezone.utc).isoformat()
+        async with self._session() as session:
+            async with session.begin():
+                stmt = select(DiscoveryRun).where(
+                    (DiscoveryRun.user_id == user_id)
+                    & (DiscoveryRun.resume_id == resume_id)
+                )
+                result = await session.execute(stmt)
+                row = result.scalar_one_or_none()
+                if row:
+                    return self._run_to_dict(row)
+                run = DiscoveryRun(
+                    user_id=user_id,
+                    resume_id=resume_id,
+                    enabled=True,
+                    interval_hours=interval_hours,
+                    next_run_at=now_iso,
+                    created_at=now_iso,
+                    updated_at=now_iso,
+                )
+                session.add(run)
+                await session.flush()
+                return self._run_to_dict(run)
+
+    async def get_discovery_run(self, user_id: str, resume_id: str) -> dict[str, Any] | None:
+        """Get a discovery run by user+resume."""
+        from sqlalchemy import select
+        async with self._session() as session:
+            stmt = select(DiscoveryRun).where(
+                (DiscoveryRun.user_id == user_id)
+                & (DiscoveryRun.resume_id == resume_id)
+            )
+            result = await session.execute(stmt)
+            row = result.scalar_one_or_none()
+            return self._run_to_dict(row) if row else None
+
+    async def list_due_discovery_runs(self, limit: int = 10) -> list[dict[str, Any]]:
+        """Find enabled runs whose next_run_at <= now (due for execution)."""
+        from datetime import datetime, timezone
+        from sqlalchemy import select
+        now_iso = datetime.now(timezone.utc).isoformat()
+        async with self._session() as session:
+            stmt = (
+                select(DiscoveryRun)
+                .where(
+                    (DiscoveryRun.enabled == True)  # noqa: E712
+                    & (DiscoveryRun.next_run_at <= now_iso)
+                )
+                .order_by(DiscoveryRun.next_run_at)
+                .limit(limit)
+            )
+            result = await session.execute(stmt)
+            return [self._run_to_dict(r) for r in result.scalars().all()]
+
+    async def update_discovery_run_status(
+        self, run_id: str, *, status: str, error: str | None = None,
+        results_count: int = 0, next_run_at: str | None = None,
+    ) -> None:
+        """Update a run after execution."""
+        from datetime import datetime, timezone
+        from sqlalchemy import update
+        now_iso = datetime.now(timezone.utc).isoformat()
+        values: dict[str, Any] = {
+            "last_status": status,
+            "last_run_at": now_iso,
+            "updated_at": now_iso,
+            "results_count": results_count,
+        }
+        if error is not None:
+            values["last_error"] = error[:500]
+        if next_run_at:
+            values["next_run_at"] = next_run_at
+        async with self._session() as session:
+            async with session.begin():
+                await session.execute(
+                    update(DiscoveryRun).where(DiscoveryRun.id == run_id).values(**values)
+                )
+
+    async def toggle_discovery_run(self, user_id: str, resume_id: str, enabled: bool) -> bool:
+        """Enable/disable a discovery run. Returns True if found."""
+        from datetime import datetime, timezone
+        from sqlalchemy import update
+        now_iso = datetime.now(timezone.utc).isoformat()
+        async with self._session() as session:
+            async with session.begin():
+                result = await session.execute(
+                    update(DiscoveryRun)
+                    .where(
+                        (DiscoveryRun.user_id == user_id)
+                        & (DiscoveryRun.resume_id == resume_id)
+                    )
+                    .values(enabled=enabled, updated_at=now_iso)
+                )
+                return (result.rowcount or 0) > 0
+
+    async def upsert_discovery_results(
+        self, user_id: str, run_id: str, results: list[dict[str, Any]]
+    ) -> int:
+        """Insert new results, skipping duplicates by fingerprint. Returns count inserted."""
+        from datetime import datetime, timezone
+        from sqlalchemy import select
+        now_iso = datetime.now(timezone.utc).isoformat()
+        inserted = 0
+        async with self._session() as session:
+            async with session.begin():
+                for r in results:
+                    # Check if fingerprint already exists for this user
+                    exists = await session.execute(
+                        select(DiscoveryResult.id).where(
+                            (DiscoveryResult.user_id == user_id)
+                            & (DiscoveryResult.fingerprint == r["fingerprint"])
+                        )
+                    )
+                    if exists.scalar_one_or_none():
+                        continue
+                    session.add(DiscoveryResult(
+                        user_id=user_id,
+                        run_id=run_id,
+                        fingerprint=r["fingerprint"],
+                        source=r.get("source", ""),
+                        title=r.get("title", ""),
+                        company=r.get("company", ""),
+                        location=r.get("location", ""),
+                        url=r.get("url", ""),
+                        is_remote=r.get("is_remote"),
+                        description=r.get("description"),
+                        salary=r.get("salary"),
+                        posted_at=r.get("posted_at"),
+                        match_score=r.get("match_score", 0),
+                        matched_keywords=r.get("matched", []),
+                        missing_keywords=r.get("missing", []),
+                        partial=r.get("partial", False),
+                        status="new",
+                        seen=False,
+                        created_at=now_iso,
+                    ))
+                    inserted += 1
+        return inserted
+
+    def _discovery_feed_conditions(
+        self,
+        user_id: str,
+        *,
+        status: str | None,
+        sources: list[str] | None,
+        query: str | None,
+        location: str | None,
+        is_remote: bool | None,
+    ) -> list[Any]:
+        """Build the WHERE terms shared by the feed list and its count.
+
+        Shared deliberately: when the list and the count filter differently the
+        UI shows "3 of 228" and pagination walks off the end of the real result
+        set, which is exactly the class of bug this replaces.
+        """
+        from sqlalchemy import func, or_
+
+        conditions: list[Any] = [DiscoveryResult.user_id == user_id]
+        if status:
+            conditions.append(DiscoveryResult.status == status)
+        if sources:
+            conditions.append(DiscoveryResult.source.in_(sources))
+        if is_remote:
+            conditions.append(DiscoveryResult.is_remote.is_(True))
+        if location:
+            conditions.append(
+                func.lower(DiscoveryResult.location).contains(location.strip().lower())
+            )
+        if query:
+            # Match the words a person would recognise the job by. Every token
+            # must appear somewhere in the title or the company, so "python dev"
+            # does not match a job that merely mentions Python in one of them.
+            for token in query.lower().split():
+                conditions.append(
+                    or_(
+                        func.lower(DiscoveryResult.title).contains(token),
+                        func.lower(DiscoveryResult.company).contains(token),
+                    )
+                )
+        return conditions
+
+    async def get_discovery_feed(
+        self, user_id: str, *, status: str | None = None,
+        sources: list[str] | None = None, query: str | None = None,
+        location: str | None = None, is_remote: bool | None = None,
+        limit: int = 50, offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        """Get paginated feed results for a user, newest first."""
+        from sqlalchemy import select
+        async with self._session() as session:
+            stmt = (
+                select(DiscoveryResult)
+                .where(
+                    *self._discovery_feed_conditions(
+                        user_id,
+                        status=status,
+                        sources=sources,
+                        query=query,
+                        location=location,
+                        is_remote=is_remote,
+                    )
+                )
+            )
+            stmt = stmt.order_by(DiscoveryResult.created_at.desc()).offset(offset).limit(limit)
+            result = await session.execute(stmt)
+            return [self._result_to_dict(r) for r in result.scalars().all()]
+
+    async def count_discovery_feed(
+        self, user_id: str, *, status: str | None = None,
+        sources: list[str] | None = None, query: str | None = None,
+        location: str | None = None, is_remote: bool | None = None,
+    ) -> int:
+        """Count feed results for a user under the same filters as the list."""
+        from sqlalchemy import select, func
+        async with self._session() as session:
+            stmt = select(func.count(DiscoveryResult.id)).where(
+                *self._discovery_feed_conditions(
+                    user_id,
+                    status=status,
+                    sources=sources,
+                    query=query,
+                    location=location,
+                    is_remote=is_remote,
+                )
+            )
+            result = await session.execute(stmt)
+            return result.scalar() or 0
+
+    async def count_unseen_discovery_results(self, user_id: str) -> int:
+        """Count new unseen results since last visit."""
+        from sqlalchemy import select, func
+        async with self._session() as session:
+            result = await session.execute(
+                select(func.count(DiscoveryResult.id)).where(
+                    (DiscoveryResult.user_id == user_id)
+                    & (DiscoveryResult.seen == False)  # noqa: E712
+                )
+            )
+            return result.scalar() or 0
+
+    async def mark_discovery_results_seen(self, user_id: str) -> None:
+        """Mark all unseen results as seen for a user."""
+        from sqlalchemy import update
+        async with self._session() as session:
+            async with session.begin():
+                await session.execute(
+                    update(DiscoveryResult)
+                    .where(
+                        (DiscoveryResult.user_id == user_id)
+                        & (DiscoveryResult.seen == False)  # noqa: E712
+                    )
+                    .values(seen=True)
+                )
+
+    @staticmethod
+    def _run_to_dict(row: DiscoveryRun) -> dict[str, Any]:
+        return {
+            "id": row.id, "user_id": row.user_id, "resume_id": row.resume_id,
+            "enabled": row.enabled, "interval_hours": row.interval_hours,
+            "last_run_at": row.last_run_at, "next_run_at": row.next_run_at,
+            "last_status": row.last_status, "last_error": row.last_error,
+            "results_count": row.results_count,
+            "created_at": row.created_at, "updated_at": row.updated_at,
+        }
+
+    @staticmethod
+    def _result_to_dict(row: DiscoveryResult) -> dict[str, Any]:
+        return {
+            "id": row.id, "user_id": row.user_id, "run_id": row.run_id,
+            "fingerprint": row.fingerprint, "source": row.source,
+            "title": row.title, "company": row.company, "location": row.location,
+            "url": row.url, "is_remote": row.is_remote,
+            "description": row.description, "salary": row.salary,
+            "posted_at": row.posted_at, "match_score": row.match_score,
+            "matched_keywords": row.matched_keywords or [],
+            "missing_keywords": row.missing_keywords or [],
+            "partial": row.partial, "status": row.status, "seen": row.seen,
+            "created_at": row.created_at,
+        }
 
 
 # Global database instance

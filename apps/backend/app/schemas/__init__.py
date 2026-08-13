@@ -89,6 +89,20 @@ from app.schemas.applications import (
     BulkStatusUpdate,
     ManualApplicationCreate,
 )
+from app.schemas.discovery import (  # noqa: F401
+    JobListingOut,
+    RecommendationOut,
+    RecommendRequest,
+    RecommendResponse,
+    SearchFiltersIn,
+    SearchQueryOut,
+    SiteRecipeCreate,
+    SiteRecipeOut,
+    SiteRecipeUpdate,
+    SourceFailureOut,
+    TailorRequest,
+    TailorResponse,
+)
 
 __all__ = [
     "PersonalInfo",

@@ -55,6 +55,19 @@ ocr = [
     "pytesseract>=0.3.10",
     "pdf2image>=1.17.0",
 ]
+# Optional job-discovery feature (§10.5, 3.1, 4.2). Gated behind the
+# JOB_DISCOVERY kill-switch; the base app imports and boots WITHOUT this group
+# installed (connectors lazy-import their scraper deps). Install with:
+#   uv sync --extra job-discovery   (or  pip install '.[job-discovery]')
+# Pinned so scraper/browser behavior is reproducible across environments.
+job-discovery = [
+    "python-jobspy==1.1.82",  # fixed-board scraping (Indeed/Naukri/LinkedIn)
+    "crawl4ai==0.9.2",        # LLM-guided extraction for custom site recipes
+    "patchright==1.61.2",     # patched Playwright driver for the stealth fetch lane
+    "camoufox==0.5.4",        # optional hardened Firefox fetcher for the stealth lane
+    "curl-cffi>=0.7.0",      # TLS fingerprint impersonation (bypasses Akamai)
+    "nodriver>=0.38",         # undetected Chrome for Cloudflare bypass
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -87,3 +100,10 @@ markers = [
     "integration: API endpoint tests with httpx AsyncClient",
     "eval: prompt-quality evaluations; may call a real LLM, skipped without a configured key",
 ]
+
+[tool.uv]
+# python-jobspy's wheel metadata hard-pins `numpy==1.26.3`, which is
+# incompatible with the base app's markitdown -> magika requirement of
+# `numpy>=2.1.0`. jobspy only touches numpy transitively via pandas and runs
+# fine on numpy 2.x, so we relax that over-strict pin here.
+override-dependencies = ["numpy>=2.1.0,<3"]

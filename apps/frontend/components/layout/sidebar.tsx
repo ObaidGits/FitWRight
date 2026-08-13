@@ -72,6 +72,7 @@ export function Sidebar() {
             >
               <Icon className="h-[18px] w-[18px]" />
               {item.label}
+              {item.href === '/discovery' && <DiscoverBadge />}
             </Link>
           );
         })}
@@ -119,5 +120,30 @@ export function Sidebar() {
         </div>
       </div>
     </aside>
+  );
+}
+
+/** Tiny badge showing unseen job count next to "Discover" nav item. */
+function DiscoverBadge() {
+  // Lazy-loaded to avoid circular deps; only renders client-side
+  const [count, setCount] = React.useState(0);
+  React.useEffect(() => {
+    fetch('/api/v1/discovery/feed/unseen', { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : { unseen: 0 }))
+      .then((d) => setCount(d.unseen || 0))
+      .catch(() => {});
+    const interval = setInterval(() => {
+      fetch('/api/v1/discovery/feed/unseen', { credentials: 'include' })
+        .then((r) => (r.ok ? r.json() : { unseen: 0 }))
+        .then((d) => setCount(d.unseen || 0))
+        .catch(() => {});
+    }, 60_000);
+    return () => clearInterval(interval);
+  }, []);
+  if (count === 0) return null;
+  return (
+    <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-bold text-primary-foreground">
+      {count > 99 ? '99+' : count}
+    </span>
   );
 }

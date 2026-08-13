@@ -25,6 +25,8 @@ from app.routers.resumes import router as resumes_router
 from app.routers.search import router as search_router
 from app.routers.users import router as users_router
 from app.routers.versions import router as versions_router
+from app.routers.discovery import router as discovery_router
+from app.routers.extension import router as extension_router
 
 __all__ = [
     "resumes_router",
@@ -52,4 +54,6 @@ __all__ = [
     "media_router",
     "profile_router",
     "public_profile_router",
+    "discovery_router",
+    "extension_router",
 ]

@@ -554,6 +554,22 @@ class Settings(BaseSettings):
         "http://127.0.0.1:3000",
     ]
 
+    # Browser-extension origins allowed to call the API with credentials.
+    # A packed extension has a stable origin (`chrome-extension://<id>`); an
+    # unpacked dev build gets a fresh id per machine, so the id is supplied by
+    # the operator rather than hardcoded. Comma-separated, blank by default -
+    # the extension surface is opt-in and adds no origin until configured.
+    extension_origins: str = ""
+
+    @property
+    def effective_extension_origins(self) -> list[str]:
+        """``EXTENSION_ORIGINS`` parsed into a clean list of browser origins."""
+        return [
+            origin.strip().rstrip("/")
+            for origin in self.extension_origins.split(",")
+            if origin.strip()
+        ]
+
     @property
     def effective_cors_origins(self) -> list[str]:
         """CORS origins including frontend_base_url for production deployments."""
@@ -561,6 +577,11 @@ class Settings(BaseSettings):
         url = self.frontend_base_url.strip().rstrip("/")
         if url and url not in origins:
             origins.append(url)
+        # Browser-extension origins (FitWright Companion). Opt-in via
+        # EXTENSION_ORIGINS; nothing is added when unset.
+        for origin in self.effective_extension_origins:
+            if origin not in origins:
+                origins.append(origin)
         return origins
 
     # =====================================================================
@@ -1362,6 +1383,32 @@ class Settings(BaseSettings):
         if value < 1:
             raise ValueError(f"Invalid {info.field_name.upper()}: must be >= 1")
         return value
+
+    # ================================================================== #
+    # Job Discovery & Recommendations (optional feature, §10.5)
+    # ================================================================== #
+    # Master kill-switch. When False the discovery router returns 404 for all
+    # routes and the orchestrator refuses work. Ships OFF.
+    JOB_DISCOVERY: bool = False
+    # Comma-separated JobSpy board slugs queried on the fast lane.
+    JOB_DISCOVERY_JOBSPY_SITES: str = "indeed"
+    # TTL (seconds) for the content-addressed search-result cache.
+    JOB_DISCOVERY_CACHE_TTL_SECONDS: int = 3600
+    # Max listings returned from a single recommend call.
+    JOB_DISCOVERY_MAX_RESULTS: int = 50
+    # Max site recipes a single user may own.
+    JOB_DISCOVERY_MAX_RECIPES: int = 20
+    # Concurrency cap for the stealth (headless-browser) fetch lane.
+    JOB_DISCOVERY_STEALTH_MAX_CONCURRENCY: int = 1
+
+    @property
+    def job_discovery_jobspy_sites(self) -> list[str]:
+        """``JOB_DISCOVERY_JOBSPY_SITES`` parsed into a clean list of slugs."""
+        return [
+            slug.strip()
+            for slug in self.JOB_DISCOVERY_JOBSPY_SITES.split(",")
+            if slug.strip()
+        ]
 
     @model_validator(mode="after")
     def _validate_auth_surface(self) -> "Settings":

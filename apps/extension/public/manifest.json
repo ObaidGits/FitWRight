@@ -1,0 +1,91 @@
+{
+  "manifest_version": 3,
+  "name": "FitWright Companion",
+  "version": "0.1.0",
+  "description": "Capture jobs, autofill applications, and see resume match scores while you browse - powered by your FitWright account.",
+  "minimum_chrome_version": "110",
+
+  "permissions": ["storage", "tabs", "alarms", "notifications"],
+
+  "host_permissions": [
+    "*://*.greenhouse.io/*",
+    "*://*.lever.co/*",
+    "*://*.myworkdayjobs.com/*",
+    "*://*.ashbyhq.com/*",
+    "*://*.smartrecruiters.com/*",
+    "*://*.indeed.com/*",
+    "*://*.indeed.co.in/*",
+    "*://*.linkedin.com/*",
+    "*://*.instahyre.com/*",
+    "*://*.hirist.tech/*",
+    "*://*.foundit.in/*",
+    "*://*.workatastartup.com/*",
+    "*://*.ycombinator.com/*",
+    "*://*.naukri.com/*",
+    "*://*.ziprecruiter.com/*",
+    "*://*.glassdoor.com/*",
+    "*://*.glassdoor.co.in/*",
+    "https://www.google.com/search*",
+    "http://localhost:3000/*",
+    "http://127.0.0.1:3000/*"
+  ],
+
+  "background": {
+    "service_worker": "service-worker.js"
+  },
+
+  "action": {
+    "default_title": "FitWright Companion",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+
+  "options_page": "options.html",
+
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.greenhouse.io/*",
+        "*://*.lever.co/*",
+        "*://*.myworkdayjobs.com/*",
+        "*://*.ashbyhq.com/*",
+        "*://*.smartrecruiters.com/*",
+        "*://*.indeed.com/*",
+        "*://*.indeed.co.in/*",
+        "*://*.linkedin.com/*",
+        "*://*.instahyre.com/*",
+        "*://*.hirist.tech/*",
+        "*://*.foundit.in/*",
+        "*://*.workatastartup.com/*",
+        "*://*.ycombinator.com/*",
+        "*://*.naukri.com/*",
+        "*://*.ziprecruiter.com/*",
+        "*://*.glassdoor.com/*",
+        "*://*.glassdoor.co.in/*",
+        "https://www.google.com/search*"
+      ],
+      "js": ["content.js"],
+      "css": ["overlay.css"],
+      "run_at": "document_idle",
+      "all_frames": false
+    },
+    {
+      "matches": ["http://localhost:3000/*", "http://127.0.0.1:3000/*"],
+      "js": ["bridge.js"],
+      "run_at": "document_start",
+      "all_frames": false
+    }
+  ]
+}

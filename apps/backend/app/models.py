@@ -1226,3 +1226,121 @@ class AnalysisArtifact(Base):
         # Dependency-aware invalidation: delete by primary owning resource.
         Index("ix_analysis_artifacts_source", "user_id", "source_id"),
     )
+
+
+# ---------------------------------------------------------------------------
+# Job Discovery & Recommendations (optional feature, §10.5)
+# ---------------------------------------------------------------------------
+
+
+class DiscoveryCache(Base):
+    """Content-addressed search-result cache for the discovery pipeline.
+
+    Keyed by a SHA-256 of (resume_version + query + filters). Expired rows are
+    treated as misses by the accessor; eviction is on overwrite or sweep.
+    """
+
+    __tablename__ = "discovery_cache"
+
+    cache_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    payload: Mapped[Any] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[str] = mapped_column(String, default=_utcnow_iso)
+    expires_at: Mapped[str] = mapped_column(String, nullable=False)
+
+
+class SiteRecipeModel(Base):
+    """Persisted custom-site scraping recipe for the discovery pipeline.
+
+    Uniqueness is (user_id, slug). ``schema`` is the JSON extraction schema
+    handed to the LLM extraction strategy.
+    """
+
+    __tablename__ = "site_recipes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    slug: Mapped[str] = mapped_column(String(255), nullable=False)
+    base_url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    search_url_template: Mapped[str] = mapped_column(Text, nullable=False)
+    schema_json: Mapped[Any] = mapped_column("schema", JSON, nullable=False, default=dict)
+    fetch_mode: Mapped[str] = mapped_column(String(16), nullable=False, default="http")
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[str] = mapped_column(String, default=_utcnow_iso)
+    updated_at: Mapped[str] = mapped_column(String, default=_utcnow_iso)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "slug", name="uq_site_recipes_user_slug"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Job Discovery Feed (Phase 1 — background discovery + persistent results)
+# ---------------------------------------------------------------------------
+
+
+class DiscoveryRun(Base):
+    """Tracks scheduled discovery runs per user.
+
+    Each user with an active resume can have one scheduled run. The background
+    worker picks users whose next_run_at <= now and executes discovery for them.
+    """
+
+    __tablename__ = "discovery_runs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
+    user_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    resume_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    interval_hours: Mapped[int] = mapped_column(Integer, nullable=False, default=24)
+    last_run_at: Mapped[str | None] = mapped_column(String, nullable=True)
+    next_run_at: Mapped[str | None] = mapped_column(String, nullable=True)
+    last_status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    last_error: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    results_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[str] = mapped_column(String, default=_utcnow_iso)
+    updated_at: Mapped[str] = mapped_column(String, default=_utcnow_iso)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "resume_id", name="uq_discovery_runs_user_resume"),
+    )
+
+
+class DiscoveryResult(Base):
+    """A persisted job listing from a discovery run.
+
+    Results accumulate across runs and form the user's job feed. Deduplicated
+    by fingerprint per user (same job won't appear twice).
+    """
+
+    __tablename__ = "discovery_results"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
+    user_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    run_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    # Job data
+    source: Mapped[str] = mapped_column(String(50), nullable=False)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    company: Mapped[str] = mapped_column(String(255), nullable=False)
+    location: Mapped[str] = mapped_column(String(255), nullable=False)
+    url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    is_remote: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    salary: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    posted_at: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Scoring
+    match_score: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    matched_keywords: Mapped[Any] = mapped_column(JSON, nullable=True)
+    missing_keywords: Mapped[Any] = mapped_column(JSON, nullable=True)
+    partial: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Status tracking (Phase 2 prep)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="new")
+    seen: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[str] = mapped_column(String, default=_utcnow_iso)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "fingerprint", name="uq_discovery_results_user_fp"),
+        Index("ix_discovery_results_user_status", "user_id", "status"),
+        Index("ix_discovery_results_user_created", "user_id", "created_at"),
+    )

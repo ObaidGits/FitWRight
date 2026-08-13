@@ -49,6 +49,8 @@ from app.routers import (
     search_router,
     users_router,
     versions_router,
+    discovery_router,
+    extension_router,
 )
 
 
@@ -163,6 +165,14 @@ async def lifespan(app: FastAPI):
         if settings.admin_enabled:
             admin_jobs_task = start_admin_jobs(settings.reaper_interval_seconds)
             logger.info("Started internal admin jobs loop")
+
+    # Start discovery background worker if the feature is enabled
+    discovery_task = None
+    if settings.JOB_DISCOVERY:
+        from app.job_discovery.worker import start_discovery_worker
+        discovery_task = start_discovery_worker()
+        logger.info("Started discovery background worker")
+
     yield
     # Shutdown - wrap each cleanup in try-except to ensure all resources are released
     try:
@@ -174,6 +184,13 @@ async def lifespan(app: FastAPI):
         await stop_reaper(reaper_task)
     except Exception as e:
         logger.error(f"Error stopping scheduled jobs: {e}")
+
+    try:
+        if discovery_task and not discovery_task.done():
+            from app.job_discovery.worker import stop_discovery_worker
+            stop_discovery_worker()
+    except Exception as e:
+        logger.error(f"Error stopping discovery worker: {e}")
 
     try:
         # Ensure the background pre-warm isn't mid-launch while we tear down.
@@ -333,6 +350,8 @@ app.include_router(media_router, prefix="/api/v1")
 app.include_router(resume_wizard_router, prefix="/api/v1")
 app.include_router(profile_router, prefix="/api/v1")
 app.include_router(public_profile_router, prefix="/api/v1")
+app.include_router(discovery_router, prefix="/api/v1")
+app.include_router(extension_router, prefix="/api/v1")
 
 
 @app.get("/")
