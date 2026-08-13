@@ -150,6 +150,9 @@ async function handle(message: ToWorker, sender: chrome.runtime.MessageSender): 
     case 'get-profile':
       return ok(await api.getProfile());
 
+    case 'get-queue':
+      return ok(await api.getApplyQueue());
+
     case 'get-resume-pdf':
       return ok(await api.fetchResumePdf({ company: message.company, title: message.title }));
 
@@ -373,7 +376,7 @@ async function runScheduledScrape(): Promise<void> {
   if (saved > 0) {
     await flashBadge(String(saved));
     try {
-      await chrome.notifications?.create({
+      await chrome.notifications?.create(NEW_JOBS_NOTIFICATION_ID, {
         type: 'basic',
         iconUrl: 'icons/icon-128.png',
         title: 'FitWright',
@@ -409,6 +412,53 @@ function sleep(ms: number): Promise<void> {
 // --------------------------------------------------------------------------- //
 // Lifecycle
 // --------------------------------------------------------------------------- //
+
+/**
+ * A fixed id so the click handler knows which notification was pressed, and so a
+ * second run replaces the first rather than stacking a pile of them.
+ */
+const NEW_JOBS_NOTIFICATION_ID = 'fitwright-new-jobs';
+
+/**
+ * Clicking "3 new jobs added" opens the jobs.
+ *
+ * A notification that only informs is a notification that trains people to
+ * dismiss it. The whole reason to interrupt someone is that there is something to
+ * act on, so it has to lead there in one click.
+ */
+chrome.notifications?.onClicked?.addListener((id) => {
+  if (id !== NEW_JOBS_NOTIFICATION_ID) return;
+  void (async () => {
+    const settings = await getSettings();
+    // Filtered to what is new, not the whole feed - otherwise the user lands in
+    // 224 jobs and has to find the three the notification meant.
+    const url = `${normalizeBaseUrl(settings.apiBaseUrl)}/discovery?status=new`;
+    await chrome.tabs.create({ url });
+    await chrome.notifications.clear(id);
+  })();
+});
+
+/**
+ * Keyboard shortcut for autofill.
+ *
+ * Someone applying properly fills dozens of these a day; reaching for the mouse,
+ * opening the popup and clicking is three actions for something that should be
+ * one. Chrome asks the user to assign the key in chrome://extensions/shortcuts, so
+ * nothing is claimed from the host page without consent.
+ */
+chrome.commands?.onCommand?.addListener((command) => {
+  if (command !== 'autofill-current-form') return;
+  void (async () => {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id) return;
+    const reply = await sendToTab(tab.id, { type: 'autofill' });
+    if (!reply.ok) {
+      // The command fires anywhere, including pages we do not run on. Saying so
+      // beats a shortcut that appears to do nothing.
+      await recordError('Keyboard shortcut', reply.error);
+    }
+  })();
+});
 
 chrome.runtime.onInstalled.addListener((details) => {
   void syncAlarm();

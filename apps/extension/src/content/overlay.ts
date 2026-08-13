@@ -7,6 +7,7 @@
  * stacking routinely mangle injected UI. The shadow boundary makes our styles
  * unreachable from the page and vice versa.
  */
+import { setSitePreference } from '@/lib/site-prefs';
 import type { MatchResult } from '@/lib/types';
 
 const HOST_ID = 'fitwright-companion-root';
@@ -53,6 +54,13 @@ const STYLES = `
     background: #4f46e5; color: #fff; border: 0; border-radius: 6px;
   }
   .fillpanel .save:disabled { opacity: .6; cursor: default; }
+  /* A quieter sibling of the close button: closing is for now, this is for good. */
+  .badge .never {
+    margin-left: auto; margin-right: 6px; background: none; border: 0; padding: 0;
+    font: inherit; font-size: 10px; color: inherit; opacity: .65; cursor: pointer;
+    text-decoration: underline;
+  }
+  .badge .never:hover { opacity: 1; }
   /* The promise, restated where the user is actually about to act. */
   .fillpanel .promise {
     margin-top: 6px; font-size: 11px; line-height: 1.4; opacity: .75; text-align: center;
@@ -232,7 +240,8 @@ export function showFillPanel(summary: FillSummary, actions: FillPanelActions): 
   const outstanding = summary.unanswered.length;
   panel.innerHTML = `
     <div class="row">
-      <span class="brand">FitWright</span>
+      <span class="brand" data-drag="1" title="Drag to move">FitWright</span>
+      <button class="never" title="Do not show this panel on this site again">Not here</button>
       <button class="close" aria-label="Hide the FitWright panel" title="Hide">&times;</button>
     </div>
     <div role="status" aria-live="polite"><strong>${summary.filled}</strong> field${summary.filled === 1 ? '' : 's'} filled${
@@ -270,6 +279,16 @@ export function showFillPanel(summary: FillSummary, actions: FillPanelActions): 
   document.addEventListener('keydown', onKeydown, true);
 
   panel.querySelector('.close')?.addEventListener('click', dismiss);
+
+  // "Not here" is a different intention from closing: autofill keeps working on
+  // this site, the box just stops appearing. Without it, a form whose own buttons
+  // sit bottom-right leaves the user closing this every single time.
+  panel.querySelector('.never')?.addEventListener('click', () => {
+    void setSitePreference(location.hostname, { panelHidden: true });
+    dismiss();
+  });
+
+  makeDraggable(panel, panel.querySelector('[data-drag]'));
 
   for (const button of panel.querySelectorAll<HTMLButtonElement>('.jump')) {
     button.addEventListener('click', () => {
@@ -315,6 +334,65 @@ export function toast(message: string, kind: 'ok' | 'err' | 'info' = 'info'): vo
   root.appendChild(el);
 
   setTimeout(() => el.remove(), 3200);
+}
+
+/**
+ * Let the user move a floating panel out of the way.
+ *
+ * It sits bottom-right at a very high z-index, which on some application forms is
+ * exactly where the site's own Next/Submit buttons are. Dragging is the difference
+ * between "helpful overlay" and "thing I have to close to finish my application".
+ *
+ * Position is per page load, deliberately not persisted: the right place depends
+ * on the form, and remembering a corner chosen on one site would put it somewhere
+ * unhelpful on the next.
+ */
+function makeDraggable(panel: HTMLElement, handle: Element | null): void {
+  if (!handle) return;
+  (handle as HTMLElement).style.cursor = 'grab';
+
+  let startX = 0;
+  let startY = 0;
+  let originLeft = 0;
+  let originTop = 0;
+
+  function onPointerDown(event: Event): void {
+    const pointer = event as PointerEvent;
+    const rect = panel.getBoundingClientRect();
+    startX = pointer.clientX;
+    startY = pointer.clientY;
+    originLeft = rect.left;
+    originTop = rect.top;
+
+    // Switch from the right/bottom anchoring to explicit coordinates, or the
+    // first drag would fight the CSS that positions it.
+    panel.style.left = `${originLeft}px`;
+    panel.style.top = `${originTop}px`;
+    panel.style.right = 'auto';
+    panel.style.bottom = 'auto';
+
+    document.addEventListener('pointermove', onPointerMove, true);
+    document.addEventListener('pointerup', onPointerUp, true);
+    event.preventDefault();
+  }
+
+  function onPointerMove(event: Event): void {
+    const pointer = event as PointerEvent;
+    // Clamped so the panel can never be dragged off screen and lost.
+    const maxLeft = Math.max(0, window.innerWidth - panel.offsetWidth);
+    const maxTop = Math.max(0, window.innerHeight - panel.offsetHeight);
+    const left = Math.min(maxLeft, Math.max(0, originLeft + (pointer.clientX - startX)));
+    const top = Math.min(maxTop, Math.max(0, originTop + (pointer.clientY - startY)));
+    panel.style.left = `${left}px`;
+    panel.style.top = `${top}px`;
+  }
+
+  function onPointerUp(): void {
+    document.removeEventListener('pointermove', onPointerMove, true);
+    document.removeEventListener('pointerup', onPointerUp, true);
+  }
+
+  handle.addEventListener('pointerdown', onPointerDown);
 }
 
 function escapeHtml(value: string): string {

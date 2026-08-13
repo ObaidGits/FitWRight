@@ -109,6 +109,40 @@ function hasValue(el: Fillable): boolean {
  * tailored for this role be attached instead of the master one, so callers
  * should pass it whenever the page told us which job it is.
  */
+/**
+ * What autofill *would* do, without touching the page.
+ *
+ * "Fill 12 fields" with a chance to look first beats filling and then reading -
+ * especially on an application, where the user is accountable for every word that
+ * goes to an employer under their name. This is also the honest answer to "what
+ * does this extension actually put in my forms": they can see it before it happens.
+ *
+ * Deliberately built from the same `classify` and `valueFor` the fill loop uses, so
+ * a preview cannot promise something the fill would not do. It reports the fields
+ * it would newly fill; ones already holding a value are left out, because the plan
+ * is about what changes.
+ */
+export async function planFill(
+  root: ParentNode = document,
+): Promise<{ label: string; value: string }[]> {
+  const profileReply = await sendToWorker({ type: 'get-profile' });
+  if (!profileReply.ok) throw new Error(profileReply.error);
+  const profile: AutofillProfile = profileReply.data;
+  const { preferences } = await getSettings();
+
+  const plan: { label: string; value: string }[] = [];
+  for (const el of collectFields(root)) {
+    if (hasValue(el)) continue;
+    if ((el as HTMLInputElement).type === 'password') continue;
+    const key = classify(el);
+    if (!key) continue;
+    const value = valueFor(key, profile, preferences);
+    if (!value) continue;
+    plan.push({ label: labelFor(el) || key, value: String(value) });
+  }
+  return plan;
+}
+
 export async function autofill(
   root: ParentNode = document,
   job?: { company?: string; title?: string },

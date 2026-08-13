@@ -127,5 +127,10 @@
   "optional_host_permissions": [
     "http://*/*",
     "https://*/*"
-  ]
+  ],
+  "commands": {
+    "autofill-current-form": {
+      "description": "Fill the application form on this page"
+    }
+  }
 }

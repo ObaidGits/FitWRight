@@ -17,6 +17,7 @@ import type { SiteAdapter } from '@/adapters/types';
 import { waitFor } from '@/lib/dom';
 import { collectFields } from '@/lib/fields';
 import { classifyEmpty, looksSignedOut } from '@/lib/login-wall';
+import { getSitePreference, isSiteEnabled } from '@/lib/site-prefs';
 import { fail, ok } from '@/lib/messages';
 import type { Reply, ToContent } from '@/lib/messages';
 import { getCachedMatch, getSettings, setCachedMatch } from '@/lib/storage';
@@ -24,6 +25,7 @@ import { sendToWorker } from '@/lib/messages';
 import type { CapturedJob, MatchResult, PageContext, PageKind } from '@/lib/types';
 import {
   autofill,
+  planFill,
   draftOpenQuestions,
   labelFor,
   listOpenQuestions,
@@ -47,6 +49,11 @@ let currentJob: CapturedJob | null = null;
 let teardownTracking: (() => void) | null = null;
 /** Session-scoped dismissal so the badge stays hidden until navigation. */
 let badgeDismissed = false;
+/**
+ * The last resume match computed for this page, so the popup can show the score
+ * without paying for a second one.
+ */
+let lastMatch: MatchResult | null = null;
 
 /**
  * Extract the page's job.
@@ -88,6 +95,7 @@ async function runMatch(job: CapturedJob): Promise<void> {
   const cacheKey = job.url;
   const cached = await getCachedMatch<MatchResult>(cacheKey);
   if (cached) {
+    lastMatch = cached;
     renderBadge(job, cached);
     return;
   }
@@ -106,6 +114,7 @@ async function runMatch(job: CapturedJob): Promise<void> {
     return;
   }
   await setCachedMatch(cacheKey, reply.data);
+  lastMatch = reply.data;
   renderBadge(job, reply.data);
 }
 
@@ -155,6 +164,11 @@ async function maybeAutoCapture(job: CapturedJob): Promise<void> {
 /** Classify the page and light up the relevant features. */
 async function initialise(): Promise<void> {
   const url = new URL(location.href);
+
+  // Honour a per-site "off" before doing anything else. Off has to mean off: no
+  // badge, no capture, no match request - not "quieter".
+  if (!(await isSiteEnabled(url.hostname))) return;
+
   adapter = resolveAdapter(url);
 
   try {
@@ -202,6 +216,9 @@ async function handleMessage(message: ToContent): Promise<Reply<unknown>> {
         adapter: adapter.id,
         job: currentJob ?? extractJob(),
         hasForm: Boolean(document.querySelector('input[type="file"], form')),
+        // Whatever we already scored for this page. Never triggers a fresh match:
+        // opening the popup should not spend an AI call.
+        match: lastMatch,
       };
       currentJob = context.job;
       return ok(context);
@@ -273,6 +290,13 @@ async function handleMessage(message: ToContent): Promise<Reply<unknown>> {
         questions: listOpenQuestions(root),
         unrecognised: report.unrecognised,
       });
+    }
+
+    case 'preview-fill': {
+      // Reads the page and writes nothing, so the user can see what autofill
+      // would put in an employer's form before it goes there.
+      const root = adapter.formRoot?.() ?? document;
+      return ok({ plan: await planFill(root) });
     }
 
     case 'scrape-list': {
@@ -357,6 +381,10 @@ async function reportAndOfferToLearn(root: ParentNode, report: AutofillReport): 
     const label = labelFor(el);
     if (label) unanswered.push({ label, element: el as HTMLElement });
   }
+
+  // "Not here" on this site: keep filling, stop drawing the box. Checked at draw
+  // time rather than at fill time so autofill itself is unaffected.
+  if ((await getSitePreference(location.hostname)).panelHidden) return;
 
   showFillPanel(
     { filled: report.filled, unanswered },
@@ -447,6 +475,12 @@ let stepObserver: MutationObserver | null = null;
 let stepDebounce: number | null = null;
 let filling = false;
 let lastFieldSignature = '';
+/**
+ * How many fields the previous pass filled, so a repeat pass can report the
+ * difference rather than the total. Reset when the step changes, because on a new
+ * step every filled field is genuinely new.
+ */
+let filledOnLastPass = 0;
 
 /** Identity of the currently visible fillable fields. */
 function fieldSignature(root: ParentNode): string {
@@ -474,8 +508,17 @@ async function fillCurrentStep(): Promise<void> {
     });
     lastFieldSignature = fieldSignature(root);
     void reportAndOfferToLearn(root, report);
-    if (report.filled > 0) {
-      toast(`${report.filled} field${report.filled === 1 ? '' : 's'} filled on this step`, 'ok');
+
+    // What changed on *this* pass. On a multi-step wizard the same panel reappears
+    // at every step, and a bare count leaves the user unable to tell a step that
+    // was filled from one that was already complete - so a repeat pass that
+    // changed nothing says exactly that rather than repeating a number.
+    const newlyFilled = report.filled - filledOnLastPass;
+    filledOnLastPass = report.filled;
+    if (newlyFilled > 0) {
+      toast(`${newlyFilled} field${newlyFilled === 1 ? '' : 's'} filled on this step`, 'ok');
+    } else if (report.filled > 0) {
+      toast('Nothing new to fill on this step', 'info');
     }
   } catch {
     /* a step that is not a form (review, confirmation) is not an error */
@@ -504,6 +547,8 @@ function startStepWatch(): void {
       const signature = fieldSignature(container as ParentNode);
       if (!signature || signature === lastFieldSignature) return;
       lastFieldSignature = signature;
+      // A new step: everything filled there is new, so the diff starts over.
+      filledOnLastPass = 0;
       void fillCurrentStep();
     }, 600) as unknown as number; // guard 2: collapse re-render bursts
   });

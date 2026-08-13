@@ -65,6 +65,7 @@ export type ToWorker =
       location?: string;
     }
   | { type: 'get-profile' }
+  | { type: 'get-queue' }
   | {
       type: 'get-resume-pdf';
       /**
@@ -83,7 +84,8 @@ export type ToContent =
   | { type: 'describe-page' }
   | { type: 'autofill' }
   | { type: 'capture-current' }
-  | { type: 'scrape-list' };
+  | { type: 'scrape-list' }
+  | { type: 'preview-fill' };
 
 export type AnyMessage = ToWorker | ToContent;
 
@@ -153,6 +155,8 @@ export interface ReplyMap {
   };
   'capture-current': CaptureResponse;
   'scrape-list': { found: number; saved: number; reason?: 'signed-out' | 'empty' };
+  'preview-fill': { plan: { label: string; value: string }[] };
+  'get-queue': { items: { company?: string; role?: string }[]; total: number };
 }
 
 export function ok<T>(data: T): Reply<T> {

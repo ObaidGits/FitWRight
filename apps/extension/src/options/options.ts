@@ -14,6 +14,7 @@ import {
   syncBridgeRegistration,
 } from '@/lib/bridge-registration';
 import { clearErrors, listErrors, listRuns, timeAgo } from '@/lib/diagnostics';
+import { clearSitePreference, listSitePreferences } from '@/lib/site-prefs';
 import { getSettings, saveSettings } from '@/lib/storage';
 import type { FormAnswers, ScrapeQuery } from '@/lib/types';
 
@@ -284,3 +285,37 @@ async function renderDiagnostics(): Promise<void> {
 }
 
 void renderDiagnostics();
+
+/** The per-site decisions, with a way to undo each one. */
+async function renderSites(): Promise<void> {
+  const box = document.getElementById('sites');
+  if (!box) return;
+
+  const sites = await listSitePreferences();
+  if (!sites.length) {
+    box.innerHTML = '<p class="hint">FitWright is on everywhere it supports.</p>';
+    return;
+  }
+
+  box.replaceChildren();
+  for (const { site, preference } of sites) {
+    const row = document.createElement('p');
+    row.className = 'hint';
+    const what = preference.disabled ? 'off entirely' : 'panel hidden';
+    row.textContent = `${site} - ${what} `;
+
+    const undo = document.createElement('button');
+    undo.type = 'button';
+    undo.textContent = 'Undo';
+    undo.addEventListener('click', () => {
+      void clearSitePreference(site).then(() => {
+        void renderSites();
+        setStatus(`FitWright is on again for ${site}. Reload that tab.`, 'ok');
+      });
+    });
+    row.appendChild(undo);
+    box.appendChild(row);
+  }
+}
+
+void renderSites();

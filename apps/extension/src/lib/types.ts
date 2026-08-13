@@ -235,4 +235,10 @@ export interface PageContext {
   job: CapturedJob | null;
   /** True when the page also has a fillable application form. */
   hasForm: boolean;
+  /**
+   * The cached resume match, when one has been computed for this page. Included so
+   * the popup can show the score even if the on-page badge was dismissed or
+   * switched off.
+   */
+  match?: MatchResult | null;
 }

@@ -92,6 +92,23 @@
       #status.ok { color: var(--ok); }
       #status.err { color: var(--err); }
       .muted { color: var(--muted); }
+      .score { margin: 2px 0 0; font-size: 12px; font-weight: 600; }
+      /* What autofill would write, before it writes it. */
+      .preview { margin-top: 8px; border-top: 1px solid var(--border); padding-top: 8px; }
+      .preview p { margin: 0 0 3px; font-size: 11px; line-height: 1.4; }
+      .preview .pl { display: inline-block; min-width: 96px; color: var(--muted); }
+      /* The next job to apply to - the popup's answer to "what now". */
+      .queue {
+        margin-top: 10px; border-top: 1px solid var(--border); padding-top: 8px; cursor: pointer;
+      }
+      .queue p { margin: 0; font-size: 11px; line-height: 1.5; }
+      .sitetoggle { margin-top: 10px; }
+      .linkish {
+        background: none; border: 0; padding: 0; font: inherit; font-size: 11px;
+        color: var(--muted); text-decoration: underline; cursor: pointer;
+      }
+      .linkish:hover { color: inherit; }
+      .linkish:disabled { opacity: .5; cursor: default; }
       /* What the extension did while nobody was watching. Quiet by design: it is
          reassurance and diagnostics, never the main event. */
       .diag { border-top: 1px solid var(--border); margin-top: 10px; padding-top: 8px; }

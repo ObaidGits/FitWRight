@@ -304,6 +304,19 @@ export function reportBoardHealth(
   });
 }
 
+/**
+ * The apply queue, so the popup can answer "what next" instead of only "what is
+ * this page". Read-only and cheap; the queue is a short ordered list.
+ */
+export function getApplyQueue(): Promise<{
+  items: { company?: string; role?: string }[];
+  total: number;
+}> {
+  return request<{ items: { company?: string; role?: string }[]; total: number }>(
+    '/applications/queue',
+  );
+}
+
 /** Reset cached auth state - called when the base URL changes. */
 export function resetAuthCache(): void {
   csrfToken = null;

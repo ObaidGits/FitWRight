@@ -6,6 +6,7 @@
  * worse than no button, because it teaches the user the extension is unreliable.
  */
 import { lastRunSummary, listErrors } from '@/lib/diagnostics';
+import { getSitePreference, setSitePreference } from '@/lib/site-prefs';
 import { sendToTab, sendToWorker } from '@/lib/messages';
 import type { PageContext } from '@/lib/types';
 
@@ -77,9 +78,18 @@ function button(label: string, primary: boolean, onClick: () => Promise<void>): 
 function render(tabId: number, context: PageContext, health: { hasResume: boolean } | null): void {
   const { job, kind } = context;
 
+  const score = context.match ? Math.round(context.match.match_score) : null;
+  // The score already exists on the page badge, but the badge can be dismissed or
+  // switched off - and the popup is where someone deciding whether to apply looks.
+  const scoreLine =
+    score === null
+      ? ''
+      : `<p class="score">${score}% match to your resume</p>`;
+
   jobBox.innerHTML = job
     ? `<h1>${escapeHtml(job.title)}</h1>
        <p>${escapeHtml([job.company, job.location].filter(Boolean).join(' \u00b7 ')) || 'Unknown company'}</p>
+       ${scoreLine}
        <span class="kind">${escapeHtml(context.adapter)}</span>`
     : `<p class="muted">No job detected on this page.</p>
        <span class="kind">${escapeHtml(context.adapter)}</span>`;
@@ -97,6 +107,25 @@ function render(tabId: number, context: PageContext, health: { hasResume: boolea
   }
 
   if (kind === 'application-form' || context.hasForm) {
+    actionsBox.appendChild(
+      button('Preview what will be filled', false, async () => {
+        // An application is sent in the user's name, so seeing the values before
+        // they land in an employer's form is the difference between a tool that
+        // helps and one that has to be trusted blindly.
+        const reply = await sendToTab(tabId, { type: 'preview-fill' });
+        if (!reply.ok) {
+          setStatus(reply.error, 'err');
+          return;
+        }
+        const { plan } = reply.data;
+        if (!plan.length) {
+          setStatus('Nothing to fill here - every field we recognise already has a value.', '');
+          return;
+        }
+        showPreview(plan);
+      }),
+    );
+
     actionsBox.appendChild(
       button('Autofill this form', !job, async () => {
         if (!health?.hasResume) {
@@ -179,7 +208,12 @@ async function main(): Promise<void> {
     return;
   }
   render(tab.id, reply.data, health);
-  await showDiagnostics();
+  const host = tab.url ? new URL(tab.url).hostname : '';
+  await Promise.all([
+    showQueue(),
+    showDiagnostics(),
+    host ? showSiteToggle(host) : Promise.resolve(),
+  ]);
 }
 
 /**
@@ -189,6 +223,92 @@ async function main(): Promise<void> {
  * tell a working schedule from one that stopped weeks ago. A recent failure is
  * shown ahead of the run summary, because it is the more actionable of the two.
  */
+/**
+ * List what autofill would put in the form.
+ *
+ * Values are shown truncated but not masked: the point is to let the user read
+ * what an employer is about to receive. Rendered into the popup rather than the
+ * page, so a form cannot restyle it.
+ */
+function showPreview(plan: { label: string; value: string }[]): void {
+  const box = document.createElement('div');
+  box.className = 'preview';
+  box.innerHTML = `
+    <p class="muted">${plan.length} field${plan.length === 1 ? '' : 's'} would be filled:</p>
+    ${plan
+      .slice(0, 12)
+      .map(
+        (row) =>
+          `<p><span class="pl">${escapeHtml(row.label)}</span>${escapeHtml(
+            row.value.length > 40 ? `${row.value.slice(0, 40)}\u2026` : row.value,
+          )}</p>`,
+      )
+      .join('')}
+    ${plan.length > 12 ? `<p class="muted">and ${plan.length - 12} more</p>` : ''}
+  `;
+  document.querySelector('.preview')?.remove();
+  actionsBox.after(box);
+}
+
+/**
+ * What to do after this page.
+ *
+ * The popup used to answer only "what is this page", which makes it a launcher.
+ * A queue of jobs waiting to be applied to is the actual next action, and it was
+ * invisible from here.
+ */
+/**
+ * Turn the extension off for the current site.
+ *
+ * Offered here rather than only in options, because "not on this site" is a
+ * decision made *while looking at* the site - the user is on an internal careers
+ * portal, or a page where the badge is in the way. Making them find a settings
+ * page to express it means they disable the whole extension instead.
+ */
+async function showSiteToggle(hostname: string): Promise<void> {
+  const pref = await getSitePreference(hostname);
+  const box = document.createElement('div');
+  box.className = 'sitetoggle';
+
+  const link = document.createElement('button');
+  link.className = 'linkish';
+  link.textContent = pref.disabled
+    ? `Turn FitWright back on for ${hostname}`
+    : `Turn off on ${hostname}`;
+  link.addEventListener('click', () => {
+    void setSitePreference(hostname, { disabled: !pref.disabled }).then(() => {
+      setStatus(
+        pref.disabled
+          ? 'Back on for this site. Reload the page.'
+          : 'Off for this site. Reload the page.',
+        'ok',
+      );
+      link.disabled = true;
+    });
+  });
+
+  box.appendChild(link);
+  document.body.appendChild(box);
+}
+
+async function showQueue(): Promise<void> {
+  const reply = await sendToWorker({ type: 'get-queue' });
+  if (!reply.ok || !reply.data.total) return;
+
+  const [next] = reply.data.items;
+  const box = document.createElement('div');
+  box.className = 'queue';
+  const label = [next?.role, next?.company].filter(Boolean).join(' \u00b7 ') || 'a saved job';
+  box.innerHTML = `
+    <p class="muted">Next in your queue (${reply.data.total} waiting)</p>
+    <p><strong>${escapeHtml(label)}</strong></p>
+  `;
+  box.addEventListener('click', () => {
+    void sendToWorker({ type: 'open-fitwright', path: '/applications?view=queue' });
+  });
+  document.body.appendChild(box);
+}
+
 async function showDiagnostics(): Promise<void> {
   const [summary, errors] = await Promise.all([lastRunSummary(), listErrors()]);
   const recent = errors[0];
