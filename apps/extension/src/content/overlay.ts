@@ -7,6 +7,7 @@
  * stacking routinely mangle injected UI. The shadow boundary makes our styles
  * unreachable from the page and vice versa.
  */
+import { t } from '@/lib/i18n';
 import { setSitePreference } from '@/lib/site-prefs';
 import type { MatchResult } from '@/lib/types';
 
@@ -140,7 +141,7 @@ export function showBadge(match: MatchResult, actions: BadgeActions): void {
   // the score is the content - so it is announced politely rather than silently
   // drawn. `complementary`, not `dialog`: nothing here demands a response.
   badge.setAttribute('role', 'complementary');
-  badge.setAttribute('aria-label', 'FitWright resume match');
+  badge.setAttribute('aria-label', t('badgeLabel'));
 
   const score = Math.round(match.match_score);
   const matched = match.matched.slice(0, 4);
@@ -150,11 +151,11 @@ export function showBadge(match: MatchResult, actions: BadgeActions): void {
   badge.innerHTML = `
     <div class="row">
       <span class="brand">FitWright</span>
-      <button class="close" aria-label="Hide the FitWright match badge" title="Hide">&times;</button>
+      <button class="close" aria-label="${t('badgeHide')}" title="${t('badgeHide')}">&times;</button>
     </div>
     ${
       match.degraded
-        ? '<div class="muted">Match unavailable - add a parsed resume in FitWright.</div>'
+        ? `<div class="muted">${t('badgeMatchUnavailable')}</div>`
         : `<div class="score" role="status" aria-live="polite" aria-label="${score} percent resume match">${score}%<small>resume match</small></div>
            <div class="pills">
              ${matched.map((k) => `<span class="pill hit">${escapeHtml(k)}</span>`).join('')}
@@ -235,22 +236,21 @@ export function showFillPanel(summary: FillSummary, actions: FillPanelActions): 
   // informative, and interrupting is not warranted.
   panel.setAttribute('role', 'dialog');
   panel.setAttribute('aria-modal', 'false');
-  panel.setAttribute('aria-label', 'FitWright autofill summary');
+  panel.setAttribute('aria-label', t('panelLabel'));
 
   const outstanding = summary.unanswered.length;
   panel.innerHTML = `
     <div class="row">
-      <span class="brand" data-drag="1" title="Drag to move">FitWright</span>
-      <button class="never" title="Do not show this panel on this site again">Not here</button>
-      <button class="close" aria-label="Hide the FitWright panel" title="Hide">&times;</button>
+      <span class="brand" data-drag="1" title="${t('panelDragTitle')}">FitWright</span>
+      <button class="never" title="${t('panelNotHereTitle')}">${t('panelNotHere')}</button>
+      <button class="close" aria-label="${t('panelHide')}" title="${t('panelHide')}">&times;</button>
     </div>
     <div role="status" aria-live="polite"><strong>${summary.filled}</strong> field${summary.filled === 1 ? '' : 's'} filled${
       outstanding ? ` &middot; <strong>${outstanding}</strong> need${outstanding === 1 ? 's' : ''} you` : ''
     }</div>
     ${
       outstanding
-        ? `<div class="muted" id="fw-panel-help">Click a question to jump to it. Answer them here, then save so the
-             next form fills itself.</div>
+        ? `<div class="muted" id="fw-panel-help">${t('panelJumpHelp')}</div>
            <div class="unanswered" role="group" aria-labelledby="fw-panel-help">${summary.unanswered
              .slice(0, 6)
              .map(
@@ -258,10 +258,10 @@ export function showFillPanel(summary: FillSummary, actions: FillPanelActions): 
                  `<button class="jump" data-index="${index}">${escapeHtml(item.label)}</button>`,
              )
              .join('')}</div>`
-        : '<div class="muted">Nothing left unanswered on this step.</div>'
+        : `<div class="muted">${t('panelNothingOutstanding')}</div>`
     }
-    <button class="save">Save my answers to FitWright</button>
-    <div class="promise">Nothing is submitted. Review, then press the employer's submit button.</div>
+    <button class="save">${t('panelSaveAnswers')}</button>
+    <div class="promise">${t('panelNeverSubmits')}</div>
   `;
 
   function dismiss(): void {

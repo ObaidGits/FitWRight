@@ -55,6 +55,9 @@ async function getCsrfToken(base: string): Promise<string> {
   if (csrfToken) return csrfToken;
   const response = await fetch(`${base}${API_PREFIX}/auth/csrf`, {
     credentials: 'include',
+      // Bounded like every other call: a hung handshake would block the first
+    // write of every session with no error to show for it.
+    signal: timeoutSignal(DEFAULT_TIMEOUT_MS),
   });
   if (!response.ok) throw new Error(`Could not obtain CSRF token (${response.status})`);
   const body = (await response.json()) as { csrfToken?: string };
@@ -68,6 +71,31 @@ interface RequestOptions {
   body?: unknown;
   /** Retry once after clearing the CSRF token. Internal. */
   retryOnCsrf?: boolean;
+  /** Override the default deadline for a call known to be slower. */
+  timeoutMs?: number;
+}
+
+/**
+ * How long any single API call may take.
+ *
+ * Generous enough for a cold local server and a large batch upload, short enough
+ * that a wedged request surfaces as an error the user can see rather than an
+ * operation that silently never finishes.
+ */
+const DEFAULT_TIMEOUT_MS = 20_000;
+
+/**
+ * An abort signal that fires after `ms`.
+ *
+ * `AbortSignal.timeout` exists in modern Chrome, which is all this extension
+ * targets - the manual fallback is there because a service worker restarting mid-
+ * call is not the moment to discover an API is missing.
+ */
+function timeoutSignal(ms: number): AbortSignal {
+  if (typeof AbortSignal.timeout === 'function') return AbortSignal.timeout(ms);
+  const controller = new AbortController();
+  setTimeout(() => controller.abort(), ms);
+  return controller.signal;
 }
 
 /**
@@ -91,8 +119,18 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
       headers,
       credentials: 'include',
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      // Every request is bounded. A hung fetch in a service worker never settles,
+      // so the operation waiting on it never finishes and never errors - it simply
+      // stops, with nothing in the diagnostics log to say why. That is the failure
+      // mode behind "background searching just stopped working".
+      signal: timeoutSignal(options.timeoutMs ?? DEFAULT_TIMEOUT_MS),
     });
-  } catch {
+  } catch (error) {
+    // An abort is a timeout, and saying so is more use than "cannot reach": one
+    // means the app is not running, the other that it is not answering.
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error(`FitWright did not respond within ${(options.timeoutMs ?? DEFAULT_TIMEOUT_MS) / 1000}s.`);
+    }
     // Network-level failure: FitWright not running, or the host permission for
     // this base URL was never granted.
     throw new Error(`Cannot reach FitWright at ${base}. Is it running?`);
@@ -273,6 +311,9 @@ export async function fetchResumePdf(job?: {
   const base = await baseUrl();
   const response = await fetch(`${base}${profile.resume_pdf_path}`, {
     credentials: 'include',
+      // A PDF render can be slower than a JSON call, so a longer deadline - but
+    // still a deadline, or attaching a resume can hang the whole fill.
+    signal: timeoutSignal(45_000),
   });
   if (!response.ok) return null;
 

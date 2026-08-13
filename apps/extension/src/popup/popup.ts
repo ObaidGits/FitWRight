@@ -26,6 +26,16 @@ function escapeHtml(value: string): string {
   return div.innerHTML;
 }
 
+/**
+ * The active tab, or null.
+ *
+ * Reads `tab.url` without the `tabs` permission, which Chrome describes to users
+ * as "read your browsing history" - a heavy thing to ask for a popup. Every API
+ * used here works without it: `create`, `remove` and `sendMessage` never required
+ * it, and `url` is populated for tabs the extension already has host permission
+ * for. On any other site the popup shows "FitWright does not run here" and never
+ * needs the URL.
+ */
 async function activeTab(): Promise<chrome.tabs.Tab | null> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   return tab ?? null;

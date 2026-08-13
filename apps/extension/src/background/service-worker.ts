@@ -17,10 +17,17 @@ import { SCRAPEABLE_BOARDS, searchUrlFor } from '@/adapters/registry';
 import * as api from '@/lib/api';
 import { fail, ok, sendToTab } from '@/lib/messages';
 import type { PerSiteResult, Reply, ReplyMap, ToWorker } from '@/lib/messages';
+import type { ExtensionSettings } from '@/lib/types';
 import { syncBridgeRegistration } from '@/lib/bridge-registration';
 import { recordError, recordRun as recordRunHistory } from '@/lib/diagnostics';
 import { jitteredGap, recordRun, remainingToday } from '@/lib/pacing';
-import { getSettings, normalizeBaseUrl, rememberCaptured, wasCaptured } from '@/lib/storage';
+import {
+  getSettings,
+  normalizeBaseUrl,
+  rememberCaptured,
+  sweepMatchCache,
+  wasCaptured,
+} from '@/lib/storage';
 
 const SCRAPE_ALARM = 'fitwright-scrape';
 
@@ -339,6 +346,26 @@ async function runScheduledScrape(): Promise<void> {
   const settings = await getSettings();
   if (!settings.backgroundScrape) return;
 
+  // Keep the worker alive for the length of the run.
+  //
+  // An eight-board harvest spans minutes, and an MV3 service worker is terminated
+  // when Chrome judges it idle. Pending tab operations usually hold it open, but
+  // "usually" means a run can be killed halfway with no record that it started -
+  // which is indistinguishable from scheduled searching having quietly stopped.
+  // A periodic no-op API call is the documented way to stay resident, and it costs
+  // one cheap request every twenty seconds for the duration.
+  const keepAlive = setInterval(() => {
+    void chrome.runtime.getPlatformInfo().catch(() => undefined);
+  }, 20_000);
+
+  try {
+    await runScheduledScrapeInner(settings);
+  } finally {
+    clearInterval(keepAlive);
+  }
+}
+
+async function runScheduledScrapeInner(settings: ExtensionSettings): Promise<void> {
   // Confirm the API is reachable before opening tabs - otherwise we would scrape
   // and then throw the results away.
   try {
@@ -471,6 +498,9 @@ chrome.runtime.onInstalled.addListener((details) => {
 
 chrome.runtime.onStartup.addListener(() => {
   void syncAlarm();
+  // Clear expired cached match scores. Startup is the natural moment: it happens
+  // regularly, costs nothing, and nobody is waiting on it.
+  void sweepMatchCache();
   // Dynamic registrations survive restarts, but the configured URL may have been
   // changed on another machine via synced settings - so re-assert it.
   void reassertBridge();

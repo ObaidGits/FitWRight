@@ -1,12 +1,11 @@
 {
   "manifest_version": 3,
-  "name": "FitWright Companion",
+  "name": "__MSG_extensionName__",
   "version": "0.2.0",
-  "description": "Capture jobs, autofill applications, and see resume match scores while you browse - powered by your FitWright account.",
+  "description": "__MSG_extensionDescription__",
   "minimum_chrome_version": "110",
   "permissions": [
     "storage",
-    "tabs",
     "alarms",
     "notifications",
     "scripting"
@@ -51,7 +50,7 @@
     "service_worker": "service-worker.js"
   },
   "action": {
-    "default_title": "FitWright Companion",
+    "default_title": "__MSG_actionTitle__",
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon-16.png",
@@ -130,7 +129,8 @@
   ],
   "commands": {
     "autofill-current-form": {
-      "description": "Fill the application form on this page"
+      "description": "__MSG_commandAutofill__"
     }
-  }
+  },
+  "default_locale": "en"
 }

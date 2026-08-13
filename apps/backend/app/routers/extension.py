@@ -34,7 +34,7 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.auth import get_effective_user_id, require_verified_user_id
 from app.config import Settings, settings
@@ -96,20 +96,66 @@ router = APIRouter(
 # Wire models
 # --------------------------------------------------------------------------- #
 class CapturedJob(BaseModel):
-    """One job as the extension extracted it from a live page."""
+    """One job as the extension extracted it from a live page.
+
+    Every field is length-bounded to match its database column. Only ``title`` was
+    before, which meant an over-long company or URL was accepted here and then
+    handled differently by each database: SQLite ignores declared column widths and
+    stores whatever it is given, while Postgres raises and the request becomes a
+    500. A validation rule that only bites in production is the worst kind, so the
+    bounds live here where both backends see the same answer.
+
+    Values are truncated rather than rejected. A 300-character company name is a
+    page that rendered oddly, not an attack, and losing the whole job over it would
+    be a worse outcome than storing a clipped name.
+    """
 
     # A title is the one field that must be present: an empty title means DOM
     # extraction failed, and storing a blank row is worse than telling the
     # extension to fall back to its generic adapter.
     title: str = Field(min_length=1, max_length=500)
-    company: str = ""
-    location: str = ""
-    url: str
-    source: str = "extension"
-    description: str | None = None
-    salary: str | None = None
-    posted_at: str | None = None
+    company: str = Field(default="", max_length=255)
+    location: str = Field(default="", max_length=255)
+    url: str = Field(max_length=2048)
+    source: str = Field(default="extension", max_length=50)
+    # The only genuinely large field. Bounded well above any real posting (a long
+    # job description is ~10k characters) but far below "unbounded write path",
+    # which with 200 jobs per batch is what it was.
+    description: str | None = Field(default=None, max_length=60_000)
+    salary: str | None = Field(default=None, max_length=100)
+    posted_at: str | None = Field(default=None, max_length=64)
     is_remote: bool | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _truncate_to_column_widths(cls, data: Any) -> Any:
+        """Clip over-long text to each field's own limit instead of failing.
+
+        A 300-character company name is a page that rendered oddly, not an attack,
+        and losing the whole job over it is a worse outcome than storing a clipped
+        name. Limits are read from the field definitions, so adding a field cannot
+        forget to truncate it.
+
+        ``url`` and ``title`` are excluded: a truncated URL is a broken link and a
+        truncated title is a mislabelled job, both worse than a rejected capture.
+        """
+        if not isinstance(data, dict):
+            return data
+
+        never_truncate = {"url", "title"}
+        for name, field in cls.model_fields.items():
+            if name in never_truncate:
+                continue
+            value = data.get(name)
+            if not isinstance(value, str):
+                continue
+            limit = next(
+                (m.max_length for m in field.metadata if getattr(m, "max_length", None)),
+                None,
+            )
+            if limit and len(value) > limit:
+                data[name] = value[:limit]
+        return data
 
     @field_validator("title", "company", "location", "source", mode="before")
     @classmethod

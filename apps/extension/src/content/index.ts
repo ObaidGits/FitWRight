@@ -16,6 +16,7 @@ import { genericAdapter, resolveAdapter } from '@/adapters/registry';
 import type { SiteAdapter } from '@/adapters/types';
 import { waitFor } from '@/lib/dom';
 import { collectFields } from '@/lib/fields';
+import { t } from '@/lib/i18n';
 import { classifyEmpty, looksSignedOut } from '@/lib/login-wall';
 import { getSitePreference, isSiteEnabled } from '@/lib/site-prefs';
 import { fail, ok } from '@/lib/messages';
@@ -126,7 +127,7 @@ function renderBadge(job: CapturedJob, match: MatchResult): void {
     onSave: async () => {
       const reply = await sendToWorker({ type: 'capture', job });
       if (!reply.ok) toast(reply.error, 'err');
-      else toast(reply.data.duplicate ? 'Already saved' : 'Saved to FitWright', 'ok');
+      else toast(reply.data.duplicate ? t('toastAlreadySaved') : t('toastSaved'), 'ok');
     },
     onTailor: async () => {
       // Capture first so the job exists in the feed the Builder reads from.
@@ -149,7 +150,7 @@ async function startTracking(): Promise<void> {
   teardownTracking = watchForSubmission({
     onSubmitted: async () => {
       const reply = await sendToWorker({ type: 'applied', url: location.href });
-      if (reply.ok && reply.data.updated) toast('Marked as applied in FitWright', 'ok');
+      if (reply.ok && reply.data.updated) toast(t('toastMarkedApplied'), 'ok');
     },
   });
 }
@@ -240,7 +241,7 @@ async function handleMessage(message: ToContent): Promise<Reply<unknown>> {
       // there is technically true and completely useless, so name the cause and
       // stop rather than reporting a failure the user cannot act on.
       if (looksSignedOut()) {
-        toast(`Sign in to ${adapter.label}, then run this again`, 'err');
+        toast(t('toastSignInFirst', [adapter.label]), 'err');
         return ok({ filled: 0, skipped: 0, questions: [], reason: 'signed-out' });
       }
 
@@ -255,7 +256,11 @@ async function handleMessage(message: ToContent): Promise<Reply<unknown>> {
         // Say which resume, not just that one was attached. "Tailored resume
         // attached" is the promise being kept; the master resume is the
         // fallback, and conflating them hides a real difference.
-        parts.push(report.resumeTailored ? 'tailored resume attached' : 'master resume attached');
+        parts.push(
+          report.resumeTailored
+            ? t('toastTailoredResumeAttached')
+            : t('toastMasterResumeAttached'),
+        );
       }
       if (report.unrecognised) {
         // Not a silent zero: this form's fields exist and we could not read them.
@@ -518,7 +523,7 @@ async function fillCurrentStep(): Promise<void> {
     if (newlyFilled > 0) {
       toast(`${newlyFilled} field${newlyFilled === 1 ? '' : 's'} filled on this step`, 'ok');
     } else if (report.filled > 0) {
-      toast('Nothing new to fill on this step', 'info');
+      toast(t('toastNothingNewOnStep'), 'info');
     }
   } catch {
     /* a step that is not a form (review, confirmation) is not an error */

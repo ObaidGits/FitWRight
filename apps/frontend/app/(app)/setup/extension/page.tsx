@@ -231,6 +231,74 @@ export default function ExtensionSetupPage() {
           press Reload on the FitWright card, or new features stay inactive on pages already open.
         </p>
       </Card>
+
+      <ForgetExtensionData />
     </div>
+  );
+}
+
+/**
+ * Delete what the extension contributed.
+ *
+ * Uninstalling an extension removes the extension; everything it sent stays on the
+ * server. "I changed my mind about this feature" deserved a better answer than
+ * editing a database, and a feature that collects data should be able to give it
+ * back.
+ *
+ * Two-step, because it cannot be undone - but the confirmation names what will go
+ * rather than asking "are you sure", which is a question nobody reads.
+ */
+function ForgetExtensionData() {
+  const [confirming, setConfirming] = React.useState(false);
+  const [result, setResult] = React.useState<string | null>(null);
+  const [working, setWorking] = React.useState(false);
+
+  async function forget() {
+    setWorking(true);
+    try {
+      const res = await apiFetch('/discovery/data', { method: 'DELETE' });
+      if (!res.ok) throw new Error(`Failed: ${res.status}`);
+      const data = (await res.json()) as {
+        captured_jobs: number;
+        learned_answers: number;
+        board_health: number;
+      };
+      setResult(
+        `Removed ${data.captured_jobs} captured job${data.captured_jobs === 1 ? '' : 's'}, ` +
+          `${data.learned_answers} learned answer${data.learned_answers === 1 ? '' : 's'} and ` +
+          `${data.board_health} board record${data.board_health === 1 ? '' : 's'}.`,
+      );
+    } catch (err) {
+      setResult(err instanceof Error ? err.message : 'Could not delete it.');
+    } finally {
+      setWorking(false);
+      setConfirming(false);
+    }
+  }
+
+  return (
+    <Card className="space-y-2 p-5">
+      <h2 className="text-sm font-semibold">Remove what the extension collected</h2>
+      <p className="text-sm text-[var(--muted-foreground)]">
+        Deletes jobs the extension captured that you never acted on, the questions it learned from
+        forms, and its record of which boards work. Your applications, resumes and profile are your
+        own work and are left alone.
+      </p>
+      {result && <p className="text-sm text-[var(--at-success)]">{result}</p>}
+      {confirming ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" variant="outline" onClick={() => void forget()} disabled={working}>
+            {working ? 'Removing…' : 'Yes, remove it'}
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setConfirming(false)}>
+            Keep it
+          </Button>
+        </div>
+      ) : (
+        <Button size="sm" variant="outline" onClick={() => setConfirming(true)}>
+          Remove extension data
+        </Button>
+      )}
+    </Card>
   );
 }

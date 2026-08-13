@@ -1,0 +1,113 @@
+{
+  "extensionName": {
+    "message": "FitWright Companion",
+    "description": "Extension name shown in the browser."
+  },
+  "extensionDescription": {
+    "message": "Capture jobs, autofill applications, and score matches from your own browser.",
+    "description": "Store listing and extensions page description."
+  },
+  "actionTitle": {
+    "message": "FitWright Companion",
+    "description": "Tooltip on the toolbar icon."
+  },
+  "commandAutofill": {
+    "message": "Fill the application form on this page",
+    "description": "Label for the keyboard shortcut in chrome://extensions/shortcuts."
+  },
+
+  "panelLabel": {
+    "message": "FitWright autofill summary",
+    "description": "Accessible name of the panel shown after filling a form."
+  },
+  "panelHide": {
+    "message": "Hide the FitWright panel",
+    "description": "Accessible name of the panel's close button."
+  },
+  "panelNotHere": {
+    "message": "Not here",
+    "description": "Stops the panel appearing on this site again."
+  },
+  "panelNotHereTitle": {
+    "message": "Do not show this panel on this site again",
+    "description": "Tooltip for the 'Not here' button."
+  },
+  "panelDragTitle": {
+    "message": "Drag to move",
+    "description": "Tooltip on the panel's drag handle."
+  },
+  "panelFieldsFilled": {
+    "message": "$COUNT$ fields filled",
+    "description": "Summary of how many fields were filled.",
+    "placeholders": { "count": { "content": "$1", "example": "12" } }
+  },
+  "panelNeedsYou": {
+    "message": "$COUNT$ need you",
+    "description": "How many questions are still unanswered.",
+    "placeholders": { "count": { "content": "$1", "example": "3" } }
+  },
+  "panelJumpHelp": {
+    "message": "Click a question to jump to it. Answer them here, then save so the next form fills itself.",
+    "description": "Explains the list of unanswered questions."
+  },
+  "panelNothingOutstanding": {
+    "message": "Nothing left unanswered on this step.",
+    "description": "Shown when every question on the step is answered."
+  },
+  "panelSaveAnswers": {
+    "message": "Save my answers to FitWright",
+    "description": "Button that stores the answers typed on this form."
+  },
+  "panelNeverSubmits": {
+    "message": "Nothing is submitted. Review, then press the employer's submit button.",
+    "description": "The core promise, restated where the user is about to act."
+  },
+
+  "badgeLabel": {
+    "message": "FitWright resume match",
+    "description": "Accessible name of the floating match badge."
+  },
+  "badgeHide": {
+    "message": "Hide the FitWright match badge",
+    "description": "Accessible name of the badge's close button."
+  },
+  "badgeScoreLabel": {
+    "message": "$PERCENT$ percent resume match",
+    "description": "Spoken form of the match score.",
+    "placeholders": { "percent": { "content": "$1", "example": "82" } }
+  },
+  "badgeMatchUnavailable": {
+    "message": "Match unavailable - add a parsed resume in FitWright.",
+    "description": "Shown when no resume is available to score against."
+  },
+
+  "toastSignInFirst": {
+    "message": "Sign in to $SITE$, then run this again",
+    "description": "Shown when the job site session has lapsed.",
+    "placeholders": { "site": { "content": "$1", "example": "Naukri" } }
+  },
+  "toastSaved": {
+    "message": "Saved to FitWright",
+    "description": "Confirmation that a job was captured."
+  },
+  "toastAlreadySaved": {
+    "message": "Already saved",
+    "description": "Shown when the job was already in the feed."
+  },
+  "toastTailoredResumeAttached": {
+    "message": "tailored resume attached",
+    "description": "Appended when the resume tailored for this role was used."
+  },
+  "toastMasterResumeAttached": {
+    "message": "master resume attached",
+    "description": "Appended when the generic resume was used instead."
+  },
+  "toastMarkedApplied": {
+    "message": "Marked as applied in FitWright",
+    "description": "Confirmation after a submitted application was recorded."
+  },
+  "toastNothingNewOnStep": {
+    "message": "Nothing new to fill on this step",
+    "description": "Shown when a repeat pass changed nothing."
+  }
+}

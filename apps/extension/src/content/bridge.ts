@@ -17,10 +17,15 @@
  *    anything running in the page and must not be treated as trusted input.
  *
  * Note for reviewers: any script executing on the FitWright page - including one
- * injected by an XSS there - can ask for a scrape. That is bounded to "open
- * public job-board pages in background tabs and add the results to the signed-in
- * user's own feed", which is what the user is asking for anyway; no credential
- * or data flows outward.
+ * injected by an XSS there, or arriving through a compromised npm dependency of the
+ * web app - can ask for a scrape. That is bounded to "open public job-board pages in
+ * background tabs and add the results to the signed-in user's own feed", which is
+ * what the user is asking for anyway; no credential or data flows outward.
+ *
+ * The bound is enforced, not merely asserted: `lib/pacing.ts` caps each board to a
+ * fixed number of runs per day and cannot be switched off, so a hostile script on
+ * that origin cannot turn this into a scraper for someone else's benefit either.
+ * It would get the same handful of searches the user themselves would.
  */
 import { EXTENSION_ONLY_BOARDS, SCRAPEABLE_BOARDS } from '@/adapters/registry';
 import { sendToWorker } from '@/lib/messages';

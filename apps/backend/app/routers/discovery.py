@@ -1097,6 +1097,76 @@ async def score_feed(
     return {"scored": scored, "remaining": remaining, "resume_id": resume["resume_id"]}
 
 
+class ForgetResult(BaseModel):
+    """What was removed, so the user sees the size of what they just deleted."""
+
+    captured_jobs: int = 0
+    learned_answers: int = 0
+    board_health: int = 0
+
+
+@router.delete(
+    "/data",
+    response_model=ForgetResult,
+    summary="Delete everything the extension contributed",
+)
+async def forget_extension_data(
+    user_id: str = Depends(require_verified_user_id),
+    db: Database = Depends(get_db),
+) -> ForgetResult:
+    """Remove the data the browser extension put here.
+
+    Uninstalling an extension removes the extension. Everything it sent - captured
+    jobs, the questions it learned from forms, per-board health - stays on the
+    server, and until now there was no way to ask for it back. "I changed my mind
+    about this feature" deserves an answer better than editing a database.
+
+    Deliberately narrow. It removes what the *extension* contributed and nothing
+    else: applications, resumes and the Profile are the user's own work, created
+    through the app, and are not this endpoint's business.
+
+    The line between "extension exhaust" and "the user's work" is whether they acted
+    on it, not what created it. A feed row they marked interested is a decision; a
+    question they answered is an answer. Both survive, even though the extension put
+    them there. Only untouched captures and still-unanswered questions go.
+    """
+    from sqlalchemy import delete as sa_delete
+
+    from app.models import ApplicationField, BoardHealth, DiscoveryResult
+
+    async with db._session() as session:  # noqa: SLF001
+        async with session.begin():
+            jobs = await session.execute(
+                sa_delete(DiscoveryResult).where(
+                    (DiscoveryResult.user_id == user_id)
+                    & (DiscoveryResult.source == "extension")
+                    # Untouched rows only: anything the user decided about stays.
+                    & (DiscoveryResult.status.in_(["new", "dismissed"]))
+                )
+            )
+            answers = await session.execute(
+                sa_delete(ApplicationField).where(
+                    (ApplicationField.user_id == user_id)
+                    # Unanswered questions only. `source` is set when the row is
+                    # created and never changes, so filtering on it would delete
+                    # answers the user typed themselves - the row was still born
+                    # from a form report. An answered question is the user's work
+                    # whatever created the row, exactly as an "interested" feed row
+                    # is a decision whatever harvested it.
+                    & (ApplicationField.status == "needs_answer")
+                )
+            )
+            boards = await session.execute(
+                sa_delete(BoardHealth).where(BoardHealth.user_id == user_id)
+            )
+
+    return ForgetResult(
+        captured_jobs=jobs.rowcount or 0,
+        learned_answers=answers.rowcount or 0,
+        board_health=boards.rowcount or 0,
+    )
+
+
 @router.get("/board-health", summary="Which boards are actually working")
 async def get_board_health(
     user_id: str = Depends(get_effective_user_id),

@@ -43,6 +43,34 @@ def get_db() -> Database:
     return db
 
 
+def sanitize_url(value: str | None) -> str | None:
+    """Strip the query string and fragment from a stored URL.
+
+    Application links carry things this system has no business keeping: session
+    tokens, applicant ids, referral codes, sometimes an email address. The path is
+    enough to recognise which form a question came from, and nothing downstream
+    ever navigates to what is stored here.
+
+    Deliberately not a parameter allowlist. Deciding which of an unknown ATS's
+    parameters are safe is a judgement that would be wrong eventually, and the
+    downside of being wrong is storing a credential.
+    """
+    if not value:
+        return value
+    try:
+        from urllib.parse import urlsplit, urlunsplit
+
+        parts = urlsplit(value.strip())
+        if not parts.scheme and not parts.netloc:
+            # Not a URL we can reason about - keep only the leading path-ish part
+            # rather than storing an arbitrary string with a query in it.
+            return value.split("?", 1)[0][:2048]
+        return urlunsplit((parts.scheme, parts.netloc, parts.path, "", ""))[:2048]
+    except Exception:  # noqa: BLE001
+        # A URL we cannot parse is not worth failing a form report over.
+        return value.split("?", 1)[0][:2048]
+
+
 # Questions whose wrong answer silently rejects the application. They may only be
 # answered from a stored fact - never inferred, never AI-drafted.
 KNOCKOUT_KEYS = frozenset(
@@ -113,9 +141,24 @@ class FormReport(BaseModel):
     """A form the extension just filled, described by its labels alone."""
 
     fields: list[ReportedField] = Field(default_factory=list, max_length=300)
-    company: str | None = None
-    ats: str | None = None
-    url: str | None = None
+    company: str | None = Field(default=None, max_length=255)
+    ats: str | None = Field(default=None, max_length=50)
+    url: str | None = Field(default=None, max_length=2048)
+
+    @field_validator("url")
+    @classmethod
+    def _strip_query(cls, value: str | None) -> str | None:
+        """Keep the path, drop the query string and fragment.
+
+        This endpoint's whole promise is "labels and types only, never values" -
+        and application URLs routinely carry a session token, an applicant id, or
+        an email address in a parameter. Storing the raw URL would quietly break
+        that promise with the most sensitive part of the request.
+
+        The path alone is all this field is for: recognising which form a question
+        came from. Nothing downstream navigates to it.
+        """
+        return sanitize_url(value)
 
     @field_validator("fields", mode="before")
     @classmethod
@@ -327,9 +370,15 @@ class SaveAnswers(BaseModel):
     """Answers the user explicitly asked to remember."""
 
     answers: list[SubmittedAnswer] = Field(default_factory=list, max_length=100)
-    company: str | None = None
-    ats: str | None = None
-    url: str | None = None
+    company: str | None = Field(default=None, max_length=255)
+    ats: str | None = Field(default=None, max_length=50)
+    url: str | None = Field(default=None, max_length=2048)
+
+    @field_validator("url")
+    @classmethod
+    def _strip_query(cls, value: str | None) -> str | None:
+        """Same rule as the form report: the path is enough, tokens are not ours."""
+        return sanitize_url(value)
 
 
 class SaveAnswersResult(BaseModel):
