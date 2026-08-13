@@ -69,6 +69,13 @@ const PLATFORMS: { id: string; label: string; lane: 'server' | 'extension' }[] =
   { id: 'instahyre', label: 'Instahyre', lane: 'extension' },
 ];
 
+/** Feed recency windows, in hours, with the wording the summary row uses. */
+const RECENCY_LABELS: Record<number, string> = {
+  24: 'last 24 hours',
+  72: 'last 3 days',
+  168: 'last week',
+};
+
 const EXTENSION_LANE = new Set(
   PLATFORMS.filter((p) => p.lane === 'extension').map((p) => p.id),
 );
@@ -106,6 +113,11 @@ export default function DiscoveryPage() {
   const [appliedQuery, setAppliedQuery] = useState('');
   const [appliedLocation, setAppliedLocation] = useState('');
   const [appliedRemote, setAppliedRemote] = useState(false);
+  // Feed-only filters: they narrow what you already have rather than changing
+  // what gets searched, so they apply immediately instead of waiting for
+  // "Filter feed". 0 means "no floor" / "any age".
+  const [minScore, setMinScore] = useState(0);
+  const [postedWithinHours, setPostedWithinHours] = useState(0);
 
   const feed = useDiscoveryFeed({
     status: statusFilter,
@@ -113,6 +125,8 @@ export default function DiscoveryPage() {
     q: appliedQuery,
     location: appliedLocation,
     isRemote: appliedRemote,
+    minScore: minScore || undefined,
+    postedWithinHours: postedWithinHours || undefined,
     limit: feedLimit,
   });
 
@@ -140,6 +154,8 @@ export default function DiscoveryPage() {
   // set, so counts and pagination agree with what is on screen.
   const feedResults = feed.data?.results ?? [];
   const feedTotal = feed.data?.total ?? 0;
+  // Jobs carrying a real match score. Gates the match filter: see the control.
+  const scoredCount = feed.data?.scored ?? 0;
   const hasFeed = feedTotal > 0;
 
   /** Filters currently narrowing the list, for the summary row. */
@@ -150,6 +166,8 @@ export default function DiscoveryPage() {
     appliedQuery ? `"${appliedQuery}"` : null,
     appliedLocation || null,
     appliedRemote ? 'remote only' : null,
+    minScore ? `${minScore}%+ match` : null,
+    postedWithinHours ? RECENCY_LABELS[postedWithinHours] : null,
   ].filter(Boolean) as string[];
 
   /** Snapshot the text/location/remote inputs into the list filters. */
@@ -164,6 +182,8 @@ export default function DiscoveryPage() {
     setAppliedQuery('');
     setAppliedLocation('');
     setAppliedRemote(false);
+    setMinScore(0);
+    setPostedWithinHours(0);
     setSelectedPlatforms(PLATFORMS.map((p) => p.id));
     setFeedLimit(20);
   }
@@ -525,8 +545,14 @@ export default function DiscoveryPage() {
                           Extension required.
                         </strong>{' '}
                         Hirist, Foundit, YC and Instahyre block server-side scraping, so they are
-                        searched from your own browser. Install the FitWright Companion extension
-                        (see <code>apps/extension/README.md</code>), then reload this page.
+                        searched from your own browser.{' '}
+                        <Link
+                          href="/setup/extension"
+                          className="font-medium text-[var(--primary)] hover:underline"
+                        >
+                          Set up the extension
+                        </Link>{' '}
+                        — it takes a minute, and this page notices on its own when it is ready.
                       </span>
                     )}
                   </p>
@@ -583,25 +609,72 @@ export default function DiscoveryPage() {
               rows exist: hiding them on an empty result stranded the user on a
               tab they could no longer leave. */}
           {!isSearching && (hasFeed || activeFilters.length > 0 || statusFilter) && (
-            <div className="flex gap-4 border-b border-[var(--border)]">
-              {[
-                { label: 'All', value: undefined },
-                { label: 'New', value: 'new' },
-                { label: 'Saved', value: 'interested' },
-                { label: 'Applied', value: 'applied' },
-              ].map((tab) => (
-                <button
-                  key={tab.label}
-                  onClick={() => setStatusFilter(tab.value)}
-                  className={`pb-2 text-xs font-medium transition-colors ${
-                    statusFilter === tab.value
-                      ? 'border-b-2 border-[var(--primary)] text-[var(--foreground)]'
-                      : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
+            <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2 border-b border-[var(--border)]">
+              <div className="flex gap-4">
+                {[
+                  { label: 'All', value: undefined },
+                  { label: 'New', value: 'new' },
+                  { label: 'Saved', value: 'interested' },
+                  { label: 'Applied', value: 'applied' },
+                ].map((tab) => (
+                  <button
+                    key={tab.label}
+                    onClick={() => setStatusFilter(tab.value)}
+                    className={`pb-2 text-xs font-medium transition-colors ${
+                      statusFilter === tab.value
+                        ? 'border-b-2 border-[var(--primary)] text-[var(--foreground)]'
+                        : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Filters on the feed you already have, deliberately next to the
+                  status tabs rather than in the search form above: those inputs
+                  decide what gets fetched, these decide what gets shown, and
+                  mixing the two is what made this page confusing. */}
+              <div className="flex flex-wrap items-center gap-3 pb-2">
+                {/* Only offered once something has actually been scored.
+                    Scores come from matching against a resume; a keyword harvest
+                    stores none, so on a fresh feed this control could only ever
+                    return an empty list. */}
+                {scoredCount > 0 && (
+                <label className="flex items-center gap-1.5 text-[11px] text-[var(--muted-foreground)]">
+                  Match
+                  <select
+                    value={minScore}
+                    onChange={(e) => {
+                      setMinScore(parseInt(e.target.value, 10));
+                      setFeedLimit(20);
+                    }}
+                    className="rounded-[var(--radius-at-sm)] border border-[var(--border)] bg-[var(--card)] px-1.5 py-0.5 text-[11px]"
+                  >
+                    <option value={0}>any</option>
+                    <option value={50}>50%+</option>
+                    <option value={70}>70%+</option>
+                    <option value={85}>85%+</option>
+                  </select>
+                </label>
+                )}
+                <label className="flex items-center gap-1.5 text-[11px] text-[var(--muted-foreground)]">
+                  Posted
+                  <select
+                    value={postedWithinHours}
+                    onChange={(e) => {
+                      setPostedWithinHours(parseInt(e.target.value, 10));
+                      setFeedLimit(20);
+                    }}
+                    className="rounded-[var(--radius-at-sm)] border border-[var(--border)] bg-[var(--card)] px-1.5 py-0.5 text-[11px]"
+                  >
+                    <option value={0}>any time</option>
+                    <option value={24}>last 24 hours</option>
+                    <option value={72}>last 3 days</option>
+                    <option value={168}>last week</option>
+                  </select>
+                </label>
+              </div>
             </div>
           )}
 

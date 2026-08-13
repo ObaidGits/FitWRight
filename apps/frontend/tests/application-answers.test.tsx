@@ -98,7 +98,7 @@ vi.mock('@/lib/api/application-fields', async (importOriginal) => {
 });
 
 async function renderSection() {
-  const { ApplicationAnswers } = await import('@/components/settings/application-answers');
+  const { ApplicationAnswers } = await import('@/components/answers/application-answers');
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>

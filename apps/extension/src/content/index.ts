@@ -16,6 +16,7 @@ import { genericAdapter, resolveAdapter } from '@/adapters/registry';
 import type { SiteAdapter } from '@/adapters/types';
 import { waitFor } from '@/lib/dom';
 import { collectFields } from '@/lib/fields';
+import { classifyEmpty, looksSignedOut } from '@/lib/login-wall';
 import { fail, ok } from '@/lib/messages';
 import type { Reply, ToContent } from '@/lib/messages';
 import { getCachedMatch, getSettings, setCachedMatch } from '@/lib/storage';
@@ -217,6 +218,15 @@ async function handleMessage(message: ToContent): Promise<Reply<unknown>> {
 
     case 'autofill': {
       const root = adapter.formRoot?.() ?? document;
+      // Sites that gate applying behind an account (Indeed, LinkedIn, Naukri)
+      // swap the form for a sign-in when the session lapses. Filling "0 fields"
+      // there is technically true and completely useless, so name the cause and
+      // stop rather than reporting a failure the user cannot act on.
+      if (looksSignedOut()) {
+        toast(`Sign in to ${adapter.label}, then run this again`, 'err');
+        return ok({ filled: 0, skipped: 0, questions: [], reason: 'signed-out' });
+      }
+
       const report = await autofill(root);
       const parts = [`${report.filled} field${report.filled === 1 ? '' : 's'} filled`];
       if (report.resumeAttached) parts.push('resume attached');
@@ -247,7 +257,9 @@ async function handleMessage(message: ToContent): Promise<Reply<unknown>> {
     case 'scrape-list': {
       if (!adapter.extractList) return fail(`${adapter.label} list scraping not supported`);
       const jobs = await harvestList();
-      if (!jobs.length) return ok({ found: 0, saved: 0 });
+      // An empty harvest is worth explaining. On these boards it is usually a
+      // login wall, and "0 found" alone reads as a broken extension.
+      if (!jobs.length) return ok({ found: 0, saved: 0, reason: classifyEmpty() });
       const reply = await sendToWorker({
         type: 'scrape-results',
         source: adapter.id,

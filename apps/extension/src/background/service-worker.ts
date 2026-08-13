@@ -16,7 +16,7 @@
 import { SCRAPEABLE_BOARDS, searchUrlFor } from '@/adapters/registry';
 import * as api from '@/lib/api';
 import { fail, ok, sendToTab } from '@/lib/messages';
-import type { Reply, ToWorker } from '@/lib/messages';
+import type { PerSiteResult, Reply, ReplyMap, ToWorker } from '@/lib/messages';
 import { getSettings, normalizeBaseUrl, rememberCaptured, wasCaptured } from '@/lib/storage';
 
 const SCRAPE_ALARM = 'fitwright-scrape';
@@ -205,8 +205,8 @@ chrome.alarms.onAlarm.addListener((alarm) => {
  */
 async function scrapeEntries(
   entries: { source: string; query: string; location?: string }[],
-): Promise<{ source: string; found: number; saved: number; error?: string }[]> {
-  const results: { source: string; found: number; saved: number; error?: string }[] = [];
+): Promise<PerSiteResult[]> {
+  const results: PerSiteResult[] = [];
 
   for (const entry of entries) {
     const url = searchUrlFor(entry.source, entry.query, entry.location ?? '');
@@ -240,9 +240,17 @@ async function scrapeEntries(
           source: entry.source,
           found: reply.data.found,
           saved: reply.data.saved,
-          // A load that rendered nothing is worth naming: on these boards it
-          // usually means signed out or a changed layout, not a quiet no-op.
-          error: reply.data.found === 0 ? 'No results found on the page' : undefined,
+          reason: reply.data.found === 0 ? (reply.data.reason ?? 'empty') : undefined,
+          // A load that rendered nothing needs a cause, not a shrug. The
+          // content script inspected the page and can tell a login wall from a
+          // search that genuinely matched nothing - and only one of those is
+          // something the user can fix.
+          error:
+            reply.data.found === 0
+              ? reply.data.reason === 'signed-out'
+                ? `Signed out of ${entry.source} - sign in to that site, then search again`
+                : 'No results on the page for this search'
+              : undefined,
         });
       } else {
         results.push({ source: entry.source, found: 0, saved: 0, error: reply.error });
@@ -280,8 +288,8 @@ async function scrapeEntries(
 async function scrapeTabWithRetry(
   tabId: number,
   attempts = 6,
-): Promise<Reply<{ found: number; saved: number }>> {
-  let last: Reply<{ found: number; saved: number }> = fail('Content script never responded');
+): Promise<Reply<ReplyMap['scrape-list']>> {
+  let last: Reply<ReplyMap['scrape-list']> = fail('Content script never responded');
 
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     last = await sendToTab(tabId, { type: 'scrape-list' });

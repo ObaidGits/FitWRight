@@ -171,6 +171,21 @@ async def check_duplicate(
     return {"duplicate": duplicate, "is_duplicate": duplicate is not None}
 
 
+@router.get("/outcomes", summary="Which resume actually gets replies")
+async def get_outcomes(user_id: str = Depends(get_effective_user_id)):
+    """Reply rate per resume, so the next application is an informed one.
+
+    A reply is any status past "sent and waiting" - response, interview or
+    accepted. ``no_response`` and ``rejected`` are outcomes, not silence, and
+    ``applied`` is still in flight.
+
+    Rates are withheld below ``MIN_SAMPLE`` applications and the raw counts are
+    shown instead. "100% reply rate" from one application is not a finding, and
+    dressing it up as one would push the user to bet on noise.
+    """
+    return await submissions.outcomes_by_resume(user_id)
+
+
 @router.post("/{application_id}/submission", summary="Record what was submitted")
 async def create_submission(
     application_id: str,

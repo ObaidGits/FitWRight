@@ -36,6 +36,7 @@ import ListIcon from 'lucide-react/dist/esm/icons/list';
 import ArrowRight from 'lucide-react/dist/esm/icons/arrow-right';
 import MoveHorizontal from 'lucide-react/dist/esm/icons/move-horizontal';
 import GripVertical from 'lucide-react/dist/esm/icons/grip-vertical';
+import ChartNoAxesColumn from 'lucide-react/dist/esm/icons/chart-no-axes-column';
 import CircleArrowRight from 'lucide-react/dist/esm/icons/circle-arrow-right';
 import Search from 'lucide-react/dist/esm/icons/search';
 import ChevronLeft from 'lucide-react/dist/esm/icons/chevron-left';
@@ -56,6 +57,8 @@ import {
 } from '@/components/atelier/dropdown-menu';
 import { useToast } from '@/components/atelier/toast';
 import { ApplyQueue } from '@/components/applications/apply-queue';
+import { useApplyQueue } from '@/features/applications/queue-hooks';
+import { Outcomes } from '@/components/applications/outcomes';
 import {
   APPLICATION_STATUS_ORDER,
   updateApplication,
@@ -254,15 +257,26 @@ export default function ApplicationsPage() {
   const { data, isLoading, isError, refetch } = useApplicationsBoard();
   const { toast } = useToast();
   const qc = useQueryClient();
-  const [view, setView] = React.useState<'board' | 'list' | 'queue'>('board');
-  // On phones the horizontal board is cramped, so default to the list view once
-  // after mount (post-hydration to avoid a mismatch; only if the user hasn't
-  // already chosen). Guarded so it's a no-op where matchMedia is unavailable.
+  const [view, setView] = React.useState<'board' | 'list' | 'queue' | 'outcomes'>('board');
+  // Deep link from Home's "Next up" card. Read once after mount rather than
+  // during render so the server and client agree on the first paint.
   const autoViewApplied = React.useRef(false);
   React.useEffect(() => {
     if (autoViewApplied.current) return;
     autoViewApplied.current = true;
     try {
+      const requested = new URLSearchParams(window.location.search).get('view');
+      if (
+        requested === 'queue' ||
+        requested === 'list' ||
+        requested === 'board' ||
+        requested === 'outcomes'
+      ) {
+        setView(requested);
+        return;
+      }
+      // On phones the horizontal board is cramped, so default to the list view
+      // once after mount, only if the user hasn't already chosen.
       if (
         typeof window !== 'undefined' &&
         typeof window.matchMedia === 'function' &&
@@ -271,9 +285,13 @@ export default function ApplicationsPage() {
         setView('list');
       }
     } catch {
-      /* matchMedia unavailable (e.g. tests) - keep the board default */
+      /* matchMedia or location unavailable (e.g. tests) - keep the board default */
     }
   }, []);
+  // Shown on the Queue toggle. The board stays the default view deliberately -
+  // silently redirecting someone who came to review their pipeline is worse than
+  // a count that tells them where the work is.
+  const queueCount = useApplyQueue().data?.total ?? 0;
   const [board, setBoard] = React.useState<ApplicationColumns>(emptyColumns);
   const [search, setSearch] = React.useState('');
   const [collapsed, setCollapsed] = React.useState<Set<ApplicationStatus>>(loadCollapsed);
@@ -393,6 +411,19 @@ export default function ApplicationsPage() {
                 className={`flex items-center gap-1.5 rounded-[var(--radius-at-md)] px-3 py-1.5 text-sm ${view === 'queue' ? 'bg-[var(--card)] shadow-[var(--shadow-at-e1)]' : 'text-[var(--muted-foreground)]'}`}
               >
                 <CircleArrowRight className="h-4 w-4" /> Queue
+                {queueCount > 0 && (
+                  <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--primary)] px-1 text-[10px] font-bold text-[var(--primary-foreground)]">
+                    {queueCount > 99 ? '99+' : queueCount}
+                    <span className="sr-only"> jobs waiting</span>
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setView('outcomes')}
+                aria-pressed={view === 'outcomes'}
+                className={`flex items-center gap-1.5 rounded-[var(--radius-at-md)] px-3 py-1.5 text-sm ${view === 'outcomes' ? 'bg-[var(--card)] shadow-[var(--shadow-at-e1)]' : 'text-[var(--muted-foreground)]'}`}
+              >
+                <ChartNoAxesColumn className="h-4 w-4" /> Outcomes
               </button>
             </div>
           </div>
@@ -416,6 +447,8 @@ export default function ApplicationsPage() {
             </Button>
           }
         />
+      ) : view === 'outcomes' ? (
+        <Outcomes />
       ) : view === 'queue' ? (
         <ApplyQueue />
       ) : view === 'board' ? (

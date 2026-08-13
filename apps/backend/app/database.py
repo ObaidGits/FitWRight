@@ -3173,14 +3173,20 @@ class Database:
         query: str | None,
         location: str | None,
         is_remote: bool | None,
+        min_score: float | None,
+        posted_within_hours: int | None,
     ) -> list[Any]:
         """Build the WHERE terms shared by the feed list and its count.
 
         Shared deliberately: when the list and the count filter differently the
         UI shows "3 of 228" and pagination walks off the end of the real result
         set, which is exactly the class of bug this replaces.
+
+        Every parameter is keyword-only with no default, so a new filter cannot
+        be wired into the list and forgotten in the count - the call simply
+        fails instead of quietly disagreeing.
         """
-        from sqlalchemy import func, or_
+        from sqlalchemy import and_, func, or_
 
         conditions: list[Any] = [DiscoveryResult.user_id == user_id]
         if status:
@@ -3189,6 +3195,29 @@ class Database:
             conditions.append(DiscoveryResult.source.in_(sources))
         if is_remote:
             conditions.append(DiscoveryResult.is_remote.is_(True))
+        if min_score is not None:
+            # Stored 0..1; the UI speaks percent and converts before calling.
+            conditions.append(DiscoveryResult.match_score >= min_score)
+        if posted_within_hours is not None and posted_within_hours > 0:
+            cutoff = (
+                datetime.now(timezone.utc) - timedelta(hours=posted_within_hours)
+            ).isoformat()
+            # posted_at is written by datetime.isoformat(), so a lexicographic
+            # compare is a chronological one.
+            #
+            # Boards that publish no date leave posted_at NULL. Dropping those
+            # rows would hide a job harvested twenty minutes ago from a "last
+            # 24 hours" filter, so fall back to when we discovered it - the
+            # nearest honest proxy we hold.
+            conditions.append(
+                or_(
+                    DiscoveryResult.posted_at >= cutoff,
+                    and_(
+                        DiscoveryResult.posted_at.is_(None),
+                        DiscoveryResult.created_at >= cutoff,
+                    ),
+                )
+            )
         if location:
             conditions.append(
                 func.lower(DiscoveryResult.location).contains(location.strip().lower())
@@ -3210,6 +3239,7 @@ class Database:
         self, user_id: str, *, status: str | None = None,
         sources: list[str] | None = None, query: str | None = None,
         location: str | None = None, is_remote: bool | None = None,
+        min_score: float | None = None, posted_within_hours: int | None = None,
         limit: int = 50, offset: int = 0,
     ) -> list[dict[str, Any]]:
         """Get paginated feed results for a user, newest first."""
@@ -3225,6 +3255,8 @@ class Database:
                         query=query,
                         location=location,
                         is_remote=is_remote,
+                        min_score=min_score,
+                        posted_within_hours=posted_within_hours,
                     )
                 )
             )
@@ -3236,6 +3268,7 @@ class Database:
         self, user_id: str, *, status: str | None = None,
         sources: list[str] | None = None, query: str | None = None,
         location: str | None = None, is_remote: bool | None = None,
+        min_score: float | None = None, posted_within_hours: int | None = None,
     ) -> int:
         """Count feed results for a user under the same filters as the list."""
         from sqlalchemy import select, func
@@ -3248,9 +3281,29 @@ class Database:
                     query=query,
                     location=location,
                     is_remote=is_remote,
+                    min_score=min_score,
+                    posted_within_hours=posted_within_hours,
                 )
             )
             result = await session.execute(stmt)
+            return result.scalar() or 0
+
+    async def count_scored_discovery_results(self, user_id: str) -> int:
+        """How many feed rows carry a real match score.
+
+        Scores exist only for jobs matched against a resume; a keyword harvest
+        stores 0.0. Without this count the UI would offer a "70%+ match" filter
+        that silently returns nothing on a feed where nothing has been scored -
+        a control that looks broken because it is being honest.
+        """
+        from sqlalchemy import func, select
+
+        async with self._session() as session:
+            result = await session.execute(
+                select(func.count(DiscoveryResult.id)).where(
+                    (DiscoveryResult.user_id == user_id) & (DiscoveryResult.match_score > 0)
+                )
+            )
             return result.scalar() or 0
 
     async def count_unseen_discovery_results(self, user_id: str) -> int:

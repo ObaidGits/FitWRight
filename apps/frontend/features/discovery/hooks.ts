@@ -144,6 +144,8 @@ export function useDiscoveryFeed(params?: FeedParams) {
       params?.q ?? '',
       params?.location ?? '',
       params?.isRemote ?? false,
+      params?.minScore ?? 0,
+      params?.postedWithinHours ?? 0,
       params?.limit,
       params?.offset,
     ],

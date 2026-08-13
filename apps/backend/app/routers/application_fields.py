@@ -186,6 +186,66 @@ class ReportResult(BaseModel):
     needs_answer: int
 
 
+class FieldSummary(BaseModel):
+    """Counts only - what a badge needs without fetching every answer."""
+
+    needs_answer: int
+    answered: int
+    total: int
+
+
+class MissingField(BaseModel):
+    """One question the Profile cannot answer yet."""
+
+    key: str
+    label: str
+    # essential | common | eligibility - drives how loudly the UI complains.
+    group: str
+
+
+class Readiness(BaseModel):
+    """How much of a typical application form the Profile can fill."""
+
+    covered: int
+    total: int
+    missing: list[MissingField]
+    has_resume: bool
+
+
+# The questions real application forms ask, in the order a person would fill
+# them. Keys are ``AutofillProfile`` fields, so this list cannot claim coverage
+# of something the extension does not actually send.
+#
+# Grouping is about consequence, not taste:
+#   essential   - almost every form asks; a gap here blocks a basic application
+#   common      - asked often; a gap costs typing
+#   eligibility - never inferred from a resume (see the module docstring), so a
+#                 gap is retyped on every single form until it is stored once
+READINESS_FIELDS: tuple[tuple[str, str, str], ...] = (
+    ("full_name", "Your name", "essential"),
+    ("email", "Email address", "essential"),
+    ("phone", "Phone number", "essential"),
+    ("city", "City", "essential"),
+    ("country", "Country", "essential"),
+    ("address_line1", "Street address", "common"),
+    ("state", "State or province", "common"),
+    ("postal_code", "Postal code", "common"),
+    ("linkedin", "LinkedIn profile", "common"),
+    ("current_title", "Current job title", "common"),
+    ("current_company", "Current employer", "common"),
+    ("years_experience", "Years of experience", "common"),
+    ("highest_degree", "Highest degree", "common"),
+    ("highest_institution", "School or university", "common"),
+    ("work_authorization", "Work authorization", "eligibility"),
+    ("visa_status", "Visa or sponsorship status", "eligibility"),
+    ("notice_period", "Notice period", "eligibility"),
+    ("salary_expectation", "Salary expectation", "eligibility"),
+    ("willing_to_relocate", "Willing to relocate", "eligibility"),
+    ("availability", "Earliest start date", "eligibility"),
+    ("remote_preference", "Remote preference", "eligibility"),
+)
+
+
 # --------------------------------------------------------------------------- #
 # Endpoints
 # --------------------------------------------------------------------------- #
@@ -329,6 +389,71 @@ async def save_answers(
         saved += 1
 
     return SaveAnswersResult(saved=saved)
+
+
+@router.get(
+    "/application-fields/summary",
+    response_model=FieldSummary,
+    summary="Counts for the answers badge",
+)
+async def field_summary(
+    user_id: str = Depends(get_effective_user_id),
+    db: Database = Depends(get_db),
+) -> FieldSummary:
+    """How many questions are waiting, without shipping every row.
+
+    The nav badge and the home card both need this number on every page load,
+    and neither needs the answers themselves.
+    """
+    rows = await db.list_application_fields(user_id, status=None)
+    needs = sum(1 for row in rows if row.get("status") == "needs_answer")
+    return FieldSummary(needs_answer=needs, answered=len(rows) - needs, total=len(rows))
+
+
+@router.get(
+    "/application-fields/readiness",
+    response_model=Readiness,
+    summary="How much of a form the Profile can answer",
+)
+async def autofill_readiness(
+    user_id: str = Depends(get_effective_user_id),
+    db: Database = Depends(get_db),
+) -> Readiness:
+    """Report which common application questions the Profile can answer.
+
+    Read from the same builder the extension fills forms from, so this cannot
+    drift into flattering the user about a field autofill would leave blank.
+
+    Eligibility gaps are called out separately because they behave differently:
+    they are never inferred, so an empty one is a question the user retypes on
+    every single form until they store it once.
+    """
+    from app.routers.extension import build_autofill_profile
+
+    profile = await build_autofill_profile(db, user_id)
+    values = profile.model_dump()
+
+    missing: list[MissingField] = []
+    covered = 0
+    for key, label, group in READINESS_FIELDS:
+        value = values.get(key)
+        # `willing_to_relocate` is a tri-state: False is a real answer the user
+        # gave, None means they never said. Everything else is a string.
+        if value is None or isinstance(value, bool):
+            filled = value is not None
+        else:
+            filled = bool(str(value).strip())
+        if filled:
+            covered += 1
+        else:
+            missing.append(MissingField(key=key, label=label, group=group))
+
+    return Readiness(
+        covered=covered,
+        total=len(READINESS_FIELDS),
+        missing=missing,
+        has_resume=bool(profile.resume_id),
+    )
 
 
 @router.get("/application-fields", response_model=list[FieldOut], summary="List answers")

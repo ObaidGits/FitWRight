@@ -51,6 +51,34 @@ export interface DuplicateCheck {
   } | null;
 }
 
+/** One resume's track record. `rate` is null until the sample is big enough. */
+export interface ResumeOutcome {
+  resume_id: string;
+  name: string;
+  /** Applications sent with this resume. */
+  sent: number;
+  /** Of those, how many the employer replied to. */
+  replied: number;
+  /** Applications that have reached a final state, reply or not. */
+  concluded: number;
+  /** Reply rate over concluded applications, or null when too few to mean anything. */
+  rate: number | null;
+}
+
+export interface Outcomes {
+  resumes: ResumeOutcome[];
+  /** How many applications a resume needs before a rate is shown. */
+  min_sample: number;
+  sent: number;
+  replied: number;
+}
+
+export async function getOutcomes(signal?: AbortSignal): Promise<Outcomes> {
+  const res = await apiFetch(`${PREFIX}/outcomes`, { method: 'GET', signal });
+  if (!res.ok) throw new Error(`Loading outcomes failed: ${res.status}`);
+  return res.json();
+}
+
 export async function getApplyQueue(signal?: AbortSignal): Promise<QueueResponse> {
   const res = await apiFetch(`${PREFIX}/queue`, { method: 'GET', signal });
   if (!res.ok) throw new Error(`Loading the queue failed: ${res.status}`);

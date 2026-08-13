@@ -32,22 +32,31 @@ function NavTab({ item, active }: { item: NavItem; active: boolean }) {
 export function BottomNav() {
   const pathname = usePathname();
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
-  // Home - Resumes - [Tailor FAB] - Applications - Agenda - every primary
-  // destination is reachable on mobile (Agenda was previously dropped).
-  const [home, resumes, applications, agenda] = [
-    PRIMARY_NAV[0],
-    PRIMARY_NAV[1],
-    PRIMARY_NAV[2],
-    PRIMARY_NAV[3],
-  ];
+
+  // Looked up by href, not by position. This list was indexed 0-3 with names
+  // that had drifted off by one: inserting Discover in the middle silently
+  // pushed Agenda off the bar while the code still called index 3 "agenda".
+  // Naming the four destinations explicitly means growing the sidebar can no
+  // longer change what a phone shows.
+  //
+  // Four tabs plus the centre action is what fits a phone. Agenda and Answers
+  // are deliberately not here - both have a card on Home, which is where a
+  // phone user lands anyway.
+  const byHref = new Map(PRIMARY_NAV.map((item) => [item.href, item]));
+  const tabs = ['/home', '/resumes', '/discovery', '/applications']
+    .map((href) => byHref.get(href))
+    .filter((item): item is NavItem => item !== undefined);
+  const left = tabs.slice(0, 2);
+  const right = tabs.slice(2);
 
   return (
     <nav
       className="fixed inset-x-0 bottom-0 z-40 flex items-center border-t border-[var(--border)] bg-[var(--card)] pb-[env(safe-area-inset-bottom)] md:hidden"
       aria-label="Primary"
     >
-      <NavTab item={home} active={isActive(home.href)} />
-      <NavTab item={resumes} active={isActive(resumes.href)} />
+      {left.map((item) => (
+        <NavTab key={item.href} item={item} active={isActive(item.href)} />
+      ))}
       <Link
         href={TAILOR_HREF}
         aria-label="Tailor to a job"
@@ -59,8 +68,9 @@ export function BottomNav() {
         </span>
         <span className="text-[11px] font-medium text-[var(--muted-foreground)]">Tailor</span>
       </Link>
-      <NavTab item={applications} active={isActive(applications.href)} />
-      <NavTab item={agenda} active={isActive(agenda.href)} />
+      {right.map((item) => (
+        <NavTab key={item.href} item={item} active={isActive(item.href)} />
+      ))}
     </nav>
   );
 }

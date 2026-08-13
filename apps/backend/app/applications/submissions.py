@@ -238,3 +238,92 @@ async def find_duplicate(
             "applied_at": row.applied_at,
         }
     return None
+
+
+# A reply rate needs enough applications behind it to mean anything. Below this
+# the raw counts are reported and `rate` stays None.
+MIN_SAMPLE = 3
+
+# Statuses that mean the employer came back. `applied` is still in flight and
+# `no_response` is a closed door, so neither counts as a reply.
+REPLIED_STATUSES = frozenset({"response", "interview", "accepted"})
+
+# Statuses that mean the application has run its course, reply or not. The
+# denominator, so an application sent yesterday does not drag the rate down.
+CONCLUDED_STATUSES = REPLIED_STATUSES | {"no_response", "rejected"}
+
+
+async def outcomes_by_resume(user_id: str) -> dict[str, Any]:
+    """Reply rate per resume used, plus the totals behind each one.
+
+    Grouped on ``resume_id`` - the resume actually sent - rather than on the
+    submission record, so applications tracked before submission recording
+    existed still count. Their answers are unknown; which resume went out is not.
+    """
+    from app.models import Resume
+
+    async with db._session() as session:  # noqa: SLF001
+        rows = (
+            (
+                await session.execute(
+                    select(Application).where(Application.user_id == user_id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+        groups: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            if row.status == "saved":
+                continue  # Never sent, so it has no outcome to report.
+            bucket = groups.setdefault(
+                row.resume_id,
+                {"resume_id": row.resume_id, "sent": 0, "replied": 0, "concluded": 0},
+            )
+            bucket["sent"] += 1
+            if row.status in REPLIED_STATUSES:
+                bucket["replied"] += 1
+            if row.status in CONCLUDED_STATUSES:
+                bucket["concluded"] += 1
+
+        if not groups:
+            return {"resumes": [], "min_sample": MIN_SAMPLE, "sent": 0, "replied": 0}
+
+        names = dict(
+            (
+                await session.execute(
+                    select(Resume.resume_id, Resume.filename).where(
+                        Resume.resume_id.in_(list(groups))
+                    )
+                )
+            ).all()
+        )
+
+    items = []
+    for group in groups.values():
+        concluded = group["concluded"]
+        items.append(
+            {
+                **group,
+                "name": names.get(group["resume_id"]) or "Untitled resume",
+                # Rate over concluded applications only, and only once the
+                # sample is big enough to be worth acting on.
+                "rate": (
+                    round(group["replied"] / concluded, 3)
+                    if concluded >= MIN_SAMPLE
+                    else None
+                ),
+            }
+        )
+
+    # Best-performing first, but anything without a rate sorts last rather than
+    # as a zero - "not enough data" is not the same as "never works".
+    items.sort(key=lambda i: (i["rate"] is None, -(i["rate"] or 0), -i["sent"]))
+
+    return {
+        "resumes": items,
+        "min_sample": MIN_SAMPLE,
+        "sent": sum(i["sent"] for i in items),
+        "replied": sum(i["replied"] for i in items),
+    }

@@ -72,6 +72,41 @@ export async function listApplicationFields(
   return res.json();
 }
 
+/** Counts for the nav badge, without fetching every answer. */
+export interface FieldSummary {
+  needs_answer: number;
+  answered: number;
+  total: number;
+}
+
+export async function getFieldSummary(signal?: AbortSignal): Promise<FieldSummary> {
+  const res = await apiFetch(`${PREFIX}/summary`, { method: 'GET', signal });
+  if (!res.ok) throw new Error(`Loading the answer count failed: ${res.status}`);
+  return res.json();
+}
+
+/** One common application question the Profile cannot answer yet. */
+export interface MissingField {
+  key: string;
+  label: string;
+  /** essential | common | eligibility - see the backend for what each costs. */
+  group: 'essential' | 'common' | 'eligibility';
+}
+
+/** How much of a typical form the Profile can fill. */
+export interface Readiness {
+  covered: number;
+  total: number;
+  missing: MissingField[];
+  has_resume: boolean;
+}
+
+export async function getAutofillReadiness(signal?: AbortSignal): Promise<Readiness> {
+  const res = await apiFetch(`${PREFIX}/readiness`, { method: 'GET', signal });
+  if (!res.ok) throw new Error(`Loading profile readiness failed: ${res.status}`);
+  return res.json();
+}
+
 export async function updateApplicationField(
   id: string,
   patch: FieldUpdate,

@@ -541,6 +541,8 @@ async def get_discovery_feed(
     q: str | None = None,
     location: str | None = None,
     is_remote: bool | None = None,
+    min_score: int | None = None,
+    posted_within_hours: int | None = None,
     limit: int = 50,
     offset: int = 0,
     user_id: str = Depends(get_effective_user_id),
@@ -555,12 +557,22 @@ async def get_discovery_feed(
       boards, so the list matches the platforms the user has selected
     * ``q`` - every token must appear in the title or company
     * ``location`` / ``is_remote`` - substring and flag match
+    * ``min_score`` - match percentage floor, 0-100 as the UI shows it
+    * ``posted_within_hours`` - recency window; jobs whose board published no
+      date fall back to when we discovered them
 
     Filtering is done in the query rather than in the client so that ``total``
     and pagination describe the filtered set. A client-side filter over one page
     reports "3 of 228" and pages through rows the user cannot see.
+
+    Not offered, deliberately: salary is stored as the free text the board
+    printed ("competitive", "40-60 LPA"), so a numeric floor would silently
+    drop rows it cannot parse, and job type is not persisted per result at all.
+    An honest absence beats a filter that lies.
     """
     source_list = [s.strip() for s in (sources or "").split(",") if s.strip()] or None
+    # The UI speaks percent; scores are stored 0..1.
+    score_floor = max(0.0, min(100.0, float(min_score))) / 100 if min_score else None
 
     results = await db.get_discovery_feed(
         user_id,
@@ -569,6 +581,8 @@ async def get_discovery_feed(
         query=q,
         location=location,
         is_remote=is_remote,
+        min_score=score_floor,
+        posted_within_hours=posted_within_hours,
         limit=min(limit, 100),
         offset=offset,
     )
@@ -579,8 +593,14 @@ async def get_discovery_feed(
         query=q,
         location=location,
         is_remote=is_remote,
+        min_score=score_floor,
+        posted_within_hours=posted_within_hours,
     )
     unseen = await db.count_unseen_discovery_results(user_id)
+    # Lets the UI hide the match-score filter rather than offer a control that
+    # can only return nothing. Counted across the whole feed, not the filtered
+    # set, so switching filters does not make the control flicker in and out.
+    scored = await db.count_scored_discovery_results(user_id)
 
     # Mark results as seen on read
     if not offset:
@@ -590,6 +610,7 @@ async def get_discovery_feed(
         "results": results,
         "total": total,
         "unseen": unseen,
+        "scored": scored,
         "limit": limit,
         "offset": offset,
     }

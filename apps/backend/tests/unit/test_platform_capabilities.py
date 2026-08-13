@@ -206,3 +206,31 @@ class TestCapabilityReport:
         assert r["profile"] == "saas"
         assert "persistent_postgres" in r["missing"]
         assert r["valid"] is False
+
+
+class TestLocalFilesystemHints:
+    """Whether this process may describe its own disk to whoever is reading.
+
+    A single-machine install may: the reader is sitting at that machine, so
+    naming the folder to load the browser extension from is genuinely useful. A
+    shared deployment may not: the path would describe the server rather than the
+    reader, which helps nobody and tells a stranger about the host.
+    """
+
+    def test_desktop_install_may_name_its_own_paths(self):
+        from app.platform.capabilities import allows_local_filesystem_hints
+
+        assert allows_local_filesystem_hints(fake()) is True
+
+    def test_multi_user_deployment_may_not(self):
+        from app.platform.capabilities import allows_local_filesystem_hints
+
+        assert allows_local_filesystem_hints(fake(single_user_mode=False)) is False
+
+    def test_absent_setting_is_treated_as_shared(self):
+        """An unknown deployment is assumed shared - the safe default."""
+        from types import SimpleNamespace
+
+        from app.platform.capabilities import allows_local_filesystem_hints
+
+        assert allows_local_filesystem_hints(SimpleNamespace()) is False

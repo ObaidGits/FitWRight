@@ -112,6 +112,20 @@ def detect_capabilities(settings) -> set[Capability]:
     return caps
 
 
+def allows_local_filesystem_hints(settings) -> bool:
+    """May this process describe its own filesystem to whoever is reading?
+
+    True only for a single-machine install, where the process and the person
+    reading its output share a computer - which is what makes "load the extension
+    from /home/you/fitwright/apps/extension/dist" a useful sentence rather than a
+    description of a stranger's server.
+
+    Lives here, in the seam that owns the deployment axis, so callers ask a policy
+    question instead of branching on the mode themselves (ARCHITECTURE §18.5).
+    """
+    return bool(getattr(settings, "single_user_mode", False))
+
+
 def required_capabilities(profile: DeploymentProfile) -> set[Capability]:
     """The capabilities a profile *must* have to boot (ARCHITECTURE §4).
 

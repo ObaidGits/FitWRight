@@ -17,6 +17,17 @@ forms on your behalf, and scoring a job against your resume while you read it.
 
 ## Setup
 
+**The app walks you through this**: open FitWright and go to
+**Setup → Browser extension** (`/setup/extension`). That page names the exact
+folder to load, says whether it has been built yet, and turns green by itself the
+moment the extension is running - no guessing whether it worked.
+
+Chrome has no API that installs an unpacked extension, and it dropped
+double-click `.crx` installs years ago, so the steps below cannot be automated
+away. Only the Chrome Web Store gives a one-click install; publishing there
+changes the extension ID, which has to be updated in `EXTENSION_ORIGINS` at the
+same time or the backend will reject the new build.
+
 ```bash
 cd apps/extension
 npm install

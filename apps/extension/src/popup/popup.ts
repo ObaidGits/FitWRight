@@ -102,7 +102,13 @@ function render(tabId: number, context: PageContext, health: { hasResume: boolea
           setStatus(reply.error, 'err');
           return;
         }
-        const { filled, questions } = reply.data;
+        const { filled, questions, reason } = reply.data;
+        if (reason === 'signed-out') {
+          // The most common cause of "it did nothing", and the one the user can
+          // fix in one click on a tab they already have open.
+          setStatus('You appear signed out of this site. Sign in, then autofill.', 'err');
+          return;
+        }
         setStatus(
           questions.length
             ? `Filled ${filled}. ${questions.length} question(s) need your review.`

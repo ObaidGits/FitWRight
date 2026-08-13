@@ -405,11 +405,59 @@ def _profile_document(row: dict[str, Any] | None) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
+class InstallInfo(BaseModel):
+    """Where the unpacked extension lives, so the setup page can say it."""
+
+    # Absolute path to load in chrome://extensions, or null when we must not say.
+    dist_path: str | None = None
+    # False when the folder is missing: the user has not run the build yet.
+    built: bool = False
+    # Only true for a local single-user install; a hosted server never answers.
+    local: bool = False
+
+
+@router.get("/install-info", response_model=InstallInfo, summary="Where to load the extension from")
+async def get_install_info(
+    config: Settings = Depends(get_settings_dep),
+) -> InstallInfo:
+    """Resolve the extension's ``dist`` folder for the setup page.
+
+    Chrome offers no way to install an unpacked extension programmatically, so
+    the one thing software can still do for a non-technical user is remove the
+    guesswork: name the exact folder, and say plainly whether it has been built.
+
+    The gate is a policy question asked of the platform seam, not a mode branch
+    here - "may this process describe its own disk to its reader". On a hosted
+    deployment the answer is no: the path would describe the server, which is
+    useless to the person reading it and more than a stranger should learn about
+    the host.
+    """
+    from app.platform import allows_local_filesystem_hints
+
+    if not allows_local_filesystem_hints(config):
+        return InstallInfo(local=False)
+
+    from pathlib import Path
+
+    # app/routers/extension.py -> app/routers -> app -> backend -> apps -> repo
+    dist = Path(__file__).resolve().parents[3] / "extension" / "dist"
+    return InstallInfo(dist_path=str(dist), built=dist.is_dir(), local=True)
+
+
 @router.get("/profile", response_model=AutofillProfile, summary="Autofill profile")
 async def get_autofill_profile(
     resume_id: str | None = None,
     user_id: str = Depends(get_effective_user_id),
     db: Database = Depends(get_db),
+) -> AutofillProfile:
+    """Serve the profile the extension fills forms from."""
+    return await build_autofill_profile(db, user_id, resume_id)
+
+
+async def build_autofill_profile(
+    db: Database,
+    user_id: str,
+    resume_id: str | None = None,
 ) -> AutofillProfile:
     """Build the autofill profile: **Profile first, resume as fallback**.
 

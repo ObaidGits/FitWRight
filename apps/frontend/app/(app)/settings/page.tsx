@@ -50,7 +50,6 @@ import { AccountSecurity } from '@/components/settings/account-security';
 import { updateProfile } from '@/lib/api/auth';
 import { describeAuthError } from '@/components/auth/error-banner';
 import { ProfileSettings } from '@/components/settings/profile-settings';
-import { ApplicationAnswers } from '@/components/settings/application-answers';
 import { NotificationPreferences } from '@/components/settings/notification-preferences';
 import { FeaturePromptsEditor } from '@/components/settings/feature-prompts-editor';
 import {
@@ -81,7 +80,6 @@ export default function SettingsPage() {
       <Tabs defaultValue="ai">
         <TabsList>
           <TabsTrigger value="profile">Profile</TabsTrigger>
-          <TabsTrigger value="answers">Application Answers</TabsTrigger>
           <TabsTrigger value="ai">AI Provider</TabsTrigger>
           <TabsTrigger value="prefs">Preferences</TabsTrigger>
           <TabsTrigger value="account">Account</TabsTrigger>
@@ -91,9 +89,6 @@ export default function SettingsPage() {
             <ProfileSection />
             <ProfileSettings />
           </div>
-        </TabsContent>
-        <TabsContent value="answers">
-          <ApplicationAnswers />
         </TabsContent>
         <TabsContent value="ai">
           <AiSection />

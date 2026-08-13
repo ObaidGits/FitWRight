@@ -232,6 +232,12 @@ export interface FeedResponse {
   results: FeedResult[];
   total: number;
   unseen: number;
+  /**
+   * How many jobs in the whole feed carry a real match score. Zero means nothing
+   * has been matched against a resume yet, so a score filter could only ever
+   * return nothing - the UI hides the control instead of offering a dead end.
+   */
+  scored: number;
   limit: number;
   offset: number;
 }
@@ -251,6 +257,10 @@ export interface FeedParams {
   q?: string;
   location?: string;
   isRemote?: boolean;
+  /** Match percentage floor, 0-100 as the UI shows it. */
+  minScore?: number;
+  /** Recency window in hours. Jobs with no published date use when we found them. */
+  postedWithinHours?: number;
   limit?: number;
   offset?: number;
 }
@@ -265,6 +275,8 @@ export async function getFeed(
   if (params?.q?.trim()) qs.set('q', params.q.trim());
   if (params?.location?.trim()) qs.set('location', params.location.trim());
   if (params?.isRemote) qs.set('is_remote', 'true');
+  if (params?.minScore) qs.set('min_score', String(params.minScore));
+  if (params?.postedWithinHours) qs.set('posted_within_hours', String(params.postedWithinHours));
   if (params?.limit) qs.set('limit', String(params.limit));
   if (params?.offset) qs.set('offset', String(params.offset));
   const query = qs.toString();

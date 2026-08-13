@@ -82,6 +82,22 @@ export type AnyMessage = ToWorker | ToContent;
 /** Uniform envelope so every handler reports failure the same way. */
 export type Reply<T> = { ok: true; data: T } | { ok: false; error: string };
 
+/**
+ * One board's outcome inside a bridge scrape.
+ *
+ * Named and exported rather than inlined so the worker that produces it and the
+ * reply the web app consumes cannot drift apart - they were separately declared
+ * duplicates before, which is how a field gets added to one and not the other.
+ */
+export interface PerSiteResult {
+  source: string;
+  found: number;
+  saved: number;
+  error?: string;
+  /** Set when we can name why nothing came back. See lib/login-wall.ts. */
+  reason?: 'signed-out' | 'empty';
+}
+
 /** Per-message reply payloads. */
 export interface ReplyMap {
   ping: { signedIn: boolean; hasResume: boolean; versionOk: boolean };
@@ -97,15 +113,21 @@ export interface ReplyMap {
     total: number;
     /** Rows the backend stored as new; the rest were already in the feed. */
     saved: number;
-    perSite: { source: string; found: number; saved: number; error?: string }[];
+    perSite: PerSiteResult[];
   };
   'get-profile': import('./types').AutofillProfile;
   'get-resume-pdf': { dataUrl: string; filename: string } | null;
   'open-fitwright': null;
   'describe-page': PageContext;
-  autofill: { filled: number; skipped: number; questions: string[] };
+  autofill: {
+    filled: number;
+    skipped: number;
+    questions: string[];
+    /** Set when the form filled nothing and we can say why. */
+    reason?: 'signed-out' | 'empty';
+  };
   'capture-current': CaptureResponse;
-  'scrape-list': { found: number; saved: number };
+  'scrape-list': { found: number; saved: number; reason?: 'signed-out' | 'empty' };
 }
 
 export function ok<T>(data: T): Reply<T> {

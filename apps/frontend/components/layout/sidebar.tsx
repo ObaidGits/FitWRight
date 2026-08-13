@@ -13,6 +13,7 @@ import { ThemeToggle } from '@/components/theme/theme-toggle';
 import { AccountMenu } from '@/components/layout/account-menu';
 import { NotificationCenter } from '@/components/notifications/notification-center';
 import { useCommandPalette } from '@/components/command/command-palette';
+import { useFieldSummary } from '@/features/application-fields/hooks';
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -73,6 +74,7 @@ export function Sidebar() {
               <Icon className="h-[18px] w-[18px]" />
               {item.label}
               {item.href === '/discovery' && <DiscoverBadge />}
+              {item.href === '/answers' && <AnswersBadge />}
             </Link>
           );
         })}
@@ -144,6 +146,26 @@ function DiscoverBadge() {
   return (
     <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-bold text-primary-foreground">
       {count > 99 ? '99+' : count}
+      <span className="sr-only"> new jobs</span>
+    </span>
+  );
+}
+
+/**
+ * Questions from application forms waiting for an answer.
+ *
+ * Uses the shared query so answering one in the Answers page updates this badge
+ * through the invalidation that already exists, instead of leaving a stale count
+ * until the next poll.
+ */
+function AnswersBadge() {
+  const summary = useFieldSummary();
+  const count = summary.data?.needs_answer ?? 0;
+  if (count === 0) return null;
+  return (
+    <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--at-warning)] px-1.5 text-[10px] font-bold text-[var(--background)]">
+      {count > 99 ? '99+' : count}
+      <span className="sr-only"> questions need an answer</span>
     </span>
   );
 }

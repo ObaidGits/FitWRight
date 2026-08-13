@@ -12,19 +12,30 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
   getApplyQueue,
+  getOutcomes,
   getSubmission,
   reorderApplyQueue,
+  type Outcomes,
   type QueueResponse,
   type SubmissionRecord,
 } from '@/lib/api/apply-queue';
 import { queryKeys } from '@/lib/query/client';
 
 const queueKey = ['applications', 'queue'] as const;
+const outcomesKey = ['applications', 'outcomes'] as const;
 
 export function useApplyQueue() {
   return useQuery<QueueResponse, Error>({
     queryKey: queueKey,
     queryFn: ({ signal }) => getApplyQueue(signal),
+  });
+}
+
+/** Reply rate per resume. Read-only, so no invalidation of its own. */
+export function useOutcomes() {
+  return useQuery<Outcomes, Error>({
+    queryKey: outcomesKey,
+    queryFn: ({ signal }) => getOutcomes(signal),
   });
 }
 

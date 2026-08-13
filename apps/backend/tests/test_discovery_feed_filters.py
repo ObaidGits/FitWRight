@@ -128,3 +128,101 @@ class TestCombined:
         assert total == 2
         assert len(page) == 1
         assert len(rest) == total - 1
+
+
+class TestScoreFilter:
+    """`min_score` is stored 0..1; the router converts from the UI's percent."""
+
+    async def test_floor_excludes_weaker_matches(self, db):
+        scored = [
+            {**row("s1", source="linkedin", title="Strong", company="A"), "match_score": 0.9},
+            {**row("s2", source="linkedin", title="Middling", company="B"), "match_score": 0.55},
+            {**row("s3", source="linkedin", title="Weak", company="C"), "match_score": 0.1},
+        ]
+        await db.upsert_discovery_results(USER, "test", scored)
+
+        rows, total = await both(db, min_score=0.7)
+        assert [r["title"] for r in rows] == ["Strong"]
+        assert total == 1
+
+    async def test_no_floor_returns_everything(self, seeded):
+        rows, total = await both(seeded, min_score=None)
+        assert total == len(SEED)
+        assert len(rows) == len(SEED)
+
+    async def test_zero_floor_is_not_treated_as_no_filter(self, db):
+        """0.0 must still be a filter, not silently dropped by a falsy check."""
+        await db.upsert_discovery_results(
+            USER,
+            "test",
+            [{**row("z", source="linkedin", title="Any", company="A"), "match_score": 0.0}],
+        )
+        rows, total = await both(db, min_score=0.0)
+        # Every score is >= 0, so this is a filter that legitimately matches all.
+        assert total == 1
+        assert len(rows) == 1
+
+
+class TestRecencyFilter:
+    """Recency reads `posted_at`, falling back to `created_at` when it is null."""
+
+    async def test_excludes_older_postings(self, db):
+        from datetime import datetime, timedelta, timezone
+
+        now = datetime.now(timezone.utc)
+        fresh = {
+            **row("r1", source="linkedin", title="Fresh", company="A"),
+            "posted_at": (now - timedelta(hours=2)).isoformat(),
+        }
+        stale = {
+            **row("r2", source="linkedin", title="Stale", company="B"),
+            "posted_at": (now - timedelta(days=9)).isoformat(),
+        }
+        await db.upsert_discovery_results(USER, "test", [fresh, stale])
+
+        rows, total = await both(db, posted_within_hours=24)
+        assert [r["title"] for r in rows] == ["Fresh"]
+        assert total == 1
+
+    async def test_undated_rows_fall_back_to_when_we_found_them(self, seeded):
+        """A board that publishes no date must not vanish from a recency filter.
+
+        Every seeded row has `posted_at=None` and was just created, so a 24-hour
+        window has to keep them. Dropping them would hide a job harvested minutes
+        ago, which reads as a broken filter.
+        """
+        rows, total = await both(seeded, posted_within_hours=24)
+        assert total == len(SEED)
+        assert len(rows) == len(SEED)
+
+    async def test_zero_hours_means_no_window(self, seeded):
+        rows, total = await both(seeded, posted_within_hours=0)
+        assert total == len(SEED)
+        assert len(rows) == len(SEED)
+
+
+class TestFiltersCombine:
+    async def test_score_and_source_and_query_intersect(self, db):
+        rows_in = [
+            {
+                **row("c1", source="linkedin", title="Python Developer", company="Acme"),
+                "match_score": 0.95,
+            },
+            {
+                **row("c2", source="hirist", title="Python Developer", company="Globex"),
+                "match_score": 0.95,
+            },
+            {
+                **row("c3", source="linkedin", title="Java Developer", company="Acme"),
+                "match_score": 0.95,
+            },
+            {
+                **row("c4", source="linkedin", title="Python Developer", company="Initech"),
+                "match_score": 0.2,
+            },
+        ]
+        await db.upsert_discovery_results(USER, "test", rows_in)
+
+        rows, total = await both(db, sources=["linkedin"], query="python", min_score=0.7)
+        assert [r["company"] for r in rows] == ["Acme"]
+        assert total == 1
