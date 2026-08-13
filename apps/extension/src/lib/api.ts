@@ -274,6 +274,22 @@ export async function fetchResumePdf(job?: {
   return { dataUrl, filename, tailored: Boolean(profile.resume_tailored_for_role) };
 }
 
+/**
+ * Report how each board behaved in a harvest run.
+ *
+ * Diagnostics, not data: it carries counts and error strings, never job content.
+ * The server keeps a rolling failure count per board so a stale adapter can be
+ * named instead of looking like a narrow search.
+ */
+export function reportBoardHealth(
+  perSite: { source: string; found: number; saved: number; error?: string; reason?: string }[],
+): Promise<{ recorded: number }> {
+  return request<{ recorded: number }>('/extension/board-health', {
+    method: 'POST',
+    body: { per_site: perSite },
+  });
+}
+
 /** Reset cached auth state - called when the base URL changes. */
 export function resetAuthCache(): void {
   csrfToken = null;

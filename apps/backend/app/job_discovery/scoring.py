@@ -24,16 +24,26 @@ __all__ = ["count_unscored", "score_unscored_results"]
 
 
 async def count_unscored(db, user_id: str) -> int:
-    """How many feed rows have no score yet."""
+    """How many *visible* feed jobs have no score yet.
+
+    Counted over the same deduplicated set the feed shows, not raw rows. Reporting
+    300 unscored while the feed displays 224 jobs would be the "3 of 228" problem
+    wearing a different hat - two numbers on one screen that cannot both be true.
+    """
     from sqlalchemy import func, select
 
     from app.models import DiscoveryResult
 
     async with db._session() as session:  # noqa: SLF001
+        representative = db._dedupe_representative_ids(  # noqa: SLF001
+            [DiscoveryResult.user_id == user_id]
+        ).subquery()
         return (
             await session.execute(
-                select(func.count(DiscoveryResult.id)).where(
-                    (DiscoveryResult.user_id == user_id)
+                select(func.count())
+                .select_from(DiscoveryResult)
+                .where(
+                    DiscoveryResult.id.in_(select(representative.c.id))
                     & (DiscoveryResult.match_score <= 0)
                 )
             )

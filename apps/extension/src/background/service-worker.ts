@@ -112,6 +112,13 @@ async function handle(message: ToWorker, sender: chrome.runtime.MessageSender): 
       const total = results.reduce((sum, r) => sum + r.found, 0);
       const saved = results.reduce((sum, r) => sum + r.saved, 0);
       if (saved > 0) await flashBadge(String(saved));
+      // Tell the server how each board behaved. A dead adapter is otherwise
+      // invisible: the board returns nothing, this run's message disappears, and
+      // three weeks later the user still thinks their search is too narrow.
+      // Fire-and-forget - a health record is not worth failing a good harvest.
+      void api.reportBoardHealth(results).catch(() => {
+        /* health reporting is diagnostics, never the point of the run */
+      });
       return ok({ total, saved, perSite: results });
     }
 

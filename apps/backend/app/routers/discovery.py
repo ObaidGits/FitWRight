@@ -44,7 +44,7 @@ from __future__ import annotations
 from functools import lru_cache
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.config import Settings, settings
 from app.database import Database
@@ -604,6 +604,11 @@ async def get_discovery_feed(
     # can only return nothing. Counted across the whole feed, not the filtered
     # set, so switching filters does not make the control flicker in and out.
     scored = await db.count_scored_discovery_results(user_id)
+    # What scoring the rest would involve. Shown before the action, because each
+    # unscored job costs one AI call and the user should see the size of that.
+    from app.job_discovery.scoring import count_unscored
+
+    unscored = await count_unscored(db, user_id)
 
     # One row per job already, from the query. This only adds the labels naming
     # the other boards that carry it, so collapsing is visible rather than silent.
@@ -621,6 +626,7 @@ async def get_discovery_feed(
         "shown": len(annotated),
         "unseen": unseen,
         "scored": scored,
+        "unscored": unscored,
         "limit": limit,
         "offset": offset,
     }
@@ -983,6 +989,72 @@ async def edit_discovery_schedule(
             )
 
     return {"message": "Schedule updated", "changes": {k: v for k, v in values.items() if k != "updated_at"}}
+
+
+class BulkStatusRequest(BaseModel):
+    result_ids: list[str] = Field(default_factory=list, max_length=200)
+    status: str
+
+
+@router.patch("/feed/bulk-status", summary="Update several jobs at once")
+async def bulk_update_status(
+    payload: BulkStatusRequest,
+    user_id: str = Depends(require_verified_user_id),
+    db: Database = Depends(get_db),
+):
+    """Move several feed results at once.
+
+    Triaging a few hundred jobs one click at a time is the difference between a
+    feed that gets used and one that gets abandoned, and a bulk request also keeps
+    the queue side consistent: saving fifteen jobs individually was fifteen round
+    trips, each re-reading the same profile and resume.
+
+    Bounded at 200 ids per call. Dismissing in bulk is the common case, so it
+    matters that this shares the single-row path's rules rather than reimplementing
+    them - the same queue entries are created and removed.
+    """
+    valid_statuses = {"new", "interested", "dismissed", "tailored", "applied"}
+    if payload.status not in valid_statuses:
+        raise HTTPException(
+            status_code=422, detail=f"Invalid status. Must be one of: {valid_statuses}"
+        )
+    if not payload.result_ids:
+        return {"updated": 0, "queued": 0}
+
+    from sqlalchemy import update as sa_update
+
+    from app.job_discovery.queueing import ensure_queued_application, unqueue_application
+    from app.models import DiscoveryResult
+
+    async with db._session() as session:
+        async with session.begin():
+            result = await session.execute(
+                sa_update(DiscoveryResult)
+                .where(
+                    (DiscoveryResult.user_id == user_id)
+                    & DiscoveryResult.id.in_(payload.result_ids)
+                )
+                .values(status=payload.status)
+            )
+            updated = result.rowcount or 0
+
+    # Queue side, one row at a time on purpose: `create_application` dedupes per
+    # job, and a partial failure should cost one job rather than the whole batch.
+    queued = 0
+    for result_id in payload.result_ids:
+        row = await db.get_discovery_result(user_id, result_id)
+        if row is None:
+            continue
+        if payload.status == "interested":
+            created = await ensure_queued_application(db, user_id, row)
+            if created:
+                queued += 1
+                if not row.get("job_id"):
+                    await db.set_discovery_result_job(user_id, result_id, created["job_id"])
+        elif payload.status == "dismissed":
+            await unqueue_application(db, user_id, row.get("job_id"))
+
+    return {"updated": updated, "queued": queued}
 
 
 class ScoreFeedRequest(BaseModel):

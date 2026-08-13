@@ -203,7 +203,14 @@ export function useManualSearch() {
 // Status management + cleanup
 // -------------------------------------------------------------------------- //
 
-import { updateResultStatus, cleanupFeed } from '@/lib/api/discovery';
+import {
+  updateResultStatus,
+  bulkUpdateResultStatus,
+  cleanupFeed,
+  getBoardHealth,
+  scoreFeed,
+  type BoardHealthResponse,
+} from '@/lib/api/discovery';
 
 /** Update a feed result's status (interested/dismissed/applied). */
 export function useUpdateResultStatus() {
@@ -221,6 +228,44 @@ export function useUpdateResultStatus() {
       // board and Home's "Next up" card are all stale until refetched.
       void qc.invalidateQueries({ queryKey: ['applications'] });
     },
+  });
+}
+
+/** Move several feed results at once - triaging a long feed one click at a time is the pain. */
+export function useBulkUpdateResultStatus() {
+  const qc = useQueryClient();
+  return useMutation<
+    { updated: number; queued: number },
+    Error,
+    { ids: string[]; status: string }
+  >({
+    mutationFn: ({ ids, status }) => bulkUpdateResultStatus(ids, status),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['discovery', 'feed'] });
+      void qc.invalidateQueries({ queryKey: ['discovery', 'unseen'] });
+      void qc.invalidateQueries({ queryKey: ['applications'] });
+    },
+  });
+}
+
+/** Per-board health: which boards are actually returning jobs. */
+export function useBoardHealth() {
+  return useQuery<BoardHealthResponse, Error>({
+    queryKey: ['discovery', 'board-health'],
+    queryFn: ({ signal }) => getBoardHealth(signal),
+  });
+}
+
+/** Score unscored feed jobs. Explicit because each job costs an AI call. */
+export function useScoreFeed() {
+  const qc = useQueryClient();
+  return useMutation<
+    { scored: number; remaining: number; resume_id: string },
+    Error,
+    { resumeId?: string; limit?: number }
+  >({
+    mutationFn: (input) => scoreFeed(input),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['discovery', 'feed'] }),
   });
 }
 

@@ -171,6 +171,64 @@ async def check_duplicate(
     return {"duplicate": duplicate, "is_duplicate": duplicate is not None}
 
 
+@router.get("/export.csv", summary="Download your applications as CSV")
+async def export_applications_csv(user_id: str = Depends(get_effective_user_id)):
+    """Every application as a spreadsheet.
+
+    Months of application history with no way out is a lock-in the user did not
+    agree to. CSV rather than JSON because the people who want this open it in a
+    spreadsheet, not a text editor.
+
+    Answers are deliberately *not* included. They can contain anything the user
+    typed into an employer's form, and a file that lands in a downloads folder is
+    the wrong place for that by default; the count is given instead so nothing
+    appears to be missing silently.
+    """
+    import csv
+    import io
+
+    from fastapi.responses import StreamingResponse
+
+    from app.applications import submissions
+
+    rows = await submissions.export_rows(user_id)
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(
+        [
+            "company",
+            "role",
+            "status",
+            "applied_at",
+            "submitted_via",
+            "answers_recorded",
+            "resume_id",
+            "created_at",
+        ]
+    )
+    for row in rows:
+        writer.writerow(
+            [
+                row.get("company") or "",
+                row.get("role") or "",
+                row.get("status") or "",
+                row.get("applied_at") or "",
+                row.get("submitted_via") or "",
+                row.get("answers_recorded") or 0,
+                row.get("resume_id") or "",
+                row.get("created_at") or "",
+            ]
+        )
+
+    buffer.seek(0)
+    return StreamingResponse(
+        iter([buffer.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="fitwright-applications.csv"'},
+    )
+
+
 @router.get("/outcomes", summary="Which resume actually gets replies")
 async def get_outcomes(user_id: str = Depends(get_effective_user_id)):
     """Reply rate per resume, so the next application is an informed one.

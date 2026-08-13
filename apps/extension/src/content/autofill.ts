@@ -262,10 +262,41 @@ export async function draftOpenQuestions(
       failed += 1;
       continue;
     }
-    if (setValue(el, reply.data.answer)) drafted += 1;
-    else failed += 1;
+    if (setValue(el, reply.data.answer)) {
+      markAsDraft(el);
+      drafted += 1;
+    } else failed += 1;
   }
   return { drafted, failed };
+}
+
+/**
+ * Mark a field as holding an AI draft, until the user touches it.
+ *
+ * A toast saying "3 answers drafted - review before submitting" scrolls away in
+ * four seconds; the text left in the box looks exactly like something the user
+ * wrote. Employers are being sent these words in the user's name, so the field
+ * itself has to carry the warning, not a notification about the field.
+ *
+ * The mark clears on first input: once they have edited it, it is theirs.
+ */
+function markAsDraft(el: Fillable): void {
+  const styled = el as HTMLElement;
+  styled.dataset.fitwrightDraft = 'true';
+  styled.style.outline = '2px dashed rgba(217, 119, 6, .9)';
+  styled.style.outlineOffset = '1px';
+  styled.style.backgroundColor = 'rgba(217, 119, 6, .06)';
+  if (!styled.title) styled.title = 'Drafted by FitWright - review before submitting';
+
+  const clear = () => {
+    delete styled.dataset.fitwrightDraft;
+    styled.style.outline = '';
+    styled.style.outlineOffset = '';
+    styled.style.backgroundColor = '';
+    if (styled.title === 'Drafted by FitWright - review before submitting') styled.title = '';
+    styled.removeEventListener('input', clear);
+  };
+  styled.addEventListener('input', clear, { once: true });
 }
 
 /** Questions on the page, for the popup to list before drafting. */

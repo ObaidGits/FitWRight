@@ -253,6 +253,42 @@ REPLIED_STATUSES = frozenset({"response", "interview", "accepted"})
 CONCLUDED_STATUSES = REPLIED_STATUSES | {"no_response", "rejected"}
 
 
+async def export_rows(user_id: str) -> list[dict[str, Any]]:
+    """Every application, flattened for export.
+
+    Answer *counts* rather than answer text: the contents are whatever the user
+    typed into an employer's form, and a CSV in a downloads folder is not where
+    that belongs by default. Reporting the count means nothing looks silently
+    missing.
+    """
+    async with db._session() as session:  # noqa: SLF001
+        rows = (
+            (
+                await session.execute(
+                    select(Application)
+                    .where(Application.user_id == user_id)
+                    .order_by(Application.created_at.desc())
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    return [
+        {
+            "company": r.company,
+            "role": r.role,
+            "status": r.status,
+            "applied_at": r.applied_at,
+            "submitted_via": r.submitted_via,
+            "answers_recorded": len(r.submitted_answers or {}),
+            "resume_id": r.resume_id,
+            "created_at": r.created_at,
+        }
+        for r in rows
+    ]
+
+
 async def outcomes_by_resume(user_id: str) -> dict[str, Any]:
     """Reply rate per resume used, plus the totals behind each one.
 

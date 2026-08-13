@@ -9,11 +9,15 @@
     "dev": "node build.mjs --watch",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist",
-    "package": "npm run build && cd dist && zip -r ../fitwright-extension.zip . -x '*.map'"
+    "package": "npm run build && cd dist && zip -r ../fitwright-extension.zip . -x '*.map'",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "devDependencies": {
     "@types/chrome": "0.0.287",
     "esbuild": "0.24.0",
-    "typescript": "5.6.3"
+    "jsdom": "28.1.0",
+    "typescript": "5.6.3",
+    "vitest": "4.1.8"
   }
 }

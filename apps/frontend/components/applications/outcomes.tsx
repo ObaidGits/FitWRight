@@ -18,6 +18,7 @@
  */
 import * as React from 'react';
 import ChartNoAxesColumn from 'lucide-react/dist/esm/icons/chart-no-axes-column';
+import Download from 'lucide-react/dist/esm/icons/download';
 
 import { Card } from '@/components/atelier/card';
 import { EmptyState, ErrorState, LoadingSkeleton } from '@/components/atelier/states';
@@ -55,7 +56,17 @@ export function Outcomes() {
 
   return (
     <div className="space-y-3">
-      {overall && <p className="text-sm text-[var(--muted-foreground)]">{overall}</p>}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {overall && <p className="text-sm text-[var(--muted-foreground)]">{overall}</p>}
+        {/* Months of history with no way out is a lock-in nobody agreed to. */}
+        <a
+          href="/api/v1/applications/export.csv"
+          className="flex items-center gap-1.5 text-xs font-medium text-[var(--primary)] hover:underline"
+        >
+          <Download className="h-3.5 w-3.5" aria-hidden="true" />
+          Export all applications (CSV)
+        </a>
+      </div>
 
       <ul className="space-y-2">
         {data.resumes.map((row) => {

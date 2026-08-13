@@ -253,6 +253,11 @@ export interface FeedResponse {
    * return nothing - the UI hides the control instead of offering a dead end.
    */
   scored: number;
+  /**
+   * Jobs with no score yet. Each one costs an AI call to score, so the UI shows
+   * this number before offering the action rather than after spending it.
+   */
+  unscored?: number;
   limit: number;
   offset: number;
 }
@@ -387,6 +392,62 @@ export async function manualSearch(
 // -------------------------------------------------------------------------- //
 
 /** PATCH /discovery/feed/{id}/status — update a job's status. */
+/** One board's track record, so a stale adapter can be named. */
+export interface BoardHealth {
+  board: string;
+  /** ok | empty | signed_out | capped | error */
+  last_status: string;
+  last_error?: string | null;
+  last_run_at: string;
+  last_success_at?: string | null;
+  last_found: number;
+  consecutive_failures: number;
+  total_runs: number;
+  /** The server's judgement, so every surface agrees on the threshold. */
+  needs_attention: boolean;
+  /** Has produced rows before - so failing now is likely fixable by the user. */
+  worked_before: boolean;
+}
+
+export interface BoardHealthResponse {
+  boards: BoardHealth[];
+  needs_attention: BoardHealth[];
+  failure_threshold: number;
+}
+
+export async function getBoardHealth(signal?: AbortSignal): Promise<BoardHealthResponse> {
+  const res = await apiFetch(`${PREFIX}/board-health`, { method: 'GET', signal });
+  if (!res.ok) throw new Error(`Loading board health failed: ${res.status}`);
+  return res.json();
+}
+
+/** Score feed jobs that have none yet. Costs one AI call per job, so it is explicit. */
+export async function scoreFeed(input: {
+  resumeId?: string;
+  limit?: number;
+}): Promise<{ scored: number; remaining: number; resume_id: string }> {
+  const res = await apiFetch(`${PREFIX}/feed/score`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ resume_id: input.resumeId, limit: input.limit ?? 40 }),
+  });
+  if (!res.ok) throw new Error(`Scoring failed: ${res.status}`);
+  return res.json();
+}
+
+export async function bulkUpdateResultStatus(
+  resultIds: string[],
+  status: string,
+): Promise<{ updated: number; queued: number }> {
+  const res = await apiFetch(`${PREFIX}/feed/bulk-status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ result_ids: resultIds, status }),
+  });
+  if (!res.ok) throw new Error(`Bulk update failed: ${res.status}`);
+  return res.json();
+}
+
 export async function updateResultStatus(
   resultId: string,
   status: string,

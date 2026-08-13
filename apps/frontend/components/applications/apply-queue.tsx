@@ -34,6 +34,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import GripVertical from 'lucide-react/dist/esm/icons/grip-vertical';
 import ExternalLink from 'lucide-react/dist/esm/icons/external-link';
+import Bell from 'lucide-react/dist/esm/icons/bell';
 
 import { Button } from '@/components/atelier/button';
 import { Card } from '@/components/atelier/card';
@@ -130,6 +131,11 @@ function SubmissionPanel({ applicationId, onClose }: { applicationId: string; on
 
       {data?.has_record && (
         <div className="mt-3 space-y-3">
+          {/* A sent application with no follow-up is where most applications go
+              quiet. The reminder API already exists; the apply flow just never
+              offered it at the one moment the user is thinking about this job. */}
+          <FollowUpButton applicationId={applicationId} />
+
           <dl className="grid grid-cols-2 gap-2 text-xs">
             <div>
               <dt className="text-[var(--muted-foreground)]">Submitted via</dt>
@@ -160,6 +166,56 @@ function SubmissionPanel({ applicationId, onClose }: { applicationId: string; on
         </div>
       )}
     </Card>
+  );
+}
+
+/**
+ * Offer a follow-up reminder at the moment the user records having applied.
+ *
+ * The reminder machinery already existed; the apply flow simply never mentioned
+ * it, and a sent application with no follow-up is where most applications go
+ * quiet. One week is the default because it is long enough not to look impatient
+ * and short enough that the role is still open.
+ */
+function FollowUpButton({ applicationId }: { applicationId: string }) {
+  const { toast } = useToast();
+  const [done, setDone] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
+
+  async function set() {
+    setSaving(true);
+    try {
+      const { createReminder } = await import('@/lib/api/scheduling');
+      await createReminder(applicationId, {
+        preset: 'in_1_week',
+        note: 'Follow up on this application',
+      });
+      setDone(true);
+      toast({
+        title: 'Follow-up set for a week from now',
+        description: 'It will appear in your Agenda.',
+      });
+    } catch (err) {
+      toast({
+        title: err instanceof Error ? err.message : 'Could not set the reminder',
+        variant: 'error',
+      });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (done) {
+    return (
+      <p className="text-xs text-[var(--at-success)]">Follow-up reminder set for next week.</p>
+    );
+  }
+
+  return (
+    <Button size="sm" variant="outline" onClick={() => void set()} disabled={saving}>
+      <Bell className="h-3.5 w-3.5" />
+      {saving ? 'Setting…' : 'Remind me to follow up in a week'}
+    </Button>
   );
 }
 

@@ -31,6 +31,7 @@ import { Badge } from '@/components/atelier/badge';
 import { EmptyState, LoadingSkeleton, ErrorState } from '@/components/atelier/states';
 import { Input } from '@/components/atelier/input';
 import { useToast } from '@/components/atelier/toast';
+import { FeedHealthPanel } from '@/components/discovery/feed-health-panel';
 
 import {
   useDiscoveryFeed,
@@ -39,6 +40,7 @@ import {
   useEnableSchedule,
   useManualSearch,
   useUpdateResultStatus,
+  useBulkUpdateResultStatus,
 } from '@/features/discovery/hooks';
 import { useTailorResumes } from '@/features/tailor/hooks';
 import { useExtension } from '@/features/discovery/use-extension';
@@ -114,6 +116,13 @@ export default function DiscoveryPage() {
   const [appliedQuery, setAppliedQuery] = useState('');
   const [appliedLocation, setAppliedLocation] = useState('');
   const [appliedRemote, setAppliedRemote] = useState(false);
+  // The search form starts open only for someone with no feed to read. Once jobs
+  // exist, the feed is what the page is for and the form is one click away.
+  const [searchOpen, setSearchOpen] = useState(true);
+  // Bulk triage. Off by default: checkboxes on every row when nobody asked for
+  // them is clutter on the screen people spend the most time reading.
+  const [selecting, setSelecting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   // Feed-only filters: they narrow what you already have rather than changing
   // what gets searched, so they apply immediately instead of waiting for
   // "Filter feed". 0 means "no floor" / "any age".
@@ -144,7 +153,20 @@ export default function DiscoveryPage() {
   const tailor = useTailorForJob();
   const enableSchedule = useEnableSchedule();
   const updateStatus = useUpdateResultStatus();
+  const bulkStatus = useBulkUpdateResultStatus();
   const { toast } = useToast();
+
+  // Collapse the search form the first time we learn the user already has a feed.
+  // Done once, so it never fights a user who deliberately opened it, and only
+  // after the feed has loaded - collapsing before then would hide the form from
+  // someone who has nothing else to look at.
+  const feedLoaded = !feed.isPending;
+  const collapsedOnce = React.useRef(false);
+  React.useEffect(() => {
+    if (collapsedOnce.current || !feedLoaded) return;
+    collapsedOnce.current = true;
+    if ((feed.data?.results?.length ?? 0) > 0) setSearchOpen(false);
+  }, [feedLoaded, feed.data]);
   const [tailoringFp, setTailoringFp] = useState<string | null>(null);
 
   // Companion extension: serves the boards the backend cannot reach.
@@ -273,6 +295,43 @@ export default function DiscoveryPage() {
     );
   }
 
+  function toggleSelected(id: string) {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function exitSelecting() {
+    setSelecting(false);
+    setSelectedIds(new Set());
+  }
+
+  function runBulk(status: string) {
+    const ids = [...selectedIds];
+    if (!ids.length) return;
+    bulkStatus.mutate(
+      { ids, status },
+      {
+        onSuccess: (data) => {
+          toast({
+            title:
+              status === 'dismissed'
+                ? `Dismissed ${data.updated} job${data.updated === 1 ? '' : 's'}`
+                : `Saved ${data.updated} job${data.updated === 1 ? '' : 's'}`,
+            description: data.queued
+              ? `${data.queued} added to your apply queue.`
+              : undefined,
+          });
+          exitSelecting();
+        },
+        onError: (err) => toast({ title: err.message, variant: 'error' }),
+      },
+    );
+  }
+
   function handleStatusChange(id: string, status: string) {
     updateStatus.mutate(
       { id, status },
@@ -321,18 +380,34 @@ export default function DiscoveryPage() {
               </p>
             </div>
             {hasFeed && (
-              <button
-                onClick={() => void feed.refetch()}
-                disabled={feed.isFetching}
-                className="flex items-center gap-1.5 text-xs text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
-              >
-                <RefreshCw className={`h-3.5 w-3.5 ${feed.isFetching ? 'animate-spin' : ''}`} />
-                Refresh
-              </button>
+              <div className="flex items-center gap-3">
+                {/* Two different jobs used to sit side by side on this screen:
+                    running a new search, and filtering the jobs already found.
+                    The search is now behind a toggle so the feed - the thing the
+                    user came for - is what the page opens as. */}
+                <button
+                  onClick={() => setSearchOpen((open) => !open)}
+                  aria-expanded={searchOpen}
+                  className="flex items-center gap-1.5 text-xs font-medium text-[var(--primary)] transition-colors hover:underline"
+                >
+                  <Search className="h-3.5 w-3.5" />
+                  {searchOpen ? 'Hide search' : 'New search'}
+                </button>
+                <button
+                  onClick={() => void feed.refetch()}
+                  disabled={feed.isFetching}
+                  className="flex items-center gap-1.5 text-xs text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${feed.isFetching ? 'animate-spin' : ''}`} />
+                  Refresh
+                </button>
+              </div>
             )}
           </div>
 
-          {/* Search panel */}
+          {/* Search panel. Open by default only when there is no feed yet: a
+              first-time user needs it, and everyone else came to read results. */}
+          {searchOpen && (
           <div className="space-y-3 rounded-[var(--radius-at-lg)] border border-[var(--border)] bg-[var(--card)] p-4">
             {/* Mode switch */}
             <div className="flex gap-1 rounded-[var(--radius-at-md)] bg-[var(--muted)] p-0.5">
@@ -527,13 +602,22 @@ export default function DiscoveryPage() {
                         aria-pressed={selected}
                         title={
                           viaExtension
-                            ? `${p.label} is searched by the FitWright browser extension`
+                            ? extension.installed || extension.detecting
+                              ? `${p.label} is searched by the FitWright browser extension`
+                              : `${p.label} blocks servers, so it needs the browser extension. Selecting it will return nothing until the extension is installed.`
                             : undefined
                         }
                         className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium transition-all ${
                           selected
                             ? 'bg-[var(--primary)] text-[var(--primary-foreground)]'
                             : 'bg-[var(--muted)] text-[var(--muted-foreground)] hover:bg-[var(--accent)]'
+                        } ${
+                          /* Dimmed, not disabled: the user may be about to install
+                             the extension, and a board they cannot even select is
+                             harder to understand than one that explains itself. */
+                          viaExtension && !extension.installed && !extension.detecting
+                            ? 'opacity-50'
+                            : ''
                         }`}
                       >
                         {p.label}
@@ -600,6 +684,7 @@ export default function DiscoveryPage() {
               </div>
             )}
           </div>
+          )}
 
           {/* Status banner */}
           {enableSchedule.isSuccess && (
@@ -632,6 +717,13 @@ export default function DiscoveryPage() {
           {/* Tabs. Shown whenever any filter or tab is active too, not only when
               rows exist: hiding them on an empty result stranded the user on a
               tab they could no longer leave. */}
+          {/* What is true about this feed but invisible: a broken board, jobs
+              with no score, and the retention window. Renders nothing when there
+              is nothing to report. */}
+          {!isSearching && hasFeed && (
+            <FeedHealthPanel unscored={feed.data?.unscored ?? 0} />
+          )}
+
           {!isSearching && (hasFeed || activeFilters.length > 0 || statusFilter) && (
             <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2 border-b border-[var(--border)]">
               <div className="flex gap-4">
@@ -744,11 +836,75 @@ export default function DiscoveryPage() {
           )}
 
           {/* Feed cards */}
+          {/* Bulk triage bar. Only present once the user opts in, and it states
+              the count it is about to act on - "Dismiss 14" is checkable before
+              pressing, "Dismiss selected" is a leap of faith. */}
+          {hasFeed && !isSearching && (
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              {selecting ? (
+                <>
+                  <span className="text-[var(--muted-foreground)]">
+                    {selectedIds.size} selected
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={!selectedIds.size || bulkStatus.isPending}
+                    onClick={() => runBulk('interested')}
+                    className="h-6 px-2 text-[10px]"
+                  >
+                    Save {selectedIds.size || ''}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={!selectedIds.size || bulkStatus.isPending}
+                    onClick={() => runBulk('dismissed')}
+                    className="h-6 px-2 text-[10px]"
+                  >
+                    Dismiss {selectedIds.size || ''}
+                  </Button>
+                  <button
+                    onClick={() => setSelectedIds(new Set(feedResults.map((r) => r.id)))}
+                    className="text-[10px] text-[var(--primary)] hover:underline"
+                  >
+                    Select all on screen
+                  </button>
+                  <button
+                    onClick={exitSelecting}
+                    className="text-[10px] text-[var(--muted-foreground)] hover:underline"
+                  >
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => setSelecting(true)}
+                  className="text-[10px] text-[var(--primary)] hover:underline"
+                >
+                  Select several
+                </button>
+              )}
+            </div>
+          )}
+
           {hasFeed && !isSearching && (
             <div className="space-y-2">
               {feedResults.map((r) => (
+                /* The checkbox is a sibling of the card button, never inside it:
+                   an interactive control nested in another is invalid markup and
+                   unusable with a keyboard or screen reader. */
+                <div key={r.id} className="flex items-start gap-2">
+                  {selecting && (
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(r.id)}
+                      onChange={() => toggleSelected(r.id)}
+                      aria-label={`Select ${r.title}${r.company ? ` at ${r.company}` : ''}`}
+                      className="mt-4 h-4 w-4 shrink-0 accent-[var(--primary)]"
+                    />
+                  )}
                 <button
-                  key={r.id}
                   onClick={() => setSelectedResult(r)}
                   className={`w-full rounded-[var(--radius-at-md)] border p-3 text-left transition-all hover:border-[var(--primary)]/30 hover:shadow-sm ${
                     selectedResult?.id === r.id
@@ -798,13 +954,24 @@ export default function DiscoveryPage() {
                         </div>
                       )}
                     </div>
-                    {r.match_score > 0 && (
+                    {r.match_score > 0 ? (
                       <span className="text-sm font-semibold tabular-nums text-[var(--primary)]">
                         {Math.round(r.match_score)}%
+                      </span>
+                    ) : (
+                      /* An empty space where a score belongs reads as a zero.
+                         Naming the absence is what stops "no score" being
+                         mistaken for "bad match". */
+                      <span
+                        className="text-[10px] text-[var(--muted-foreground)]"
+                        title="Scores compare a job against your resume. Score your feed to fill these in."
+                      >
+                        not scored
                       </span>
                     )}
                   </div>
                 </button>
+                </div>
               ))}
               {/* Count against rows actually loaded, not the page size: with a
                   filter applied the two diverge and the old math offered "show
