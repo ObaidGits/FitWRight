@@ -146,7 +146,7 @@ function DiscoverBadge() {
   return (
     <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-bold text-primary-foreground">
       {count > 99 ? '99+' : count}
-      <span className="sr-only"> new jobs</span>
+      <span className="sr-only">{count === 1 ? ' new job' : ' new jobs'}</span>
     </span>
   );
 }
@@ -165,7 +165,9 @@ function AnswersBadge() {
   return (
     <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--at-warning)] px-1.5 text-[10px] font-bold text-[var(--background)]">
       {count > 99 ? '99+' : count}
-      <span className="sr-only"> questions need an answer</span>
+      <span className="sr-only">
+        {count === 1 ? ' question needs an answer' : ' questions need an answer'}
+      </span>
     </span>
   );
 }
