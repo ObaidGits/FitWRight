@@ -67,6 +67,11 @@ export type ToWorker =
   | { type: 'get-profile' }
   | { type: 'get-queue' }
   | {
+      type: 'read-jd';
+      /** A single job posting the server could not fetch. */
+      url: string;
+    }
+  | {
       type: 'get-resume-pdf';
       /**
        * The job this form belongs to. Carried so the server can attach the
@@ -157,6 +162,13 @@ export interface ReplyMap {
   'scrape-list': { found: number; saved: number; reason?: 'signed-out' | 'empty' };
   'preview-fill': { plan: { label: string; value: string }[] };
   'get-queue': { items: { company?: string; role?: string }[]; total: number };
+  'read-jd': {
+    description: string;
+    title: string;
+    company: string;
+    /** Where it came from, so the app can say 'via your browser'. */
+    source: string;
+  };
 }
 
 export function ok<T>(data: T): Reply<T> {

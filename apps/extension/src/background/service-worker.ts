@@ -157,6 +157,9 @@ async function handle(message: ToWorker, sender: chrome.runtime.MessageSender): 
     case 'get-profile':
       return ok(await api.getProfile());
 
+    case 'read-jd':
+      return readJobDescription(message.url);
+
     case 'get-queue':
       return ok(await api.getApplyQueue());
 
@@ -225,6 +228,100 @@ chrome.alarms.onAlarm.addListener((alarm) => {
  * through the bridge, so both behave identically - same pacing, same
  * per-board failure isolation.
  */
+/**
+ * Open one job posting in a background tab and read its description.
+ *
+ * Exists because the server genuinely cannot do this for the biggest boards: their
+ * robots.txt disallows automated fetching, and they answer a datacenter IP with 403.
+ * Both are the right answer to a server and neither describes a person opening a
+ * page they were sent. It also handles the case no fetcher can: a posting rendered
+ * into a modal, or keyed by a query parameter, where the URL identifies a search
+ * page and the job exists only after the page's own scripts run.
+ *
+ * Counts against the same daily pacing budget as a search, keyed by hostname, so
+ * this cannot become an unbounded fetching loop.
+ */
+async function readJobDescription(url: string): Promise<Reply<ReplyMap['read-jd']>> {
+  let host: string;
+  try {
+    host = new URL(url).hostname;
+  } catch {
+    return fail('That does not look like a job posting URL');
+  }
+
+  if ((await remainingToday(`jd:${host}`)) <= 0) {
+    return fail(`Daily limit reached for ${host} - it resumes tomorrow`);
+  }
+
+  let tabId: number | undefined;
+  try {
+    await recordRun(`jd:${host}`);
+    const tab = await chrome.tabs.create({ url, active: false });
+    tabId = tab.id;
+    if (tabId === undefined) return fail('Could not open the posting');
+
+    await waitForTabLoad(tabId);
+    // Job pages hydrate after load; the content script's own ready-selector wait
+    // handles most of it, and this covers the rest.
+    await sleep(jitteredGap(2000));
+
+    const described = await describeTabWithRetry(tabId);
+    if (!described.ok) {
+      // The content script never answered, which almost always means this host is
+      // not one the extension runs on. Saying that beats "receiving end does not
+      // exist", which tells the user nothing they can act on.
+      if (/receiving end|could not establish|never responded/i.test(described.error)) {
+        return fail(
+          `FitWright does not run on ${host}, so it cannot read this posting. Paste the text instead.`,
+        );
+      }
+      return fail(described.error);
+    }
+
+    const job = described.data.job;
+    const description = job?.description?.trim() ?? '';
+    if (!description) {
+      return fail(
+        'Opened the page but found no job description on it. It may need you to be signed in.',
+      );
+    }
+    return ok({
+      description,
+      title: job?.title ?? '',
+      company: job?.company ?? '',
+      source: described.data.adapter,
+    });
+  } catch (error) {
+    return fail(error instanceof Error ? error.message : 'Could not read that posting');
+  } finally {
+    if (tabId !== undefined) {
+      try {
+        await chrome.tabs.remove(tabId);
+      } catch {
+        /* already closed */
+      }
+    }
+  }
+}
+
+/**
+ * Ask a tab to describe itself, retrying while the content script is still
+ * injecting - the same race `scrapeTabWithRetry` exists for.
+ */
+async function describeTabWithRetry(
+  tabId: number,
+  attempts = 6,
+): Promise<Reply<ReplyMap['describe-page']>> {
+  let last: Reply<ReplyMap['describe-page']> = fail('Content script never responded');
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    last = await sendToTab(tabId, { type: 'describe-page' });
+    if (last.ok) return last;
+    if (!/receiving end|could not establish|message port closed/i.test(last.error)) return last;
+    await sleep(1500);
+  }
+  return last;
+}
+
 async function scrapeEntries(
   entries: { source: string; query: string; location?: string }[],
 ): Promise<PerSiteResult[]> {

@@ -37,10 +37,11 @@ const FROM_EXTENSION = 'fitwright-extension';
 interface PageRequest {
   source: typeof FROM_PAGE;
   id: string;
-  type: 'hello' | 'scrape';
+  type: 'hello' | 'scrape' | 'read-jd';
   sites?: string[];
   query?: string;
   location?: string;
+  url?: string;
 }
 
 const VERSION = chrome.runtime.getManifest().version;
@@ -69,6 +70,29 @@ window.addEventListener('message', (event: MessageEvent<PageRequest>) => {
 
   if (message.type === 'hello') {
     reply(message.id, { ok: true, data: capabilities() });
+    return;
+  }
+
+  if (message.type === 'read-jd') {
+    // Read one job posting the server cannot reach.
+    //
+    // This is the honest answer to Indeed and friends: their robots.txt disallows
+    // automated fetching and they answer a datacenter IP with 403, both of which
+    // are correct for a server and neither of which applies to the user reading a
+    // page in their own browser. It also solves the case no fetcher can handle -
+    // a job shown in a modal or keyed by a query parameter, where the URL names a
+    // search page and the posting only exists once the page's own JavaScript has
+    // drawn it.
+    const url = typeof message.url === 'string' ? message.url.trim() : '';
+    if (!/^https?:\/\//i.test(url)) {
+      reply(message.id, { ok: false, error: 'A job posting URL is required' });
+      return;
+    }
+
+    void sendToWorker({ type: 'read-jd', url }).then((result) => {
+      if (result.ok) reply(message.id, { ok: true, data: result.data });
+      else reply(message.id, { ok: false, error: result.error });
+    });
     return;
   }
 

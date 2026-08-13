@@ -99,6 +99,35 @@ function ask<T>(
   });
 }
 
+/** A job description the extension read from a page in the user's own browser. */
+export interface ExtensionJobDescription {
+  description: string;
+  title: string;
+  company: string;
+  source: string;
+}
+
+/**
+ * Ask the extension to read one job posting the server could not fetch.
+ *
+ * The server is not failing when this is needed - Indeed's robots.txt disallows
+ * automated fetching of `/viewjob?`, and the site answers a datacenter IP with 403.
+ * Both are correct responses to a server, and neither describes a person opening a
+ * link. The extension reads the page the user could read themselves.
+ *
+ * It also covers the case no fetcher can handle: a posting rendered into a modal or
+ * keyed by a query parameter, where the URL names a search page and the job only
+ * exists after the page's own scripts run.
+ *
+ * Slow by nature (a real background tab), so the timeout is generous.
+ */
+export async function requestJobDescription(
+  url: string,
+  timeoutMs = 45_000,
+): Promise<{ ok: true; data: ExtensionJobDescription } | { ok: false; error: string }> {
+  return ask<ExtensionJobDescription>({ type: 'read-jd', url }, timeoutMs);
+}
+
 /**
  * Is the companion extension present, and what can it do?
  *

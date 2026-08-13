@@ -17,6 +17,15 @@ services:
     environment:
       FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost:3000}
       SINGLE_USER_MODE: "true"
+      # The secret that encrypts stored API keys.
+      #
+      # Must be passed through, or the container falls back to generating its own
+      # in the data volume - and a key saved while running natively (or under a
+      # previous volume) then decrypts to nothing and looks deleted. Blank is
+      # allowed: the app generates and persists one in the volume, which is fine
+      # as long as the volume survives. `docker compose down -v` destroys it and
+      # every stored key with it.
+      APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:-}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       LOG_LLM: ${LOG_LLM:-WARNING}
       LLM_PROVIDER: ${LLM_PROVIDER:-openai}

@@ -365,6 +365,13 @@ export interface ApiKeyProviderStatus {
   provider: ApiKeyProvider;
   configured: boolean;
   masked_key: string | null;
+  /**
+   * A key is stored but cannot be decrypted - the encryption secret changed
+   * between environments. Reported separately from `configured` because the two
+   * need different advice, and treating them the same made a configuration
+   * mismatch look like the app had deleted the key.
+   */
+  unreadable?: boolean;
 }
 
 export interface ApiKeyStatusResponse {

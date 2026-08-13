@@ -767,6 +767,43 @@ export default function TailorPage() {
     warnings?: string[];
   } | null>(null);
 
+  /**
+   * Read a posting through the extension when the server cannot.
+   *
+   * Returns true when it worked, so the caller can stop rather than also showing
+   * the server's failure - which would be technically accurate and useless.
+   */
+  async function tryExtensionFetch(url: string): Promise<boolean> {
+    const { detectExtension, requestJobDescription } = await import(
+      '@/features/discovery/extension-bridge'
+    );
+    if (!(await detectExtension())) return false;
+
+    toast({ title: 'Trying again through your browser…', variant: 'info' });
+    const result = await requestJobDescription(url);
+    if (!result.ok || !result.data.description.trim()) {
+      return false;
+    }
+
+    setJd(result.data.description);
+    saveDraft({ jd: result.data.description });
+    setLowConfidence(false);
+    setJdMeta({
+      confidenceLevel: 'MEDIUM',
+      source: 'extension',
+      // Said plainly: this text came from the page in their browser, not a server
+      // fetch, so verifying it is a reasonable ask.
+      suggestions: ['Read through the text below before tailoring.'],
+    });
+    toast({
+      title: `Job description read from your browser${
+        result.data.company ? ` (${result.data.company})` : ''
+      }`,
+      variant: 'success',
+    });
+    return true;
+  }
+
   async function importFromUrl() {
     const url = jdUrl.trim();
     if (!url) return;
@@ -776,6 +813,13 @@ export default function TailorPage() {
     try {
       const res = await fetchJdFromUrl(url);
       if (!res.content) {
+        // The server could not read it. Before giving up, try the browser: the
+        // biggest boards disallow automated fetching in robots.txt and answer a
+        // server with 403, and a posting shown in a modal has no page to fetch at
+        // all - but the user can open all of them, and the extension runs there.
+        const viaBrowser = await tryExtensionFetch(url);
+        if (viaBrowser) return;
+
         // Surface the classified reason (e.g. robots blocked, unsupported PDF).
         const reason = res.warnings?.[0] || res.suggestions?.[0];
         toast({

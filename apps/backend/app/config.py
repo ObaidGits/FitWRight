@@ -289,22 +289,28 @@ def get_api_keys_from_config(user_id: str | None = None) -> dict[str, str]:
     return decrypted
 
 
-def save_api_keys_to_config(api_keys: dict[str, str], user_id: str | None = None) -> None:
-    """Replace a user's encrypted key store with ``api_keys`` (encrypting each).
+def get_api_key_health(user_id: str | None = None) -> dict[str, str]:
+    """Per-provider health of the stored key store.
 
-    Replace-all semantics mirror the legacy ``config["api_keys"] = api_keys``;
-    the config router reads-merges-saves the full map. Only the resolved user's
-    keys are replaced.
+    ``ok`` when the stored ciphertext decrypts, ``unreadable`` when a key is
+    present but cannot be decrypted - which happens when the encryption secret
+    changes between environments (most often: running natively with
+    ``APP_ENCRYPTION_KEY`` set, then in Docker without it passed through).
+
+    This exists because the failure was indistinguishable from having no key at
+    all. The status endpoint reported ``configured: false``, the user concluded
+    their key had been deleted, and nothing anywhere said the row was still there
+    and simply unreadable. Telling them lets them fix it in one action instead of
+    wondering whether the app is losing their data.
     """
-    from app.crypto import encrypt
+    from app.crypto import decrypt
     from app.database import db
 
     uid = resolve_key_user_id(user_id)
-    # Encrypt everything first, then swap in a single transaction, so a partial
-    # failure (encryption error or DB write) can never wipe previously stored
-    # keys mid-replace.
-    ciphertexts = {provider: encrypt(key) for provider, key in api_keys.items() if key}
-    db.replace_api_keys(uid, ciphertexts)
+    health: dict[str, str] = {}
+    for provider, ciphertext in db.get_api_key_ciphertexts(uid).items():
+        health[provider] = "ok" if decrypt(ciphertext) else "unreadable"
+    return health
 
 
 def patch_api_keys_in_config(
