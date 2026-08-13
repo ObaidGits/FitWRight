@@ -157,7 +157,11 @@ async function initialise(): Promise<void> {
       void runMatch(currentJob);
     }
   }
-  if (kind === 'application-form') void startTracking();
+  if (kind === 'application-form') {
+    void startTracking();
+    // Wizards advance without a URL change, so watch the form for step changes.
+    startStepWatch();
+  }
 }
 
 // --------------------------------------------------------------------------- //
@@ -285,7 +289,116 @@ setInterval(() => {
   currentJob = null;
   teardownTracking?.();
   teardownTracking = null;
+  stopStepWatch();
   void initialise();
 }, 1200);
+
+// --------------------------------------------------------------------------- //
+// Multi-step application wizards
+// --------------------------------------------------------------------------- //
+
+/**
+ * Watch a multi-step application form and re-fill when it advances a step.
+ *
+ * Workday and Indeed Easy Apply are wizards: pressing Next replaces the visible
+ * fields WITHOUT changing the URL, so the URL poll above never fires and every
+ * step after the first was left unfilled. This watches the form subtree instead.
+ *
+ * Three problems have to be solved at once, and each guard below exists for one:
+ *
+ *  1. **Filling mutates the DOM**, so a naive observer would retrigger itself
+ *     forever. `filling` suppresses reactions caused by our own writes.
+ *  2. **Frameworks re-render in bursts** of dozens of mutations. The debounce
+ *     collapses a burst into one reaction.
+ *  3. **A re-render is not a new step.** Reacting to any mutation would re-fill
+ *     constantly, so we only act when the set of fillable field identities
+ *     actually changes - that is what "advanced a step" means in DOM terms.
+ *
+ * Autofill itself is idempotent (it skips fields that already hold a value), so
+ * even a false positive cannot overwrite something the user typed.
+ */
+let stepObserver: MutationObserver | null = null;
+let stepDebounce: number | null = null;
+let filling = false;
+let lastFieldSignature = '';
+
+/** Identity of the currently visible fillable fields. */
+function fieldSignature(root: ParentNode): string {
+  const fields = root.querySelectorAll<HTMLElement>('input, textarea, select');
+  const parts: string[] = [];
+  for (const el of fields) {
+    const input = el as HTMLInputElement;
+    if (input.type === 'hidden') continue;
+    // Skip invisible fields: wizards keep previous steps in the DOM and hide
+    // them, so including those would make every step look identical.
+    if (!el.offsetParent && el.getClientRects().length === 0) continue;
+    parts.push(`${el.tagName}:${input.type ?? ''}:${input.name || el.id || ''}`);
+  }
+  return parts.join('|');
+}
+
+async function fillCurrentStep(): Promise<void> {
+  const root = adapter.formRoot?.() ?? document;
+  filling = true;
+  try {
+    const report = await autofill(root);
+    lastFieldSignature = fieldSignature(root);
+    if (report.filled > 0) {
+      toast(`${report.filled} field${report.filled === 1 ? '' : 's'} filled on this step`, 'ok');
+    }
+  } catch {
+    /* a step that is not a form (review, confirmation) is not an error */
+  } finally {
+    // Release on the next tick so mutations from our own writes are still
+    // suppressed when the observer callback runs.
+    setTimeout(() => {
+      filling = false;
+    }, 400);
+  }
+}
+
+function startStepWatch(): void {
+  stopStepWatch();
+  const root = adapter.formRoot?.() ?? document.body;
+  if (!root || !(root instanceof Node)) return;
+
+  lastFieldSignature = fieldSignature(root as ParentNode);
+
+  stepObserver = new MutationObserver(() => {
+    if (filling) return; // guard 1: our own writes
+    if (stepDebounce !== null) clearTimeout(stepDebounce);
+    stepDebounce = setTimeout(() => {
+      // guard 3: only a genuine change of visible fields counts as a new step
+      const container = adapter.formRoot?.() ?? document.body;
+      const signature = fieldSignature(container as ParentNode);
+      if (!signature || signature === lastFieldSignature) return;
+      lastFieldSignature = signature;
+      void fillCurrentStep();
+    }, 600) as unknown as number; // guard 2: collapse re-render bursts
+  });
+
+  stepObserver.observe(root, {
+    childList: true,
+    subtree: true,
+    // Attributes matter as much as nodes. Some wizards replace the step's DOM
+    // (childList), but others keep every step mounted and just toggle
+    // visibility - a `style="display:none"` flip produces NO childList record at
+    // all, so watching nodes alone left those forms unfilled from step 2 on.
+    // Filtered to visibility-affecting attributes to keep the noise down; the
+    // field-signature check below still decides whether anything really changed.
+    attributes: true,
+    attributeFilter: ['style', 'class', 'hidden', 'aria-hidden', 'data-step'],
+  });
+}
+
+function stopStepWatch(): void {
+  stepObserver?.disconnect();
+  stepObserver = null;
+  if (stepDebounce !== null) {
+    clearTimeout(stepDebounce);
+    stepDebounce = null;
+  }
+  lastFieldSignature = '';
+}
 
 void initialise();

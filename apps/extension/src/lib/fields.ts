@@ -30,8 +30,24 @@ export type FieldKey =
       | 'website'
       | 'current_title'
       | 'current_company'
+      // Structured address: ATS forms ask for these as separate inputs.
+      | 'address_line1'
+      | 'address_line2'
+      | 'city'
+      | 'state'
+      | 'postal_code'
+      | 'country'
+      // Highest education.
+      | 'highest_degree'
+      | 'highest_institution'
+      | 'education_years'
+      // Eligibility, served from the user's Profile in FitWright.
+      | 'availability'
+      | 'remote_preference'
+      | 'visa_status'
     >
   | 'years_experience'
+  | 'willing_to_relocate'
   | keyof Omit<LocalPreferences, 'custom'>;
 
 interface Rule {
@@ -67,8 +83,13 @@ const RULES: Rule[] = [
   { key: 'phone', match: /phone|mobile|tel(ephone)?\b|contact[\s_-]*number/ },
   {
     key: 'location',
-    match: /location|city|address|where.*(based|located)|current[\s_-]*(city|location)/,
-    reject: /email|url|relocat|willing/,
+    // Deliberately narrow. This is the one-line "where are you based" field, so
+    // it must NOT swallow "City", "Address line 1", "State" or "Country" - those
+    // have their own rules further down, and RULES is first-match-wins. Before
+    // this was narrowed, a form asking for city/state/zip separately had all
+    // three filled with "Pune, India".
+    match: /location|where.*(based|located)|current[\s_-]*(city|location)|based[\s_-]*in/,
+    reject: /email|url|relocat|willing|zip|postal|country|province/,
   },
 
   // --- Links: each before the generic website rule ---
@@ -123,6 +144,52 @@ const RULES: Rule[] = [
   { key: 'ethnicity', match: /ethnic|race|hispanic|latino/ },
   { key: 'veteranStatus', match: /veteran|military/ },
   { key: 'disabilityStatus', match: /disab/ },
+
+  // --- Structured address --------------------------------------------------- #
+  // Ordered before the generic `location` rule would be reached for these, and
+  // each rejects the others' wording so "address line 2" cannot match line 1.
+  {
+    key: 'address_line2',
+    match: /address[\s_-]*(line[\s_-]*)?2|apt|apartment|unit|suite|line[\s_-]*2/,
+  },
+  {
+    key: 'address_line1',
+    match: /street|address[\s_-]*(line[\s_-]*)?1|address$|^address|mailing[\s_-]*address/,
+    reject: /line[\s_-]*2|apt|apartment|unit|suite|email|ip[\s_-]*address|city|state|zip|postal|country/,
+  },
+  { key: 'city', match: /\bcity\b|\btown\b/, reject: /citizen/ },
+  {
+    key: 'state',
+    match: /\bstate\b|province|\bregion\b|county/,
+    reject: /united[\s_-]*states|statement|employment[\s_-]*state/,
+  },
+  { key: 'postal_code', match: /zip|postal|post[\s_-]*code|pincode|pin[\s_-]*code/ },
+  { key: 'country', match: /country|nation(ality)?/, reject: /county/ },
+
+  // --- Education ------------------------------------------------------------ #
+  {
+    key: 'highest_degree',
+    match: /degree|qualification|highest[\s_-]*(level[\s_-]*of[\s_-]*)?education|education[\s_-]*level/,
+  },
+  {
+    key: 'highest_institution',
+    match: /university|college|school[\s_-]*name|institut|alma[\s_-]*mater/,
+    reject: /high[\s_-]*school[\s_-]*diploma/,
+  },
+  { key: 'education_years', match: /graduation[\s_-]*(year|date)|year[\s_-]*of[\s_-]*graduation/ },
+
+  // --- Availability / preferences ------------------------------------------- #
+  {
+    key: 'availability',
+    match: /available[\s_-]*(from|start)?|start[\s_-]*date|earliest[\s_-]*start|when.*start/,
+    reject: /notice/,
+  },
+  { key: 'willing_to_relocate', match: /relocat/ },
+  {
+    key: 'remote_preference',
+    match: /remote[\s_-]*(work|preference)?|work[\s_-]*(mode|arrangement|setting)|onsite|hybrid/,
+    reject: /remote[\s_-]*id/,
+  },
 ];
 
 /** Classify one field, or null when nothing matches confidently. */
@@ -144,6 +211,19 @@ export function classify(el: Fillable): FieldKey | null {
 }
 
 /** Resolve the string to type into a classified field. */
+/**
+ * The value a matched field should receive.
+ *
+ * Precedence is the point of this function: FitWright's Profile is the source of
+ * truth, and the extension's locally stored answers are only a fallback for what
+ * the server does not (yet) hold. That ordering is what lets the user edit one
+ * place - Settings in FitWright - and have every form follow, instead of
+ * discovering that a stale answer cached in this browser silently won.
+ *
+ * EEO/demographic answers are the deliberate exception: they are never sourced
+ * from the server profile and stay local-only, because they must never be
+ * inferred or shared, and "prefer not to say" is a valid final answer.
+ */
 export function valueFor(
   key: FieldKey,
   profile: AutofillProfile,
@@ -152,15 +232,33 @@ export function valueFor(
   switch (key) {
     case 'years_experience':
       return profile.years_experience == null ? '' : String(profile.years_experience);
+
+    case 'willing_to_relocate':
+      // Tri-state on the wire: null means unanswered, so send nothing.
+      if (profile.willing_to_relocate == null) return '';
+      return profile.willing_to_relocate ? 'Yes' : 'No';
+
+    // Eligibility answers now live in the Profile; fall back to whatever the
+    // older extension build stored locally so upgrades lose nothing.
     case 'workAuthorization':
-    case 'requiresSponsorship':
+      return profile.work_authorization || preferences.workAuthorization || '';
     case 'noticePeriod':
+      return profile.notice_period || preferences.noticePeriod || '';
     case 'salaryExpectation':
+      return profile.salary_expectation || preferences.salaryExpectation || '';
+
+    // Sponsorship is asked both ways round ("do you require sponsorship?" vs
+    // "are you authorized to work?"), so it stays a separate stored answer.
+    case 'requiresSponsorship':
+      return preferences.requiresSponsorship || '';
+
+    // Local-only by design. See the note above.
     case 'gender':
     case 'ethnicity':
     case 'veteranStatus':
     case 'disabilityStatus':
       return preferences[key] ?? '';
+
     default:
       return profile[key] ?? '';
   }

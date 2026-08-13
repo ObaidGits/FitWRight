@@ -50,6 +50,7 @@ from app.routers import (
     users_router,
     versions_router,
     discovery_router,
+    application_fields_router,
     extension_router,
 )
 
@@ -352,6 +353,7 @@ app.include_router(profile_router, prefix="/api/v1")
 app.include_router(public_profile_router, prefix="/api/v1")
 app.include_router(discovery_router, prefix="/api/v1")
 app.include_router(extension_router, prefix="/api/v1")
+app.include_router(application_fields_router, prefix="/api/v1")
 
 
 @app.get("/")

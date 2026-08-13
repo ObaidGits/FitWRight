@@ -73,6 +73,29 @@ export interface AutofillProfile {
   current_title: string;
   current_company: string;
   years_experience: number | null;
+  /** Structured address - ATS forms ask for these parts separately. */
+  address_line1: string;
+  address_line2: string;
+  city: string;
+  state: string;
+  postal_code: string;
+  country: string;
+  /**
+   * Eligibility answers, served from the user's FitWright Profile. Blank means
+   * unanswered, and must be left blank on the form rather than guessed: a wrong
+   * visa status or salary auto-rejects the application.
+   */
+  work_authorization: string;
+  visa_status: string;
+  notice_period: string;
+  salary_expectation: string;
+  /** Tri-state: null is unanswered, not "no". */
+  willing_to_relocate: boolean | null;
+  availability: string;
+  remote_preference: string;
+  highest_degree: string;
+  highest_institution: string;
+  education_years: string;
   resume_id: string | null;
   resume_filename: string;
   resume_pdf_path: string | null;

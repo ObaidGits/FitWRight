@@ -193,7 +193,13 @@ class PingResponse(BaseModel):
 
 
 class AutofillProfile(BaseModel):
-    """Everything the extension needs to fill a standard application form."""
+    """Everything the extension needs to fill a standard application form.
+
+    Sourced from the user's **Profile** first and the resume only as a fallback
+    (see :func:`get_autofill_profile`). Every field is additive against the
+    previously shipped shape, so an extension build from before this change keeps
+    working - it simply ignores what it does not know about.
+    """
 
     full_name: str = ""
     first_name: str = ""
@@ -206,13 +212,47 @@ class AutofillProfile(BaseModel):
     website: str = ""
     current_title: str = ""
     current_company: str = ""
+    # Profile first, then an estimate computed from the resume's experience dates.
+    # Deliberately NOT in the eligibility block below: unlike a visa status, this
+    # is derivable from dates rather than guessed, and a screening filter asking
+    # "minimum 5 years" is better served by a good estimate than by a blank. The
+    # user's Profile value always overrides it.
     years_experience: float | None = None
+
+    # --- Structured address ------------------------------------------------- #
+    # ATS forms ask for these as separate required inputs, and a "Pune, India"
+    # one-liner cannot be split back into them reliably.
+    address_line1: str = ""
+    address_line2: str = ""
+    city: str = ""
+    state: str = ""
+    postal_code: str = ""
+    country: str = ""
+
+    # --- Eligibility / knockout answers ------------------------------------- #
+    # These decide whether an application is auto-rejected, so they come ONLY
+    # from curated Profile facts - never inferred from resume prose. Blank means
+    # "not answered", which is safer than a guess.
+    work_authorization: str = ""
+    visa_status: str = ""
+    notice_period: str = ""
+    salary_expectation: str = ""
+    willing_to_relocate: bool | None = None
+    availability: str = ""
+    remote_preference: str = ""
+
+    # --- Highest education -------------------------------------------------- #
+    highest_degree: str = ""
+    highest_institution: str = ""
+    education_years: str = ""
+
     resume_id: str | None = None
     resume_filename: str = ""
     # Relative API path the extension fetches to attach the PDF to a form.
     resume_pdf_path: str | None = None
-    # Operator/user-supplied answers that never live in a resume. Stored on the
-    # extension side; echoed here when present so one profile object is enough.
+    # Legacy escape hatch: answers the older extension stored locally. Kept for
+    # backwards compatibility, but Profile values above take precedence - the
+    # server is the source of truth now.
     preferences: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -324,64 +364,168 @@ async def ping(
 # --------------------------------------------------------------------------- #
 # Autofill profile
 # --------------------------------------------------------------------------- #
+def _pick(*candidates: Any) -> str:
+    """First non-empty candidate as a trimmed string.
+
+    The precedence rule of this whole endpoint in one helper: pass the curated
+    Profile value first and the resume-derived value second, and the user's own
+    answer always wins.
+    """
+    for candidate in candidates:
+        text = str(candidate or "").strip()
+        if text:
+            return text
+    return ""
+
+
+def _split_name(name: str) -> tuple[str, str]:
+    """`"Ada Lovelace"` -> `("Ada", "Lovelace")`; a single token has no surname."""
+    parts = name.split()
+    if not parts:
+        return "", ""
+    return parts[0], " ".join(parts[1:])
+
+
+def _profile_document(row: dict[str, Any] | None) -> dict[str, Any]:
+    """The profile's JSON document as a plain dict, however it was stored.
+
+    SQLite hands back the JSON column as a string on some driver paths and as a
+    dict on others, so both are accepted rather than assumed.
+    """
+    if not row:
+        return {}
+    data = row.get("data")
+    if isinstance(data, str):
+        import json
+
+        try:
+            data = json.loads(data)
+        except json.JSONDecodeError:
+            return {}
+    return data if isinstance(data, dict) else {}
+
+
 @router.get("/profile", response_model=AutofillProfile, summary="Autofill profile")
 async def get_autofill_profile(
     resume_id: str | None = None,
     user_id: str = Depends(get_effective_user_id),
     db: Database = Depends(get_db),
 ) -> AutofillProfile:
-    """Build the autofill profile from the user's resume.
+    """Build the autofill profile: **Profile first, resume as fallback**.
 
-    Deliberately derived rather than separately stored: the resume is already
-    the canonical record of name/contact/experience, so there is no second copy
-    to drift. Fields the resume cannot know (visa status, notice period, salary
-    expectation) live in the extension's own options page.
+    The Profile is what the user curates in FitWright, so it is authoritative -
+    it holds the answers a resume cannot carry (work authorization, visa status,
+    notice period, salary expectation, relocation, structured address) and the
+    ones they may deliberately want to differ from the resume. The resume only
+    fills gaps the Profile has left empty, which keeps a fresh account useful
+    before anyone has visited the Profile page.
+
+    Eligibility answers are the exception to "fall back": they are never derived
+    from resume prose. Guessing a visa status or salary wrong auto-rejects an
+    application, so an unanswered field stays blank on purpose.
     """
+    profile_row = await db.get_profile(user_id)
+    document = _profile_document(profile_row)
+    identity = document.get("identity") if isinstance(document.get("identity"), dict) else {}
+    address = identity.get("address") if isinstance(identity.get("address"), dict) else {}
+
     resume = await _resolve_resume(db, user_id, resume_id)
-    if resume is None:
-        # Not an error: a fresh account has no resume yet. The extension shows
-        # an "upload a resume first" state rather than an error toast.
-        return AutofillProfile()
+    processed: dict[str, Any] = {}
+    if resume is not None:
+        raw = resume.get("processed_data")
+        if isinstance(raw, str):
+            import json
 
-    processed = resume.get("processed_data")
-    if isinstance(processed, str):
-        import json
-
-        try:
-            processed = json.loads(processed)
-        except json.JSONDecodeError:
-            processed = None
-    if not isinstance(processed, dict):
-        processed = {}
+            try:
+                raw = json.loads(raw)
+            except json.JSONDecodeError:
+                raw = None
+        if isinstance(raw, dict):
+            processed = raw
 
     personal = processed.get("personal_info")
     personal = personal if isinstance(personal, dict) else {}
 
-    name = str(personal.get("name") or "").strip()
-    parts = name.split()
     experience = processed.get("experience")
-    latest = (
+    latest_resume_role = (
         experience[0]
         if isinstance(experience, list) and experience and isinstance(experience[0], dict)
         else {}
     )
 
-    rid = resume.get("resume_id")
+    # Current role: the Profile's explicit currentRole/currentCompany, else the
+    # work-experience entry flagged `current`, else the resume's latest entry.
+    profile_roles = document.get("workExperience")
+    current_profile_role: dict[str, Any] = {}
+    if isinstance(profile_roles, list):
+        for entry in profile_roles:
+            if isinstance(entry, dict) and entry.get("current"):
+                current_profile_role = entry
+                break
+        if not current_profile_role and profile_roles and isinstance(profile_roles[0], dict):
+            current_profile_role = profile_roles[0]
+
+    # Highest education: the first entry, which the Profile editor keeps ordered
+    # most-recent-first (same convention as the resume).
+    education = document.get("education")
+    top_education = (
+        education[0]
+        if isinstance(education, list) and education and isinstance(education[0], dict)
+        else {}
+    )
+
+    name = _pick(identity.get("name"), personal.get("name"))
+    first_name, last_name = _split_name(name)
+
+    years = identity.get("yearsExperience")
+    if not isinstance(years, (int, float)):
+        years = _years_of_experience(processed) if processed else None
+
+    rid = resume.get("resume_id") if resume else None
+    relocation = identity.get("relocation")
+
     return AutofillProfile(
         full_name=name,
-        first_name=parts[0] if parts else "",
-        last_name=" ".join(parts[1:]) if len(parts) > 1 else "",
-        email=str(personal.get("email") or ""),
-        phone=str(personal.get("phone") or ""),
-        location=str(personal.get("location") or ""),
-        linkedin=str(personal.get("linkedin") or ""),
-        github=str(personal.get("github") or ""),
-        website=str(personal.get("website") or ""),
-        current_title=str(latest.get("title") or personal.get("title") or ""),
-        current_company=str(latest.get("company") or ""),
-        years_experience=_years_of_experience(processed),
+        first_name=first_name,
+        last_name=last_name,
+        email=_pick(identity.get("email"), personal.get("email")),
+        phone=_pick(identity.get("phone"), personal.get("phone")),
+        location=_pick(identity.get("location"), personal.get("location")),
+        linkedin=_pick(identity.get("linkedin"), personal.get("linkedin")),
+        github=_pick(identity.get("github"), personal.get("github")),
+        website=_pick(identity.get("website"), personal.get("website")),
+        current_title=_pick(
+            identity.get("currentRole"),
+            current_profile_role.get("title"),
+            latest_resume_role.get("title"),
+            personal.get("title"),
+        ),
+        current_company=_pick(
+            identity.get("currentCompany"),
+            current_profile_role.get("company"),
+            latest_resume_role.get("company"),
+        ),
+        years_experience=float(years) if isinstance(years, (int, float)) else None,
+        # Structured address - Profile only; a resume has no such breakdown.
+        address_line1=_pick(address.get("line1")),
+        address_line2=_pick(address.get("line2")),
+        city=_pick(address.get("city")),
+        state=_pick(address.get("state")),
+        postal_code=_pick(address.get("postalCode")),
+        country=_pick(address.get("country")),
+        # Eligibility - Profile only, never inferred. See the docstring.
+        work_authorization=_pick(identity.get("workAuthorization")),
+        visa_status=_pick(identity.get("visaStatus")),
+        notice_period=_pick(identity.get("noticePeriod")),
+        salary_expectation=_pick(identity.get("salaryExpectation")),
+        willing_to_relocate=relocation if isinstance(relocation, bool) else None,
+        availability=_pick(identity.get("availability")),
+        remote_preference=_pick(identity.get("remotePreference")),
+        highest_degree=_pick(top_education.get("degree")),
+        highest_institution=_pick(top_education.get("institution")),
+        education_years=_pick(top_education.get("years")),
         resume_id=rid,
-        resume_filename=str(resume.get("filename") or "resume.pdf"),
+        resume_filename=str(resume.get("filename") or "resume.pdf") if resume else "",
         resume_pdf_path=f"/api/v1/resumes/{rid}/pdf" if rid else None,
     )
 

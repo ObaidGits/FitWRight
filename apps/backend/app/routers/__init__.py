@@ -27,6 +27,7 @@ from app.routers.users import router as users_router
 from app.routers.versions import router as versions_router
 from app.routers.discovery import router as discovery_router
 from app.routers.extension import router as extension_router
+from app.routers.application_fields import router as application_fields_router
 
 __all__ = [
     "resumes_router",
@@ -56,4 +57,5 @@ __all__ = [
     "public_profile_router",
     "discovery_router",
     "extension_router",
+    "application_fields_router",
 ]

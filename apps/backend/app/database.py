@@ -1168,6 +1168,251 @@ class Database:
             "updated_at": row.updated_at,
         }
 
+    # ===================================================================== #
+    # Application field registry (the learning loop)
+    # ===================================================================== #
+
+    async def upsert_application_field(
+        self,
+        user_id: str,
+        *,
+        label: str,
+        label_normalized: str,
+        field_type: str = "text",
+        options: list[str] | None = None,
+        status: str = "needs_answer",
+        source: str = "learned",
+        company: str | None = None,
+        last_seen_url: str | None = None,
+        last_seen_ats: str | None = None,
+        last_seen_at: str | None = None,
+    ) -> bool:
+        """Record that a form asked this question. Returns True if newly created.
+
+        Matching is on the normalized label within the same scope, so the same
+        question seen fifty times is one row with ``times_seen`` at fifty rather
+        than fifty rows - which is the difference between a usable Settings page
+        and an unusable one.
+
+        An existing answer is never overwritten here. A later form offering
+        different options or a different input type must not silently discard what
+        the user already told us; only the sighting metadata is refreshed.
+        """
+        from sqlalchemy import select
+
+        from app.models import ApplicationField, _utcnow_iso
+
+        # A reported field is global unless it was seen with a company attached.
+        scope = "company" if company else "global"
+        async with self._session() as session:
+            async with session.begin():
+                existing = (
+                    await session.execute(
+                        select(ApplicationField).where(
+                            (ApplicationField.user_id == user_id)
+                            & (ApplicationField.label_normalized == label_normalized)
+                            & (ApplicationField.scope == scope)
+                            & (ApplicationField.company == company)
+                        )
+                    )
+                ).scalar_one_or_none()
+
+                if existing is not None:
+                    existing.times_seen = (existing.times_seen or 0) + 1
+                    existing.last_seen_at = last_seen_at or _utcnow_iso()
+                    if last_seen_url:
+                        existing.last_seen_url = last_seen_url
+                    if last_seen_ats:
+                        existing.last_seen_ats = last_seen_ats
+                    # Options can legitimately grow between postings; take the
+                    # richer set so Settings can render every choice offered.
+                    if options and len(options) > len(existing.options or []):
+                        existing.options = options
+                    # A field we once could not answer but just filled is answered
+                    # now; the reverse must NOT reopen a question already settled.
+                    if status == "answered" and existing.status == "needs_answer":
+                        existing.status = "answered"
+                    existing.updated_at = _utcnow_iso()
+                    return False
+
+                session.add(
+                    ApplicationField(
+                        user_id=user_id,
+                        label=label,
+                        label_normalized=label_normalized,
+                        field_type=field_type,
+                        options=options or None,
+                        status=status,
+                        source=source,
+                        scope=scope,
+                        company=company,
+                        times_seen=1,
+                        last_seen_at=last_seen_at or _utcnow_iso(),
+                        last_seen_url=last_seen_url,
+                        last_seen_ats=last_seen_ats,
+                    )
+                )
+                return True
+
+    async def list_application_fields(
+        self, user_id: str, *, status: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Known fields. Unanswered first, then by how often they come up."""
+        from sqlalchemy import case, select
+
+        from app.models import ApplicationField, _utcnow_iso
+
+        stmt = select(ApplicationField).where(ApplicationField.user_id == user_id)
+        if status:
+            stmt = stmt.where(ApplicationField.status == status)
+        stmt = stmt.order_by(
+            # Anything awaiting an answer belongs at the top of Settings.
+            case((ApplicationField.status == "needs_answer", 0), else_=1),
+            ApplicationField.times_seen.desc(),
+            ApplicationField.label,
+        )
+        async with self._session() as session:
+            rows = (await session.execute(stmt)).scalars().all()
+            return [self._application_field_to_dict(r) for r in rows]
+
+    async def update_application_field(
+        self, user_id: str, field_id: str, changes: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        """Apply a partial update. Returns the updated row, or None if not found."""
+        from sqlalchemy import select
+
+        from app.models import ApplicationField, _utcnow_iso
+
+        allowed = {
+            "label",
+            "label_normalized",
+            "field_type",
+            "options",
+            "value",
+            "profile_path",
+            "scope",
+            "company",
+            "status",
+            "synonyms",
+        }
+        async with self._session() as session:
+            async with session.begin():
+                row = (
+                    await session.execute(
+                        select(ApplicationField).where(
+                            (ApplicationField.user_id == user_id)
+                            & (ApplicationField.id == field_id)
+                        )
+                    )
+                ).scalar_one_or_none()
+                if row is None:
+                    return None
+
+                # Enforce the value-or-pointer rule here, not just in the router:
+                # any caller (an importer, a future endpoint) that sets one must
+                # not be able to leave the other behind as a stale answer.
+                if changes.get("profile_path"):
+                    changes["value"] = None
+                elif changes.get("value") is not None:
+                    changes["profile_path"] = None
+
+                # Giving a field an answer takes it out of the review queue, even
+                # if the caller forgot to say so - otherwise Settings would keep
+                # asking for something already answered.
+                answered_now = changes.get("value") is not None or changes.get("profile_path")
+                if answered_now and "status" not in changes:
+                    changes["status"] = "answered"
+
+                for key, value in changes.items():
+                    if key in allowed:
+                        setattr(row, key, value)
+                # A global answer has no company; clearing scope must clear it too,
+                # or the unique constraint would treat it as a company row.
+                if changes.get("scope") == "global":
+                    row.company = None
+                row.updated_at = _utcnow_iso()
+                result = self._application_field_to_dict(row)
+            return result
+
+    async def delete_application_field(self, user_id: str, field_id: str) -> bool:
+        from sqlalchemy import delete
+
+        from app.models import ApplicationField, _utcnow_iso
+
+        async with self._session() as session:
+            async with session.begin():
+                result = await session.execute(
+                    delete(ApplicationField).where(
+                        (ApplicationField.user_id == user_id)
+                        & (ApplicationField.id == field_id)
+                    )
+                )
+                return bool(result.rowcount)
+
+    async def merge_application_fields(
+        self, user_id: str, keep_id: str, drop_id: str
+    ) -> dict[str, Any] | None:
+        """Fold ``drop_id``'s wording into ``keep_id``'s synonyms and delete it.
+
+        The kept row's answer wins; the dropped row contributes only its label (and
+        any synonyms it had already absorbed), plus its sighting count so the
+        merged row reflects how often the question really appears.
+        """
+        from sqlalchemy import select
+
+        from app.models import ApplicationField, _utcnow_iso
+
+        async with self._session() as session:
+            async with session.begin():
+                rows = (
+                    (
+                        await session.execute(
+                            select(ApplicationField).where(
+                                (ApplicationField.user_id == user_id)
+                                & (ApplicationField.id.in_([keep_id, drop_id]))
+                            )
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                by_id = {r.id: r for r in rows}
+                keep, drop = by_id.get(keep_id), by_id.get(drop_id)
+                if keep is None or drop is None:
+                    return None
+
+                synonyms = list(keep.synonyms or [])
+                for candidate in [drop.label_normalized, *(drop.synonyms or [])]:
+                    if candidate and candidate != keep.label_normalized:
+                        if candidate not in synonyms:
+                            synonyms.append(candidate)
+                keep.synonyms = synonyms
+                keep.times_seen = (keep.times_seen or 0) + (drop.times_seen or 0)
+                keep.updated_at = _utcnow_iso()
+                await session.delete(drop)
+                result = self._application_field_to_dict(keep)
+            return result
+
+    def _application_field_to_dict(self, row: Any) -> dict[str, Any]:
+        return {
+            "id": row.id,
+            "label": row.label,
+            "label_normalized": row.label_normalized,
+            "synonyms": row.synonyms or [],
+            "field_type": row.field_type,
+            "options": row.options or [],
+            "value": row.value,
+            "profile_path": row.profile_path,
+            "scope": row.scope,
+            "company": row.company,
+            "status": row.status,
+            "source": row.source,
+            "times_seen": row.times_seen,
+            "last_seen_at": row.last_seen_at,
+            "last_seen_url": row.last_seen_url,
+            "last_seen_ats": row.last_seen_ats,
+        }
+
     async def get_profile(self, user_id: str) -> dict[str, Any] | None:
         """Return the user's profile (one per user), or ``None`` if not created."""
         async with self._session() as session:

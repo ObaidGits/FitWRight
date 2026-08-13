@@ -225,9 +225,92 @@ class Application(Base):
     role: Mapped[str | None] = mapped_column(String, nullable=True)
     applied_at: Mapped[str | None] = mapped_column(String, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # --- Submission audit trail (Phase 5) ---------------------------------- #
+    # What was actually sent, captured at submit time. Kept because it answers
+    # questions nothing else can: what did I tell them my notice period was, which
+    # resume version did they see, and which answers correlate with callbacks.
+    submitted_answers: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    submitted_resume_version_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    # extension | manual | api - how the application reached the employer.
+    submitted_via: Mapped[str | None] = mapped_column(String, nullable=True)
     position: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[str] = mapped_column(String, default=_utcnow_iso)
     updated_at: Mapped[str] = mapped_column(String, default=_utcnow_iso)
+
+
+class ApplicationField(Base):
+    """One question an application form asked, and the user's answer to it.
+
+    The learning loop's store. Every form the extension fills reports the fields
+    it saw; anything it could not answer lands here as ``needs_answer`` and shows
+    up in Settings, so answering it once teaches every future form.
+
+    Two design rules are load-bearing:
+
+    * **A row holds a value OR a pointer, never both.** When a question maps onto
+      something the Profile already models, ``profile_path`` is set (e.g.
+      ``identity.workAuthorization``) and ``value`` stays null - the answer is
+      read live from the Profile. Copying it here instead would leave a stale
+      duplicate that silently wins after the user edits their Profile.
+    * **Type and scope are set at creation.** Without them Settings degenerates
+      into a flat list of hundreds of raw ATS labels; with them the page can
+      group, render the right input, and collapse synonyms.
+    """
+
+    __tablename__ = "application_fields"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_new_uuid)
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+
+    # The label as the site wrote it, plus a normalized form for matching.
+    label: Mapped[str] = mapped_column(String, nullable=False)
+    label_normalized: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    # Other normalized labels seen for the same question ("Years of Python",
+    # "Python (years)"), merged into this row so Settings shows one entry.
+    synonyms: Mapped[list | None] = mapped_column(JSON, nullable=True)
+
+    # text | textarea | select | radio | checkbox | date | number | file
+    field_type: Mapped[str] = mapped_column(String, nullable=False, default="text")
+    # For select/radio: the options the form offered, so Settings can render the
+    # same choices instead of a free-text box that will not match.
+    options: Mapped[list | None] = mapped_column(JSON, nullable=True)
+
+    # The answer, when this question is not something the Profile models.
+    value: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # Dotted path into the profile document, when it is. Mutually exclusive with
+    # ``value`` - see the class docstring.
+    profile_path: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    # global | company - a company-scoped answer wins over a global one.
+    scope: Mapped[str] = mapped_column(String, nullable=False, default="global")
+    company: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+
+    # needs_answer | answered | ignored ("never ask me this")
+    status: Mapped[str] = mapped_column(String, nullable=False, default="needs_answer", index=True)
+    # learned (seen on a form) | user (added in Settings) | builtin
+    source: Mapped[str] = mapped_column(String, nullable=False, default="learned")
+
+    # How often this question has been encountered, so Settings can lead with
+    # what actually matters instead of one-off junk.
+    times_seen: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    last_seen_at: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Where it was last seen, for the review card's "appeared on" line.
+    last_seen_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    last_seen_ats: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    created_at: Mapped[str] = mapped_column(String, default=_utcnow_iso)
+    updated_at: Mapped[str] = mapped_column(String, default=_utcnow_iso)
+
+    __table_args__ = (
+        # One row per question per scope. A company-specific answer coexists with
+        # the global one; a second global row for the same label does not.
+        UniqueConstraint(
+            "user_id", "label_normalized", "scope", "company", name="uq_appfield_user_label_scope"
+        ),
+        Index("ix_appfield_user_status", "user_id", "status"),
+    )
 
 
 class ApiKey(Base):

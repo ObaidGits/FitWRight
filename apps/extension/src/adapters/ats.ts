@@ -189,6 +189,59 @@ export const workdayAdapter: SiteAdapter = {
   formRoot: () => pick(['[data-automation-id="applyFlow"]', 'form', 'main']),
 };
 
+/**
+ * Indeed Easy Apply, which runs on its own origin (`smartapply.indeed.com`)
+ * rather than on the job page.
+ *
+ * UNVERIFIED SELECTORS - READ BEFORE TRUSTING THIS ADAPTER.
+ * Reaching this flow requires a logged-in Indeed account applying to a real job,
+ * so its DOM could not be inspected from an automated browser. Everything here
+ * is therefore built only on what is verifiable without seeing the page:
+ *
+ *  - `matches` and `classify` key off the hostname and pathname, which are
+ *    documented by the URLs Indeed publishes and stable across the flow.
+ *  - Field filling relies on the GENERIC matcher in lib/fields.ts, which reads
+ *    labels, name, id and placeholder rather than Indeed-specific classes. That
+ *    is why this adapter needs no bespoke field selectors to be useful.
+ *  - `formRoot` is a widening cascade: an Indeed-specific hook first, then the
+ *    ARIA main landmark, then any form. If the first misses, the later ones
+ *    still scope autofill sanely.
+ *
+ * One live pass is still needed to confirm the resume-upload step and the
+ * per-step container, since Indeed's flow has steps that are not plain forms
+ * (resume choice, review). Expect to adjust `formRoot` and `readySelector` then.
+ */
+export const indeedApplyAdapter: SiteAdapter = {
+  id: 'indeed_apply',
+  label: 'Indeed Easy Apply',
+  readySelector: 'form, [role="main"], [data-testid="ResumeSection"]',
+
+  matches: (url) =>
+    url.hostname === 'smartapply.indeed.com' || url.hostname.endsWith('.smartapply.indeed.com'),
+
+  classify(url): PageKind {
+    // The whole SmartApply origin exists to host the application flow, so any
+    // page under /applyingasjobseeker or /form is a step of that form.
+    if (/appl(y|ying)|form|resume|questions|review/i.test(url.pathname)) {
+      return 'application-form';
+    }
+    return 'application-form';
+  },
+
+  extractJob(url) {
+    // The flow shows the job title and company in its header; the canonical
+    // record already exists in the feed from the board page, so this is only a
+    // best-effort label for the applied-tracking receipt.
+    return toJob('indeed_apply', url, {
+      title: pickText(['h1', '[data-testid*="title"]', '[class*="jobTitle"]']),
+      company: pickText(['[data-testid*="company"]', '[class*="companyName"]']),
+      location: pickText(['[data-testid*="location"]', '[class*="location"]']),
+    });
+  },
+
+  formRoot: () => pick(['[data-testid="ApplicationForm"]', 'form', '[role="main"]', 'main']),
+};
+
 export const smartRecruitersAdapter: SiteAdapter = {
   id: 'smartrecruiters',
   label: 'SmartRecruiters',
@@ -220,4 +273,5 @@ export const atsAdapters: SiteAdapter[] = [
   ashbyAdapter,
   workdayAdapter,
   smartRecruitersAdapter,
+  indeedApplyAdapter,
 ];
