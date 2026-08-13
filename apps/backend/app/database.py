@@ -3211,7 +3211,7 @@ class Database:
         if is_remote:
             conditions.append(DiscoveryResult.is_remote.is_(True))
         if min_score is not None:
-            # Stored 0..1; the UI speaks percent and converts before calling.
+            # Stored on the same 0..100 scale the UI prints, so no conversion.
             conditions.append(DiscoveryResult.match_score >= min_score)
         if posted_within_hours is not None and posted_within_hours > 0:
             cutoff = (

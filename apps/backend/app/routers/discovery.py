@@ -571,8 +571,11 @@ async def get_discovery_feed(
     An honest absence beats a filter that lies.
     """
     source_list = [s.strip() for s in (sources or "").split(",") if s.strip()] or None
-    # The UI speaks percent; scores are stored 0..1.
-    score_floor = max(0.0, min(100.0, float(min_score))) / 100 if min_score else None
+    # Scores are stored 0..100, the same scale the UI prints, so the filter value
+    # passes through unchanged. It was briefly divided by 100 here, which made a
+    # "70%+ match" filter accept anything scoring 1 or more - invisible at the
+    # time because no job in the feed had been scored at all.
+    score_floor = max(0.0, min(100.0, float(min_score))) if min_score else None
 
     results = await db.get_discovery_feed(
         user_id,
@@ -982,6 +985,66 @@ async def edit_discovery_schedule(
     return {"message": "Schedule updated", "changes": {k: v for k, v in values.items() if k != "updated_at"}}
 
 
+class ScoreFeedRequest(BaseModel):
+    resume_id: str | None = None
+    # Bounded per call so a 200-job feed cannot become one enormous request.
+    limit: int = 40
+
+
+@router.post("/feed/score", summary="Score unscored feed jobs against a resume")
+async def score_feed(
+    payload: ScoreFeedRequest,
+    user_id: str = Depends(require_verified_user_id),
+    db: Database = Depends(get_db),
+):
+    """Score jobs that have no match score yet.
+
+    Scores exist only for jobs matched against a resume; a keyword harvest stores
+    none. So most of a feed is unscored, and the score filter has nothing to work
+    with.
+
+    Deliberately explicit rather than automatic. Scoring reads each job
+    description through the keyword extractor, which is an LLM call per job
+    (cached by content, but the first pass is real). Quietly scoring 200 jobs
+    because a user pressed Search once would spend their budget without asking.
+    The UI shows the count before this runs, and ``limit`` caps a single call.
+    """
+    from app.job_discovery.scoring import score_unscored_results
+
+    resume = (
+        await db.get_resume(user_id, payload.resume_id)
+        if payload.resume_id
+        else await db.get_master_resume(user_id)
+    )
+    if resume is None:
+        raise HTTPException(status_code=404, detail="resume_not_found")
+
+    scored, remaining = await score_unscored_results(
+        db, user_id, resume, limit=max(1, min(payload.limit, 100))
+    )
+    return {"scored": scored, "remaining": remaining, "resume_id": resume["resume_id"]}
+
+
+@router.get("/board-health", summary="Which boards are actually working")
+async def get_board_health(
+    user_id: str = Depends(get_effective_user_id),
+    db: Database = Depends(get_db),
+):
+    """Per-board status, worst first, plus which ones need attention.
+
+    Answers the question a user cannot answer for themselves: "is this board
+    broken, or is my search too narrow?"
+    """
+    from app.job_discovery.board_health import FAILURE_THRESHOLD, list_health
+
+    boards = await list_health(db, user_id)
+    return {
+        "boards": boards,
+        "needs_attention": [b for b in boards if b["needs_attention"]],
+        "failure_threshold": FAILURE_THRESHOLD,
+    }
+
+
 # 10. Feed cleanup/TTL endpoint
 @router.post("/feed/cleanup", summary="Archive old feed results")
 async def cleanup_feed(
@@ -989,22 +1052,23 @@ async def cleanup_feed(
     user_id: str = Depends(require_verified_user_id),
     db: Database = Depends(get_db),
 ):
-    """Remove feed results older than N days (default 30). Keeps 'interested' and 'applied'."""
-    from sqlalchemy import delete as sa_delete
-    from app.models import DiscoveryResult
-    from datetime import datetime, timedelta, timezone
+    """Remove untouched feed results older than N days (default 30).
 
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=max(7, days))).isoformat()
+    Anything the user decided about - interested, tailored, applied - is kept: a
+    decision is not disk to reclaim. The background worker runs the same sweep
+    daily, so this endpoint is the "do it now" version rather than the only way it
+    ever happens; sharing one implementation is what keeps the two from drifting
+    into different definitions of "old".
+    """
+    from app.job_discovery.retention import (
+        DEFAULT_RETENTION_DAYS,
+        MIN_RETENTION_DAYS,
+        sweep_feed,
+    )
 
-    async with db._session() as session:
-        async with session.begin():
-            result = await session.execute(
-                sa_delete(DiscoveryResult).where(
-                    (DiscoveryResult.user_id == user_id)
-                    & (DiscoveryResult.created_at < cutoff)
-                    & (DiscoveryResult.status.in_(["new", "dismissed"]))
-                )
-            )
-            deleted = result.rowcount or 0
-
-    return {"deleted": deleted, "cutoff_days": days}
+    deleted = await sweep_feed(db, user_id, days or DEFAULT_RETENTION_DAYS)
+    return {
+        "deleted": deleted,
+        "cutoff_days": max(MIN_RETENTION_DAYS, days),
+        "minimum_days": MIN_RETENTION_DAYS,
+    }

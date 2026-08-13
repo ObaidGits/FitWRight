@@ -449,6 +449,39 @@ async def get_install_info(
     return InstallInfo(dist_path=str(dist), built=dist.is_dir(), local=True)
 
 
+class BoardOutcome(BaseModel):
+    """One board's result inside a harvest run, as the extension saw it."""
+
+    source: str = Field(min_length=1, max_length=50)
+    found: int = 0
+    saved: int = 0
+    error: str | None = Field(default=None, max_length=500)
+    reason: str | None = Field(default=None, max_length=30)
+
+
+class BoardOutcomeReport(BaseModel):
+    per_site: list[BoardOutcome] = Field(default_factory=list, max_length=40)
+
+
+@router.post("/board-health", summary="Report how each board behaved")
+async def report_board_health(
+    payload: BoardOutcomeReport,
+    user_id: str = Depends(require_verified_user_id),
+    db: Database = Depends(get_db),
+):
+    """Record what happened on each board, so breakage becomes visible.
+
+    Without this, a dead adapter is silent: the board returns nothing, the toast
+    disappears, and the user concludes their search was too narrow. Three empty
+    runs in a row against a board that has produced rows before is a fact worth
+    surfacing, and only the server can remember it across sessions.
+    """
+    from app.job_discovery.board_health import record_run
+
+    recorded = await record_run(db, user_id, [o.model_dump() for o in payload.per_site])
+    return {"recorded": recorded}
+
+
 @router.get("/profile", response_model=AutofillProfile, summary="Autofill profile")
 async def get_autofill_profile(
     resume_id: str | None = None,

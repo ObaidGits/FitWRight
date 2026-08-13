@@ -1389,6 +1389,38 @@ class DiscoveryRun(Base):
     )
 
 
+class BoardHealth(Base):
+    """Whether a job board is actually working for this user.
+
+    Exists because a dead scraper is silent: the board returns nothing and the
+    user blames their search terms. A rolling failure count turns "no results"
+    into "Hirist has returned nothing five runs in a row", which is actionable -
+    sign in again, or the adapter needs fixing.
+
+    One row per user per board, overwritten in place. This is a status, not a log:
+    nobody needs the history, they need to know what is broken now.
+    """
+
+    __tablename__ = "board_health"
+    __table_args__ = (
+        UniqueConstraint("user_id", "board", name="uq_board_health_user_board"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_new_uuid)
+    user_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    board: Mapped[str] = mapped_column(String, nullable=False)
+    # ok | empty | signed_out | capped | error
+    last_status: Mapped[str] = mapped_column(String, nullable=False)
+    last_error: Mapped[str | None] = mapped_column(String, nullable=True)
+    last_run_at: Mapped[str] = mapped_column(String, nullable=False, default=_utcnow_iso)
+    # The "it used to work" evidence: without this, a board that never worked and
+    # one that broke yesterday look identical.
+    last_success_at: Mapped[str | None] = mapped_column(String, nullable=True)
+    last_found: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    consecutive_failures: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    total_runs: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
 class DiscoveryResult(Base):
     """A persisted job listing from a discovery run.
 

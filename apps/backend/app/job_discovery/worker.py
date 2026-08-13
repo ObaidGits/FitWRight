@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -107,6 +108,11 @@ async def _execute_one_run(run: dict[str, Any]) -> None:
             run_id, status="success", results_count=new_count,
             next_run_at=next_run,
         )
+        # Tell the user. A background search that silently fills a list gives
+        # nobody a reason to come back, and the whole point of scheduling it was
+        # that they would not have to check.
+        if new_count:
+            await _notify_new_matches(user_id, run_id, new_count, result.recommendations)
         logger.info(
             "Discovery run %s for user %s: %d new results (of %d total)",
             run_id, user_id, new_count, len(results_to_store),
@@ -123,6 +129,79 @@ async def _execute_one_run(run: dict[str, Any]) -> None:
             run_id, status="error", error=str(exc)[:500],
             next_run_at=next_run,
         )
+
+
+async def _notify_new_matches(
+    user_id: str, run_id: str, new_count: int, recommendations
+) -> None:
+    """Tell the user their scheduled search found something.
+
+    Names the best match rather than only counting, because "3 new jobs" is a
+    chore and "Senior Data Engineer at Globex, 82% match" is a reason to open the
+    app. Failure here is never fatal: a missing notification is a worse product,
+    not a broken run, and the results are already saved.
+
+    Deduped per run per day, so a run that fires twice in one day cannot notify
+    twice.
+    """
+    try:
+        from app.notifications import get_notification_service
+
+        best = None
+        for rec in recommendations or []:
+            if best is None or (rec.match_score or 0) > (best.match_score or 0):
+                best = rec
+
+        title = f"{new_count} new job{'s' if new_count != 1 else ''} in your feed"
+        body = None
+        if best is not None and best.listing.title:
+            company = best.listing.company or "an employer"
+            score = int(best.match_score or 0)
+            body = f"Best match: {best.listing.title} at {company}"
+            if score:
+                body += f" ({score}% match)"
+
+        today = datetime.now(timezone.utc).date().isoformat()
+        await get_notification_service().notify(
+            user_id,
+            type="discovery_results",
+            title=title,
+            body=body,
+            category="system",
+            node_type="discovery",
+            dedupe_key=f"discovery:{run_id}:{today}",
+        )
+    except Exception:  # noqa: BLE001
+        logger.warning("Could not notify user %s about new discovery results", user_id)
+
+
+_SWEEP_INTERVAL_SECONDS = 24 * 60 * 60
+_last_sweep_at: float | None = None
+
+
+async def _sweep_if_due(db, sleep_fn) -> None:
+    """Run feed retention about once a day.
+
+    Interval-based rather than cron-scheduled because the worker may be restarted
+    at any hour, and a fixed wall-clock time would be missed on every restart. The
+    exact hour does not matter; that it happens does.
+    """
+    global _last_sweep_at
+
+    now = time.monotonic()
+    if _last_sweep_at is not None and (now - _last_sweep_at) < _SWEEP_INTERVAL_SECONDS:
+        return
+    _last_sweep_at = now
+
+    try:
+        from app.job_discovery.retention import sweep_all_users
+
+        removed = await sweep_all_users(db)
+        if removed:
+            logger.info("Feed retention: removed %d stale rows", removed)
+    except Exception:  # noqa: BLE001
+        # A feed that grows too long is a degraded feed, not a broken worker.
+        logger.exception("Feed retention sweep failed; will retry next cycle")
 
 
 async def discovery_worker_loop(
@@ -148,6 +227,11 @@ async def discovery_worker_loop(
                 continue
 
             async with _running_lock:
+                # Retention first: sweeping before searching means the new rows
+                # land in an already-tidy feed, and the sweep still runs on days
+                # when no search is due.
+                await _sweep_if_due(db, sleep_fn)
+
                 due_runs = await db.list_due_discovery_runs(limit=5)
                 if not due_runs:
                     continue

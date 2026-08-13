@@ -131,19 +131,34 @@ class TestCombined:
 
 
 class TestScoreFilter:
-    """`min_score` is stored 0..1; the router converts from the UI's percent."""
+    """`min_score` is on the 0..100 scale the UI prints - no conversion."""
 
     async def test_floor_excludes_weaker_matches(self, db):
         scored = [
-            {**row("s1", source="linkedin", title="Strong", company="A"), "match_score": 0.9},
-            {**row("s2", source="linkedin", title="Middling", company="B"), "match_score": 0.55},
-            {**row("s3", source="linkedin", title="Weak", company="C"), "match_score": 0.1},
+            {**row("s1", source="linkedin", title="Strong", company="A"), "match_score": 90},
+            {**row("s2", source="linkedin", title="Middling", company="B"), "match_score": 55},
+            {**row("s3", source="linkedin", title="Weak", company="C"), "match_score": 10},
         ]
         await db.upsert_discovery_results(USER, "test", scored)
 
-        rows, total = await both(db, min_score=0.7)
+        rows, total = await both(db, min_score=70)
         assert [r["title"] for r in rows] == ["Strong"]
         assert total == 1
+
+    async def test_percent_is_not_divided(self, db):
+        """The bug this pins: a 0..1 conversion made "70%+" accept everything.
+
+        A job scoring 40 out of 100 must fail a 70% floor. If the filter value were
+        divided by 100 it would become 0.7 and 40 would sail past it.
+        """
+        await db.upsert_discovery_results(
+            USER,
+            "test",
+            [{**row("mid", source="linkedin", title="Middling", company="B"), "match_score": 40}],
+        )
+
+        _rows, total = await both(db, min_score=70)
+        assert total == 0
 
     async def test_no_floor_returns_everything(self, seeded):
         rows, total = await both(seeded, min_score=None)
@@ -151,13 +166,13 @@ class TestScoreFilter:
         assert len(rows) == len(SEED)
 
     async def test_zero_floor_is_not_treated_as_no_filter(self, db):
-        """0.0 must still be a filter, not silently dropped by a falsy check."""
+        """0 must still be a filter, not silently dropped by a falsy check."""
         await db.upsert_discovery_results(
             USER,
             "test",
-            [{**row("z", source="linkedin", title="Any", company="A"), "match_score": 0.0}],
+            [{**row("z", source="linkedin", title="Any", company="A"), "match_score": 0}],
         )
-        rows, total = await both(db, min_score=0.0)
+        rows, total = await both(db, min_score=0)
         # Every score is >= 0, so this is a filter that legitimately matches all.
         assert total == 1
         assert len(rows) == 1
@@ -206,23 +221,23 @@ class TestFiltersCombine:
         rows_in = [
             {
                 **row("c1", source="linkedin", title="Python Developer", company="Acme"),
-                "match_score": 0.95,
+                "match_score": 95,
             },
             {
                 **row("c2", source="hirist", title="Python Developer", company="Globex"),
-                "match_score": 0.95,
+                "match_score": 95,
             },
             {
                 **row("c3", source="linkedin", title="Java Developer", company="Acme"),
-                "match_score": 0.95,
+                "match_score": 95,
             },
             {
                 **row("c4", source="linkedin", title="Python Developer", company="Initech"),
-                "match_score": 0.2,
+                "match_score": 20,
             },
         ]
         await db.upsert_discovery_results(USER, "test", rows_in)
 
-        rows, total = await both(db, sources=["linkedin"], query="python", min_score=0.7)
+        rows, total = await both(db, sources=["linkedin"], query="python", min_score=70)
         assert [r["company"] for r in rows] == ["Acme"]
         assert total == 1
