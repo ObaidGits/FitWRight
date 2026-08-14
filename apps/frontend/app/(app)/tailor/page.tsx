@@ -2554,7 +2554,7 @@ function CompanionDocuments({
 }
 
 /** Inline keyword-match stats for the tailor review step - the same
- *  client-side comparison the resume page's JdMatchCard does, computed here
+ *  client-side comparison the builder's JD Match mode does, computed here
  *  against the freshly tailored preview so the user sees it without leaving
  *  the tailor flow. No LLM call. */
 function KeywordMatchSummary({ jd, resumeData }: { jd: string; resumeData: ResumeData }) {
