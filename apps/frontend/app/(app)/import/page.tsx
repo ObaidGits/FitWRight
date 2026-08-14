@@ -77,7 +77,7 @@ export default function ImportPage() {
         return false;
       }
       toast({ title: 'Resume uploaded', variant: 'success' });
-      router.push(`/resumes/${res.resume_id}`);
+      router.push(`/builder?id=${res.resume_id}`);
       return true;
     },
     [qc, router, toast]

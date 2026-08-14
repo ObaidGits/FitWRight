@@ -78,6 +78,14 @@ import {
 import MoreHorizontal from 'lucide-react/dist/esm/icons/more-horizontal';
 import EyeOff from 'lucide-react/dist/esm/icons/eye-off';
 import { PaneToggle, paneVisibility, type Pane } from '@/components/layout/pane-toggle';
+import Palette from 'lucide-react/dist/esm/icons/palette';
+import { Card } from '@/components/atelier/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/atelier/dialog';
+import { TemplateGallery } from '@/components/resume/template-gallery';
+import { templateToSettings, type ResumeTemplate } from '@/lib/resume/template-catalog';
+import { VersionHistoryPanel } from '@/components/resume/version-history-panel';
+import { UnsavedChangesGuard } from '@/components/common/unsaved-changes-guard';
+import { ExportButton } from '@/components/resume/export-button';
 import { cn } from '@/lib/utils';
 import type { RegenerateItemInput } from '@/lib/api/enrichment';
 
@@ -147,6 +155,12 @@ const ResumeBuilderContent = () => {
   // Has this resume's server-persisted appearance been adopted yet? Also set by
   // the first user change, so a late fetch can never overwrite their choice.
   const settingsAdoptedRef = useRef(false);
+  // Bumped to force the loader to re-run - used after a version restore, which
+  // replaces the resume content on the server underneath the open editor.
+  const [reloadNonce, setReloadNonce] = useState(0);
+  // Full-catalogue template picker (Design mode).
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
+  const [pickedTemplateId, setPickedTemplateId] = useState<string | undefined>(undefined);
   const { improvedData } = useResumePreview();
   const improvedPreview = improvedData?.data?.resume_preview;
   const improvedCoverLetter = improvedData?.data?.cover_letter;
@@ -499,6 +513,8 @@ const ResumeBuilderContent = () => {
     improvedOutreach,
     improvedInterviewPrep,
     resumeId,
+    // Bumped by a version restore, which replaces the content under the editor.
+    reloadNonce,
   ]);
 
   // Fetch job description when we have a tailored resume
@@ -919,6 +935,18 @@ const ResumeBuilderContent = () => {
 
   return (
     <div className="flex h-full w-full flex-col bg-[var(--background)]">
+      {/*
+        In-app navigation guard. The builder only had a `beforeunload` handler,
+        which catches a reload or a closed tab but NOT a click on the sidebar -
+        and now that the builder lives inside the app shell with a sidebar next to
+        it, that was the likeliest way to lose work. The resume editor always had
+        this; it must not be lost when that route retires.
+      */}
+      <UnsavedChangesGuard
+        when={hasUnsavedChanges}
+        confirmLabel={t('builder.discardChanges')}
+        cancelLabel={t('common.cancel')}
+      />
       {/* P4 R6.5: announce streaming AI progress to screen readers via aria-live. */}
       <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
         {streamingActive ? t('builder.alerts.aiStreaming') : ''}
@@ -1063,6 +1091,21 @@ const ResumeBuilderContent = () => {
               in four different colours (outline / amber warning / primary /
               green success), so nothing read as the main action. */}
           <div className="flex shrink-0 items-center gap-2">
+            {/* Version history, ported from the resume editor - the builder had no
+                way to see or restore an earlier snapshot. Available in every mode
+                because it restores the resume regardless of what you are editing. */}
+            {resumeId && (
+              <VersionHistoryPanel
+                resumeId={resumeId}
+                onRestored={() => {
+                  // A restore replaces the content under the editor, so reload it
+                  // rather than leaving stale state on screen. The restored copy
+                  // IS the saved copy, so nothing is unsaved afterwards.
+                  setHasUnsavedChanges(false);
+                  setReloadNonce((n) => n + 1);
+                }}
+              />
+            )}
             {/* Resume + Design actions: both edit the resume itself, so both
                 need Save / Download / Regenerate. */}
             {(activeTab === 'resume' || activeTab === 'design') && (
@@ -1178,19 +1221,34 @@ const ResumeBuilderContent = () => {
 
             {/* Interview prep tab actions */}
             {activeTab === 'interview-prep' && interviewPrep && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleGenerateInterviewPrep}
-                disabled={!canGenerateInterviewPrep || isGeneratingInterviewPrep}
-              >
-                {isGeneratingInterviewPrep ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Sparkles className="h-4 w-4" />
+              <>
+                {/* Prep export existed only on the retiring resume-editor route,
+                    via its ExportButton. Kept so retiring that page loses nothing. */}
+                {resumeId && (
+                  <ExportButton
+                    kind="interview-prep"
+                    resumeId={resumeId}
+                    pageSize={templateSettings.pageSize}
+                    variant="outline"
+                    size="sm"
+                    name={resumeData.personalInfo?.name}
+                    role={resumeData.personalInfo?.title}
+                  />
                 )}
-                <span className="hidden sm:inline">{t('interviewPrep.regenerate')}</span>
-              </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleGenerateInterviewPrep}
+                  disabled={!canGenerateInterviewPrep || isGeneratingInterviewPrep}
+                >
+                  {isGeneratingInterviewPrep ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-4 w-4" />
+                  )}
+                  <span className="hidden sm:inline">{t('interviewPrep.regenerate')}</span>
+                </Button>
+              </>
             )}
           </div>
         </div>
@@ -1268,6 +1326,24 @@ const ResumeBuilderContent = () => {
                   or font change is visible as it is made. */}
               {activeTab === 'design' && (
                 <>
+                  {/* Full template catalogue. FormattingControls' own thumbnails
+                      only reach the seven built-in presets; this is the same
+                      gallery the /templates page uses, with the whole catalogue
+                      and real-renderer previews. Ported from the resume editor,
+                      which was the only place it could be reached. */}
+                  <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
+                    <div>
+                      <h3 className="text-sm font-semibold text-[var(--foreground)]">
+                        {t('builder.formatting.template')}
+                      </h3>
+                      <p className="text-xs text-[var(--muted-foreground)]">
+                        {t('builder.formatting.browseAll')}
+                      </p>
+                    </div>
+                    <Button variant="outline" size="sm" onClick={() => setTemplatePickerOpen(true)}>
+                      <Palette className="h-4 w-4" /> {t('builder.formatting.browseAllCta')}
+                    </Button>
+                  </Card>
                   <FormattingControls settings={templateSettings} onChange={handleSettingsChange} />
                   <div className="rounded-[var(--radius-at-lg)] border border-[var(--border)] bg-[var(--card)] p-4">
                     <h3 className="mb-3 text-sm font-semibold text-[var(--foreground)]">Photo</h3>
@@ -1491,6 +1567,28 @@ const ResumeBuilderContent = () => {
           </div>
         </div>
       </div>
+
+      {/* Full template catalogue, ported from the resume editor - the builder
+          previously could only reach the seven built-in presets. Same gallery the
+          /templates page uses, so every preview is the real renderer. */}
+      <Dialog open={templatePickerOpen} onOpenChange={setTemplatePickerOpen}>
+        <DialogContent className="max-w-6xl">
+          <DialogHeader>
+            <DialogTitle>{t('builder.formatting.browseAllCta')}</DialogTitle>
+          </DialogHeader>
+          <div className="max-h-[75vh] overflow-y-auto pr-1">
+            <TemplateGallery
+              selectedId={pickedTemplateId}
+              onSelect={(tpl: ResumeTemplate) => {
+                setPickedTemplateId(tpl.id);
+                persistTemplateSettings(templateToSettings(tpl));
+                setTemplatePickerOpen(false);
+              }}
+              ctaLabel={t('builder.formatting.browseAllCta')}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Regenerate Confirmation Dialog */}
       <ConfirmDialog

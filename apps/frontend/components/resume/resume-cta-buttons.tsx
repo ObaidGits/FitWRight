@@ -41,7 +41,7 @@ export function UseSampleButton({
         source: `sample:${sample.id}`,
       });
       toast({ title: 'Resume created from sample', variant: 'success' });
-      router.push(`/resumes/${res.resume_id}`);
+      router.push(`/builder?id=${res.resume_id}`);
     } catch (e) {
       toast({
         title: e instanceof Error ? e.message : 'Could not create resume',

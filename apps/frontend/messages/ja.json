@@ -429,7 +429,9 @@
       "effectiveHeaderFont": "見出しフォント",
       "effectiveBodyFont": "本文フォント",
       "compactHint": "コンパクトモードでは間隔と行間が詰まります。余白と本文フォントサイズは維持されます。",
-      "resetDefaults": "デフォルトに戻す"
+      "resetDefaults": "デフォルトに戻す",
+      "browseAll": "すべてのテンプレートを見る",
+      "browseAllCta": "テンプレート一覧"
     },
     "personalInfoForm": {
       "placeholders": {

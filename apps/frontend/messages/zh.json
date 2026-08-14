@@ -429,7 +429,9 @@
       "effectiveHeaderFont": "标题字体",
       "effectiveBodyFont": "正文字体",
       "compactHint": "紧凑模式会收紧间距与行高；页边距与正文字号保持不变。",
-      "resetDefaults": "恢复默认设置"
+      "resetDefaults": "恢复默认设置",
+      "browseAll": "浏览所有模板",
+      "browseAllCta": "浏览模板"
     },
     "personalInfoForm": {
       "placeholders": {

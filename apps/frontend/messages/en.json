@@ -429,7 +429,9 @@
       "effectiveHeaderFont": "Header Font",
       "effectiveBodyFont": "Body Font",
       "compactHint": "Compact mode tightens spacing and line height. Margins and base font size stay literal.",
-      "resetDefaults": "Reset to Defaults"
+      "resetDefaults": "Reset to Defaults",
+      "browseAll": "Browse every template",
+      "browseAllCta": "Browse templates"
     },
     "personalInfoForm": {
       "placeholders": {

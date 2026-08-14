@@ -305,7 +305,7 @@ export default function ResumesPage() {
               <ResumeThumbnail resumeId={r.resume_id} ready={r.processing_status === 'ready'} />
               <div className="min-w-0 flex-1">
                 <Link
-                  href={`/resumes/${r.resume_id}`}
+                  href={`/builder?id=${r.resume_id}`}
                   className="block truncate font-medium hover:text-[var(--primary)]"
                 >
                   {r.title || r.filename || 'Untitled resume'}
@@ -327,7 +327,7 @@ export default function ResumesPage() {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem asChild>
-                    <Link href={`/resumes/${r.resume_id}`}>
+                    <Link href={`/builder?id=${r.resume_id}`}>
                       <PenLine className="h-4 w-4" /> Open in editor
                     </Link>
                   </DropdownMenuItem>

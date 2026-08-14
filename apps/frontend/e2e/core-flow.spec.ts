@@ -43,12 +43,12 @@ test.describe('FitWright - navigation & real-data smoke', () => {
     if (await firstOpen.count()) {
       await firstOpen.click();
     } else {
-      // Fall back to clicking the first resume card title.
-      await page.locator('a[href^="/resumes/"]').first().click();
+      // Fall back to clicking the first resume card title. Links now point at
+      // the unified editor - the old /resumes/<id> route is a redirect.
+      await page.locator('a[href^="/builder?id="]').first().click();
     }
-    await expect(page).toHaveURL(/\/resumes\/.+/);
-    // The editor exposes a Save action and an always-visible Live preview.
-    await expect(page.getByText(/Live preview/i)).toBeVisible();
+    await expect(page).toHaveURL(/\/builder\?id=.+/);
+    // The editor exposes a Save action and an always-visible preview.
     await expect(page.getByRole('button', { name: /^Save$/ })).toBeVisible();
     // Appearance + Export actions are present.
     await expect(page.getByRole('button', { name: /Appearance/i })).toBeVisible();

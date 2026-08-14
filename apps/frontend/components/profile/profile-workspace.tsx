@@ -266,7 +266,7 @@ export function ProfileWorkspace() {
         template_settings: getPreferredTemplateSettings(),
       });
       toast({ title: 'Resume generated', variant: 'success' });
-      if (result.resume_id) router.push(`/resumes/${result.resume_id}`);
+      if (result.resume_id) router.push(`/builder?id=${result.resume_id}`);
     } catch (err) {
       toast({
         title: 'Could not generate resume',

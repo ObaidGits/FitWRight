@@ -429,7 +429,9 @@
       "effectiveHeaderFont": "Fonte do Cabeçalho",
       "effectiveBodyFont": "Fonte do Corpo",
       "compactHint": "O modo compacto reduz espaçamento e altura da linha. Margens e tamanho de fonte base permanecem literais.",
-      "resetDefaults": "Restaurar Padrões"
+      "resetDefaults": "Restaurar Padrões",
+      "browseAll": "Explore todos os modelos",
+      "browseAllCta": "Ver modelos"
     },
     "personalInfoForm": {
       "placeholders": {

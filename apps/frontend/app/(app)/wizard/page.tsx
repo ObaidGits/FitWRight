@@ -201,7 +201,7 @@ export default function WizardPage() {
         /* best-effort */
       });
       toast({ title: res.message || 'Resume saved', variant: 'success' });
-      router.push(`/resumes/${res.resume_id}`);
+      router.push(`/builder?id=${res.resume_id}`);
     } catch (e) {
       toast({
         title: e instanceof Error ? e.message : 'Could not finish the resume',

@@ -429,7 +429,9 @@
       "effectiveHeaderFont": "Police des en-têtes",
       "effectiveBodyFont": "Police du corps",
       "compactHint": "Le mode compact resserre l'espacement et l'interligne. Les marges et la taille de police de base restent littérales.",
-      "resetDefaults": "Rétablir les valeurs par défaut"
+      "resetDefaults": "Rétablir les valeurs par défaut",
+      "browseAll": "Parcourir tous les modeles",
+      "browseAllCta": "Voir les modeles"
     },
     "personalInfoForm": {
       "placeholders": {

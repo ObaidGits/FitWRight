@@ -251,7 +251,7 @@ export default function ApplicationWorkspacePage() {
           </DropdownMenu>
           {app.resume_id && (
             <Button asChild variant="outline">
-              <Link href={`/resumes/${app.resume_id}`}>
+              <Link href={`/builder?id=${app.resume_id}`}>
                 <PenLine className="h-4 w-4" /> Edit resume
               </Link>
             </Button>

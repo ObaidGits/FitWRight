@@ -127,7 +127,7 @@ export function NotificationCenter() {
     }
     if (!n.nodeRef) return;
     const href =
-      n.nodeRef.type === 'resume' ? `/resumes/${n.nodeRef.id}` : `/applications/${n.nodeRef.id}`;
+      n.nodeRef.type === 'resume' ? `/builder?id=${n.nodeRef.id}` : `/applications/${n.nodeRef.id}`;
     setOpen(false);
     router.push(href);
   }

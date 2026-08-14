@@ -1275,7 +1275,7 @@ export default function TailorPage() {
         // off in the background so it's already in progress once we land there.
         void runSelectedExtras(newId);
       }
-      router.push(`/resumes/${newId}`);
+      router.push(`/builder?id=${newId}`);
     } catch (e) {
       toast({
         title: toMessage(e, 'Could not save your tailored resume. Please try again.'),

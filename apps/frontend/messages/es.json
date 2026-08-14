@@ -429,7 +429,9 @@
       "effectiveHeaderFont": "Fuente de encabezados",
       "effectiveBodyFont": "Fuente del cuerpo",
       "compactHint": "El modo compacto reduce el espaciado y el interlineado. Los márgenes y la fuente base se mantienen.",
-      "resetDefaults": "Restablecer valores"
+      "resetDefaults": "Restablecer valores",
+      "browseAll": "Explora todas las plantillas",
+      "browseAllCta": "Ver plantillas"
     },
     "personalInfoForm": {
       "placeholders": {

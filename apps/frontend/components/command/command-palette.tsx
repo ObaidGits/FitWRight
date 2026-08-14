@@ -220,7 +220,7 @@ export function CommandPaletteProvider({ children }: { children: React.ReactNode
           id: r.resume_id,
           title,
           snippet: r.is_master ? 'Master resume' : 'Tailored resume',
-          href: `/resumes/${r.resume_id}`,
+          href: `/builder?id=${r.resume_id}`,
           haystack: `${title} ${r.jobSnippet ?? ''}`.toLowerCase(),
         });
       }

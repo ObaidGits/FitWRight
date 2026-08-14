@@ -319,7 +319,7 @@ export default function HomePage() {
             </p>
           </div>
           <Button asChild variant="outline">
-            <Link href={`/resumes/${mostRecent.resume_id}`}>
+            <Link href={`/builder?id=${mostRecent.resume_id}`}>
               Open <ArrowRight className="h-4 w-4" />
             </Link>
           </Button>
@@ -354,7 +354,7 @@ export default function HomePage() {
                   </p>
                 </div>
                 <Button asChild size="sm" variant="outline">
-                  <Link href={`/resumes/${r.resume_id}`}>Review</Link>
+                  <Link href={`/builder?id=${r.resume_id}`}>Review</Link>
                 </Button>
               </Card>
             ))}
@@ -406,7 +406,7 @@ export default function HomePage() {
             {recent.map((r) => (
               <Link
                 key={r.resume_id}
-                href={`/resumes/${r.resume_id}`}
+                href={`/builder?id=${r.resume_id}`}
                 className="block mb-3 last:mb-0"
               >
                 <Card className="flex items-center justify-between gap-3 p-3.5 transition-shadow hover:shadow-[var(--shadow-at-e2)]">
