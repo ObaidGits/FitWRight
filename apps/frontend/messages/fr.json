@@ -472,6 +472,10 @@
       "draftQuarantined": "Un brouillon local enregistré était illisible et a été mis de côté pour protéger votre travail. Votre contenu actuel est en sécurité.",
       "storageDegraded": "Le stockage local est indisponible ; les modifications ne sont conservées qu'en mémoire pour cette session. Enregistrez sur le serveur pour ne pas les perdre.",
       "openRecoveryCenter": "Ouvrir le centre de récupération"
+    },
+    "item": {
+      "hide": "Masquer dans ce CV",
+      "show": "Afficher dans ce CV"
     }
   },
   "enrichment": {

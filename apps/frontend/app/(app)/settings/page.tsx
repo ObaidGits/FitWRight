@@ -8,6 +8,7 @@ import * as React from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import CheckCircle from 'lucide-react/dist/esm/icons/circle-check';
 import XCircle from 'lucide-react/dist/esm/icons/circle-x';
+import ChevronDown from 'lucide-react/dist/esm/icons/chevron-down';
 
 import { Card } from '@/components/atelier/card';
 import { Button } from '@/components/atelier/button';
@@ -204,11 +205,34 @@ function AiSection() {
   const [reasoningEffort, setReasoningEffort] = React.useState<ReasoningEffort | 'default'>(
     'default'
   );
+  // Model / reasoning effort are provider plumbing, not decisions a job seeker
+  // should have to make, so they sit behind a disclosure.
+  const [showAdvanced, setShowAdvanced] = React.useState(false);
+
+  /**
+   * Switching provider carries the new provider's default model with it.
+   *
+   * The Model field showed the default as *placeholder* text, which reads as
+   * filled-in. Its own help text had to apologise for that ("the greyed text is
+   * only an example, not a saved value") - a sure sign the control was wrong.
+   * A user who picked a provider and pressed Save sent an empty model. Now the
+   * field always holds a real value, which is also what lets it move out of
+   * sight without becoming a trap.
+   */
+  function onProviderChange(next: LLMProvider) {
+    const previousDefault = PROVIDER_INFO[provider]?.defaultModel;
+    setProvider(next);
+    if (!model.trim() || model === previousDefault) {
+      setModel(PROVIDER_INFO[next]?.defaultModel ?? '');
+    }
+  }
 
   React.useEffect(() => {
     if (cfg.data) {
       setProvider(cfg.data.provider);
-      setModel(cfg.data.model ?? '');
+      // An account saved before the field carried a real value can hold an empty
+      // model. Show the provider's default rather than a blank box.
+      setModel(cfg.data.model || (PROVIDER_INFO[cfg.data.provider]?.defaultModel ?? ''));
       setApiBase(cfg.data.api_base ?? '');
       setReasoningEffort(cfg.data.reasoning_effort ?? 'default');
     }
@@ -296,7 +320,7 @@ function AiSection() {
     <Card className="space-y-4 p-6">
       <div className="space-y-1.5">
         <Label>Provider</Label>
-        <Select value={provider} onValueChange={(v) => setProvider(v as LLMProvider)}>
+        <Select value={provider} onValueChange={(v) => onProviderChange(v as LLMProvider)}>
           <SelectTrigger aria-label="LLM provider">
             <SelectValue />
           </SelectTrigger>
@@ -314,25 +338,6 @@ function AiSection() {
             gateways. Set the Base URL below.
           </p>
         )}
-      </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="model">Model</Label>
-        <Input
-          id="model"
-          value={model}
-          onChange={(e) => setModel(e.target.value)}
-          placeholder={PROVIDER_INFO[provider]?.defaultModel}
-        />
-        <p className="text-xs text-[var(--muted-foreground)]">
-          Enter the exact model ID from your provider. The greyed text is only an example
-          {PROVIDER_INFO[provider]?.defaultModel ? (
-            <>
-              {' '}
-              (e.g. <code>{PROVIDER_INFO[provider].defaultModel}</code>)
-            </>
-          ) : null}
-          , not a saved value - always confirm the current ID in your provider&apos;s docs.
-        </p>
       </div>
       {needsBase && (
         <div className="space-y-1.5">
@@ -387,27 +392,67 @@ function AiSection() {
           </p>
         )}
       </div>
-      <div className="space-y-1.5">
-        <Label>Reasoning effort</Label>
-        <Select
-          value={reasoningEffort}
-          onValueChange={(v) => setReasoningEffort(v as ReasoningEffort | 'default')}
+
+      {/* Advanced. Everything a job seeker should never need to touch: the exact
+          model id and the reasoning-effort knob. Both keep working when left
+          alone, because the model now always carries the provider's default. */}
+      <div>
+        <button
+          type="button"
+          onClick={() => setShowAdvanced((v) => !v)}
+          aria-expanded={showAdvanced}
+          className="flex items-center gap-1 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
         >
-          <SelectTrigger aria-label="Reasoning effort">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="default">Default (let the model decide)</SelectItem>
-            <SelectItem value="minimal">Minimal</SelectItem>
-            <SelectItem value="low">Low</SelectItem>
-            <SelectItem value="medium">Medium</SelectItem>
-            <SelectItem value="high">High</SelectItem>
-          </SelectContent>
-        </Select>
-        <p className="text-xs text-[var(--muted-foreground)]">
-          Only used by reasoning-capable models (e.g. OpenAI gpt-5, DeepSeek R1). It is safely
-          ignored by models that don&apos;t support it. Choose Default to leave it unset.
-        </p>
+          <ChevronDown
+            className={`h-4 w-4 transition-transform ${showAdvanced ? 'rotate-180' : ''}`}
+          />
+          Advanced
+        </button>
+        {!showAdvanced && (
+          <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+            Using <code className="rounded bg-[var(--secondary)] px-1">{model || '-'}</code>. Open
+            this only if your provider told you to use a different model.
+          </p>
+        )}
+        {showAdvanced && (
+          <div className="mt-3 space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="model">Model</Label>
+              <Input
+                id="model"
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                placeholder={PROVIDER_INFO[provider]?.defaultModel}
+              />
+              <p className="text-xs text-[var(--muted-foreground)]">
+                Filled with this provider&apos;s default. Change it only to a model id your provider
+                actually offers - a wrong id fails at the first request, not here.
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Reasoning effort</Label>
+              <Select
+                value={reasoningEffort}
+                onValueChange={(v) => setReasoningEffort(v as ReasoningEffort | 'default')}
+              >
+                <SelectTrigger aria-label="Reasoning effort">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="default">Default (let the model decide)</SelectItem>
+                  <SelectItem value="minimal">Minimal</SelectItem>
+                  <SelectItem value="low">Low</SelectItem>
+                  <SelectItem value="medium">Medium</SelectItem>
+                  <SelectItem value="high">High</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-[var(--muted-foreground)]">
+                Only used by reasoning-capable models (e.g. OpenAI gpt-5, DeepSeek R1). It is safely
+                ignored by models that don&apos;t support it. Choose Default to leave it unset.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
       {test.data && (
         <div className="space-y-1.5">

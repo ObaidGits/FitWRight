@@ -472,6 +472,10 @@
       "draftQuarantined": "A saved local draft was unreadable and has been set aside to protect your work. Your current content is safe.",
       "storageDegraded": "Local storage is unavailable, so changes are kept in memory only for this session. Save to the server to avoid losing them.",
       "openRecoveryCenter": "Open recovery center"
+    },
+    "item": {
+      "hide": "Hide from this resume",
+      "show": "Show in this resume"
     }
   },
   "enrichment": {

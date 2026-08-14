@@ -54,6 +54,7 @@ import { useRegenerateWizard } from '@/hooks/use-regenerate-wizard';
 import { useTranslations } from '@/lib/i18n';
 import { type TemplateSettings, DEFAULT_TEMPLATE_SETTINGS } from '@/lib/types/template-settings';
 import { withLocalizedDefaultSections } from '@/lib/utils/section-helpers';
+import { stripHiddenItems, countHiddenItems } from '@/lib/utils/hidden-items';
 import { useLanguage } from '@/lib/context/language-context';
 import { useSession } from '@/lib/context/session';
 import { useResilienceFlags } from '@/lib/hooks/use-resilience-flags';
@@ -71,6 +72,7 @@ import {
   DropdownMenuItem,
 } from '@/components/atelier/dropdown-menu';
 import MoreHorizontal from 'lucide-react/dist/esm/icons/more-horizontal';
+import EyeOff from 'lucide-react/dist/esm/icons/eye-off';
 import { cn } from '@/lib/utils';
 import type { RegenerateItemInput } from '@/lib/api/enrichment';
 
@@ -311,10 +313,15 @@ const ResumeBuilderContent = () => {
     return null;
   }, [resumeData.additional?.technicalSkills, t]);
 
+  // Hidden items are stripped here, and again in app/print/resumes/[id] which is
+  // what headless Chromium renders into the PDF - so the preview and the export
+  // agree. Filtering in only one of the two would be the same class of bug as an
+  // export that ignores unsaved edits.
   const localizedResumeDataForPreview = useMemo(
-    () => withLocalizedDefaultSections(resumeData, t),
+    () => stripHiddenItems(withLocalizedDefaultSections(resumeData, t)),
     [resumeData, t]
   );
+  const hiddenItemCount = useMemo(() => countHiddenItems(resumeData), [resumeData]);
 
   // Load template settings from localStorage on mount
   useEffect(() => {
@@ -511,11 +518,16 @@ const ResumeBuilderContent = () => {
     setTemplateSettings(newSettings);
   }, []);
 
-  const handleSave = async () => {
-    if (!resumeId) {
-      showNotification(t('builder.alerts.saveNotAvailable'), 'warning');
-      return;
-    }
+  /**
+   * Persist the current draft and report whether it landed.
+   *
+   * `handleSave` deliberately swallows its error to show a notification, which
+   * left no way for a caller that DEPENDS on the server copy being current -
+   * the PDF export renders server-side - to know it must not continue. This
+   * returns the outcome so the export can refuse to hand over a stale document.
+   */
+  const persistResume = async (): Promise<boolean> => {
+    if (!resumeId) return false;
     try {
       setIsSaving(true);
       const updated = await updateResume(resumeId, resumeData);
@@ -524,11 +536,22 @@ const ResumeBuilderContent = () => {
       setLastSavedData(nextData);
       setHasUnsavedChanges(false);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(nextData));
+      return true;
     } catch (error) {
       console.error('Failed to save resume:', error);
-      showNotification(t('builder.alerts.saveFailed'), 'danger');
+      return false;
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!resumeId) {
+      showNotification(t('builder.alerts.saveNotAvailable'), 'warning');
+      return;
+    }
+    if (!(await persistResume())) {
+      showNotification(t('builder.alerts.saveFailed'), 'danger');
     }
   };
 
@@ -547,6 +570,15 @@ const ResumeBuilderContent = () => {
   const handleDownload = async () => {
     if (!resumeId) {
       showNotification(t('builder.alerts.downloadNotAvailable'), 'warning');
+      return;
+    }
+    // The PDF is rendered server-side from the SAVED resume, so any edit still
+    // sitting in the browser was silently missing from the file - the user got a
+    // document that did not match what the preview beside them showed. Flush
+    // first, and if that fails, do not hand over a stale document pretending to
+    // be current.
+    if (hasUnsavedChanges && !(await persistResume())) {
+      showNotification(t('builder.alerts.saveFailed'), 'danger');
       return;
     }
     try {
@@ -599,6 +631,17 @@ const ResumeBuilderContent = () => {
     }
     if (!coverLetter) {
       showNotification(t('builder.alerts.coverLetterMissing'), 'warning');
+      return;
+    }
+    // Same server-side render as the resume export, and the cover letter editor
+    // has no dirty flag - so an edit could only reach the PDF if the user
+    // happened to press Save first. Persist unconditionally: re-writing
+    // identical text is cheap next to handing back the wrong letter.
+    try {
+      await updateCoverLetter(resumeId, coverLetter);
+    } catch (error) {
+      console.error('Failed to save cover letter before export:', error);
+      showNotification(t('builder.alerts.coverLetterSaveFailed'), 'danger');
       return;
     }
     try {
@@ -969,6 +1012,19 @@ const ResumeBuilderContent = () => {
               </button>
             ))}
           </div>
+
+          {hiddenItemCount > 0 && (
+            <span
+              className="flex shrink-0 items-center gap-1 rounded-[var(--radius-at-sm)] bg-[var(--at-warning)]/12 px-2 py-1 text-xs font-medium text-[var(--at-warning)]"
+              title={t('builder.sectionHeader.hiddenFromPdfTag')}
+            >
+              <EyeOff className="h-3 w-3" />
+              {hiddenItemCount}
+              <span className="hidden sm:inline">
+                {t('builder.sectionHeader.hiddenFromPdfTag')}
+              </span>
+            </span>
+          )}
 
           {hasUnsavedChanges && (
             <span className="flex shrink-0 items-center gap-1 rounded-[var(--radius-at-sm)] border border-[var(--at-warning)]/40 bg-[var(--at-warning)]/12 px-2 py-1 text-xs font-medium text-[var(--at-warning)]">

@@ -472,6 +472,10 @@
       "draftQuarantined": "Un borrador local guardado no se pudo leer y se apartó para proteger tu trabajo. Tu contenido actual está a salvo.",
       "storageDegraded": "El almacenamiento local no está disponible, así que los cambios se guardan solo en memoria durante esta sesión. Guarda en el servidor para no perderlos.",
       "openRecoveryCenter": "Abrir centro de recuperación"
+    },
+    "item": {
+      "hide": "Ocultar en este curriculum",
+      "show": "Mostrar en este curriculum"
     }
   },
   "enrichment": {

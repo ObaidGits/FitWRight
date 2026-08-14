@@ -45,6 +45,7 @@ import {
 } from '@/components/atelier/dialog';
 import { useToast } from '@/components/atelier/toast';
 import { useResumeLibrary, useDeleteResume, useRetryProcessing } from '@/features/resumes/hooks';
+import { ResumeThumbnail } from '@/components/resume/resume-thumbnail';
 import type { ResumeListItem } from '@/lib/api/resume';
 
 type Filter = 'all' | 'master' | 'tailored';
@@ -280,8 +281,11 @@ export default function ResumesPage() {
       ) : (
         <div className="space-y-2">
           {filtered.map((r) => (
-            <Card key={r.resume_id} className="flex items-center gap-3 p-4">
-              <FileText className="h-5 w-5 shrink-0 text-[var(--muted-foreground)]" />
+            <Card key={r.resume_id} className="flex items-center gap-4 p-4">
+              {/* A real preview of the document, not a generic icon: once you
+                  have a dozen tailored variants with similar generated names,
+                  the only reliable way to tell them apart is to see them. */}
+              <ResumeThumbnail resumeId={r.resume_id} ready={r.processing_status === 'ready'} />
               <div className="min-w-0 flex-1">
                 <Link
                   href={`/resumes/${r.resume_id}`}

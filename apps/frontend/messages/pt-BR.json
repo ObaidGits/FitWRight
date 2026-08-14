@@ -472,6 +472,10 @@
       "draftQuarantined": "Um rascunho local salvo estava ilegível e foi isolado para proteger seu trabalho. Seu conteúdo atual está seguro.",
       "storageDegraded": "O armazenamento local está indisponível, então as alterações ficam apenas na memória nesta sessão. Salve no servidor para não perdê-las.",
       "openRecoveryCenter": "Abrir central de recuperação"
+    },
+    "item": {
+      "hide": "Ocultar neste curriculo",
+      "show": "Mostrar neste curriculo"
     }
   },
   "enrichment": {
