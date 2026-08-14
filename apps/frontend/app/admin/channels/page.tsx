@@ -53,10 +53,12 @@ import {
   useAiChannels,
   useCreateAiChannel,
   useDeleteAiChannel,
+  useTestAiChannel,
   useUpdateAiChannel,
 } from '@/features/admin/hooks';
 import type { AiChannel } from '@/lib/api/admin';
 import Sparkles from 'lucide-react/dist/esm/icons/sparkles';
+import Zap from 'lucide-react/dist/esm/icons/zap';
 
 const PROVIDERS = [
   'openai',
@@ -240,8 +242,29 @@ function AddChannelDialog({
 function ChannelRow({ channel }: { channel: AiChannel }) {
   const update = useUpdateAiChannel();
   const del = useDeleteAiChannel();
+  const test = useTestAiChannel();
   const { toast } = useToast();
   const [confirmDelete, setConfirmDelete] = React.useState(false);
+
+  async function runTest() {
+    try {
+      const result = await test.mutateAsync(channel.id);
+      toast({
+        title: result.ok ? `Responded in ${result.latency_ms}ms` : 'The channel failed',
+        // The server's own explanation is the useful part - "check the API key" versus
+        // "the provider does not recognise this model" send the operator to different
+        // places.
+        description: result.message,
+        variant: result.ok ? 'success' : 'error',
+      });
+    } catch (err) {
+      toast({
+        title: 'Could not test the channel',
+        description: err instanceof Error ? err.message : undefined,
+        variant: 'error',
+      });
+    }
+  }
 
   async function setState(state: AiChannel['state']) {
     try {
@@ -291,6 +314,16 @@ function ChannelRow({ channel }: { channel: AiChannel }) {
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {/* Before activating, not after. Testing costs a few tokens and answers the
+              question that would otherwise be answered by real users failing. */}
+          <Button
+            size="sm"
+            variant="outline"
+            loading={test.isPending}
+            onClick={() => void runTest()}
+          >
+            <Zap className="h-4 w-4" /> Test
+          </Button>
           {channel.state !== 'active' && (
             <Button
               size="sm"

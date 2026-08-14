@@ -918,6 +918,55 @@ async function getAiSpend(days: number): Promise<AiSpendSummary> {
   return json<AiSpendSummary>(await apiFetch(`/admin/ai/spend?days=${days}`));
 }
 
+export interface ChannelTestResult {
+  ok: boolean;
+  error_class: string | null;
+  message: string;
+  structured_verdict: 'reliable' | 'flaky' | 'unsupported' | 'unknown';
+  latency_ms: number;
+  sample?: string;
+}
+
+export interface ChannelPerformanceRow {
+  channel_id: string;
+  calls: number;
+  ok: number;
+  success_rate: number | null;
+  p95_latency_ms: number | null;
+}
+
+export interface AiAlert {
+  severity: 'high' | 'medium' | 'low';
+  kind: string;
+  detail: string;
+  channel_id?: string;
+  user_id?: string;
+  note?: string;
+}
+
+export interface ReconciliationReport {
+  status: 'ok' | 'attention' | 'error';
+  findings?: Record<string, number>;
+}
+
+async function testAiChannel(id: string): Promise<ChannelTestResult> {
+  return json<ChannelTestResult>(
+    await apiPost(`/admin/ai/channels/${encodeURIComponent(id)}/test`, {})
+  );
+}
+
+async function getChannelPerformance(days: number): Promise<ChannelPerformanceRow[]> {
+  return json<ChannelPerformanceRow[]>(await apiFetch(`/admin/ai/performance?days=${days}`));
+}
+
+async function getAiAlerts(days: number): Promise<AiAlert[]> {
+  return json<AiAlert[]>(await apiFetch(`/admin/ai/alerts?days=${days}`));
+}
+
+async function getReconciliation(): Promise<ReconciliationReport> {
+  return json<ReconciliationReport>(await apiFetch('/admin/ai/reconciliation'));
+}
+
 export const adminApi = {
   getStats,
   getUsageSeries,
@@ -933,6 +982,10 @@ export const adminApi = {
   // AI provider channels + per-user credits (spec: ai-provider-admin)
   listAiChannels,
   getAiSpend,
+  testAiChannel,
+  getChannelPerformance,
+  getAiAlerts,
+  getReconciliation,
   createAiChannel,
   updateAiChannel,
   deleteAiChannel,

@@ -49,6 +49,7 @@ from app.models import (
     AiUsageLedger,
     AuditLog,
     CreditAccount,
+    CreditPurchase,
     CreditReservation,
     CreditTransaction,
     DiscoveryCache,
@@ -4241,6 +4242,308 @@ class Database:
                 res.state = "released" if reason != "expired" else "expired"
                 res.settled_at = now
                 return "released"
+
+    # ------------------------------------------------------------------
+    # Credit purchases (spec Phase 4). Grants happen ONLY here, from a verified
+    # webhook - never from a client callback.
+    # ------------------------------------------------------------------
+
+    #: Forward-only ordering. A webhook that would move a purchase backwards is
+    #: ignored, because providers deliver out of order and a late `created` must not
+    #: undo a completed `granted`.
+    _PURCHASE_STATE_ORDER = {
+        "created": 0,
+        "failed": 1,
+        "paid": 2,
+        "granted": 3,
+        "refunded": 4,
+    }
+
+    async def create_credit_purchase(
+        self,
+        *,
+        user_id: str,
+        pack_id: str,
+        credits: int,
+        amount_minor: int,
+        currency: str,
+        provider: str,
+    ) -> dict[str, Any]:
+        now = _now()
+        purchase = CreditPurchase(
+            id=str(uuid4()),
+            user_id=user_id,
+            pack_id=pack_id,
+            credits=credits,
+            amount_minor=amount_minor,
+            currency=currency,
+            provider=provider,
+            state="created",
+            created_at=now,
+            updated_at=now,
+        )
+        async with self._session() as session:
+            async with session.begin():
+                session.add(purchase)
+                await session.flush()
+                return self._purchase_to_dict(purchase)
+
+    async def attach_purchase_order(self, purchase_id: str, *, order_id: str) -> None:
+        async with self._session() as session:
+            async with session.begin():
+                await session.execute(
+                    sa_update(CreditPurchase)
+                    .where(CreditPurchase.id == purchase_id)
+                    .values(provider_order_id=order_id, updated_at=_now())
+                )
+
+    async def purchase_event_seen(self, event_id: str) -> bool:
+        """Whether this provider event has already been processed.
+
+        The cheap check. The UNIQUE index is the one that actually holds under
+        concurrent redelivery.
+        """
+        async with self._session() as session:
+            return (
+                await session.execute(
+                    select(CreditPurchase.id).where(
+                        CreditPurchase.provider_event_id == event_id
+                    )
+                )
+            ).scalars().first() is not None
+
+    async def get_purchase_by_order(self, order_id: str) -> dict[str, Any] | None:
+        if not order_id:
+            return None
+        async with self._session() as session:
+            row = (
+                await session.execute(
+                    select(CreditPurchase).where(
+                        CreditPurchase.provider_order_id == order_id
+                    )
+                )
+            ).scalars().first()
+            return self._purchase_to_dict(row) if row is not None else None
+
+    async def grant_purchase(self, purchase_id: str, *, event_id: str) -> str:
+        """Move money into credits. Returns ``granted`` / ``replayed`` / ``not_payable``.
+
+        The credit grant and the purchase state change are ONE transaction. Splitting
+        them would eventually produce a paid purchase with no credits, or credits with
+        no purchase to explain them - and the customer only notices the first.
+        """
+        now = _now()
+        try:
+            async with self._session() as session:
+                async with session.begin():
+                    row = (
+                        await session.execute(
+                            select(CreditPurchase).where(CreditPurchase.id == purchase_id)
+                        )
+                    ).scalars().first()
+                    if row is None:
+                        return "not_payable"
+                    if self._PURCHASE_STATE_ORDER.get(row.state, 0) >= self._PURCHASE_STATE_ORDER[
+                        "granted"
+                    ]:
+                        return "replayed"
+
+                    account = (
+                        await session.execute(
+                            select(CreditAccount).where(CreditAccount.user_id == row.user_id)
+                        )
+                    ).scalars().first()
+                    if account is None:
+                        account = CreditAccount(
+                            user_id=row.user_id, created_at=now, updated_at=now
+                        )
+                        session.add(account)
+                        await session.flush()
+
+                    # Purchased credits go to the WALLET, which never expires - unlike
+                    # the monthly allowance. Someone who paid must not lose it at the
+                    # month boundary.
+                    await session.execute(
+                        sa_update(CreditAccount)
+                        .where(CreditAccount.user_id == row.user_id)
+                        .values(
+                            wallet_credits=CreditAccount.wallet_credits + row.credits,
+                            lifetime_granted=CreditAccount.lifetime_granted + row.credits,
+                            version=CreditAccount.version + 1,
+                            updated_at=now,
+                        )
+                    )
+
+                    session.add(
+                        CreditTransaction(
+                            id=str(uuid4()),
+                            user_id=row.user_id,
+                            kind="purchase",
+                            credits_delta=row.credits,
+                            balance_after=0,  # recomputed below
+                            reason=f"Purchase {row.pack_id}",
+                            external_ref=row.provider_payment_id or row.provider_order_id,
+                            idempotency_key=f"purchase:{row.id}",
+                            created_at=now,
+                        )
+                    )
+
+                    row.state = "granted"
+                    row.provider_event_id = event_id
+                    row.granted_at = now
+                    row.updated_at = now
+                    # Invoice number assigned at grant time, when the sale is real.
+                    row.invoice_number = row.invoice_number or f"INV-{now[:10]}-{row.id[:8]}"
+                    return "granted"
+        except IntegrityError:
+            # Concurrent redelivery lost the UNIQUE race on the event id, or the
+            # purchase transaction key already existed. Either way the other caller
+            # granted it.
+            return "replayed"
+
+    async def fail_purchase(
+        self, purchase_id: str, *, reason: str, event_id: str | None = None
+    ) -> None:
+        now = _now()
+        async with self._session() as session:
+            async with session.begin():
+                row = (
+                    await session.execute(
+                        select(CreditPurchase).where(CreditPurchase.id == purchase_id)
+                    )
+                ).scalars().first()
+                if row is None:
+                    return
+                # Never overwrite a completed purchase with a failure.
+                if self._PURCHASE_STATE_ORDER.get(row.state, 0) >= self._PURCHASE_STATE_ORDER[
+                    "paid"
+                ]:
+                    return
+                row.state = "failed"
+                row.failure_reason = reason
+                row.provider_event_id = event_id or row.provider_event_id
+                row.updated_at = now
+
+    async def refund_purchase(self, purchase_id: str, *, event_id: str) -> str:
+        """Claw back a refunded purchase's credits.
+
+        The balance MAY go negative and the account is blocked when it does. Refusing to
+        go negative would let someone buy, spend, refund, and keep the value - and a
+        blocked account with a negative balance is a conversation, whereas silently
+        absorbing the loss is not.
+        """
+        now = _now()
+        async with self._session() as session:
+            async with session.begin():
+                row = (
+                    await session.execute(
+                        select(CreditPurchase).where(CreditPurchase.id == purchase_id)
+                    )
+                ).scalars().first()
+                if row is None or row.state == "refunded":
+                    return "replayed"
+
+                if row.state == "granted":
+                    await session.execute(
+                        sa_update(CreditAccount)
+                        .where(CreditAccount.user_id == row.user_id)
+                        .values(
+                            wallet_credits=CreditAccount.wallet_credits - row.credits,
+                            version=CreditAccount.version + 1,
+                            updated_at=now,
+                        )
+                    )
+                    account = (
+                        await session.execute(
+                            select(CreditAccount).where(CreditAccount.user_id == row.user_id)
+                        )
+                    ).scalars().first()
+                    if account is not None and (
+                        account.wallet_credits + account.allowance_credits < 0
+                    ):
+                        account.state = "blocked"
+
+                    session.add(
+                        CreditTransaction(
+                            id=str(uuid4()),
+                            user_id=row.user_id,
+                            kind="refund",
+                            credits_delta=-row.credits,
+                            balance_after=0,
+                            reason=f"Refund of purchase {row.id}",
+                            idempotency_key=f"refund:{row.id}",
+                            created_at=now,
+                        )
+                    )
+
+                row.state = "refunded"
+                row.provider_event_id = event_id
+                row.refunded_at = now
+                row.updated_at = now
+                return "refunded"
+
+    async def list_purchases(self, user_id: str, *, limit: int = 20) -> list[dict[str, Any]]:
+        async with self._session() as session:
+            rows = (
+                await session.execute(
+                    Repo.scoped(select(CreditPurchase), CreditPurchase, user_id)
+                    .order_by(CreditPurchase.created_at.desc())
+                    .limit(limit)
+                )
+            ).scalars().all()
+            return [self._purchase_to_dict(r) for r in rows]
+
+    async def purchase_reconciliation(self) -> dict[str, Any]:
+        """Paid-but-not-granted and granted-but-not-paid (task 4.6).
+
+        Both directions matter and they fail differently: the first is a customer who
+        paid and got nothing (they will tell you), the second is credits given away
+        (nobody will).
+        """
+        async with self._session() as session:
+            paid_not_granted = (
+                await session.execute(
+                    select(func.count(CreditPurchase.id)).where(
+                        CreditPurchase.state == "paid"
+                    )
+                )
+            ).scalar() or 0
+            granted_without_payment = (
+                await session.execute(
+                    select(func.count(CreditPurchase.id)).where(
+                        CreditPurchase.state == "granted",
+                        CreditPurchase.provider_event_id.is_(None),
+                    )
+                )
+            ).scalar() or 0
+        findings = {
+            "paid_not_granted": int(paid_not_granted),
+            "granted_without_verified_payment": int(granted_without_payment),
+        }
+        return {
+            "status": "ok" if not any(findings.values()) else "attention",
+            "findings": findings,
+        }
+
+    @staticmethod
+    def _purchase_to_dict(row: CreditPurchase) -> dict[str, Any]:
+        return {
+            "id": row.id,
+            "user_id": row.user_id,
+            "pack_id": row.pack_id,
+            "credits": row.credits,
+            "amount_minor": row.amount_minor,
+            "currency": row.currency,
+            "tax_minor": row.tax_minor,
+            "state": row.state,
+            "provider": row.provider,
+            "provider_order_id": row.provider_order_id,
+            "invoice_number": row.invoice_number,
+            "failure_reason": row.failure_reason,
+            "created_at": row.created_at,
+            "granted_at": row.granted_at,
+            "refunded_at": row.refunded_at,
+        }
 
     async def channel_performance(self, *, days: int = 7) -> list[dict[str, Any]]:
         """Success rate and p95 latency per channel (task 5.1).

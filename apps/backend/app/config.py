@@ -1122,6 +1122,17 @@ class Settings(BaseSettings):
     # an indefinite archive of every user's job search. See app/ai_retention.py for the
     # full privacy contract.
     ai_usage_retention_days: int = 400
+    # Phase 4 purchases. OFF by default and intentionally so: prices must come from
+    # observed cost (that is why metering ships first), and a payment integration is not
+    # verified until it has handled a real webhook from a real provider account.
+    ai_purchases_enabled: bool = False
+    # Only "fake" is implemented. Setting anything else refuses every purchase rather
+    # than half-taking money through an unfinished adapter.
+    ai_payment_provider: str = "fake"
+    # JSON list of packs: [{"id","credits","amount_minor","currency","label"}].
+    # Amounts are the smallest currency unit and tax-INCLUSIVE - a price that changes at
+    # checkout reads as a trick even when it is legal. Empty means nothing is on sale.
+    ai_credit_packs: str = ""
     # How long a hold survives before the sweep releases it. Must comfortably
     # exceed the slowest AI call, or a legitimate long request loses its hold
     # mid-flight; short enough that a crashed worker does not strand a balance for

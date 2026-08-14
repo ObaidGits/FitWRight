@@ -17,6 +17,7 @@ import UserPlus from 'lucide-react/dist/esm/icons/user-plus';
 import Sparkles from 'lucide-react/dist/esm/icons/sparkles';
 import Radio from 'lucide-react/dist/esm/icons/radio-tower';
 import Coins from 'lucide-react/dist/esm/icons/coins';
+import Activity from 'lucide-react/dist/esm/icons/activity';
 import Database from 'lucide-react/dist/esm/icons/database';
 import ScrollText from 'lucide-react/dist/esm/icons/scroll-text';
 import TriangleAlert from 'lucide-react/dist/esm/icons/triangle-alert';
@@ -33,6 +34,7 @@ const NAV = [
   { href: '/admin/ai', label: 'AI', icon: Sparkles },
   { href: '/admin/channels', label: 'AI channels', icon: Radio },
   { href: '/admin/spend', label: 'AI spend', icon: Coins },
+  { href: '/admin/ai-ops', label: 'AI ops', icon: Activity },
   { href: '/admin/storage', label: 'Storage', icon: Database },
   { href: '/admin/errors', label: 'Error reports', icon: TriangleAlert },
   { href: '/admin/audit', label: 'Audit', icon: ScrollText },

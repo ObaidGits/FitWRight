@@ -1477,6 +1477,55 @@ class DiscoveryResult(Base):
     )
 
 
+class CreditPurchase(Base):
+    """One attempt to buy credits (migration 0038).
+
+    Credits are granted ONLY when a verified provider webhook says the money arrived.
+    A client-side "payment succeeded" callback is a claim by an untrusted party and can
+    be forged by anyone who can read the page's JavaScript; it may update the UI, and it
+    must never move a balance.
+
+    ``state`` is forward-only. Providers deliver webhooks out of order, so a late
+    ``created`` must not undo a completed ``granted``.
+    """
+
+    __tablename__ = "credit_purchases"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_new_uuid)
+    user_id: Mapped[str] = mapped_column(String, nullable=False)
+    pack_id: Mapped[str] = mapped_column(String, nullable=False)
+    #: Recorded here rather than recomputed at grant time: pack pricing changes, and
+    #: what this buyer was promised must not change with it.
+    credits: Mapped[int] = mapped_column(Integer, nullable=False)
+    #: Smallest currency unit (paise, cents). Integer - 0.1 + 0.2 is not 0.3, and that
+    #: error compounds across a ledger.
+    amount_minor: Mapped[int] = mapped_column(Integer, nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, server_default="INR")
+    tax_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    state: Mapped[str] = mapped_column(
+        String, nullable=False, default="created", server_default="created"
+    )
+    provider: Mapped[str] = mapped_column(String, nullable=False)
+    provider_order_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    provider_payment_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    #: UNIQUE. Providers redeliver webhooks by design; this constraint is what makes a
+    #: redelivery a no-op rather than a second grant.
+    provider_event_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    invoice_number: Mapped[str | None] = mapped_column(String, nullable=True)
+    failure_reason: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[str] = mapped_column(String, nullable=False, default=_utcnow_iso)
+    updated_at: Mapped[str] = mapped_column(String, nullable=False, default=_utcnow_iso)
+    granted_at: Mapped[str | None] = mapped_column(String, nullable=True)
+    refunded_at: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    __table_args__ = (
+        Index("ix_credit_purchases_user_created", "user_id", "created_at"),
+        Index("ux_credit_purchases_event", "provider_event_id", unique=True),
+        Index("ux_credit_purchases_invoice", "invoice_number", unique=True),
+        Index("ix_credit_purchases_state", "state"),
+    )
+
+
 class AiChannel(Base):
     """One configured, credentialled route to a model (migration 0033).
 

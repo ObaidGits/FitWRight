@@ -81,7 +81,13 @@ class TestAiCostGuard:
 
         reset_container()
         html = "<html><body><article>" + ("A real job description here. " * 40) + "</article></body></html>"
-        with patch("app.jd.service.fetch_url_safely", new=AsyncMock(return_value=html)), \
+        # Patch the ORCHESTRATOR's binding, not app.jd.service's. The orchestrator
+        # imported fetch_url_safely at module load, so rebinding it at the source has
+        # no effect there - the call went out to real DNS and failed with dns_failure.
+        # The test only passed when run alongside others that happened to make DNS
+        # hermetic, which is why it failed whenever this file was run on its own.
+        with patch("app.jd.orchestrator.fetch_url_safely", new=AsyncMock(return_value=html)), \
+             patch("app.jd.service.fetch_url_safely", new=AsyncMock(return_value=html)), \
              patch("app.llm.complete", new=AsyncMock(return_value="cleaned")) as mock_llm:
             async with _client() as c:
                 resp = await c.post("/api/v1/jobs/fetch-url", json={"url": "https://x.example.com/j", "use_ai": False})

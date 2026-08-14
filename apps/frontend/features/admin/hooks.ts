@@ -50,6 +50,9 @@ export const adminKeys = {
   performance: () => [...adminKeys.all, 'performance'] as const,
   aiChannels: () => [...adminKeys.all, 'ai-channels'] as const,
   aiSpend: (days: number) => [...adminKeys.all, 'ai-spend', days] as const,
+  aiPerformance: (days: number) => [...adminKeys.all, 'ai-performance', days] as const,
+  aiAlerts: (days: number) => [...adminKeys.all, 'ai-alerts', days] as const,
+  aiReconciliation: () => [...adminKeys.all, 'ai-reconciliation'] as const,
   userCredits: (userId: string) => [...adminKeys.all, 'user-credits', userId] as const,
   storage: () => [...adminKeys.all, 'storage'] as const,
   security: () => [...adminKeys.all, 'security'] as const,
@@ -483,5 +486,39 @@ export function useAiSpend(days: number) {
     queryKey: adminKeys.aiSpend(days),
     queryFn: () => adminApi.getAiSpend(days),
     placeholderData: keepPreviousData,
+  });
+}
+
+/** Send one probe through a channel. Spends a few tokens, so it is a mutation. */
+export function useTestAiChannel() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => adminApi.testAiChannel(id),
+    // The probe writes the structured verdict, so the list is now stale.
+    onSuccess: () => qc.invalidateQueries({ queryKey: adminKeys.aiChannels() }),
+  });
+}
+
+export function useChannelPerformance(days: number) {
+  return useQuery({
+    queryKey: adminKeys.aiPerformance(days),
+    queryFn: () => adminApi.getChannelPerformance(days),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useAiAlerts(days: number) {
+  return useQuery({
+    queryKey: adminKeys.aiAlerts(days),
+    queryFn: () => adminApi.getAiAlerts(days),
+    // Alerts are the reason an operator opens this page; stale ones are worse than none.
+    refetchInterval: 60_000,
+  });
+}
+
+export function useReconciliation() {
+  return useQuery({
+    queryKey: adminKeys.aiReconciliation(),
+    queryFn: () => adminApi.getReconciliation(),
   });
 }
