@@ -72,7 +72,7 @@ class TestResolution:
         )
         monkeypatch.setattr("app.database.db.get_ai_channel_health", _async_returning({}))
         # Only "b" has a usable key.
-        monkeypatch.setattr("app.ai_routing._load_channel_keys", lambda: {"channel:b": "sk-b"})
+        monkeypatch.setattr("app.ai_routing._load_channel_keys", _keys({"b": "sk-b"}))
 
         route = await resolve_channel_route("cover_letter")
         assert route is not None
@@ -90,7 +90,7 @@ class TestResolution:
             _async_returning([_channel("local", provider="ollama", model="gemma3:4b")]),
         )
         monkeypatch.setattr("app.database.db.get_ai_channel_health", _async_returning({}))
-        monkeypatch.setattr("app.ai_routing._load_channel_keys", lambda: {})
+        monkeypatch.setattr("app.ai_routing._load_channel_keys", _keys({}))
 
         route = await resolve_channel_route("cover_letter")
         assert route is not None
@@ -104,7 +104,7 @@ class TestResolution:
             "app.database.db.list_ai_channels", _async_returning([_channel("a")])
         )
         monkeypatch.setattr("app.database.db.get_ai_channel_health", _async_returning({}))
-        monkeypatch.setattr("app.ai_routing._load_channel_keys", lambda: {})
+        monkeypatch.setattr("app.ai_routing._load_channel_keys", _keys({}))
         assert await resolve_channel_route("cover_letter") is None
 
     async def test_structured_gating_applies_through_the_resolver(self, monkeypatch):
@@ -116,7 +116,7 @@ class TestResolution:
             _async_returning([_channel("bad", verdict="unsupported")]),
         )
         monkeypatch.setattr("app.database.db.get_ai_channel_health", _async_returning({}))
-        monkeypatch.setattr("app.ai_routing._load_channel_keys", lambda: {"channel:bad": "k"})
+        monkeypatch.setattr("app.ai_routing._load_channel_keys", _keys({"bad": "k"}))
 
         # Free-text is fine...
         assert await resolve_channel_route("cover_letter") is not None
@@ -137,6 +137,21 @@ class TestHealthRecording:
 
         monkeypatch.setattr("app.database.db.record_ai_channel_result", boom)
         await record_channel_outcome("c1", ok=True)
+
+
+def _keys(mapping):
+    """Async stub for the credential loader, keyed by CHANNEL ID.
+
+    Keys moved from the shared `api_keys` table (where they could never be stored -
+    see migration 0036) onto the channel row, so the loader is async now and no longer
+    namespaces ids behind a "channel:" prefix.
+    """
+
+    async def _load():
+        return dict(mapping)
+
+    return _load
+
 
 
 class TestRouterConstruction:

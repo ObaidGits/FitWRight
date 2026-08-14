@@ -10,9 +10,7 @@ accepted (reaches the handler, not a 403) WITH it.
 """
 import io
 
-import pytest
 
-from app.config import settings as app_settings
 from tests.integration.test_authz_matrix import _client, hosted  # noqa: F401
 from tests.integration.test_auth_api import _login, _seed_active_user
 

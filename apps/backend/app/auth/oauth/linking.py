@@ -39,7 +39,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.auth.accounts import AccountRecord, create_user, get_by_email, get_password_hash
 from app.auth.owner import normalize_email
-from app.models import OAuthIdentity, User
+from app.models import OAuthIdentity
 
 logger = logging.getLogger(__name__)
 

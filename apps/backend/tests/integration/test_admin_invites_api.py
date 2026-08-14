@@ -16,11 +16,10 @@ all apply):
 from __future__ import annotations
 
 import pytest
-from httpx import ASGITransport, AsyncClient
+from httpx import AsyncClient
 
 from app.admin.schemas import assert_no_forbidden_fields
 from app.config import settings as app_settings
-from app.main import app
 
 from tests.integration.test_admin_api import _admin_client, _client, _seed
 from tests.integration.test_auth_api import STRONG_PW, _csrf, _login

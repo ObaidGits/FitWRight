@@ -7,7 +7,6 @@ feature-flag kill-switch.
 
 from __future__ import annotations
 
-import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.auth.kvstore.local import LocalKVStore

@@ -225,9 +225,9 @@ def _extract_text_parts(value: Any, depth: int = 0, max_depth: int = 10) -> list
 
     next_depth = depth + 1
     if hasattr(value, "text"):
-        return _extract_text_parts(getattr(value, "text"), next_depth, max_depth)
+        return _extract_text_parts(value.text, next_depth, max_depth)
     if hasattr(value, "content"):
-        return _extract_text_parts(getattr(value, "content"), next_depth, max_depth)
+        return _extract_text_parts(value.content, next_depth, max_depth)
 
     return []
 
@@ -291,8 +291,8 @@ def _extract_choice_text(choice: Any) -> str | None:
     if content:
         return content
 
-    for field in ("text", "delta"):
-        value = _safe_get(choice, field)
+    for attr in ("text", "delta"):
+        value = _safe_get(choice, attr)
         if value is not None:
             extracted = _join_text_parts(_extract_text_parts(value))
             if extracted:
@@ -761,6 +761,24 @@ def _config_has_usable_credential(config: LLMConfig) -> bool:
         # Self-hosted: a base URL is the credential.
         return bool(config.api_base)
     return bool(config.api_key)
+
+
+def _guard_input_size(*parts: str | None) -> None:
+    """Refuse an oversized input before spending anything on it (task 6.1).
+
+    Enforced here, at the same choke points as metering, for the same reason: an
+    endpoint-by-endpoint check is one someone eventually forgets, and the omission is
+    invisible because the endpoint still works.
+
+    A no-op when no feature is in context - health probes, the channel test and
+    background jobs have no user-supplied payload to police.
+    """
+    ctx = current_usage()
+    if not ctx or not ctx.feature:
+        return
+    from app.ai_input_limits import check_input_size
+
+    check_input_size(ctx.feature, *parts)
 
 
 async def _resolve_router(config: LLMConfig | None):
@@ -1273,6 +1291,7 @@ async def complete(
 
     Transport retries (429, 500, timeout) are handled by the Router.
     """
+    _guard_input_size(prompt, system_prompt)
     router, config, _route = await _resolve_router(config)
     model_name = get_model_name(config)
 
@@ -1382,6 +1401,7 @@ async def complete(
             provider=config.provider,
             model=model_name,
             channel_id=_route.primary_channel_id if _route else None,
+            latency_ms=(time.perf_counter() - _start) * 1000,
         )
         # Channel health drives failover: consecutive failures bench a channel so the
         # next request starts lower down the list instead of retrying a dead provider.
@@ -1475,6 +1495,7 @@ async def stream_complete(
     Raises the underlying provider error so the caller can emit a terminal
     ``error`` SSE event and fall back to the non-stream path (R1.3).
     """
+    _guard_input_size(prompt, system_prompt)
     router, config, _route = await _resolve_router(config)
     model_name = get_model_name(config)
     # Central clamp (fix 11): cap to a KNOWN model limit; unknown/custom models
@@ -1599,6 +1620,7 @@ async def stream_complete(
             provider=config.provider,
             model=model_name,
             channel_id=_route.primary_channel_id if _route else None,
+            latency_ms=(time.perf_counter() - _start) * 1000,
         )
         # Guarded by the same cancellation check as the metrics above, and that guard
         # is load-bearing here for a second reason: awaiting inside an async
@@ -2148,6 +2170,7 @@ async def complete_json(
     the provider request is in flight; cancellation closes the transport task
     and raises :class:`LLMRequestCancelled` without recording a false failure.
     """
+    _guard_input_size(prompt, system_prompt)
     router, config, _route = await _resolve_router(config)
     model_name = get_model_name(config)
 
@@ -2397,6 +2420,7 @@ async def complete_json(
                     provider=config.provider,
                     model=model_name,
                     channel_id=_route.primary_channel_id if _route else None,
+                    latency_ms=(time.perf_counter() - _attempt_start) * 1000,
                 )
                 if _route and not _attempt_cancelled:
                     await record_channel_outcome(

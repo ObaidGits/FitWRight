@@ -58,6 +58,8 @@ class UsageAccumulator:
     #: to the ledger: an estimate must never be indistinguishable from a
     #: measurement, or reconciling against the provider invoice is impossible.
     estimated_calls: int = 0
+    #: Summed provider wall-clock time for this request, in ms.
+    latency_ms: int = 0
     provider: str | None = None
     model: str | None = None
     channel_id: str | None = None
@@ -119,6 +121,7 @@ def note_call(
     provider: str | None = None,
     model: str | None = None,
     channel_id: str | None = None,
+    latency_ms: float = 0,
 ) -> None:
     """Report one provider call into the request's tally.
 
@@ -140,6 +143,7 @@ def note_call(
         acc.completion_tokens += max(0, int(completion_tokens or 0))
         if estimated:
             acc.estimated_calls += 1
+        acc.latency_ms += max(0, int(latency_ms or 0))
         # Last writer wins for provenance. A request that failed over mid-flight
         # should name the channel that actually served it.
         if provider:

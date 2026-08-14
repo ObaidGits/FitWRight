@@ -1117,6 +1117,11 @@ class Settings(BaseSettings):
     # completion_micros_per_1k]}. Never affects what a user is charged, so a wrong
     # value here misreports profit and nothing else.
     ai_rate_overrides: str = ""
+    # How long per-user AI usage rows are kept. Long enough to settle a dispute and
+    # reconcile a 12-month invoice cycle; short enough that the table does not become
+    # an indefinite archive of every user's job search. See app/ai_retention.py for the
+    # full privacy contract.
+    ai_usage_retention_days: int = 400
     # How long a hold survives before the sweep releases it. Must comfortably
     # exceed the slowest AI call, or a legitimate long request loses its hold
     # mid-flight; short enough that a crashed worker does not strand a balance for

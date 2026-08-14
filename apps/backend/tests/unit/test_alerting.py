@@ -15,19 +15,16 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta, timezone
-from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from app.admin.jobs import (
     ALERT_CONDITIONS,
-    ALERTING_LOCK_KEY,
     _apply_alert,
     _ConditionUnavailable,
     _cooldown_seconds,
     _deliver_alert,
-    _HEALTH_BAD_STATUSES,
     _high_error_rate,
     _job_marker_stuck,
     run_alerting_job,

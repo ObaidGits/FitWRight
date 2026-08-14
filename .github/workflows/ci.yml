@@ -33,6 +33,11 @@ jobs:
       - name: Sync dependencies
         # Resolve exactly the reviewed dependency graph committed in uv.lock.
         run: uv sync --frozen --extra dev
+      - name: Lint (ruff)
+        # Runs BEFORE the tests because it catches a class the tests cannot: an
+        # undefined name or a dead import passes a fully green suite and fails at
+        # runtime. Two such bugs shipped into this repo before this step existed.
+        run: uv run ruff check app tests scripts
       - name: Run backend test suite
         # LLM evals are excluded via pyproject addopts (`-m "not eval"`). The
         # PDF/Playwright tests skip cleanly when Chromium is absent, so no

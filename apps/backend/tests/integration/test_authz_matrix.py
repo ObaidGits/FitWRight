@@ -30,7 +30,7 @@ import pytest
 from fastapi import Depends
 from httpx import ASGITransport, AsyncClient
 
-from app.auth import Capabilities, Principal, get_principal, require_capability
+from app.auth import Capabilities, Principal, require_capability
 from app.auth.accounts import create_user
 from app.auth.passwords import get_password_service
 from app.auth.sessions import get_session_service, hash_token
@@ -40,7 +40,6 @@ from app.models import User
 
 from tests.integration.test_auth_api import (
     STRONG_PW,
-    _cookie_str,
     _login,
     _seed_active_user,
 )

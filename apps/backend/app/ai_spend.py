@@ -80,6 +80,7 @@ class SpendHandle:
     _model: str | None = field(default=None, repr=False)
     #: Needed to price the call - the rate table is keyed on provider and model.
     _provider: str | None = field(default=None, repr=False)
+    _latency_ms: int = field(default=0, repr=False)
 
     def record(
         self,
@@ -91,6 +92,7 @@ class SpendHandle:
         channel_id: str | None = None,
         model: str | None = None,
         provider: str | None = None,
+        latency_ms: int = 0,
     ) -> None:
         """Report real usage. Safe to call once; later calls overwrite.
 
@@ -107,6 +109,7 @@ class SpendHandle:
         self._channel_id = channel_id
         self._model = model
         self._provider = provider
+        self._latency_ms = max(0, int(latency_ms or 0))
 
 
 async def check_can_spend(user_id: str, feature: str, *, has_own_key: bool = False) -> SpendDecision:
@@ -260,6 +263,7 @@ def _ledger_fields(handle: SpendHandle, *, outcome: str) -> dict:
         "total_tokens": handle._tokens,
         "tokens_estimated": handle._estimated,
         "provider_cost_micros": cost,
+        "latency_ms": handle._latency_ms,
         "outcome": outcome,
     }
 

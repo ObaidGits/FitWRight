@@ -7,7 +7,6 @@ the public projection must expose avatar metadata for CLS-free rendering.
 
 from __future__ import annotations
 
-import pytest
 
 
 class TestSyncPreservesPhoto:

@@ -120,6 +120,22 @@ async def run_credit_maintenance_job(*, kvstore=None) -> dict:
         logger.exception("Reservation sweep failed")
         result["status"] = "partial"
 
+    # Retention and reconciliation run regardless of the flag: rows and holds can
+    # exist from before it was turned off, and leaving them unattended is how a
+    # disabled feature still causes a problem.
+    try:
+        from app.ai_retention import reconcile_credits, trim_usage_ledger
+
+        result["trimmed"] = await trim_usage_ledger()
+        report = await reconcile_credits()
+        result["reconciliation"] = report
+        if report.get("status") == "attention":
+            # Loud, because every counter in there should be zero.
+            logger.error("Credit reconciliation found problems: %s", report.get("findings"))
+    except Exception:
+        logger.exception("Retention or reconciliation step failed")
+        result["status"] = "partial"
+
     if not settings.ai_credits_enabled:
         result["refilled"] = 0
         return result

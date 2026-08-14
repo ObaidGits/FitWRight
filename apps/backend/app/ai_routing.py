@@ -27,12 +27,6 @@ __all__ = [
     "resolve_channel_route",
 ]
 
-#: Reserved owner id for operator-owned channel credentials. They live in the same
-#: encrypted key table as user keys - one encryption path, one place that can leak -
-#: under an id no real user can hold.
-_CHANNEL_KEY_OWNER = "__ai_channel__"
-
-
 class ChannelRoute:
     """An ordered set of channel deployments, plus the ids they came from.
 
@@ -58,33 +52,37 @@ class ChannelRoute:
         return bool(self.deployments)
 
 
-def _channel_key_name(channel_id: str) -> str:
-    return f"channel:{channel_id}"
+async def _load_channel_keys() -> dict[str, str]:
+    """Decrypt every channel credential, keyed by CHANNEL ID.
 
-
-def _load_channel_keys() -> dict[str, str]:
-    """Decrypt the operator's channel credentials.
-
-    Returns a mapping of key-store name -> plaintext. Entries that fail to decrypt
-    are omitted rather than raising: one unreadable credential must not take down
-    every other channel. This mirrors how user keys already behave.
+    Entries that fail to decrypt are omitted rather than raising: one unreadable
+    credential (after an encryption-secret change, say) must not take down every other
+    channel. This mirrors how user keys already behave.
     """
     from app.crypto import decrypt
     from app.database import db
 
     out: dict[str, str] = {}
     try:
-        ciphertexts = db.get_api_key_ciphertexts(_CHANNEL_KEY_OWNER)
+        ciphertexts = await db.get_ai_channel_keys()
     except Exception:
-        logger.warning("Could not read channel credentials from the key store")
+        logger.warning("Could not read channel credentials")
         return out
-    for name, ciphertext in (ciphertexts or {}).items():
+    for channel_id, ciphertext in (ciphertexts or {}).items():
         try:
-            out[name] = decrypt(ciphertext)
+            plaintext = decrypt(ciphertext)
         except Exception:
-            # Same failure mode the user-key path already handles: report absence,
-            # never a broken value.
+            # Report absence, never a broken value.
             logger.warning("Channel credential could not be decrypted; skipping")
+            continue
+        # `decrypt` reports failure by RETURNING EMPTY rather than raising, so the
+        # exception handler above is not enough on its own. An empty string here would
+        # be a credential that exists and cannot work - the confusing middle state this
+        # function is meant to eliminate.
+        if plaintext:
+            out[channel_id] = plaintext
+        else:
+            logger.warning("Channel credential decrypted to empty; treating as absent")
     return out
 
 
@@ -111,6 +109,10 @@ async def resolve_channel_route(feature: str, *, pinned_channel_id: str | None =
     try:
         channels = await db.list_ai_channels()
         health = await db.get_ai_channel_health()
+        # Month-to-date cost per channel, so a channel that has spent its configured
+        # cap is skipped. Fetched here rather than inside the policy to keep
+        # ai_channels pure and testable.
+        spend = await db.channel_spend_micros_this_month()
     except Exception:
         logger.warning("Channel lookup failed; falling back to the per-user key path")
         return None
@@ -119,16 +121,20 @@ async def resolve_channel_route(feature: str, *, pinned_channel_id: str | None =
         return None
 
     candidates = select_channels(
-        channels, health, feature=feature, pinned_channel_id=pinned_channel_id
+        channels,
+        health,
+        feature=feature,
+        pinned_channel_id=pinned_channel_id,
+        spend_by_channel=spend,
     )
     if not candidates:
         return None
 
-    keys = _load_channel_keys()
+    keys = await _load_channel_keys()
     deployments: list[dict[str, Any]] = []
     usable: list[ChannelCandidate] = []
     for cand in candidates:
-        key = keys.get(_channel_key_name(cand.id))
+        key = keys.get(cand.id)
         # A channel with no readable credential is skipped rather than added and
         # left to fail every request it receives. The admin API refuses to activate
         # one, but a key can also become unreadable after an encryption-secret

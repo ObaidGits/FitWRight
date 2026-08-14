@@ -6,7 +6,6 @@ up-front, and collapsing three different failures into one message.
 """
 
 from datetime import datetime, timezone
-from uuid import uuid4
 
 import pytest
 

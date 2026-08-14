@@ -157,6 +157,25 @@ def _lapsed_cooldown(health: dict[str, Any] | None, now: datetime) -> bool:
         return False
 
 
+def over_monthly_cap(channel: dict[str, Any], spend_micros: int) -> bool:
+    """Whether this channel has spent its monthly ceiling.
+
+    The cap is stored in CENTS (what an operator types) and spend is measured in
+    MICROS (what survives millions of small calls without rounding). 1 cent =
+    10_000 micros, and getting that conversion wrong by a factor of 10,000 in
+    either direction is either a cap that never fires or one that fires instantly,
+    so it lives in exactly one function with a test either side of the boundary.
+
+    ``None`` or ``0`` means no cap. Zero deliberately means "unlimited" rather
+    than "spend nothing": a channel capped at zero would be indistinguishable from
+    a disabled one, and there is already a state for disabled.
+    """
+    cap_cents = channel.get("monthly_cost_cap_cents")
+    if not cap_cents:
+        return False
+    return int(spend_micros) >= int(cap_cents) * 10_000
+
+
 def select_channels(
     channels: list[dict[str, Any]],
     health: dict[str, dict[str, Any]],
@@ -164,6 +183,7 @@ def select_channels(
     feature: str,
     now: datetime | None = None,
     pinned_channel_id: str | None = None,
+    spend_by_channel: dict[str, int] | None = None,
 ) -> list[ChannelCandidate]:
     """Return usable channels in the order they should be attempted.
 
@@ -174,9 +194,16 @@ def select_channels(
     ``pinned_channel_id`` forces one channel for support/debugging. A pin still
     respects structured-output gating - pinning a channel that cannot produce JSON
     into a JSON feature would produce a confusing bug report, not a useful one.
+
+    ``spend_by_channel`` is month-to-date provider cost in micros per channel. A
+    channel that has reached its configured cap is excluded here, which is the ONLY
+    place the cap is enforced - the field existed and was editable in the admin UI
+    for a while without being enforced anywhere, which is worse than not offering it,
+    because an operator believed they were protected.
     """
     moment = now or datetime.now(timezone.utc)
     needs_structured = feature in FEATURES_REQUIRING_STRUCTURED_OUTPUT
+    spend = spend_by_channel or {}
 
     healthy: list[ChannelCandidate] = []
     probes: list[ChannelCandidate] = []
@@ -187,6 +214,8 @@ def select_channels(
         if needs_structured and ch.get("structured_verdict") not in _STRUCTURED_OK:
             continue
         if pinned_channel_id and ch.get("id") != pinned_channel_id:
+            continue
+        if over_monthly_cap(ch, spend.get(ch["id"], 0)):
             continue
 
         h = health.get(ch["id"])

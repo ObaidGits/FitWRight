@@ -87,10 +87,13 @@ from app.services.improver import (
     extract_requested_additions,
     merge_user_additions,
     generate_improvements,
-    generate_skill_target_plan,
+    # Imported for indirection, not called directly here: tests patch
+    # `app.routers.resumes.generate_skill_target_plan`, which only works if the name
+    # is bound in this module. Removing them as "unused" broke five tests.
+    generate_skill_target_plan,  # noqa: F401
+    verify_skill_target_plan,  # noqa: F401
     generate_resume_diffs,
     improve_resume,
-    verify_skill_target_plan,
     verify_diff_result,
 )
 from app.services.refiner import refine_resume, calculate_keyword_match
@@ -709,7 +712,7 @@ def _build_ats_score(
             injectable_keywords=ats_raw["injectable_keywords"],
             recommendations=ats_raw["recommendations"],
         )
-    except Exception as e:
+    except Exception:
         logger.warning("ATS score computation failed", exc_info=True)
         return None
 
@@ -857,7 +860,7 @@ async def _generate_auxiliary_messages(
         task_labels.append("interview_prep")
 
     results = await asyncio.gather(*generation_tasks, return_exceptions=True)
-    for label, result in zip(task_labels, results):
+    for label, result in zip(task_labels, results, strict=False):
         if isinstance(result, Exception):
             logger.warning(
                 "%s generation failed: %s",

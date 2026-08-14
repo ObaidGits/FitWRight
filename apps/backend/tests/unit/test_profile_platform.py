@@ -8,7 +8,6 @@ suggestion guardrails when no model is configured.
 
 from __future__ import annotations
 
-import pytest
 
 from app.profile import ai
 from app.profile.completion import compute_ai_readiness, compute_ats_readiness

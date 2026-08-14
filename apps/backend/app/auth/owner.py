@@ -28,7 +28,7 @@ import unicodedata
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from sqlalchemy import select, text, update
+from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 

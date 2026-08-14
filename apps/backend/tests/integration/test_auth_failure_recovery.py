@@ -27,7 +27,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.auth.accounts import create_user
-from app.auth.oauth import OAuthTokens, OAuthUserInfo, registry as oauth_registry
+from app.auth.oauth import OAuthTokens, registry as oauth_registry
 from app.auth.oauth.base import OAuthError, OAuthProvider
 from app.auth.oauth.google import GoogleOAuthProvider, HttpxJwksClient
 from app.auth.passwords import get_password_service

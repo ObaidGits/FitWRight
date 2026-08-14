@@ -137,6 +137,7 @@ def ai_metered(feature: str, *, blocking: bool = True):
                     channel_id=usage.channel_id,
                     model=usage.model,
                     provider=usage.provider,
+                    latency_ms=usage.latency_ms,
                 )
 
     # Lets the architecture ratchet DETECT that a route is metered instead of

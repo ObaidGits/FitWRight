@@ -25,6 +25,15 @@ from app.admin.metric_registry import (
     SEC_SUSPICIOUS,
 )
 
+# Type-only imports. These modules import one another at runtime - the lazy
+# imports inside the functions below exist to break that cycle - so the names are
+# needed for annotations and for the linter, but must not be imported at load time.
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # pragma: no cover
+    from app.admin.rollup_pipeline import StepResult
+    from app.admin.schemas import SecurityView
+
 logger = logging.getLogger(__name__)
 
 __all__ = [

@@ -1,6 +1,5 @@
 """LLM configuration endpoints."""
 
-import json
 import logging
 from pathlib import Path
 

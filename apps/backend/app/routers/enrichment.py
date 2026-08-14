@@ -5,7 +5,6 @@ import copy
 import json
 import logging
 import re
-from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -548,7 +547,7 @@ async def regenerate_items(
     errors: list[RegenerateItemError] = []
     first_provider_error: Exception | None = None
 
-    for item, result in zip(request.items, results):
+    for item, result in zip(request.items, results, strict=False):
         if isinstance(result, Exception):
             if first_provider_error is None:
                 first_provider_error = result

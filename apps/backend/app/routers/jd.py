@@ -90,7 +90,7 @@ async def _fetch_v2(request: FetchUrlRequest, user_id: str) -> FetchUrlResponse:
 
     try:
         # Rate limit (reuse existing v1 rate limiter)
-        from app.jd.service import _enforce_rate_limits, JdRateLimited as RL
+        from app.jd.service import _enforce_rate_limits
         await _enforce_rate_limits(user_id)
     except Exception:
         raise HTTPException(status_code=429, detail="Too many requests. Please slow down.")

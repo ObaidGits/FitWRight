@@ -29,11 +29,10 @@ from app.admin.repo import get_admin_repo
 from app.admin.schemas import assert_no_forbidden_fields
 from app.auth.accounts import create_user
 from app.auth.passwords import get_password_service
-from app.auth.sessions import get_session_service
 from app.config import settings as app_settings
 from app.main import app
 
-from tests.integration.test_auth_api import STRONG_PW, _csrf, _login
+from tests.integration.test_auth_api import STRONG_PW, _login
 
 pytestmark = pytest.mark.integration
 

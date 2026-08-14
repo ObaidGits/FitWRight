@@ -49,7 +49,6 @@ class TestEnsureAllowance:
     ):
         """This IS the signup grant. No hook to forget, and it covers users who
         already existed before the feature shipped."""
-        from app.database import db
 
         uid = f"u-{uuid4().hex[:8]}"
         account = await ensure_allowance(uid)
@@ -186,7 +185,6 @@ class TestEnsureAllowance:
 
     async def test_does_nothing_while_the_feature_is_off(self, isolated_db, monkeypatch):
         from app.config import settings
-        from app.database import db
 
         monkeypatch.setattr(settings, "ai_credits_enabled", False)
         uid = f"u-{uuid4().hex[:8]}"

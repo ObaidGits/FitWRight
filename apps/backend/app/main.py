@@ -166,6 +166,19 @@ async def lifespan(app: FastAPI):
                 logger.info("PDF renderer pre-warm skipped: %s", exc)
 
         prewarm_task = asyncio.create_task(_prewarm_pdf())
+
+    # One-time import of LLM_API_KEY as a (disabled) AI channel, so the operator's
+    # credential stops living in two conceptual places. No-ops unless credits are
+    # enabled and no channel exists yet - see app/ai_channel_import.py for why it is
+    # deliberately conservative. Awaited rather than fired-and-forgotten: it is a
+    # single cheap query in the common case, and a race with the first request
+    # resolving a route would be confusing to debug for no benefit.
+    try:
+        from app.ai_channel_import import adopt_env_key_as_channel
+
+        await adopt_env_key_as_channel()
+    except Exception as exc:  # pragma: no cover - never block boot
+        logger.info("AI channel import skipped: %s", exc)
     # Session reaper (ADR-15). In ``internal`` (premium) mode a background loop
     # runs the single-flighted reaper on an interval; ``external_cron`` (free
     # tier default) instead relies on POST /api/v1/internal/run-jobs, so nothing

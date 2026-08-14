@@ -47,6 +47,14 @@ from app.admin.metric_registry import (
     REQUEST_5XX,
 )
 
+# Type-only imports. These modules import one another at runtime - the lazy
+# imports inside the functions below exist to break that cycle - so the names are
+# needed for annotations and for the linter, but must not be imported at load time.
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # pragma: no cover
+    from app.admin.schemas import KpiValue, OverviewKpis
+
 logger = logging.getLogger(__name__)
 
 __all__ = [
@@ -210,7 +218,7 @@ class OverviewService:
         Req 13.7) using UTC day/window boundaries (Req 13.3). Every read is O(1)
         (Req 13.6). See the class docstring for the full source mapping.
         """
-        from app.admin.schemas import KpiValue, OverviewKpis
+        from app.admin.schemas import OverviewKpis
 
         now = _now()
 

@@ -6,7 +6,6 @@ Runs on the raw HTML + HTTP metadata before extraction attempts.
 
 from __future__ import annotations
 
-import re
 
 __all__ = ["classify_page", "PageClass"]
 

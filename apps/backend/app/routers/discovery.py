@@ -43,7 +43,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
 from app.config import Settings, settings
@@ -984,7 +984,6 @@ async def update_result_status(
 
     from sqlalchemy import update as sa_update
     from app.models import DiscoveryResult
-    from datetime import datetime, timezone
 
     from app.job_discovery.queueing import ensure_queued_application, unqueue_application
 

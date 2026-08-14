@@ -1,7 +1,6 @@
 """Unit tests for verify_diff_result() - local quality checks."""
 
 import copy
-import pytest
 
 from app.schemas.models import ResumeChange
 from app.services.improver import verify_diff_result

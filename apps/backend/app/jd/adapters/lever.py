@@ -37,7 +37,7 @@ class LeverAdapter:
         text = data.get("text", "")
         categories = data.get("categories", {})
         location = categories.get("location", "")
-        team = categories.get("team", "")
+        team = categories.get("team", "")  # noqa: F841
         commitment = categories.get("commitment", "")  # Full-time, Part-time
 
         # Build description from lists

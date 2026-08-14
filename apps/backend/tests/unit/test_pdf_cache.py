@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 
 from app.pdf_cache import PdfRenderCache, make_pdf_cache_key
 from app.routers.resumes import _pdf_content_disposition, _slug_filename_part

@@ -610,7 +610,7 @@ def verify_diff_result(
     ]:
         orig_entries = original.get(key, [])
         result_entries = result.get(key, [])
-        for i, (orig, res) in enumerate(zip(orig_entries, result_entries)):
+        for i, (orig, res) in enumerate(zip(orig_entries, result_entries, strict=False)):
             if not isinstance(orig, dict) or not isinstance(res, dict):
                 continue
             for field in id_fields:

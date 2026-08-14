@@ -1013,6 +1013,11 @@ async def run_admin_jobs(*, kvstore=None) -> dict:
     # allowance period rolled over while it was dormant. Marker-wrapped like the
     # others so the Health page shows when it last ran - a silently dead sweep leaves
     # users with frozen balances and no signal anywhere that it stopped.
+    # Imported here rather than at module scope: app.ai_allowance reaches into
+    # app.database, and this module is imported during app startup where that would
+    # create a cycle.
+    from app.ai_allowance import run_credit_maintenance_job
+
     credit_maintenance = await _run_job_with_markers(
         "credit_maintenance", lambda: run_credit_maintenance_job(kvstore=kvstore)
     )

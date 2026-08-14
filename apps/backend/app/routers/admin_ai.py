@@ -17,15 +17,19 @@ Two deliberate refusals in this surface:
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from app.admin.deps import require_admin_manage, require_admin_read
+from app.auth.audit import AuditEvent
 from app.auth.principal import Principal
 from app.config import settings
 from app.database import db
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/admin/ai", tags=["admin"])
 
@@ -124,32 +128,51 @@ def _channel_out(channel: dict[str, Any], health: dict[str, Any] | None, has_key
 
 
 async def _has_channel_key(channel_id: str) -> bool:
-    """Presence check against the encrypted key store, never the value."""
+    """Presence check only. The value is never read here, and never returned."""
     try:
-        return bool(db.get_api_key_ciphertexts(_CHANNEL_KEY_OWNER).get(_channel_key_name(channel_id)))
+        return bool(await db.get_ai_channel_key(channel_id))
     except Exception:
         return False
 
 
-def _store_channel_key(channel_id: str, api_key: str) -> None:
-    """Encrypt and store a channel credential.
+async def _store_channel_key(channel_id: str, api_key: str) -> None:
+    """Encrypt and store a channel credential on the channel row (migration 0036).
 
-    Goes through the SAME crypto helper and the SAME key table as user keys, so the
-    codebase keeps exactly one encryption path - just under a reserved owner id.
+    Uses the same ``app.crypto`` helper as user keys, so there is still exactly one
+    encryption implementation. It does NOT use the ``api_keys`` table: that table's
+    user_id is a foreign key to users, so a channel - which has no user - could never
+    be stored there. See the 0036 migration for the full account.
     """
     from app.crypto import encrypt
 
-    db.set_api_key_ciphertext(_CHANNEL_KEY_OWNER, _channel_key_name(channel_id), encrypt(api_key))
+    await db.set_ai_channel_key(channel_id, encrypt(api_key))
 
 
-#: Channel credentials are operator-owned, not user-owned. They still live in the
-#: user key table (one encryption path, one place that can leak) under a reserved
-#: owner id that no real user can hold.
-_CHANNEL_KEY_OWNER = "__ai_channel__"
+async def _audit(
+    event: str,
+    admin: Principal,
+    *,
+    target_user_id: str | None = None,
+    meta: dict[str, Any] | None = None,
+) -> None:
+    """Record an admin AI action in the SHARED audit trail.
 
+    Deliberately fails soft (the default): an audit write must not break the action it
+    observes. The credit ledger is the financial record and is written
+    transactionally; this is the accountability record - who did it - and losing one
+    row of it is preferable to refusing a legitimate operator action.
+    """
+    from app.auth.audit import get_audit_service
 
-def _channel_key_name(channel_id: str) -> str:
-    return f"channel:{channel_id}"
+    try:
+        await get_audit_service().record(
+            event,
+            actor_user_id=admin.user_id,
+            target_user_id=target_user_id,
+            meta=meta,
+        )
+    except Exception:  # pragma: no cover - fail-soft by design
+        logger.warning("Admin AI action could not be audited: %s", event)
 
 
 @router.get("/channels", response_model=list[ChannelOut])
@@ -175,7 +198,19 @@ async def create_channel(
         monthly_cost_cap_cents=payload.monthly_cost_cap_cents,
     )
     if payload.api_key:
-        _store_channel_key(created["id"], payload.api_key)
+        await _store_channel_key(created["id"], payload.api_key)
+    await _audit(
+        AuditEvent.ADMIN_AI_CHANNEL_CREATED,
+        _admin,
+        meta={
+            "channel_id": created["id"],
+            "name": payload.name,
+            "provider": payload.provider,
+            "model": payload.model,
+            # Never the key itself - only whether one was supplied.
+            "had_key": bool(payload.api_key),
+        },
+    )
     health = await db.get_ai_channel_health()
     return _channel_out(created, health.get(created["id"]), bool(payload.api_key))
 
@@ -204,11 +239,20 @@ async def update_channel(
             )
 
     if payload.api_key:
-        _store_channel_key(channel_id, payload.api_key)
+        await _store_channel_key(channel_id, payload.api_key)
 
     updated = await db.update_ai_channel(channel_id, **fields)
     if updated is None:
         raise HTTPException(status_code=404, detail="Channel not found")
+    await _audit(
+        AuditEvent.ADMIN_AI_CHANNEL_UPDATED,
+        _admin,
+        meta={
+            "channel_id": channel_id,
+            "changed": sorted(fields.keys()),
+            "key_replaced": bool(payload.api_key),
+        },
+    )
     health = await db.get_ai_channel_health()
     return _channel_out(updated, health.get(channel_id), await _has_channel_key(channel_id))
 
@@ -229,11 +273,115 @@ async def delete_channel(
             "requests can finish.",
         )
     await db.delete_ai_channel(channel_id)
+    await _audit(
+        AuditEvent.ADMIN_AI_CHANNEL_DELETED,
+        _admin,
+        meta={"channel_id": channel_id, "name": existing.get("name")},
+    )
 
 
 # ---------------------------------------------------------------------------
 # Per-user limits
 # ---------------------------------------------------------------------------
+
+
+@router.post("/channels/{channel_id}/test")
+async def test_channel(
+    channel_id: str, _admin: Principal = Depends(require_admin_manage)
+) -> dict[str, Any]:
+    """Send one tiny probe through this channel and report what happened.
+
+    Exists so a wrong credential is discovered HERE rather than by real users. Without
+    it the only way to validate a channel is to activate it and watch generations
+    fail, which spends the operator's credibility to learn something a 200-token probe
+    can tell them.
+
+    It also records the structured-output verdict, because "can this model return
+    JSON?" cannot be answered from configuration - some models advertise the
+    capability and then emit prose. The verdict gates which features may use the
+    channel, so measuring it is the difference between a safe route and one that
+    breaks resume parsing in a way that looks like our bug.
+
+    ``require_admin_manage`` rather than read: it spends real provider money, however
+    little, and writes the verdict.
+    """
+    channel = await db.get_ai_channel(channel_id)
+    if channel is None:
+        raise HTTPException(status_code=404, detail="Channel not found")
+
+    from app.ai_channel_test import probe_channel
+
+    result = await probe_channel(channel)
+
+    # Persist the verdict so routing can use it, and so the operator sees it on the
+    # list without re-testing.
+    await db.update_ai_channel(
+        channel_id, structured_verdict=result["structured_verdict"]
+    )
+    await _audit(
+        AuditEvent.ADMIN_AI_CHANNEL_TESTED,
+        _admin,
+        meta={
+            "channel_id": channel_id,
+            "ok": result["ok"],
+            "error_class": result.get("error_class"),
+            "structured_verdict": result["structured_verdict"],
+        },
+    )
+    return result
+
+
+@router.get("/performance")
+async def get_channel_performance(
+    days: int = 7,
+    _actor: str = Depends(require_admin_read),
+) -> list[dict[str, Any]]:
+    """Success rate and p95 latency per channel (task 5.1).
+
+    Sorted worst-first: the channel you need to know about should not be the one you
+    have to scroll to.
+    """
+    return await db.channel_performance(days=days)
+
+
+@router.get("/alerts")
+async def get_ai_alerts(
+    days: int = 7,
+    _actor: str = Depends(require_admin_read),
+) -> list[dict[str, Any]]:
+    """Current AI alert findings (task 5.3). Read-only; nothing is remediated."""
+    from app.ai_alerts import evaluate_ai_alerts
+
+    return await evaluate_ai_alerts(days=days)
+
+
+@router.get("/reconciliation")
+async def get_reconciliation(
+    _actor: str = Depends(require_admin_read),
+) -> dict[str, Any]:
+    """Counts that should all be zero (task 5.4).
+
+    Surfaced here rather than only in logs, because an invariant nobody looks at is
+    an invariant nobody enforces.
+    """
+    from app.ai_retention import reconcile_credits
+
+    return await reconcile_credits()
+
+
+@router.get("/abuse-review")
+async def get_abuse_review(
+    days: int = 7,
+    _actor: str = Depends(require_admin_read),
+) -> list[dict[str, Any]]:
+    """Accounts worth a HUMAN look (task 6.2).
+
+    Never an automatic block. Every signal here is circumstantial and each entry says
+    so, including the innocent explanation - which is usually the true one.
+    """
+    from app.ai_abuse_signals import abuse_review_candidates
+
+    return await abuse_review_candidates(days=days)
 
 
 @router.get("/spend")
@@ -296,6 +444,20 @@ async def patch_user_credits(
     )
     if updated is None:
         raise HTTPException(status_code=404, detail="User not found")
+    await _audit(
+        AuditEvent.ADMIN_AI_CREDIT_POLICY_CHANGED,
+        _admin,
+        target_user_id=user_id,
+        meta={
+            # Recording the RESOLVED intent, not the raw payload: "cleared the
+            # override" and "set it to 0" look similar in a request body and mean
+            # opposite things to whoever reads this later.
+            "allowance_override": "unchanged" if allowance is ... else allowance,
+            "velocity_override": "unchanged" if velocity is ... else velocity,
+            "ai_disabled": payload.ai_disabled,
+            "state": payload.state,
+        },
+    )
     return updated
 
 
@@ -322,4 +484,13 @@ async def grant_user_credits(
     )
     if status == "no_account":
         raise HTTPException(status_code=404, detail="User not found")
+    # The ledger already holds the reason; this is the accountability half - WHO.
+    # A balance change that cannot be traced to an administrator is the shape of a
+    # dispute nobody can settle.
+    await _audit(
+        AuditEvent.ADMIN_AI_CREDITS_GRANTED,
+        admin,
+        target_user_id=user_id,
+        meta={"credits": payload.credits, "reason": payload.reason, "status": status},
+    )
     return await db.get_or_create_credit_account(user_id)

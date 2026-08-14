@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Any, AsyncIterator
 from uuid import uuid4
 
-from sqlalchemy import and_, delete, func, or_, select, text, update as sa_update
+from sqlalchemy import and_, case, delete, func, or_, select, text, update as sa_update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import Session, sessionmaker
@@ -47,6 +47,7 @@ from app.models import (
     AiChannel,
     AiChannelHealth,
     AiUsageLedger,
+    AuditLog,
     CreditAccount,
     CreditReservation,
     CreditTransaction,
@@ -1275,7 +1276,7 @@ class Database:
         """Known fields. Unanswered first, then by how often they come up."""
         from sqlalchemy import case, select
 
-        from app.models import ApplicationField, _utcnow_iso
+        from app.models import ApplicationField
 
         stmt = select(ApplicationField).where(ApplicationField.user_id == user_id)
         if status:
@@ -1352,7 +1353,7 @@ class Database:
     async def delete_application_field(self, user_id: str, field_id: str) -> bool:
         from sqlalchemy import delete
 
-        from app.models import ApplicationField, _utcnow_iso
+        from app.models import ApplicationField
 
         async with self._session() as session:
             async with session.begin():
@@ -3986,6 +3987,49 @@ class Database:
     ) -> tuple[str, dict[str, Any] | None]:
         """Place a hold on ``credits``. Returns ``(status, reservation)``.
 
+        Wraps the real work so a lost idempotency race reports ``replayed`` instead of
+        raising. The up-front duplicate SELECT inside handles the common case; two
+        genuinely simultaneous requests with the SAME key both pass it and one loses
+        the UNIQUE constraint. That is not an error - it is a retry arriving twice,
+        which clients do routinely - and the whole transaction rolls back, so the loser
+        took no hold. Found by the concurrency load test; before this it surfaced as a
+        500 on an ordinary retry.
+        """
+        try:
+            return await self._reserve_credits_once(
+                user_id,
+                feature=feature,
+                credits=credits,
+                idempotency_key=idempotency_key,
+                ttl_seconds=ttl_seconds,
+            )
+        except IntegrityError:
+            existing = await self.get_reservation_by_key(idempotency_key)
+            return "replayed", existing
+
+    async def get_reservation_by_key(self, idempotency_key: str) -> dict[str, Any] | None:
+        """The reservation for an idempotency key, if one exists."""
+        async with self._session() as session:
+            row = (
+                await session.execute(
+                    select(CreditReservation).where(
+                        CreditReservation.idempotency_key == idempotency_key
+                    )
+                )
+            ).scalars().first()
+            return self._reservation_to_dict(row) if row is not None else None
+
+    async def _reserve_credits_once(
+        self,
+        user_id: str,
+        *,
+        feature: str,
+        credits: int,
+        idempotency_key: str,
+        ttl_seconds: int = 900,
+    ) -> tuple[str, dict[str, Any] | None]:
+        """Place a hold on ``credits``. Returns ``(status, reservation)``.
+
         Status is one of ``created`` / ``replayed`` / ``insufficient`` /
         ``blocked`` / ``no_account``.
 
@@ -4100,22 +4144,43 @@ class Database:
                 # of the worst case. Overrun is the operator's to absorb.
                 charge = min(charge, res.credits_reserved)
 
-                from_allowance = min(charge, max(0, account.allowance_credits))
-                from_wallet = charge - from_allowance
-
-                account.allowance_credits -= from_allowance
-                account.wallet_credits -= from_wallet
-                account.reserved_credits = max(
-                    0, account.reserved_credits - res.credits_reserved
+                # ATOMIC, RELATIVE arithmetic - not read-modify-write.
+                #
+                # The reserve path was always careful about this; settle and release
+                # were not, and mutated the ORM object after reading it. Under
+                # concurrency two settles would both read the same reserved_credits and
+                # one would overwrite the other's decrement, so holds leaked and
+                # lifetime_spent under-counted. Thirty concurrent cycles left 14 credits
+                # frozen and 5 of 15 charges recorded - all thirty reporting success.
+                # Found by the concurrency load test.
+                #
+                # Spend order (allowance first, then wallet) is expressed as a CASE so
+                # it stays one statement. `case` rather than `func.min`, which renders
+                # as SQLite's scalar min() but Postgres's AGGREGATE min().
+                from_allowance = case(
+                    (CreditAccount.allowance_credits >= charge, charge),
+                    else_=func.max(CreditAccount.allowance_credits, 0),
                 )
-                account.lifetime_spent += charge
-                account.velocity_spent = (account.velocity_spent or 0) + charge
-                account.version += 1
-                account.updated_at = now
+                await session.execute(
+                    sa_update(CreditAccount)
+                    .where(CreditAccount.user_id == res.user_id)
+                    .values(
+                        allowance_credits=CreditAccount.allowance_credits - from_allowance,
+                        wallet_credits=CreditAccount.wallet_credits - (charge - from_allowance),
+                        reserved_credits=CreditAccount.reserved_credits - res.credits_reserved,
+                        lifetime_spent=CreditAccount.lifetime_spent + charge,
+                        velocity_spent=func.coalesce(CreditAccount.velocity_spent, 0) + charge,
+                        version=CreditAccount.version + 1,
+                        updated_at=now,
+                    )
+                )
 
                 res.state = "settled"
                 res.settled_at = now
 
+                # Re-read for the ledger's balance_after: the value must be what the
+                # database now holds, not what this process computed before the update.
+                await session.refresh(account)
                 balance_after = account.allowance_credits + account.wallet_credits
                 if charge:
                     session.add(
@@ -4161,20 +4226,353 @@ class Database:
                 ).scalars().first()
                 if res is None or res.state != "held":
                     return "not_held"
-                account = (
-                    await session.execute(
-                        select(CreditAccount).where(CreditAccount.user_id == res.user_id)
+                # Atomic and relative, for the same reason as settle: concurrent
+                # releases that each read-then-wrote would lose one another's
+                # decrements and permanently freeze part of the balance.
+                await session.execute(
+                    sa_update(CreditAccount)
+                    .where(CreditAccount.user_id == res.user_id)
+                    .values(
+                        reserved_credits=CreditAccount.reserved_credits - res.credits_reserved,
+                        version=CreditAccount.version + 1,
+                        updated_at=now,
                     )
-                ).scalars().first()
-                if account is not None:
-                    account.reserved_credits = max(
-                        0, account.reserved_credits - res.credits_reserved
-                    )
-                    account.version += 1
-                    account.updated_at = now
+                )
                 res.state = "released" if reason != "expired" else "expired"
                 res.settled_at = now
                 return "released"
+
+    async def channel_performance(self, *, days: int = 7) -> list[dict[str, Any]]:
+        """Success rate and p95 latency per channel (task 5.1).
+
+        P95 rather than an average, because an average hides the failure mode that
+        matters: a channel that is usually quick and occasionally terrible looks
+        healthy on the mean, and users only ever remember the terrible calls.
+
+        The percentile is computed in Python over the window's rows for this table's
+        expected size. SQLite has no percentile function, and a portable SQL
+        approximation would be harder to read than it is worth at this scale - the
+        honest tradeoff is written here rather than discovered later.
+        """
+        cutoff = (
+            datetime.now(timezone.utc) - timedelta(days=max(1, int(days or 7)))
+        ).isoformat()
+
+        async with self._session() as session:
+            rows = (
+                await session.execute(
+                    select(
+                        AiUsageLedger.channel_id,
+                        AiUsageLedger.outcome,
+                        AiUsageLedger.latency_ms,
+                    ).where(
+                        AiUsageLedger.created_at >= cutoff,
+                        AiUsageLedger.channel_id.is_not(None),
+                    )
+                )
+            ).all()
+
+        grouped: dict[str, dict[str, Any]] = {}
+        for channel_id, outcome, latency in rows:
+            entry = grouped.setdefault(
+                str(channel_id), {"calls": 0, "ok": 0, "latencies": []}
+            )
+            entry["calls"] += 1
+            if outcome == "ok":
+                entry["ok"] += 1
+            if latency is not None:
+                entry["latencies"].append(int(latency))
+
+        out: list[dict[str, Any]] = []
+        for channel_id, entry in grouped.items():
+            latencies = sorted(entry["latencies"])
+            p95 = None
+            if latencies:
+                # Nearest-rank: index of the first value at or above the 95th
+                # percentile. Clamped so a single sample reports itself rather than
+                # indexing past the end.
+                idx = min(len(latencies) - 1, int(len(latencies) * 0.95))
+                p95 = latencies[idx]
+            out.append(
+                {
+                    "channel_id": channel_id,
+                    "calls": entry["calls"],
+                    "ok": entry["ok"],
+                    "success_rate": round(entry["ok"] / entry["calls"], 4)
+                    if entry["calls"]
+                    else None,
+                    "p95_latency_ms": p95,
+                }
+            )
+        out.sort(key=lambda r: (r["success_rate"] is None, r["success_rate"]))
+        return out
+
+    async def trim_ai_usage_ledger(self, *, older_than_days: int = 400) -> int:
+        """Delete usage rows older than the horizon. Returns the count removed.
+
+        Bounded by nothing on purpose: this runs on a schedule, and leaving a partial
+        backlog would mean the table never actually converges on the retention window.
+        It is a single DELETE with an indexed predicate.
+        """
+        cutoff = (
+            datetime.now(timezone.utc)
+            - timedelta(days=max(1, int(older_than_days or 400)))
+        ).isoformat()
+
+        async with self._session() as session:
+            async with session.begin():
+                result = await session.execute(
+                    delete(AiUsageLedger).where(AiUsageLedger.created_at < cutoff)
+                )
+                return int(result.rowcount or 0)
+
+    async def credit_reconciliation(self) -> dict[str, Any]:
+        """Counts that should all be zero. Anything else means an invariant broke.
+
+        Reported, never auto-repaired: each of these is evidence of HOW something went
+        wrong, and a silent fix would delete that evidence while leaving the cause in
+        place.
+        """
+        async with self._session() as session:
+            negative_available = (
+                await session.execute(
+                    select(func.count(CreditAccount.user_id)).where(
+                        (
+                            CreditAccount.allowance_credits
+                            + CreditAccount.wallet_credits
+                            - CreditAccount.reserved_credits
+                        )
+                        < 0
+                    )
+                )
+            ).scalar() or 0
+
+            negative_balances = (
+                await session.execute(
+                    select(func.count(CreditAccount.user_id)).where(
+                        or_(
+                            CreditAccount.allowance_credits < 0,
+                            CreditAccount.wallet_credits < 0,
+                            CreditAccount.reserved_credits < 0,
+                        )
+                    )
+                )
+            ).scalar() or 0
+
+            # A hold that outlived its expiry means the sweep is not running - the
+            # failure that silently freezes user balances.
+            now = _now()
+            stuck_reservations = (
+                await session.execute(
+                    select(func.count(CreditReservation.id)).where(
+                        CreditReservation.state == "held",
+                        CreditReservation.expires_at < now,
+                    )
+                )
+            ).scalar() or 0
+
+            # Charged more than was ever held. The settle caps the charge at the hold,
+            # so this should be arithmetically impossible - which is exactly why it is
+            # worth counting. Joined through the ledger, because the charge is recorded
+            # there and the hold on the reservation.
+            overcharged = (
+                await session.execute(
+                    select(func.count(AiUsageLedger.id))
+                    .join(
+                        CreditReservation,
+                        CreditReservation.id == AiUsageLedger.reservation_id,
+                    )
+                    .where(
+                        AiUsageLedger.credits_charged
+                        > CreditReservation.credits_reserved
+                    )
+                )
+            ).scalar() or 0
+
+            spent_more_than_granted = (
+                await session.execute(
+                    select(func.count(CreditAccount.user_id)).where(
+                        CreditAccount.lifetime_spent > CreditAccount.lifetime_granted
+                    )
+                )
+            ).scalar() or 0
+
+        findings = {
+            "negative_available": int(negative_available),
+            "negative_component_balances": int(negative_balances),
+            "expired_holds_not_swept": int(stuck_reservations),
+            "settled_above_reserved": int(overcharged),
+            "spent_more_than_granted": int(spent_more_than_granted),
+        }
+        return {
+            "status": "ok" if not any(findings.values()) else "attention",
+            "findings": findings,
+        }
+
+    async def accounts_sharing_ip_hash(
+        self, *, days: int = 7, min_accounts: int = 3
+    ) -> list[dict[str, Any]]:
+        """Groups of accounts seen from the same hashed IP.
+
+        Reads the audit trail's EXISTING hashed IPs. Nothing new is collected and no
+        raw address is stored or returned - the hash is all this needs, and all it can
+        get.
+        """
+        cutoff = (
+            datetime.now(timezone.utc) - timedelta(days=max(1, int(days or 7)))
+        ).isoformat()
+
+        async with self._session() as session:
+            rows = (
+                await session.execute(
+                    select(AuditLog.ip_hash, AuditLog.actor_user_id)
+                    .where(
+                        AuditLog.ts >= cutoff,
+                        AuditLog.ip_hash.is_not(None),
+                        AuditLog.actor_user_id.is_not(None),
+                    )
+                    .distinct()
+                )
+            ).all()
+
+        grouped: dict[str, set[str]] = {}
+        for ip_hash, user_id in rows:
+            grouped.setdefault(str(ip_hash), set()).add(str(user_id))
+
+        return [
+            {"ip_hash": ip_hash, "user_ids": sorted(users)}
+            for ip_hash, users in grouped.items()
+            if len(users) >= min_accounts
+        ]
+
+    async def accounts_spending_allowance_immediately(
+        self, *, days: int = 7, limit: int = 20
+    ) -> list[dict[str, Any]]:
+        """Accounts that consumed their whole allowance very soon after creation.
+
+        Computed from the account's own created_at and its usage rows, so it needs no
+        extra tracking. Reported in MINUTES because that is the unit that makes the
+        signal legible - "spent it in four minutes" reads differently from a rate.
+        """
+        cutoff = (
+            datetime.now(timezone.utc) - timedelta(days=max(1, int(days or 7)))
+        ).isoformat()
+
+        async with self._session() as session:
+            accounts = (
+                await session.execute(
+                    select(CreditAccount.user_id, CreditAccount.created_at).where(
+                        CreditAccount.created_at >= cutoff,
+                        CreditAccount.allowance_credits == 0,
+                        CreditAccount.lifetime_spent > 0,
+                    )
+                )
+            ).all()
+
+            out: list[dict[str, Any]] = []
+            for user_id, created_at in accounts:
+                last = (
+                    await session.execute(
+                        select(func.max(AiUsageLedger.created_at)).where(
+                            AiUsageLedger.user_id == user_id
+                        )
+                    )
+                ).scalar()
+                if not last or not created_at:
+                    continue
+                try:
+                    minutes = int(
+                        (
+                            datetime.fromisoformat(str(last))
+                            - datetime.fromisoformat(str(created_at))
+                        ).total_seconds()
+                        // 60
+                    )
+                except (TypeError, ValueError):
+                    continue
+                # An hour is the threshold for "immediately" - long enough that a
+                # genuinely fast user is not flagged for being efficient.
+                if 0 <= minutes <= 60:
+                    out.append({"user_id": str(user_id), "minutes": minutes})
+
+            out.sort(key=lambda r: r["minutes"])
+            return out[:limit]
+
+    async def set_ai_channel_key(self, channel_id: str, ciphertext: str | None) -> bool:
+        """Store (or clear) a channel's encrypted credential. True if the row existed.
+
+        Separate from ``update_ai_channel`` on purpose: every other channel field is
+        safe to echo back in an API response, and this one must never be. Keeping the
+        write on its own method means a future ``update_ai_channel(**payload)`` cannot
+        accidentally accept a ciphertext from a request body.
+        """
+        async with self._session() as session:
+            async with session.begin():
+                row = (
+                    await session.execute(
+                        select(AiChannel).where(AiChannel.id == channel_id)
+                    )
+                ).scalars().first()
+                if row is None:
+                    return False
+                row.api_key_ciphertext = ciphertext
+                row.updated_at = _now()
+                return True
+
+    async def get_ai_channel_key(self, channel_id: str) -> str | None:
+        """The stored ciphertext for one channel, or None."""
+        async with self._session() as session:
+            return (
+                await session.execute(
+                    select(AiChannel.api_key_ciphertext).where(AiChannel.id == channel_id)
+                )
+            ).scalars().first()
+
+    async def get_ai_channel_keys(self) -> dict[str, str]:
+        """Ciphertexts for every channel that has one, keyed by channel id.
+
+        One query rather than N: route resolution needs all of them on every request
+        that uses channels, and a per-channel round trip would put the database on the
+        latency path of every generation.
+        """
+        async with self._session() as session:
+            rows = (
+                await session.execute(
+                    select(AiChannel.id, AiChannel.api_key_ciphertext).where(
+                        AiChannel.api_key_ciphertext.is_not(None)
+                    )
+                )
+            ).all()
+        return {str(r[0]): str(r[1]) for r in rows}
+
+    async def channel_spend_micros_this_month(self) -> dict[str, int]:
+        """Month-to-date provider cost per channel, in micros.
+
+        Anchored to the first of the UTC month rather than a rolling 30 days,
+        because that is what an operator means by "monthly cap" and what provider
+        invoices align to. A rolling window would let a cap be exceeded within a
+        calendar month and then silently reopen mid-month.
+        """
+        now = datetime.now(timezone.utc)
+        start = now.replace(
+            day=1, hour=0, minute=0, second=0, microsecond=0
+        ).isoformat()
+
+        async with self._session() as session:
+            rows = (
+                await session.execute(
+                    select(
+                        AiUsageLedger.channel_id,
+                        func.coalesce(func.sum(AiUsageLedger.provider_cost_micros), 0),
+                    )
+                    .where(
+                        AiUsageLedger.created_at >= start,
+                        AiUsageLedger.channel_id.is_not(None),
+                    )
+                    .group_by(AiUsageLedger.channel_id)
+                )
+            ).all()
+        return {str(r[0]): int(r[1] or 0) for r in rows}
 
     async def ai_spend_summary(self, *, days: int = 30, top: int = 10) -> dict[str, Any]:
         """Aggregate the usage ledger for the operator's spend view.

@@ -1511,6 +1511,11 @@ class AiChannel(Base):
         String, nullable=False, default="unknown", server_default="unknown"
     )
     monthly_cost_cap_cents: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Encrypted with app.crypto, stored here rather than in `api_keys` because that
+    # table's user_id is a FK to users and a channel has no user (migration 0036).
+    # Never returned by the API - only ever decrypted for an outbound call, and
+    # deliberately absent from _ai_channel_to_dict so it cannot leak by accident.
+    api_key_ciphertext: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[str] = mapped_column(String, nullable=False, default=_utcnow_iso)
     updated_at: Mapped[str] = mapped_column(String, nullable=False, default=_utcnow_iso)
 
@@ -1589,6 +1594,10 @@ class AiUsageLedger(Base):
     )
     reservation_id: Mapped[str | None] = mapped_column(String, nullable=True)
     request_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Request-level provider latency (migration 0037), for per-channel p95. Nullable:
+    # rows written before the column existed have no value, and inventing one would
+    # corrupt the percentile it exists to compute.
+    latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # ok | failed | cancelled. ``failed`` rows exist precisely so a zero charge is
     # provable rather than merely absent.
     outcome: Mapped[str] = mapped_column(String, nullable=False, default="ok", server_default="ok")

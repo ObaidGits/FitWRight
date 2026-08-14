@@ -68,7 +68,7 @@ class LogisticModel:
     weights: list[float]
 
     def predict(self, features: list[float]) -> float:
-        z = sum(w * f for w, f in zip(self.weights, features))
+        z = sum(w * f for w, f in zip(self.weights, features, strict=False))
         # Clamp to avoid overflow in exp.
         z = max(-30.0, min(30.0, z))
         return 1.0 / (1.0 + math.exp(-z))
@@ -168,8 +168,8 @@ def train(dataset: list[tuple[str, int]] | None = None, *, iterations: int = 400
 
     for _ in range(iterations):
         grad = [0.0] * n_features
-        for x, y in zip(feats, labels):
-            z = sum(w * xi for w, xi in zip(weights, x))
+        for x, y in zip(feats, labels, strict=False):
+            z = sum(w * xi for w, xi in zip(weights, x, strict=False))
             z = max(-30.0, min(30.0, z))
             pred = 1.0 / (1.0 + math.exp(-z))
             err = pred - y

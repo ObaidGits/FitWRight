@@ -107,6 +107,17 @@ class AuditEvent:
     # --- Secure admin signup: invite lifecycle (Option B) ---
     ADMIN_INVITE_CREATED = "admin.invite_created"
     ADMIN_INVITE_REVOKED = "admin.invite_revoked"
+    # AI provider channels and credit administration (spec: ai-provider-admin).
+    # Credit movements are audited SEPARATELY from the credit ledger: the ledger
+    # answers "what is this user's balance and why", the audit trail answers "which
+    # administrator did this, and when". A grant that appears in one but not the
+    # other is the shape of a dispute nobody can settle.
+    ADMIN_AI_CHANNEL_CREATED = "admin.ai_channel_created"
+    ADMIN_AI_CHANNEL_UPDATED = "admin.ai_channel_updated"
+    ADMIN_AI_CHANNEL_DELETED = "admin.ai_channel_deleted"
+    ADMIN_AI_CHANNEL_TESTED = "admin.ai_channel_tested"
+    ADMIN_AI_CREDITS_GRANTED = "admin.ai_credits_granted"
+    ADMIN_AI_CREDIT_POLICY_CHANGED = "admin.ai_credit_policy_changed"
     ADMIN_INVITE_REDEEMED = "admin.invite_redeemed"
 
 

@@ -11,7 +11,7 @@ import os
 import pytest
 
 from app.jd.canonicalize import canonicalize_url
-from app.jd.adapters.registry import detect_platform, get_adapter
+from app.jd.adapters.registry import detect_platform
 from app.jd.adapters.ashby import AshbyAdapter
 from app.jd.adapters.greenhouse import GreenhouseAdapter
 from app.jd.adapters.lever import LeverAdapter
@@ -667,7 +667,6 @@ class TestPlaywrightRendering:
     async def test_orchestrator_uses_playwright_for_spa(self, monkeypatch):
         """Orchestrator should use Playwright when static extraction fails on SPA."""
         from app.jd import orchestrator
-        from app.jd.browser import render as browser_render
         from app.jd.models import ConfidenceResult, ExtractionResult
 
         # Mock: static fetch returns empty SPA shell
