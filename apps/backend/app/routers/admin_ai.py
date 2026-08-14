@@ -236,6 +236,20 @@ async def delete_channel(
 # ---------------------------------------------------------------------------
 
 
+@router.get("/spend")
+async def get_spend_summary(
+    days: int = 30,
+    _actor: str = Depends(require_admin_read),
+) -> dict:
+    """Operator spend: credits charged against real provider cost.
+
+    Read-only and aggregate. It reports ``unpriced_calls`` prominently because the
+    margin figure is only as trustworthy as the rate table behind it, and a partial
+    rate table produces a number that looks complete.
+    """
+    return await db.ai_spend_summary(days=days)
+
+
 @router.get("/users/{user_id}/credits")
 async def get_user_credits(
     user_id: str, _admin: Principal = Depends(require_admin_read)

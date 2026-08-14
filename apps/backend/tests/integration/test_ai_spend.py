@@ -5,6 +5,7 @@ outage, charging a user who brought their own key, refusing mid-save instead of
 up-front, and collapsing three different failures into one message.
 """
 
+from datetime import datetime, timezone
 from uuid import uuid4
 
 import pytest
@@ -20,6 +21,11 @@ async def _fund(db, user_id: str, *, allowance: int = 0, wallet: int = 0):
         row = await session.get(CreditAccount, user_id)
         row.allowance_credits = allowance
         row.wallet_credits = wallet
+        # Stamp the CURRENT period so the lazy allowance grant treats this account as
+        # already topped up for the month. Without it, `allowance=0` would be read as
+        # "never granted" and refilled - and a test that means "this user is out of
+        # credits" would silently become "this user has 50".
+        row.allowance_period_start = datetime.now(timezone.utc).isoformat()
         await session.commit()
 
 

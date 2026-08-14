@@ -78,6 +78,8 @@ class SpendHandle:
     _estimated: bool = field(default=False, repr=False)
     _channel_id: str | None = field(default=None, repr=False)
     _model: str | None = field(default=None, repr=False)
+    #: Needed to price the call - the rate table is keyed on provider and model.
+    _provider: str | None = field(default=None, repr=False)
 
     def record(
         self,
@@ -88,6 +90,7 @@ class SpendHandle:
         estimated: bool = False,
         channel_id: str | None = None,
         model: str | None = None,
+        provider: str | None = None,
     ) -> None:
         """Report real usage. Safe to call once; later calls overwrite.
 
@@ -103,6 +106,7 @@ class SpendHandle:
         self._estimated = bool(estimated)
         self._channel_id = channel_id
         self._model = model
+        self._provider = provider
 
 
 async def check_can_spend(user_id: str, feature: str, *, has_own_key: bool = False) -> SpendDecision:
@@ -119,6 +123,12 @@ async def check_can_spend(user_id: str, feature: str, *, has_own_key: bool = Fal
     from app.database import db
 
     account = await db.get_or_create_credit_account(user_id)
+    # Grant or renew the free allowance before judging the balance. Without this a
+    # brand-new user's first action is refused for lack of credits they are entitled
+    # to, and a returning user is refused on the 1st of the month.
+    from app.ai_allowance import ensure_allowance
+
+    account = await ensure_allowance(user_id, account=account) or account
     if account.get("ai_disabled"):
         return SpendDecision(allowed=False, reason="disabled_globally")
     if account.get("state") != "ok":
@@ -230,6 +240,18 @@ async def ai_spend(
 
 
 def _ledger_fields(handle: SpendHandle, *, outcome: str) -> dict:
+    # Operator cost is computed here, at the one place every ledger row is built, so
+    # no path can write usage without also recording what it cost us. An unknown model
+    # records zero and is counted as unpriced rather than guessed - see app/ai_rates.
+    from app.ai_rates import cost_micros
+
+    cost, _known = cost_micros(
+        handle._provider,
+        handle._model,
+        prompt_tokens=handle._prompt_tokens,
+        completion_tokens=handle._completion_tokens,
+        total_tokens=handle._tokens,
+    )
     return {
         "channel_id": handle._channel_id,
         "model": handle._model,
@@ -237,6 +259,7 @@ def _ledger_fields(handle: SpendHandle, *, outcome: str) -> dict:
         "completion_tokens": handle._completion_tokens,
         "total_tokens": handle._tokens,
         "tokens_estimated": handle._estimated,
+        "provider_cost_micros": cost,
         "outcome": outcome,
     }
 

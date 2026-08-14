@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Any, AsyncIterator
 from uuid import uuid4
 
-from sqlalchemy import and_, delete, func, select, text, update as sa_update
+from sqlalchemy import and_, delete, func, or_, select, text, update as sa_update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import Session, sessionmaker
@@ -4176,6 +4176,177 @@ class Database:
                 res.settled_at = now
                 return "released"
 
+    async def ai_spend_summary(self, *, days: int = 30, top: int = 10) -> dict[str, Any]:
+        """Aggregate the usage ledger for the operator's spend view.
+
+        Aggregated in SQL rather than in Python because this table grows by one row
+        per AI call: pulling it into the process to sum it would work in month one and
+        fall over later, which is the worst possible time to find out.
+
+        ``unpriced_calls`` is reported alongside the totals on purpose. Cost is zero
+        for a model with no rate entry, so without that count a margin figure computed
+        from an incomplete rate table looks authoritative while being wrong.
+        """
+        cutoff = (
+            datetime.now(timezone.utc) - timedelta(days=max(1, min(int(days or 30), 365)))
+        ).isoformat()
+
+        async with self._session() as session:
+            totals = (
+                await session.execute(
+                    select(
+                        func.count(AiUsageLedger.id),
+                        func.coalesce(func.sum(AiUsageLedger.total_tokens), 0),
+                        func.coalesce(func.sum(AiUsageLedger.credits_charged), 0),
+                        func.coalesce(func.sum(AiUsageLedger.provider_cost_micros), 0),
+                    ).where(AiUsageLedger.created_at >= cutoff)
+                )
+            ).one()
+
+            unpriced = (
+                await session.execute(
+                    select(func.count(AiUsageLedger.id)).where(
+                        AiUsageLedger.created_at >= cutoff,
+                        AiUsageLedger.total_tokens > 0,
+                        AiUsageLedger.provider_cost_micros == 0,
+                    )
+                )
+            ).scalar() or 0
+
+            failed = (
+                await session.execute(
+                    select(func.count(AiUsageLedger.id)).where(
+                        AiUsageLedger.created_at >= cutoff,
+                        AiUsageLedger.outcome != "ok",
+                    )
+                )
+            ).scalar() or 0
+
+            by_day = (
+                await session.execute(
+                    select(
+                        func.substr(AiUsageLedger.created_at, 1, 10).label("day"),
+                        func.count(AiUsageLedger.id),
+                        func.coalesce(func.sum(AiUsageLedger.credits_charged), 0),
+                        func.coalesce(func.sum(AiUsageLedger.provider_cost_micros), 0),
+                    )
+                    .where(AiUsageLedger.created_at >= cutoff)
+                    .group_by("day")
+                    .order_by("day")
+                )
+            ).all()
+
+            by_feature = (
+                await session.execute(
+                    select(
+                        AiUsageLedger.feature,
+                        func.count(AiUsageLedger.id),
+                        func.coalesce(func.sum(AiUsageLedger.credits_charged), 0),
+                        func.coalesce(func.sum(AiUsageLedger.provider_cost_micros), 0),
+                    )
+                    .where(AiUsageLedger.created_at >= cutoff)
+                    .group_by(AiUsageLedger.feature)
+                    .order_by(func.sum(AiUsageLedger.provider_cost_micros).desc())
+                )
+            ).all()
+
+            by_channel = (
+                await session.execute(
+                    select(
+                        AiUsageLedger.channel_id,
+                        func.count(AiUsageLedger.id),
+                        func.coalesce(func.sum(AiUsageLedger.provider_cost_micros), 0),
+                    )
+                    .where(AiUsageLedger.created_at >= cutoff)
+                    .group_by(AiUsageLedger.channel_id)
+                    .order_by(func.sum(AiUsageLedger.provider_cost_micros).desc())
+                )
+            ).all()
+
+            top_users = (
+                await session.execute(
+                    select(
+                        AiUsageLedger.user_id,
+                        func.count(AiUsageLedger.id),
+                        func.coalesce(func.sum(AiUsageLedger.credits_charged), 0),
+                        func.coalesce(func.sum(AiUsageLedger.provider_cost_micros), 0),
+                    )
+                    .where(AiUsageLedger.created_at >= cutoff)
+                    .group_by(AiUsageLedger.user_id)
+                    .order_by(func.sum(AiUsageLedger.provider_cost_micros).desc())
+                    .limit(max(1, min(int(top or 10), 100)))
+                )
+            ).all()
+
+        return {
+            "days": days,
+            "calls": int(totals[0] or 0),
+            "total_tokens": int(totals[1] or 0),
+            "credits_charged": int(totals[2] or 0),
+            "provider_cost_micros": int(totals[3] or 0),
+            "unpriced_calls": int(unpriced),
+            "failed_calls": int(failed),
+            "by_day": [
+                {
+                    "day": r[0],
+                    "calls": int(r[1]),
+                    "credits": int(r[2]),
+                    "cost_micros": int(r[3]),
+                }
+                for r in by_day
+            ],
+            "by_feature": [
+                {
+                    "feature": r[0],
+                    "calls": int(r[1]),
+                    "credits": int(r[2]),
+                    "cost_micros": int(r[3]),
+                }
+                for r in by_feature
+            ],
+            "by_channel": [
+                {"channel_id": r[0], "calls": int(r[1]), "cost_micros": int(r[2])}
+                for r in by_channel
+            ],
+            "top_users": [
+                {
+                    "user_id": r[0],
+                    "calls": int(r[1]),
+                    "credits": int(r[2]),
+                    "cost_micros": int(r[3]),
+                }
+                for r in top_users
+            ],
+        }
+
+    async def list_accounts_needing_refill(
+        self, *, period: str, limit: int = 500
+    ) -> list[str]:
+        """User ids whose allowance period is missing or older than ``period``.
+
+        Compares on the stored ISO timestamp's ``YYYY-MM`` prefix, which is why the
+        stamp is written in UTC: a lexical prefix match is only equivalent to a
+        calendar comparison when every row uses the same zone.
+
+        Bounded by ``limit`` - a refill sweep that grew with the user table would
+        eventually time out the job that calls it, and a partial sweep followed by
+        another tick is harmless because each grant is idempotent per period.
+        """
+        async with self._session() as session:
+            rows = (
+                await session.execute(
+                    select(CreditAccount.user_id)
+                    .where(
+                        or_(
+                            CreditAccount.allowance_period_start.is_(None),
+                            CreditAccount.allowance_period_start < period,
+                        )
+                    )
+                    .limit(limit)
+                )
+            ).scalars().all()
+            return [str(r) for r in rows]
+
     async def sweep_expired_reservations(self, *, limit: int = 500) -> int:
         """Release holds past their expiry. Returns how many were released.
 
@@ -4218,7 +4389,42 @@ class Database:
         Idempotent by key, which is what makes a double-run refill job or a
         redelivered payment webhook harmless. ``to_wallet=False`` targets the
         expiring allowance instead (monthly refill).
+
+        The duplicate check is done TWICE, deliberately. The up-front SELECT is the
+        common, cheap path. The UNIQUE constraint is the one that actually holds
+        under concurrency, because two callers can both pass the SELECT before
+        either inserts - so a constraint violation here is not an error, it is the
+        other caller having won, and it reports ``replayed`` like any other repeat.
+        Without this the loser of that race raised a 500, which for the monthly
+        allowance meant a user's first-ever generation could fail at random.
         """
+        try:
+            return await self._grant_credits_once(
+                user_id,
+                credits=credits,
+                kind=kind,
+                idempotency_key=idempotency_key,
+                reason=reason,
+                actor_user_id=actor_user_id,
+                to_wallet=to_wallet,
+                period_start=period_start,
+            )
+        except IntegrityError:
+            return "replayed"
+
+    async def _grant_credits_once(
+        self,
+        user_id: str,
+        *,
+        credits: int,
+        kind: str,
+        idempotency_key: str,
+        reason: str | None = None,
+        actor_user_id: str | None = None,
+        to_wallet: bool = True,
+        period_start: str | None = None,
+    ) -> str:
+
         now = _now()
         async with self._session() as session:
             async with session.begin():

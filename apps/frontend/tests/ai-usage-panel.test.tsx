@@ -5,9 +5,7 @@ import { AiUsagePanel } from '@/components/settings/ai-usage-panel';
 import type { MyCredits } from '@/lib/api/credits';
 
 vi.mock('@/lib/api/credits', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/api/credits')>(
-    '@/lib/api/credits'
-  );
+  const actual = await vi.importActual<typeof import('@/lib/api/credits')>('@/lib/api/credits');
   return {
     ...actual,
     getMyCredits: vi.fn(),

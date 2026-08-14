@@ -41,7 +41,14 @@ __all__ = ["UsageAccumulator", "current_usage", "note_call", "start_metering", "
 
 @dataclass
 class UsageAccumulator:
-    """Running total for one request. Mutated in place - see the module docstring."""
+    """Running total for one request. Mutated in place - see the module docstring.
+
+    It also carries the request's AI IDENTITY (which feature, which user, and whether
+    that user is self-funded). Those live here rather than in a second ContextVar
+    because they have exactly the same lifetime and the same cross-task problem: the
+    provider call that needs to know "which feature is this?" in order to pick a
+    channel happens deep inside llm.py, several frames below the endpoint that knew.
+    """
 
     total_tokens: int = 0
     prompt_tokens: int = 0
@@ -54,6 +61,13 @@ class UsageAccumulator:
     provider: str | None = None
     model: str | None = None
     channel_id: str | None = None
+    #: The billing identity, and what selects an operator channel.
+    feature: str | None = None
+    user_id: str | None = None
+    #: True when the user supplied their own credential. Routing must then leave
+    #: them on it: sending a self-funded user through an operator channel would
+    #: spend the operator's money for someone who was not going to cost anything.
+    has_own_key: bool = False
 
     @property
     def estimated(self) -> bool:
@@ -69,9 +83,14 @@ class UsageAccumulator:
 _current: ContextVar[UsageAccumulator | None] = ContextVar("fw_ai_usage", default=None)
 
 
-def start_metering() -> tuple[UsageAccumulator, Token]:
+def start_metering(
+    *,
+    feature: str | None = None,
+    user_id: str | None = None,
+    has_own_key: bool = False,
+) -> tuple[UsageAccumulator, Token]:
     """Begin accounting for this request. Returns the tally and its reset token."""
-    acc = UsageAccumulator()
+    acc = UsageAccumulator(feature=feature, user_id=user_id, has_own_key=has_own_key)
     return acc, _current.set(acc)
 
 

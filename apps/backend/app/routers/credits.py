@@ -86,6 +86,11 @@ async def get_my_credits(user_id: str = Depends(get_effective_user_id)) -> dict:
         }
 
     account = await _db().get_or_create_credit_account(user_id)
+    # Same lazy grant the spend path uses, so the balance shown is the balance that
+    # will actually be honoured a moment later.
+    from app.ai_allowance import ensure_allowance
+
+    account = await ensure_allowance(user_id, account=account) or account
     available = int(account.get("available_credits") or 0)
 
     if account.get("ai_disabled") or account.get("state") != "ok":

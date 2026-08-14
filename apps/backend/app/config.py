@@ -1112,6 +1112,11 @@ class Settings(BaseSettings):
     # Credits/hour ceiling, independent of balance: credits alone do not stop a
     # stolen session draining a funded wallet in one minute. 0 disables.
     ai_velocity_cap_per_hour: int = 200
+    # Operator corrections to the provider rate table used for MARGIN REPORTING only
+    # (app/ai_rates.py). JSON: {"model-substring": [prompt_micros_per_1k,
+    # completion_micros_per_1k]}. Never affects what a user is charged, so a wrong
+    # value here misreports profit and nothing else.
+    ai_rate_overrides: str = ""
     # How long a hold survives before the sweep releases it. Must comfortably
     # exceed the slowest AI call, or a legitimate long request loses its hold
     # mid-flight; short enough that a crashed worker does not strand a balance for

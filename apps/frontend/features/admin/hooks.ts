@@ -49,6 +49,7 @@ export const adminKeys = {
   errors: (window: number) => [...adminKeys.all, 'errors', window] as const,
   performance: () => [...adminKeys.all, 'performance'] as const,
   aiChannels: () => [...adminKeys.all, 'ai-channels'] as const,
+  aiSpend: (days: number) => [...adminKeys.all, 'ai-spend', days] as const,
   userCredits: (userId: string) => [...adminKeys.all, 'user-credits', userId] as const,
   storage: () => [...adminKeys.all, 'storage'] as const,
   security: () => [...adminKeys.all, 'security'] as const,
@@ -473,5 +474,14 @@ export function useGrantUserCredits() {
     }) => adminApi.grantUserCredits(userId, credits, reason),
     onSuccess: (_data, vars) =>
       qc.invalidateQueries({ queryKey: adminKeys.userCredits(vars.userId) }),
+  });
+}
+
+/** Operator spend over a window. */
+export function useAiSpend(days: number) {
+  return useQuery({
+    queryKey: adminKeys.aiSpend(days),
+    queryFn: () => adminApi.getAiSpend(days),
+    placeholderData: keepPreviousData,
   });
 }

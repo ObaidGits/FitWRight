@@ -116,7 +116,12 @@ def ai_metered(feature: str, *, blocking: bool = True):
         # Entering ai_spend can raise 402 / 403 / 429 BEFORE the handler runs. That
         # is the point: the refusal arrives before any partial work exists.
         async with ai_spend(user_id, feature=feature, has_own_key=bypass_billing) as spend:
-            usage, token = start_metering()
+            # Publishing the feature here is what lets llm.py pick an operator
+            # channel: the provider call is several frames below this point and has
+            # no other way to know which feature it is serving.
+            usage, token = start_metering(
+                feature=feature, user_id=user_id, has_own_key=bypass_billing
+            )
             try:
                 yield
             finally:
@@ -131,6 +136,7 @@ def ai_metered(feature: str, *, blocking: bool = True):
                     estimated=usage.estimated,
                     channel_id=usage.channel_id,
                     model=usage.model,
+                    provider=usage.provider,
                 )
 
     # Lets the architecture ratchet DETECT that a route is metered instead of

@@ -888,6 +888,36 @@ async function grantUserCredits(
   );
 }
 
+export interface SpendBucket {
+  day?: string;
+  feature?: string;
+  channel_id?: string | null;
+  user_id?: string;
+  calls: number;
+  credits?: number;
+  cost_micros: number;
+}
+
+export interface AiSpendSummary {
+  days: number;
+  calls: number;
+  total_tokens: number;
+  credits_charged: number;
+  provider_cost_micros: number;
+  /** Calls that used tokens but had no rate entry. The margin figure is only as
+   *  complete as this is small - surfaced, never hidden. */
+  unpriced_calls: number;
+  failed_calls: number;
+  by_day: SpendBucket[];
+  by_feature: SpendBucket[];
+  by_channel: SpendBucket[];
+  top_users: SpendBucket[];
+}
+
+async function getAiSpend(days: number): Promise<AiSpendSummary> {
+  return json<AiSpendSummary>(await apiFetch(`/admin/ai/spend?days=${days}`));
+}
+
 export const adminApi = {
   getStats,
   getUsageSeries,
@@ -902,6 +932,7 @@ export const adminApi = {
   bulkDisable,
   // AI provider channels + per-user credits (spec: ai-provider-admin)
   listAiChannels,
+  getAiSpend,
   createAiChannel,
   updateAiChannel,
   deleteAiChannel,

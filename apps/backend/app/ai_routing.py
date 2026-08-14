@@ -20,7 +20,12 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["ChannelRoute", "resolve_channel_route", "record_channel_outcome"]
+__all__ = [
+    "ChannelRoute",
+    "channels_are_configured",
+    "record_channel_outcome",
+    "resolve_channel_route",
+]
 
 #: Reserved owner id for operator-owned channel credentials. They live in the same
 #: encrypted key table as user keys - one encryption path, one place that can leak -
@@ -145,6 +150,32 @@ async def resolve_channel_route(feature: str, *, pinned_channel_id: str | None =
     if not deployments:
         return None
     return ChannelRoute(usable, deployments)
+
+
+async def channels_are_configured() -> bool:
+    """Whether the operator has set up ANY channel at all.
+
+    The one thing ``resolve_channel_route`` returning ``None`` cannot tell you, and
+    the difference between two messages a user must never see confused:
+
+      * no channels configured -> this deployment does not offer hosted AI; use your
+        own key. Nothing is broken.
+      * channels configured but every one is down -> OUR outage. The user did nothing
+        wrong and should be told to try again shortly, not sent to go and configure
+        something.
+
+    Collapsing those is how an outage turns into a support queue full of users
+    re-entering API keys that were never the problem.
+    """
+    if not settings.ai_credits_enabled:
+        return False
+    from app.database import db
+
+    try:
+        return bool(await db.list_ai_channels())
+    except Exception:
+        logger.warning("Could not determine whether channels are configured")
+        return False
 
 
 async def record_channel_outcome(
