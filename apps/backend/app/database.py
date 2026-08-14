@@ -287,6 +287,11 @@ class Database:
             "interview_prep": row.interview_prep,
             "title": row.title,
             "template_settings": getattr(row, "template_settings", None),
+            # Match score for the job this resume was tailored against (0-100),
+            # or None for a master resume, which has no job to be measured
+            # against. ``getattr`` keeps the facade safe for a row read before
+            # migration 0032 lands.
+            "ats_score": getattr(row, "ats_score", None),
             # Optimistic-concurrency token (P4 R3.1). Older rows created before
             # migration 0014 read back via the server_default (1); ``getattr``
             # keeps the facade safe if a detached/legacy row lacks the attribute.
@@ -709,6 +714,10 @@ class Database:
                 Resume.created_at,
                 Resume.updated_at,
                 Resume.title,
+                # Lets the library rank and badge variants by how well each
+                # matched its job, instead of showing a dozen indistinguishable
+                # rows. NULL for a master resume (no job to score against).
+                Resume.ats_score,
             ),
             Resume,
             user_id,
@@ -1999,6 +2008,7 @@ class Database:
         outreach_message: str | None,
         interview_prep: str | None,
         title: str | None,
+        ats_score: float | None = None,
     ) -> tuple[str, dict[str, Any] | None]:
         """Consume one matching preview and persist all confirmation rows atomically.
 
@@ -2052,6 +2062,11 @@ class Database:
                         interview_prep=interview_prep,
                         title=title,
                         template_settings=source.template_settings,
+                        # Written in the SAME transaction as the resume it
+                        # describes: a score that could land separately could
+                        # also fail separately, leaving a resume whose score
+                        # silently belongs to nothing.
+                        ats_score=ats_score,
                         created_at=now,
                         updated_at=now,
                     )

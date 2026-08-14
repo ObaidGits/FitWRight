@@ -2203,6 +2203,20 @@ async def improve_resume_confirm_endpoint(
         response_warnings.extend(aux_warnings)
 
         improvements_payload = [imp.model_dump() for imp in request.improvements]
+
+        # Score this resume against the job it was tailored for, and keep it.
+        # Until now the score was computed during preview, shown once, and
+        # discarded - so the library could not tell the user which of a dozen
+        # variants actually matched best. This is pure computation (keyword
+        # overlap and structure checks), so it costs no LLM call; the refinement
+        # analysis from preview is not available here, and _build_ats_score
+        # falls back to a direct keyword match in that case. A failure returns
+        # None rather than raising, because a missing score must never cost the
+        # user a resume they already accepted.
+        stage = "score_tailored_resume"
+        ats = _build_ats_score(improved_data, job.get("job_keywords") or {}, None, False)
+        ats_score = ats.overall_score if ats is not None else None
+
         stage = "commit_confirmation"
         status, committed = await db.confirm_tailor_preview(
             user_id,
@@ -2217,6 +2231,7 @@ async def improve_resume_confirm_endpoint(
             outreach_message=outreach_message,
             interview_prep=_serialize_interview_prep(interview_prep),
             title=title,
+            ats_score=ats_score,
         )
         if status == "not_found":
             raise HTTPException(status_code=404, detail="Resume or job description not found")

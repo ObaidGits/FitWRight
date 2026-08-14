@@ -46,16 +46,32 @@ import {
 import { useToast } from '@/components/atelier/toast';
 import { useResumeLibrary, useDeleteResume, useRetryProcessing } from '@/features/resumes/hooks';
 import { ResumeThumbnail } from '@/components/resume/resume-thumbnail';
+import { compareByMatchScore } from '@/lib/utils/resume-sort';
 import type { ResumeListItem } from '@/lib/api/resume';
 
 type Filter = 'all' | 'master' | 'tailored';
-type SortKey = 'updated' | 'created' | 'name';
+type SortKey = 'updated' | 'created' | 'name' | 'score';
 
 const SORT_LABELS: Record<SortKey, string> = {
   updated: 'Recently updated',
   created: 'Recently added',
   name: 'Name (A-Z)',
+  score: 'Best match first',
 };
+
+/** A score badge, or nothing. An unscored resume shows no badge rather than a
+ *  zero: a master resume has no job to be measured against, so "0%" would read
+ *  as a terrible match instead of an absent one. */
+function ScoreBadge({ score }: { score?: number | null }) {
+  if (score == null) return null;
+  const rounded = Math.round(score);
+  const variant = rounded >= 75 ? 'success' : rounded >= 50 ? 'warning' : 'danger';
+  return (
+    <Badge variant={variant} title="How well this resume matched its job description">
+      {rounded}% match
+    </Badge>
+  );
+}
 
 function StatusBadge({ status }: { status: string }) {
   if (status === 'ready') return <Badge variant="success">Ready</Badge>;
@@ -97,6 +113,7 @@ export default function ResumesPage() {
     const bySearch = q ? byTab.filter((r) => resumeName(r).includes(q)) : byTab;
     const sorted = [...bySearch].sort((a, b) => {
       if (sort === 'name') return resumeName(a).localeCompare(resumeName(b));
+      if (sort === 'score') return compareByMatchScore(a, b);
       const key = sort === 'created' ? 'created_at' : 'updated_at';
       return (b[key] ?? '').localeCompare(a[key] ?? '');
     });
@@ -298,6 +315,7 @@ export default function ResumesPage() {
                 </p>
               </div>
               {r.is_master && <Badge variant="primary">Master</Badge>}
+              <ScoreBadge score={r.ats_score} />
               <StatusBadge
                 status={retryingId === r.resume_id ? 'processing' : r.processing_status}
               />

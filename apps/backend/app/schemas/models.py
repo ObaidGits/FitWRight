@@ -485,6 +485,11 @@ class ResumeSummary(BaseModel):
     created_at: str
     updated_at: str
     title: str | None = None
+    # Overall match score (0-100) against the job this resume was tailored for.
+    # None means there is no score to show: a master resume has no job to be
+    # measured against, and a resume tailored before this was persisted has none
+    # recorded. The UI must render absence as "no score", never as zero.
+    ats_score: float | None = None
 
 
 class ResumeListResponse(BaseModel):

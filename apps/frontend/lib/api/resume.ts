@@ -179,6 +179,11 @@ export interface ResumeListItem {
   created_at: string;
   updated_at: string;
   title?: string | null;
+  /** Overall match score (0-100) against the job this resume was tailored for.
+   *  `null`/absent means there is NO score - an untailored or master resume has
+   *  no job to be measured against, and a resume tailored before the score was
+   *  persisted has none recorded. Render absence as "no score", never as 0. */
+  ats_score?: number | null;
   // Optional lightweight snippet of associated job description (populated client-side)
   jobSnippet?: string;
 }

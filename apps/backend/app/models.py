@@ -15,6 +15,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     ForeignKey,
+    Float,
     Index,
     Integer,
     LargeBinary,
@@ -80,6 +81,14 @@ class Resume(Base):
     # This is a rendering artifact, NOT resume content, so writing it never bumps
     # the optimistic-concurrency ``version`` (see ``update_resume``).
     template_settings: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # Overall ATS match score (0-100) for the job this resume was tailored
+    # against, captured at confirm time. NULL means "no score", which is the
+    # permanent state for a master resume: it has no job to be measured against,
+    # and that is different from scoring zero. Migration 0032 adds it nullable.
+    # Only the composite is stored - the sub-scores and keyword lists remain a
+    # per-request computation, since they are derived and would go stale as the
+    # scoring rules change.
+    ats_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     # Optimistic-concurrency token (P4 Resilience R3.1). Bumped by every write
     # via an atomic single-row conditional UPDATE (version CAS): a write carries
     # the ``base_version`` it read; the server applies the change only when the
