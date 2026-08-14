@@ -593,6 +593,58 @@ def _build_router(config: LLMConfig) -> Router:
     )
 
 
+#: Shared retry policy. The distinctions matter: retrying an auth failure or a
+#: malformed request is pointless (they fail identically every time and on every
+#: provider), while a timeout or rate limit is exactly what a retry is for.
+_RETRY_POLICY = RetryPolicy(
+    AuthenticationErrorRetries=0,
+    BadRequestErrorRetries=0,
+    TimeoutErrorRetries=2,
+    RateLimitErrorRetries=3,
+    ContentPolicyViolationErrorRetries=0,
+    InternalServerErrorRetries=2,
+)
+
+
+def build_channel_router(deployments: list[dict[str, Any]]) -> Router:
+    """Build a Router over one or more operator-configured channels.
+
+    ``deployments`` is an ordered list of ``{"model": ..., "api_key": ...,
+    "api_base": ...}`` dicts, best first, as produced by
+    :func:`app.ai_channels.select_channels` plus credential lookup.
+
+    All deployments share the model alias ``"primary"``, which is how LiteLLM is
+    told they are interchangeable: it will try the first and fall back through the
+    rest on a retryable error.
+
+    Cooldowns are ENABLED here, unlike the single-deployment router above. That
+    router had to disable them - benching its only deployment would black out the
+    whole backend on a transient blip. With a fallback list, benching a sick
+    provider is the entire point, and its own docstring said to re-enable this once
+    a fallback existed.
+    """
+    if not deployments:
+        raise ValueError("build_channel_router requires at least one deployment")
+
+    model_list = []
+    for dep in deployments:
+        params: dict[str, Any] = {"model": dep["model"]}
+        if dep.get("api_key"):
+            params["api_key"] = dep["api_key"]
+        if dep.get("api_base"):
+            params["api_base"] = dep["api_base"]
+        model_list.append({"model_name": "primary", "litellm_params": params})
+
+    return Router(
+        model_list=model_list,
+        num_retries=3,
+        retry_policy=_RETRY_POLICY,
+        # A single channel is back to the original hazard: benching it leaves
+        # nowhere to go, so only enable cooldowns when there is somewhere to fall.
+        disable_cooldowns=len(model_list) < 2,
+    )
+
+
 def get_router(config: LLMConfig | None = None) -> tuple[Router, LLMConfig]:
     """Get (or build) the LiteLLM Router for ``config``.
 
