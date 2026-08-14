@@ -226,6 +226,9 @@ OWNED_ENDPOINTS: list[tuple[str, str]] = [
     ("PATCH", "/api/v1/discovery/feed/bulk-status"),
     ("GET", "/api/v1/discovery/board-health"),
     ("DELETE", "/api/v1/discovery/data"),
+    # a user's own AI allowance and their own usage history
+    ("GET", "/api/v1/credits"),
+    ("GET", "/api/v1/credits/usage"),
 ]
 
 # Provider-cost actions gated behind email verification (R5.6). These must 403

@@ -26,6 +26,7 @@ from app.errors import error_envelope, install_error_handlers
 from app.routers import (
     admin_router,
     admin_ai_router,
+    credits_router,
     agenda_router,
     applications_router,
     auth_router,
@@ -350,6 +351,7 @@ app.include_router(health_router, prefix="/api/v1")
 app.include_router(internal_router, prefix="/api/v1")
 app.include_router(admin_router, prefix="/api/v1")
 app.include_router(admin_ai_router, prefix="/api/v1")
+app.include_router(credits_router, prefix="/api/v1")
 app.include_router(config_router, prefix="/api/v1")
 app.include_router(resumes_router, prefix="/api/v1")
 app.include_router(versions_router, prefix="/api/v1")

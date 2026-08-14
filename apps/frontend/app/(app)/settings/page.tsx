@@ -34,6 +34,7 @@ import {
 } from '@/components/atelier/dialog';
 import { LoadingSkeleton } from '@/components/atelier/states';
 import { useToast } from '@/components/atelier/toast';
+import { AiUsagePanel } from '@/components/settings/ai-usage-panel';
 import { useTheme } from '@/components/theme/theme-provider';
 import { useSession } from '@/lib/context/session';
 import {
@@ -319,6 +320,10 @@ function AiSection() {
 
   return (
     <Card className="space-y-4 p-6">
+      {/* What the user can still do, before the knobs for changing how it is done.
+          Someone opening AI settings because generation stopped working needs this
+          answer first - the provider fields are the fix, not the diagnosis. */}
+      <AiUsagePanel />
       <div className="space-y-1.5">
         <Label>Provider</Label>
         <Select value={provider} onValueChange={(v) => onProviderChange(v as LLMProvider)}>
