@@ -64,9 +64,20 @@ import { ConflictDialog } from '@/components/resilience/conflict-dialog';
 import { RecoveryBanner } from '@/components/resilience/recovery-banner';
 import { RecoveryCenter } from '@/components/resilience/recovery-center';
 import { buildResumeFilename, downloadBlobAsFile, openUrlInNewTab } from '@/lib/utils/download';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from '@/components/atelier/dropdown-menu';
+import MoreHorizontal from 'lucide-react/dist/esm/icons/more-horizontal';
+import { cn } from '@/lib/utils';
 import type { RegenerateItemInput } from '@/lib/api/enrichment';
 
 type TabId = 'resume' | 'cover-letter' | 'outreach' | 'interview-prep' | 'jd-match';
+/** Which of the two panes a narrow screen is showing (they cannot fit side by
+ *  side below `lg`, and stacking them hid the preview under the whole form). */
+type MobilePane = 'edit' | 'preview';
 type JobContextStatus = 'idle' | 'loading' | 'available' | 'missing';
 
 const STORAGE_KEY = 'resume_builder_draft';
@@ -160,6 +171,9 @@ const ResumeBuilderContent = () => {
 
   // Tab state
   const [activeTab, setActiveTab] = useState<TabId>(() => getTabFromSearchParams(searchParams));
+  // Narrow screens show one pane at a time, switched from the header. Defaults
+  // to the editor: a user opening the editor came to change something.
+  const [mobilePane, setMobilePane] = useState<MobilePane>('edit');
 
   useEffect(() => {
     setActiveTab(getTabFromSearchParams(searchParams));
@@ -821,7 +835,7 @@ const ResumeBuilderContent = () => {
   };
 
   return (
-    <div className="flex h-screen w-full items-center justify-center bg-[var(--background)] p-4 md:p-8">
+    <div className="flex h-full w-full flex-col bg-[var(--background)]">
       {/* P4 R6.5: announce streaming AI progress to screen readers via aria-live. */}
       <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
         {streamingActive ? t('builder.alerts.aiStreaming') : ''}
@@ -844,8 +858,10 @@ const ResumeBuilderContent = () => {
           onDismiss={autosave.resolveTakeLatest}
         />
       )}
-      {/* Main Container */}
-      <div className="flex h-full w-full max-w-[90%] flex-col overflow-hidden rounded-[var(--radius-at-xl)] border border-[var(--border)] bg-[var(--background)] shadow-[var(--shadow-at-e3)] md:max-w-[95%] xl:max-w-[1800px]">
+      {/* Main container. Fills the shell's content area: the editor needs every
+          pixel, and the old floating card (max-w-[90%] inside p-4) surrendered
+          ~10% of the viewport to decorative inset - worst on a phone. */}
+      <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-[var(--background)]">
         {/* P4 Resilience: non-destructive crash/refresh recovery (R5.1). */}
         {autosave.recovery && (
           <RecoveryBanner
@@ -903,174 +919,212 @@ const ResumeBuilderContent = () => {
             {t('builder.alerts.storageDegraded')}
           </div>
         )}
-        {/* Header Section */}
-        <div className="no-print border-b border-[var(--border)] bg-[var(--background)] p-6 md:p-8">
-          {/* Top Row: Back button and Actions */}
-          <div className="mb-6 flex flex-col items-start justify-between md:flex-row md:items-center">
-            <div>
-              <Button
-                variant="link"
-                onClick={() => router.push('/dashboard')}
-                className="mb-2 -ml-1"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                {t('nav.backToDashboard')}
-              </Button>
-              <h1 className="text-3xl font-semibold leading-tight tracking-tight text-[var(--foreground)] md:text-5xl">
-                {t('nav.builder')}
-              </h1>
-              <div className="mt-3 flex items-center gap-3">
-                <p className="text-sm font-medium text-[var(--primary)]">
-                  {resumeId ? t('builder.editMode') : t('builder.createAndPreview')}
-                </p>
-                {hasUnsavedChanges && (
-                  <span className="flex items-center gap-1 rounded-[var(--radius-at-sm)] border border-[var(--at-warning)]/40 bg-[var(--at-warning)]/12 px-2 py-1 text-xs font-medium text-[var(--at-warning)]">
-                    <AlertTriangle className="w-3 h-3" />
-                    {t('builder.unsavedDraft')}
-                  </span>
+        {/* Header. Deliberately compact: an editor's scarcest resource is
+            vertical space, and this strip previously spent a md:text-5xl
+            heading (48px) restating the name of the page the user had just
+            clicked into. The back link now points at /resumes - it used to
+            push /dashboard, a route this app does not have, which made the
+            editor a dead end. */}
+        <div className="no-print flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-[var(--border)] bg-[var(--background)] px-4 py-3 md:px-6">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => router.push('/resumes')}
+            className="-ml-2 shrink-0"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span className="hidden sm:inline">{t('common.back')}</span>
+          </Button>
+
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold leading-tight text-[var(--foreground)]">
+              {resumeTitle || t('builder.title')}
+            </p>
+            <p className="truncate text-xs text-[var(--muted-foreground)]">
+              {resumeId ? t('builder.editMode') : t('builder.createAndPreview')}
+            </p>
+          </div>
+
+          {/* Which pane a phone shows. Below lg the two panes cannot sit side by
+              side, and stacking them buried the preview under the whole form. */}
+          <div
+            role="group"
+            aria-label={t('dashboard.preview')}
+            className="flex shrink-0 gap-1 rounded-[var(--radius-at-lg)] bg-[var(--secondary)] p-1 lg:hidden"
+          >
+            {(['edit', 'preview'] as MobilePane[]).map((pane) => (
+              <button
+                key={pane}
+                type="button"
+                onClick={() => setMobilePane(pane)}
+                aria-pressed={mobilePane === pane}
+                className={cn(
+                  'rounded-[var(--radius-at-md)] px-2.5 py-1 text-xs font-medium transition-colors',
+                  mobilePane === pane
+                    ? 'bg-[var(--card)] text-[var(--foreground)] shadow-[var(--shadow-at-e1)]'
+                    : 'text-[var(--muted-foreground)]'
                 )}
-              </div>
-            </div>
+              >
+                {pane === 'edit' ? t('common.edit') : t('dashboard.preview')}
+              </button>
+            ))}
+          </div>
 
-            <div className="flex gap-3 mt-4 md:mt-0">
-              {/* Resume tab actions */}
-              {activeTab === 'resume' && (
-                <>
+          {hasUnsavedChanges && (
+            <span className="flex shrink-0 items-center gap-1 rounded-[var(--radius-at-sm)] border border-[var(--at-warning)]/40 bg-[var(--at-warning)]/12 px-2 py-1 text-xs font-medium text-[var(--at-warning)]">
+              <AlertTriangle className="h-3 w-3" />
+              <span className="hidden sm:inline">{t('builder.unsavedDraft')}</span>
+            </span>
+          )}
+
+          {/* Actions. One filled primary per tab; everything occasional lives in
+              the overflow menu. Previously this row carried up to six controls
+              in four different colours (outline / amber warning / primary /
+              green success), so nothing read as the main action. */}
+          <div className="flex shrink-0 items-center gap-2">
+            {/* Resume tab actions */}
+            {activeTab === 'resume' && (
+              <>
+                {flags.advanced_autosave && resumeId && (
+                  <SaveStatusChip
+                    status={autosave.status}
+                    lastSavedAt={autosave.lastSavedAt}
+                    isFollower={!autosave.isLeader}
+                  />
+                )}
+                {streamingActive && (
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => regenerateWizard.startRegenerate()}
-                    disabled={!resumeId}
+                    onClick={cancelActiveStream}
+                    aria-label={t('common.cancel')}
                   >
-                    <Sparkles className="w-4 h-4" />
-                    {t('builder.regenerate.buttonLabel')}
+                    {t('common.cancel')}
                   </Button>
-                  <Button
-                    variant="warning"
-                    size="sm"
-                    onClick={handleReset}
-                    disabled={!hasUnsavedChanges}
-                  >
-                    <RotateCcw className="w-4 h-4" />
-                    {t('common.reset')}
-                  </Button>
-                  {flags.advanced_autosave && resumeId && (
-                    <SaveStatusChip
-                      status={autosave.status}
-                      lastSavedAt={autosave.lastSavedAt}
-                      isFollower={!autosave.isLeader}
-                    />
-                  )}
-                  {streamingActive && (
-                    <Button
-                      variant="warning"
-                      size="sm"
-                      onClick={cancelActiveStream}
-                      aria-label={t('common.cancel')}
-                    >
-                      {t('common.cancel')}
-                    </Button>
-                  )}
-                  <Button size="sm" onClick={handleSave} disabled={!resumeId || isSaving}>
-                    <Save className="w-4 h-4" />
-                    {isSaving ? t('common.saving') : t('common.save')}
-                  </Button>
-                  <Button
-                    variant="success"
-                    size="sm"
-                    onClick={handleDownload}
-                    disabled={!resumeId || isDownloading}
-                  >
-                    <Download className="w-4 h-4" />
-                    {isDownloading ? t('common.generating') : t('common.download')}
-                  </Button>
-                </>
-              )}
-
-              {/* Cover letter tab actions */}
-              {activeTab === 'cover-letter' && coverLetter && (
-                <>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleGenerateCoverLetter}
-                    disabled={isGeneratingCoverLetter}
-                  >
-                    {isGeneratingCoverLetter ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Sparkles className="w-4 h-4" />
-                    )}
-                    {t('coverLetter.regenerate')}
-                  </Button>
-                  <Button
-                    variant="success"
-                    size="sm"
-                    onClick={handleDownloadCoverLetter}
-                    disabled={!resumeId || isDownloading}
-                  >
-                    <Download className="w-4 h-4" />
-                    {isDownloading ? t('common.generating') : t('common.download')}
-                  </Button>
-                </>
-              )}
-
-              {/* Outreach tab actions */}
-              {activeTab === 'outreach' && outreachMessage && (
-                <>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleGenerateOutreach}
-                    disabled={isGeneratingOutreach}
-                  >
-                    {isGeneratingOutreach ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Sparkles className="w-4 h-4" />
-                    )}
-                    {t('outreach.regenerate')}
-                  </Button>
-                  <Button variant="success" size="sm" onClick={handleCopyOutreach}>
-                    {isCopied ? (
-                      <>
-                        <Check className="w-4 h-4" />
-                        {t('outreach.copied')}
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-4 h-4" />
-                        {t('outreach.copyToClipboard')}
-                      </>
-                    )}
-                  </Button>
-                </>
-              )}
-
-              {/* Interview prep tab actions */}
-              {activeTab === 'interview-prep' && interviewPrep && (
+                )}
+                <Button size="sm" onClick={handleSave} disabled={!resumeId || isSaving}>
+                  <Save className="h-4 w-4" />
+                  {isSaving ? t('common.saving') : t('common.save')}
+                </Button>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={handleGenerateInterviewPrep}
-                  disabled={!canGenerateInterviewPrep || isGeneratingInterviewPrep}
+                  onClick={handleDownload}
+                  disabled={!resumeId || isDownloading}
                 >
-                  {isGeneratingInterviewPrep ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Sparkles className="w-4 h-4" />
-                  )}
-                  {t('interviewPrep.regenerate')}
+                  <Download className="h-4 w-4" />
+                  <span className="hidden sm:inline">
+                    {isDownloading ? t('common.generating') : t('common.download')}
+                  </span>
                 </Button>
-              )}
-            </div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="iconSm" aria-label={t('dashboard.actions')}>
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      disabled={!resumeId}
+                      onClick={() => regenerateWizard.startRegenerate()}
+                    >
+                      <Sparkles className="h-4 w-4" />
+                      {t('builder.regenerate.buttonLabel')}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem disabled={!hasUnsavedChanges} onClick={handleReset}>
+                      <RotateCcw className="h-4 w-4" />
+                      {t('common.reset')}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </>
+            )}
+
+            {/* Cover letter tab actions */}
+            {activeTab === 'cover-letter' && coverLetter && (
+              <>
+                <Button
+                  size="sm"
+                  onClick={handleDownloadCoverLetter}
+                  disabled={!resumeId || isDownloading}
+                >
+                  <Download className="h-4 w-4" />
+                  <span className="hidden sm:inline">
+                    {isDownloading ? t('common.generating') : t('common.download')}
+                  </span>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleGenerateCoverLetter}
+                  disabled={isGeneratingCoverLetter}
+                >
+                  {isGeneratingCoverLetter ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-4 w-4" />
+                  )}
+                  <span className="hidden sm:inline">{t('coverLetter.regenerate')}</span>
+                </Button>
+              </>
+            )}
+
+            {/* Outreach tab actions */}
+            {activeTab === 'outreach' && outreachMessage && (
+              <>
+                <Button size="sm" onClick={handleCopyOutreach}>
+                  {isCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                  <span className="hidden sm:inline">
+                    {isCopied ? t('outreach.copied') : t('outreach.copyToClipboard')}
+                  </span>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleGenerateOutreach}
+                  disabled={isGeneratingOutreach}
+                >
+                  {isGeneratingOutreach ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-4 w-4" />
+                  )}
+                  <span className="hidden sm:inline">{t('outreach.regenerate')}</span>
+                </Button>
+              </>
+            )}
+
+            {/* Interview prep tab actions */}
+            {activeTab === 'interview-prep' && interviewPrep && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleGenerateInterviewPrep}
+                disabled={!canGenerateInterviewPrep || isGeneratingInterviewPrep}
+              >
+                {isGeneratingInterviewPrep ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Sparkles className="h-4 w-4" />
+                )}
+                <span className="hidden sm:inline">{t('interviewPrep.regenerate')}</span>
+              </Button>
+            )}
           </div>
         </div>
 
-        {/* Content Grid */}
+        {/* Content grid. Side by side from `lg`; below that only the pane the
+            header's Edit/Preview switch selects is mounted-visible, so the
+            preview is one tap away instead of buried below the whole form. */}
         <div className="grid min-h-0 flex-1 grid-cols-1 gap-px bg-[var(--border)] lg:grid-cols-2">
           {/* Left Panel: Editor */}
-          <div className="no-print overflow-y-auto bg-[var(--background)] p-6 md:p-8">
+          <div
+            className={cn(
+              'no-print overflow-y-auto bg-[var(--background)] p-4 md:p-6 lg:p-8',
+              mobilePane === 'edit' ? 'block' : 'hidden',
+              'lg:block'
+            )}
+          >
             <div className="mx-auto max-w-3xl space-y-6">
               <div className="flex items-center gap-2 border-b border-[var(--border)] pb-2">
                 <div className="h-3 w-3 rounded-full bg-[var(--primary)]"></div>
@@ -1214,7 +1268,13 @@ const ResumeBuilderContent = () => {
           </div>
 
           {/* Right Panel: Preview with Tabs */}
-          <div className="no-print flex flex-col overflow-hidden bg-[var(--secondary)]">
+          <div
+            className={cn(
+              'no-print flex-col overflow-hidden bg-[var(--secondary)]',
+              mobilePane === 'preview' ? 'flex' : 'hidden',
+              'lg:flex'
+            )}
+          >
             {/* Tabs Header */}
             <div className="shrink-0 bg-[var(--secondary)] px-6 pt-3">
               <TabStrip

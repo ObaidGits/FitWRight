@@ -78,7 +78,7 @@ test.describe('FitWright - AI-native core (requires quota)', () => {
     await page.getByRole('button', { name: /^Generate$/ }).click();
     // Review surface: a match score ring + change summary appear when done.
     await expect(page.getByText(/Match score/i)).toBeVisible({ timeout: 240_000 });
-    await page.getByRole('button', { name: /Accept & save/i }).click();
+    await page.getByRole('button', { name: /Save resume/i }).click();
     await expect(page).toHaveURL(/\/applications/, { timeout: 60_000 });
   });
 

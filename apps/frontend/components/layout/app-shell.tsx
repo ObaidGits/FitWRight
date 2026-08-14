@@ -7,6 +7,7 @@
  */
 import * as React from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import Search from 'lucide-react/dist/esm/icons/search';
 import { Sidebar } from '@/components/layout/sidebar';
 import { BottomNav } from '@/components/layout/bottom-nav';
@@ -18,9 +19,15 @@ import { VerifyEmailBanner } from '@/components/auth/verify-email-banner';
 import { ModeMismatchBanner } from '@/components/dev/mode-mismatch-banner';
 import { Button } from '@/components/atelier/button';
 import { useCommandPalette } from '@/components/command/command-palette';
+import { cn } from '@/lib/utils';
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { open: openCommandPalette } = useCommandPalette();
+  const pathname = usePathname();
+  // Editor routes manage their own full-height, two-pane layout, so the shell
+  // must not impose the reading-width column and page padding it gives content
+  // pages - that would squeeze a side-by-side editor into half the screen.
+  const fullBleed = pathname === '/builder' || pathname.startsWith('/builder/');
   return (
     // Dashboard shell: exactly one viewport tall (`h-dvh` handles mobile browser
     // chrome), and the shell itself never scrolls (`overflow-hidden`). The fixed
@@ -71,14 +78,25 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </header>
         </div>
 
-        {/* The ONLY vertical scroll region. `tabIndex={-1}` makes the skip link
-            able to move focus here; `overscroll-y-contain` stops scroll chaining. */}
+        {/* The ONLY vertical scroll region for content pages. `tabIndex={-1}`
+            makes the skip link able to move focus here; `overscroll-y-contain`
+            stops scroll chaining. Editor routes opt out: they own their own
+            internal scroll panes, so the shell clips instead of adding a second
+            scrollbar around them. `pb-20` keeps content clear of the mobile
+            bottom nav in both modes. */}
         <main
           id="main-content"
           tabIndex={-1}
-          className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain pb-20 focus:outline-none md:pb-0"
+          className={cn(
+            'min-h-0 flex-1 overscroll-y-contain pb-20 focus:outline-none md:pb-0',
+            fullBleed ? 'overflow-hidden' : 'overflow-y-auto'
+          )}
         >
-          <div className="mx-auto w-full max-w-6xl px-4 py-6 md:px-8 md:py-8">{children}</div>
+          {fullBleed ? (
+            children
+          ) : (
+            <div className="mx-auto w-full max-w-6xl px-4 py-6 md:px-8 md:py-8">{children}</div>
+          )}
         </main>
       </div>
 
