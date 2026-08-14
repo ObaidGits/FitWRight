@@ -696,13 +696,80 @@ async def manual_search(
     db: Database = Depends(get_db),
     config: Settings = Depends(get_settings_dep),
 ):
-    """Search jobs by raw query terms. No resume needed.
+    """Search jobs by raw query terms, waiting for the result.
 
-    If ``resume_id`` is provided, results are scored against that resume.
-    Otherwise results are returned sorted by recency (no match scoring).
-    If ``sites`` is provided, only those platforms are scraped.
+    Kept synchronous for the browser extension and any caller that wants the rows
+    in the response. The web app uses ``/search/start`` instead, because a scrape
+    routinely outlives Heroku's 30-second request ceiling.
     """
     _check_search_rate(user_id)  # Rate limit: 1 search per 10s per user
+    return await _execute_manual_search(payload, user_id, db, config)
+
+
+@router.post("/search/start", status_code=202, summary="Start a background job search")
+async def start_manual_search(
+    payload: ManualSearchRequest,
+    user_id: str = Depends(get_effective_user_id),
+    db: Database = Depends(get_db),
+    config: Settings = Depends(get_settings_dep),
+):
+    """Kick off a search and return immediately with an id to poll.
+
+    A scrape across several boards takes 15-35 seconds and Heroku destroys any
+    request still open at 30, so the synchronous endpoint reported failure for
+    searches that had in fact worked. Detaching the work from the request removes
+    that ceiling entirely: the response lands in milliseconds and the page follows
+    progress through ``/search/progress/{search_id}``.
+    """
+    _check_search_rate(user_id)
+
+    from app.job_discovery import search_jobs
+
+    # One at a time: a second concurrent search competes with the first for the
+    # same rate-limited boards and makes both slower.
+    existing = search_jobs.running_for(user_id)
+    if existing is not None:
+        return {**existing.to_dict(), "already_running": True}
+
+    sites = payload.sites or config.job_discovery_jobspy_sites
+
+    async def _work(job: "search_jobs.SearchJob"):
+        return await _execute_manual_search(payload, user_id, db, config, job=job)
+
+    job = search_jobs.start(user_id, payload.query, list(sites), _work)
+    return {**job.to_dict(), "already_running": False}
+
+
+@router.get("/search/progress/{search_id}", summary="Progress of a background search")
+async def manual_search_progress(
+    search_id: str,
+    user_id: str = Depends(get_effective_user_id),
+):
+    """Report how a background search is going.
+
+    An id the server no longer knows about comes back as ``expired`` rather than
+    404, because after a restart that is the truth and the useful instruction is
+    "reload the feed and stop polling".
+    """
+    from app.job_discovery import search_jobs
+
+    return search_jobs.get(user_id, search_id)
+
+
+async def _execute_manual_search(
+    payload: ManualSearchRequest,
+    user_id: str,
+    db: Database,
+    config: Settings,
+    job=None,
+):
+    """Run one manual search: scrape, normalize, optionally score, persist.
+
+    Shared by the synchronous endpoint and the background one. ``job``, when given,
+    is updated as each board finishes so the UI can report real progress instead of
+    an unqualified spinner. Rate limiting belongs to the callers, not here - a
+    background job must not re-check a limit its own start already consumed.
+    """
     from app.job_discovery.connectors.base import FailureReport, run_connector
     from app.job_discovery.connectors.jobspy import JobSpyConnector
     from app.job_discovery.models import SearchFilters, SearchQuery
@@ -743,12 +810,27 @@ async def manual_search(
     # JobSpy connector (Indeed, LinkedIn, Glassdoor, Google, Naukri, ZipRecruiter)
     if jobspy_sites:
         connector = JobSpyConnector(sites=jobspy_sites)
-        raw.extend(await run_connector(connector, query, filters, report))
+        found = await run_connector(connector, query, filters, report)
+        raw.extend(found)
+        if job is not None:
+            # Attributed to the group: JobSpy scrapes its boards as one call, so
+            # per-board counts are not separable here without lying about them.
+            for site in jobspy_sites:
+                job.site_finished(site)
+            job.found = len(raw)
 
     # Extra platforms connector (Remotive, WWR, SimplyHired, Hirist, Foundit, etc.)
     if extra_sites:
         extra_connector = ExtraPlatformConnector(sites=extra_sites)
         raw.extend(await extra_connector.search(query, filters, report.failures))
+        if job is not None:
+            for site in extra_sites:
+                job.site_finished(site)
+            job.found = len(raw)
+
+    if job is not None:
+        for failure in report.failures:
+            job.note_failure(failure.source, failure.reason)
 
     # Normalize + dedup
     listings = normalize_listings(raw)
@@ -852,6 +934,10 @@ async def manual_search(
                 "partial": r.get("partial", False),
             })
         await db.upsert_discovery_results(user_id, "manual-search", feed_results)
+        if job is not None:
+            # What actually reached the feed, which is what the user cares about -
+            # `found` counts scraped rows before dedup against what they already had.
+            job.saved = len(feed_results)
 
     return {
         "results": recommendations[:min(payload.results_wanted or 50, 100)],

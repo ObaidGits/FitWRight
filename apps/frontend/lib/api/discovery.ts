@@ -387,6 +387,57 @@ export async function manualSearch(
   return res.json();
 }
 
+/** Progress of a detached search. `expired` means the server forgot it (restart). */
+export interface SearchProgress {
+  search_id: string;
+  status: 'running' | 'done' | 'failed' | 'expired';
+  query: string;
+  sites: string[];
+  done_sites: string[];
+  sites_total: number;
+  sites_done: number;
+  found: number;
+  saved: number;
+  failures: Array<{ source: string; reason: string }>;
+  error: string | null;
+  elapsed_ms: number;
+  /** True when a search was already in flight, so no new one was started. */
+  already_running?: boolean;
+}
+
+/**
+ * POST /discovery/search/start — begin a search without waiting for it.
+ *
+ * Preferred over `manualSearch` in the web app: a scrape routinely takes longer
+ * than the 30 seconds Heroku allows a request to stay open, so the synchronous
+ * call reported failure for searches that had actually worked.
+ */
+export async function startBackgroundSearch(
+  body: ManualSearchRequest,
+  signal?: AbortSignal
+): Promise<SearchProgress> {
+  const res = await apiFetch(`${PREFIX}/search/start`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal,
+  });
+  if (!res.ok) throw new Error(`Could not start search: ${res.status}`);
+  return res.json();
+}
+
+/** GET /discovery/search/progress/{id} — poll a running search. */
+export async function getSearchProgress(
+  searchId: string,
+  signal?: AbortSignal
+): Promise<SearchProgress> {
+  const res = await apiFetch(`${PREFIX}/search/progress/${encodeURIComponent(searchId)}`, {
+    signal,
+  });
+  if (!res.ok) throw new Error(`Could not read search progress: ${res.status}`);
+  return res.json();
+}
+
 // -------------------------------------------------------------------------- //
 // Status + Cleanup + Schedule editing
 // -------------------------------------------------------------------------- //

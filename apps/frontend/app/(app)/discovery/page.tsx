@@ -6,7 +6,7 @@
  */
 
 import * as React from 'react';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Search from 'lucide-react/dist/esm/icons/search';
 import Briefcase from 'lucide-react/dist/esm/icons/briefcase';
@@ -30,6 +30,7 @@ import { Badge } from '@/components/atelier/badge';
 import { EmptyState, ErrorState } from '@/components/atelier/states';
 import { Input } from '@/components/atelier/input';
 import { useToast } from '@/components/atelier/toast';
+import { SearchProgressBar } from '@/components/discovery/search-progress-bar';
 import { FeedHealthPanel } from '@/components/discovery/feed-health-panel';
 
 import {
@@ -37,7 +38,7 @@ import {
   useRecommendations,
   useTailorForJob,
   useEnableSchedule,
-  useManualSearch,
+  useBackgroundSearch,
   useUpdateResultStatus,
   useBulkUpdateResultStatus,
 } from '@/features/discovery/hooks';
@@ -141,7 +142,14 @@ export default function DiscoveryPage() {
   const [selectedResult, setSelectedResult] = useState<FeedResult | null>(null);
 
   // Mutations
-  const manualSearch = useManualSearch();
+  // Search runs detached from its request: a scrape regularly exceeds the 30s
+  // the host allows a request to live, which used to surface as a failure for
+  // searches that had actually worked.
+  const search = useBackgroundSearch(
+    useCallback(() => {
+      void feed.refetch();
+    }, [feed])
+  );
   const recommendations = useRecommendations({
     resumeId,
     filters: { location: location || null, is_remote: isRemote || null },
@@ -170,7 +178,7 @@ export default function DiscoveryPage() {
   const extension = useExtension();
   const selectedExtensionSites = selectedPlatforms.filter((id) => EXTENSION_LANE.has(id));
 
-  const isSearching = manualSearch.isPending || recommendations.isFetching || extension.scraping;
+  const isSearching = search.isStarting || recommendations.isFetching || extension.scraping;
   // Server-filtered: `feedResults` and `feedTotal` already describe the same
   // set, so counts and pagination agree with what is on screen.
   const feedResults = feed.data?.results ?? [];
@@ -242,20 +250,17 @@ export default function DiscoveryPage() {
     }
 
     if (serverSites.length || !extensionSites.length) {
-      manualSearch.mutate(
-        {
-          query: queryText.trim(),
-          location: location || null,
-          is_remote: isRemote || null,
-          hours_old: hoursOld ? parseInt(hoursOld) : null,
-          results_wanted: resultsWanted,
-          sites: serverSites.length > 0 ? serverSites : null,
-          job_type: jobType || null,
-          country_indeed: countryIndeed || null,
-          resume_id: useResume ? resumeId : null,
-        },
-        { onSuccess: () => void feed.refetch() }
-      );
+      search.startSearch({
+        query: queryText.trim(),
+        location: location || null,
+        is_remote: isRemote || null,
+        hours_old: hoursOld ? parseInt(hoursOld) : null,
+        results_wanted: resultsWanted,
+        sites: serverSites.length > 0 ? serverSites : null,
+        job_type: jobType || null,
+        country_indeed: countryIndeed || null,
+        resume_id: useResume ? resumeId : null,
+      });
     }
   }
 
@@ -694,11 +699,20 @@ export default function DiscoveryPage() {
               Auto-discovery enabled — new jobs will appear here daily.
             </p>
           )}
-          {manualSearch.isError && (
+          {search.startError && (
             <ErrorState
-              description="Search failed. Try again."
-              onRetry={() => manualSearch.reset()}
+              description="Could not start the search. Try again."
+              onRetry={() => search.reset()}
             />
+          )}
+          {search.progress && (
+            <div className="mb-4">
+              <SearchProgressBar
+                progress={search.progress}
+                onRefresh={() => void feed.refetch()}
+                onDismiss={() => search.reset()}
+              />
+            </div>
           )}
 
           {/* Loading */}

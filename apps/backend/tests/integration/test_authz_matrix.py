@@ -191,6 +191,9 @@ OWNED_ENDPOINTS: list[tuple[str, str]] = [
     ("PATCH", "/api/v1/discovery/feed/schedule"),
     ("POST", "/api/v1/discovery/feed/schedule/toggle"),
     ("POST", "/api/v1/discovery/search"),
+    # Background search: start returns immediately, progress is polled.
+    ("POST", "/api/v1/discovery/search/start"),
+    ("GET", "/api/v1/discovery/search/progress/sid"),
     # browser extension (apps/extension) - same kill-switch as discovery
     ("GET", "/api/v1/extension/ping"),
     ("GET", "/api/v1/extension/profile"),
@@ -322,6 +325,7 @@ class TestAnonymousRejected:
                 ("{job_id}", "jid"),
                 ("{application_id}", "aid"),
                 ("{field_id}", "fid"),
+                ("{search_id}", "sid"),
                 ("{provider}", "prov"),
                 ("{session_id}", "sid"),
                 ("{slug}", "sl"),
