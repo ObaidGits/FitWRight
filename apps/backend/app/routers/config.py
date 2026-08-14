@@ -198,6 +198,13 @@ async def update_llm_config(
     # Best-effort health check for server-side logs/diagnostics (do not block response).
     background_tasks.add_task(_log_llm_health_check, test_config)
 
+    # A newly saved configuration invalidates any earlier refusal, so the
+    # frontend gate reopens immediately. Waiting for a successful live test
+    # would leave a user who has just pasted a correct key still blocked.
+    from app.llm_health import clear_credentials_rejected
+
+    clear_credentials_rejected(user_id)
+
     return LLMConfigResponse(
         provider=test_config.provider,
         model=test_config.model,
@@ -263,6 +270,10 @@ async def test_llm_connection(
     # clear "unsupported/flaky" verdict + warning here, BEFORE the user hits an
     # opaque failure mid-tailor.
     if health.get("healthy"):
+        # Connectivity proved: drop any recorded refusal so the upload gate reopens.
+        from app.llm_health import clear_credentials_rejected
+
+        clear_credentials_rejected(user_id)
         try:
             probe = await check_structured_output(config)
             health.update(probe)

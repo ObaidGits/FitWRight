@@ -48,15 +48,27 @@ describe('SearchProgressBar', () => {
   });
 
   it('announces how many jobs reached the feed on success', () => {
-    render(<SearchProgressBar progress={progress({ status: 'done', found: 20, saved: 6, sites_done: 2 })} />);
+    render(
+      <SearchProgressBar
+        progress={progress({ status: 'done', found: 20, saved: 6, sites_done: 2 })}
+      />
+    );
     expect(screen.getByText(/Added 6 jobs to your feed/)).toBeInTheDocument();
   });
 
   it('distinguishes "nothing new" from "nothing found"', () => {
-    render(<SearchProgressBar progress={progress({ status: 'done', found: 12, saved: 0, sites_done: 2 })} />);
+    render(
+      <SearchProgressBar
+        progress={progress({ status: 'done', found: 12, saved: 0, sites_done: 2 })}
+      />
+    );
     expect(screen.getByText(/already in your feed/)).toBeInTheDocument();
 
-    render(<SearchProgressBar progress={progress({ status: 'done', found: 0, saved: 0, sites_done: 2 })} />);
+    render(
+      <SearchProgressBar
+        progress={progress({ status: 'done', found: 0, saved: 0, sites_done: 2 })}
+      />
+    );
     expect(screen.getByText(/No jobs matched this search/)).toBeInTheDocument();
   });
 
@@ -85,7 +97,11 @@ describe('SearchProgressBar', () => {
   it('surfaces a failure reason and any jobs saved before it stopped', () => {
     render(
       <SearchProgressBar
-        progress={progress({ status: 'failed', error: 'The search failed (TimeoutError).', saved: 2 })}
+        progress={progress({
+          status: 'failed',
+          error: 'The search failed (TimeoutError).',
+          saved: 2,
+        })}
       />
     );
     expect(screen.getByRole('alert')).toHaveTextContent('TimeoutError');

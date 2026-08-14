@@ -946,6 +946,16 @@ async def _structure_uploaded_resume(
             api_error.code,
             exc_info=True,
         )
+        if api_error.code == "llm_authentication_failed":
+            # Remember the refusal so the next upload is refused up front rather
+            # than after the user has waited through another extraction. Without
+            # this, `llm_configured` stays true - the deployment-level
+            # LLM_API_KEY satisfies it - and every attempt repeats the trip.
+            from app.llm_health import mark_credentials_rejected
+
+            mark_credentials_rejected(
+                user_id, get_llm_config(user_id).provider, "resume_parse"
+            )
         await db.update_resume(
             user_id, resume["resume_id"], {"processing_status": "failed"}
         )
