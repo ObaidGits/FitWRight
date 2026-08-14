@@ -24,6 +24,7 @@ from app.config_cache import get_content_language, load_config as _load_config
 from app.database import db
 from app.errors import ApiError
 from app.pdf import render_resume_pdf, PDFRenderError
+from app.ai_metered import ai_metered
 from app.llm_ratelimit import llm_rate_limit_dep
 from app.config import settings
 from app.resilience import get_idempotency_cache, get_stream_registry
@@ -1024,7 +1025,7 @@ def _is_allowed_upload(content_type: str | None, filename: str | None) -> bool:
 @router.post(
     "/upload",
     response_model=ResumeUploadResponse,
-    dependencies=[Depends(llm_rate_limit_dep)],
+    dependencies=[Depends(llm_rate_limit_dep), Depends(ai_metered("resume_parse"))],
 )
 async def upload_resume(
     request: Request,
@@ -1148,7 +1149,10 @@ def _validate_upload_bytes(request: Request, file: UploadFile, content: bytes) -
         raise HTTPException(status_code=400, detail="Empty file")
 
 
-@router.post("/upload/stream", dependencies=[Depends(llm_rate_limit_dep)])
+@router.post(
+    "/upload/stream",
+    dependencies=[Depends(llm_rate_limit_dep), Depends(ai_metered("resume_parse"))],
+)
 async def upload_resume_stream(
     request: Request,
     file: UploadFile = File(...),
@@ -1489,7 +1493,7 @@ async def list_resumes(
 @router.post(
     "/improve/preview",
     response_model=ImproveResumeResponse,
-    dependencies=[Depends(llm_rate_limit_dep)],
+    dependencies=[Depends(llm_rate_limit_dep), Depends(ai_metered("resume_tailor"))],
 )
 async def improve_resume_preview_endpoint(
     request: ImproveResumeRequest,
@@ -2127,7 +2131,7 @@ async def _improve_preview_flow(
 @router.post(
     "/improve/confirm",
     response_model=ImproveResumeResponse,
-    dependencies=[Depends(llm_rate_limit_dep)],
+    dependencies=[Depends(llm_rate_limit_dep), Depends(ai_metered("cover_letter", blocking=False))],
 )
 async def improve_resume_confirm_endpoint(
     request: ImproveResumeConfirmRequest,
@@ -2296,7 +2300,7 @@ async def improve_resume_confirm_endpoint(
 @router.post(
     "/improve",
     response_model=ImproveResumeResponse,
-    dependencies=[Depends(llm_rate_limit_dep)],
+    dependencies=[Depends(llm_rate_limit_dep), Depends(ai_metered("resume_tailor"))],
 )
 async def improve_resume_endpoint(
     request: ImproveResumeRequest,
@@ -2980,7 +2984,7 @@ async def delete_resume(
 @router.post(
     "/{resume_id}/retry-processing",
     response_model=ResumeUploadResponse,
-    dependencies=[Depends(llm_rate_limit_dep)],
+    dependencies=[Depends(llm_rate_limit_dep), Depends(ai_metered("resume_parse"))],
 )
 async def retry_processing(
     resume_id: str,
@@ -3172,7 +3176,7 @@ async def create_resume_from_data(
 @router.post(
     "/{resume_id}/generate-cover-letter",
     response_model=GenerateContentResponse,
-    dependencies=[Depends(llm_rate_limit_dep)],
+    dependencies=[Depends(llm_rate_limit_dep), Depends(ai_metered("cover_letter"))],
 )
 async def generate_cover_letter_endpoint(
     resume_id: str,
@@ -3269,7 +3273,7 @@ async def generate_cover_letter_endpoint(
 @router.post(
     "/{resume_id}/generate-outreach",
     response_model=GenerateContentResponse,
-    dependencies=[Depends(llm_rate_limit_dep)],
+    dependencies=[Depends(llm_rate_limit_dep), Depends(ai_metered("outreach"))],
 )
 async def generate_outreach_endpoint(
     resume_id: str,
@@ -3356,7 +3360,7 @@ async def generate_outreach_endpoint(
 @router.post(
     "/{resume_id}/generate-interview-prep",
     response_model=GenerateInterviewPrepResponse,
-    dependencies=[Depends(llm_rate_limit_dep)],
+    dependencies=[Depends(llm_rate_limit_dep), Depends(ai_metered("interview_prep"))],
 )
 async def generate_interview_prep_endpoint(
     resume_id: str,

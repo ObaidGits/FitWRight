@@ -10,6 +10,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.auth import get_effective_user_id, require_verified_user_id
+from app.ai_metered import ai_metered
 from app.llm_ratelimit import llm_rate_limit_dep
 from app.config_cache import get_content_language
 from app.database import db
@@ -94,7 +95,7 @@ def _extract_item_from_resume(processed_data: dict, item_id: str) -> dict:
 @router.post(
     "/analyze/{resume_id}",
     response_model=AnalysisResponse,
-    dependencies=[Depends(llm_rate_limit_dep)],
+    dependencies=[Depends(llm_rate_limit_dep), Depends(ai_metered("enrichment"))],
 )
 async def analyze_resume(
     resume_id: str,
@@ -176,7 +177,7 @@ async def analyze_resume(
 @router.post(
     "/enhance",
     response_model=EnhancementPreview,
-    dependencies=[Depends(llm_rate_limit_dep)],
+    dependencies=[Depends(llm_rate_limit_dep), Depends(ai_metered("enrichment"))],
 )
 async def generate_enhancements(
     request: EnhanceRequest,
@@ -511,7 +512,7 @@ async def _regenerate_skills(
 @router.post(
     "/regenerate",
     response_model=RegenerateResponse,
-    dependencies=[Depends(llm_rate_limit_dep)],
+    dependencies=[Depends(llm_rate_limit_dep), Depends(ai_metered("enrichment"))],
 )
 async def regenerate_items(
     request: RegenerateRequest,

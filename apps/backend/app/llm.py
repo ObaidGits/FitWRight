@@ -16,6 +16,7 @@ from litellm import Router
 from litellm.router import RetryPolicy
 from pydantic import BaseModel, ValidationError
 
+from app.ai_usage_meter import note_call
 from app.config import load_config_file, save_user_llm_config, settings
 
 LITELLM_LOGGER_NAMES = ("LiteLLM", "LiteLLM Router", "LiteLLM Proxy")
@@ -1238,6 +1239,15 @@ async def complete(
             tokens=_tokens,
             latency_ms=(time.perf_counter() - _start) * 1000,
         )
+        # Billing tally, recorded ALONGSIDE the anonymous metrics above rather
+        # than inside them: that system's contract forbids retaining per-user
+        # detail, this one requires it. Two systems, same choke point.
+        note_call(
+            total_tokens=_tokens,
+            estimated=_ok and _tokens == 0,
+            provider=config.provider,
+            model=model_name,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -1434,6 +1444,18 @@ async def stream_complete(
                 tokens=result.usage.total_tokens,
                 latency_ms=(time.perf_counter() - _start) * 1000,
             )
+        # Metered even when CANCELLED, unlike the health metrics above. A user who
+        # stops a stream halfway still caused the tokens the provider generated,
+        # and the operator is invoiced for them. Excluding cancellations here would
+        # make abandoning streams a free way to consume the operator's budget.
+        note_call(
+            total_tokens=result.usage.total_tokens,
+            prompt_tokens=result.usage.prompt_tokens,
+            completion_tokens=result.usage.completion_tokens,
+            estimated=result.usage.total_tokens == 0 and bool(result.text),
+            provider=config.provider,
+            model=model_name,
+        )
 
 
 def _supports_json_mode(model_name: str) -> bool:
@@ -2209,6 +2231,17 @@ async def complete_json(
                     retried=_attempt_router_retries + (1 if attempt > 0 else 0),
                     tokens=_attempt_tokens,
                     latency_ms=(time.perf_counter() - _attempt_start) * 1000,
+                )
+            # Per ATTEMPT, deliberately. A retried structured call burns tokens on
+            # every attempt and the provider bills for each, so accumulating them
+            # is the honest total. The reserve caps what the user can be charged, so
+            # a pathological retry loop lands on the operator, not the user.
+            if _call_started:
+                note_call(
+                    total_tokens=_attempt_tokens,
+                    estimated=_attempt_ok and _attempt_tokens == 0,
+                    provider=config.provider,
+                    model=model_name,
                 )
 
     raise ValueError(f"Failed after {retries + 1} attempts")

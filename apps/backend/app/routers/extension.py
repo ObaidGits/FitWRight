@@ -39,6 +39,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from app.auth import get_effective_user_id, require_verified_user_id
 from app.config import Settings, settings
 from app.database import Database
+from app.ai_metered import ai_metered
 from app.llm_ratelimit import llm_rate_limit_dep
 
 logger = logging.getLogger(__name__)
@@ -772,7 +773,7 @@ async def ingest_scraped(
     "/match",
     response_model=MatchResponse,
     summary="Score a JD against the resume",
-    dependencies=[Depends(llm_rate_limit_dep)],
+    dependencies=[Depends(llm_rate_limit_dep), Depends(ai_metered("match_score"))],
 )
 async def match_job(
     payload: MatchRequest,
@@ -845,7 +846,7 @@ _DRAFT_SYSTEM_PROMPT = (
     "/draft",
     response_model=DraftResponse,
     summary="Draft an application answer",
-    dependencies=[Depends(llm_rate_limit_dep)],
+    dependencies=[Depends(llm_rate_limit_dep), Depends(ai_metered("extension_draft"))],
 )
 async def draft_answer(
     payload: DraftRequest,

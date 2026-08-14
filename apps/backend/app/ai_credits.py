@@ -60,6 +60,9 @@ FEATURE_FALLBACK_TOKENS = {
     "interview_prep": 12000,
     "enrichment": 3000,
     "jd_extract": 6000,
+    "discovery_recommend": 10000,
+    "extension_draft": 2000,
+    "match_score": 4000,
 }
 
 #: Used when a feature is not in the table at all - better than raising, so a new

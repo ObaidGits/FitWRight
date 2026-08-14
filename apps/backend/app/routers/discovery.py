@@ -119,6 +119,7 @@ def require_job_discovery_enabled(
 # session middleware; these dependency functions extract the caller identity.
 
 from app.auth import get_effective_user_id, require_verified_user_id
+from app.ai_metered import ai_metered
 from app.llm_ratelimit import llm_rate_limit_dep
 
 
@@ -302,7 +303,7 @@ router = APIRouter(
 @router.post(
     "/recommend",
     response_model=RecommendResponse,
-    dependencies=[Depends(llm_rate_limit_dep)],
+    dependencies=[Depends(llm_rate_limit_dep), Depends(ai_metered("discovery_recommend"))],
 )
 async def recommend(
     payload: RecommendRequest,
@@ -405,7 +406,7 @@ async def cached_recommendation(
 @router.post(
     "/tailor",
     response_model=TailorResponse,
-    dependencies=[Depends(llm_rate_limit_dep)],
+    dependencies=[Depends(llm_rate_limit_dep), Depends(ai_metered("resume_tailor"))],
 )
 async def tailor(
     payload: TailorRequest,

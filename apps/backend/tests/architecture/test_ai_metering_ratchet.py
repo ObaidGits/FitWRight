@@ -54,6 +54,37 @@ METERED_ENDPOINTS: set[tuple[str, str]] = {
 #: metered" - that conflation is how a feature ends up permanently free.
 WIRED_ENDPOINTS: set[tuple[str, str]] = set()
 
+
+def _metered_routes(app) -> dict[tuple[str, str], str]:
+    """Endpoints that ACTUALLY carry the metering dependency, read off the live app.
+
+    Detected via the marker ``ai_metered`` stamps on the dependency it builds, so
+    this reflects wiring that really exists. The earlier version of this file kept a
+    hand-maintained set, which would have gone stale the first time a path was
+    renamed - and a stale entry here claims coverage that is not there, which is
+    worse than no ratchet at all.
+    """
+    found: dict[tuple[str, str], str] = {}
+    for route in app.routes:
+        dependant = getattr(route, "dependant", None)
+        if dependant is None:
+            continue
+        for sub in _walk_dependants(dependant):
+            feature = getattr(sub.call, "__fw_metered_feature__", None)
+            if feature:
+                for method in getattr(route, "methods", set()) or set():
+                    if method in ("GET", "HEAD", "OPTIONS"):
+                        continue
+                    found[(method, route.path)] = feature
+    return found
+
+
+def _walk_dependants(dependant):
+    """Yield a dependant and everything it depends on, transitively."""
+    yield dependant
+    for sub in getattr(dependant, "dependencies", []) or []:
+        yield from _walk_dependants(sub)
+
 #: Endpoints deliberately NOT charged, each with a stated reason. An exemption is a
 #: decision, not an oversight, so it lives here in writing.
 EXEMPT_ENDPOINTS: dict[tuple[str, str], str] = {
@@ -145,24 +176,59 @@ class TestMeteringRatchet:
         overlap = METERED_ENDPOINTS & set(EXEMPT_ENDPOINTS)
         assert not overlap, f"Contradictory classification: {sorted(overlap)}"
 
-    def test_wired_endpoints_are_a_subset_of_intended_ones(self):
+    def test_wired_endpoints_are_a_subset_of_intended_ones(self, app):
         """Something cannot be wired without being intended - that would mean an
         endpoint is charging users while classified as not-to-be-charged."""
-        stray = WIRED_ENDPOINTS - METERED_ENDPOINTS
+        stray = set(_metered_routes(app)) - METERED_ENDPOINTS
         assert not stray, f"Wired but not listed as metered: {sorted(stray)}"
 
-    def test_reports_how_much_wiring_remains(self):
-        """Deliberately informational, and deliberately NOT a failure.
+    def test_every_metered_endpoint_is_actually_wired(self, app):
+        """The real guarantee, now that wiring is complete.
 
-        The accounting core is complete and tested; connecting it to each endpoint is
-        mechanical. This keeps the remaining gap visible in CI output instead of
-        living in someone's memory - and the moment WIRED covers METERED, this line
-        becomes the proof that nothing was skipped.
+        This started as an informational report while the wiring was in progress.
+        It is an assertion now, because the failure it guards against is invisible
+        by nature: an endpoint that was never wired behaves EXACTLY like a working
+        one and is simply free forever. Nobody files a bug for that.
         """
-        remaining = sorted(METERED_ENDPOINTS - WIRED_ENDPOINTS)
-        print(
-            f"\nAI metering: {len(WIRED_ENDPOINTS)}/{len(METERED_ENDPOINTS)} endpoints wired."
+        wired = set(_metered_routes(app))
+        missing = METERED_ENDPOINTS - wired
+        assert not missing, (
+            "These endpoints spend provider money but carry no metering "
+            "dependency. Add Depends(ai_metered(\"<feature>\")) to each:\n"
+            + "\n".join(f"  {m} {p}" for m, p in sorted(missing))
         )
-        for method, path in remaining:
+
+    def test_exempt_endpoints_are_not_secretly_metered(self, app):
+        """An endpoint documented as free must not quietly charge users."""
+        wired = set(_metered_routes(app))
+        contradictory = set(EXEMPT_ENDPOINTS) & wired
+        assert not contradictory, (
+            "Documented as exempt but actually metered: " f"{sorted(contradictory)}"
+        )
+
+    def test_every_feature_name_has_an_estimate(self, app):
+        """A feature with no estimate silently falls back to a generic guess, so its
+        hold is the wrong size for every call it ever makes."""
+        from app.ai_credits import FEATURE_FALLBACK_TOKENS
+
+        for endpoint, feature in sorted(_metered_routes(app).items()):
+            assert feature in FEATURE_FALLBACK_TOKENS, (
+                f"{endpoint} meters as {feature!r}, which has no entry in "
+                "FEATURE_FALLBACK_TOKENS - its hold would be sized by a default."
+            )
+
+    def test_reports_how_much_wiring_remains(self, app):
+        """Informational: prints the billing identity of every metered endpoint.
+
+        Kept after the wiring finished because the useful question changed. It is no
+        longer "what is left to do?" but "what is each endpoint charging as?" - a
+        mis-mapped feature (tailoring billed as a cover letter) is a real defect that
+        no other test here can see, and it is obvious at a glance in this output.
+        """
+        wired = _metered_routes(app)
+        print(f"\nAI metering: {len(wired)}/{len(METERED_ENDPOINTS)} endpoints wired.")
+        for (method, path), feature in sorted(wired.items()):
+            print(f"  {feature:<22} {method} {path}")
+        for method, path in sorted(METERED_ENDPOINTS - set(wired)):
             print(f"  pending: {method} {path}")
         assert True
