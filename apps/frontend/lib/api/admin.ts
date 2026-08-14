@@ -772,6 +772,122 @@ export async function runMaintenance(action: MaintenanceAction): Promise<Mainten
 }
 
 /** The typed admin surface consumed by the feature hooks. */
+// ---------------------------------------------------------------------------
+// AI provider channels + per-user credits (spec: ai-provider-admin)
+// ---------------------------------------------------------------------------
+
+export interface AiChannel {
+  id: string;
+  name: string;
+  provider: string;
+  model: string;
+  api_base: string | null;
+  priority: number;
+  state: 'active' | 'disabled' | 'draining';
+  structured_verdict: 'reliable' | 'flaky' | 'unsupported' | 'unknown';
+  monthly_cost_cap_cents: number | null;
+  /** Presence only. The backend never returns the key itself, by design. */
+  has_key: boolean;
+  consecutive_failures: number;
+  cooling_until: string | null;
+  last_ok_at: string | null;
+  last_error_class: string | null;
+}
+
+export interface AiChannelInput {
+  name: string;
+  provider: string;
+  model: string;
+  api_base?: string | null;
+  priority?: number;
+  monthly_cost_cap_cents?: number | null;
+  /** Write-only: sent on create/update, never returned. */
+  api_key?: string;
+}
+
+export interface AiChannelPatch {
+  name?: string;
+  model?: string;
+  api_base?: string | null;
+  priority?: number;
+  state?: 'active' | 'disabled' | 'draining';
+  structured_verdict?: 'reliable' | 'flaky' | 'unsupported' | 'unknown';
+  monthly_cost_cap_cents?: number | null;
+  api_key?: string;
+}
+
+export interface UserCredits {
+  user_id: string;
+  allowance_credits: number;
+  allowance_period_start: string | null;
+  wallet_credits: number;
+  reserved_credits: number;
+  available_credits: number;
+  lifetime_granted: number;
+  lifetime_spent: number;
+  state: 'ok' | 'blocked';
+  monthly_allowance_override: number | null;
+  velocity_cap_override: number | null;
+  ai_disabled: boolean;
+  /** Echoed so the UI can show "inherited: 50" beside an empty override. */
+  global_monthly_allowance: number;
+  global_velocity_cap: number;
+  credits_enabled: boolean;
+}
+
+export interface UserCreditsPatch {
+  monthly_allowance_override?: number;
+  clear_allowance_override?: boolean;
+  velocity_cap_override?: number;
+  clear_velocity_override?: boolean;
+  ai_disabled?: boolean;
+  state?: 'ok' | 'blocked';
+}
+
+async function listAiChannels(): Promise<AiChannel[]> {
+  return json<AiChannel[]>(await apiFetch('/admin/ai/channels'));
+}
+
+async function createAiChannel(input: AiChannelInput): Promise<AiChannel> {
+  return json<AiChannel>(await apiPost('/admin/ai/channels', input));
+}
+
+async function updateAiChannel(id: string, patch: AiChannelPatch): Promise<AiChannel> {
+  return json<AiChannel>(await apiPatch(`/admin/ai/channels/${encodeURIComponent(id)}`, patch));
+}
+
+async function deleteAiChannel(id: string): Promise<void> {
+  const res = await apiDelete(`/admin/ai/channels/${encodeURIComponent(id)}`);
+  if (!res.ok) {
+    // Surface the server's reason - most often "drain this channel first", which
+    // is actionable guidance rather than a generic failure.
+    await json<unknown>(res);
+  }
+}
+
+async function getUserCredits(userId: string): Promise<UserCredits> {
+  return json<UserCredits>(await apiFetch(`/admin/ai/users/${encodeURIComponent(userId)}/credits`));
+}
+
+async function patchUserCredits(userId: string, patch: UserCreditsPatch): Promise<UserCredits> {
+  return json<UserCredits>(
+    await apiPatch(`/admin/ai/users/${encodeURIComponent(userId)}/credits`, patch)
+  );
+}
+
+async function grantUserCredits(
+  userId: string,
+  credits: number,
+  reason: string
+): Promise<UserCredits> {
+  return json<UserCredits>(
+    await apiPost(`/admin/ai/users/${encodeURIComponent(userId)}/credits/grant`, {
+      credits,
+      reason,
+    })
+  );
+}
+
 export const adminApi = {
   getStats,
   getUsageSeries,
@@ -784,6 +900,14 @@ export const adminApi = {
   deleteUser,
   restoreUser,
   bulkDisable,
+  // AI provider channels + per-user credits (spec: ai-provider-admin)
+  listAiChannels,
+  createAiChannel,
+  updateAiChannel,
+  deleteAiChannel,
+  getUserCredits,
+  patchUserCredits,
+  grantUserCredits,
 };
 
 export type AdminApi = typeof adminApi;

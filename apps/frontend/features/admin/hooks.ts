@@ -17,11 +17,14 @@ import {
   observabilityApi,
   type AdminUserList,
   type AdminUserRow,
+  type AiChannelInput,
+  type AiChannelPatch,
   type AuditListParams,
   type ErrorReportListParams,
   type MaintenanceAction,
   type MetricName,
   type MetricWindow,
+  type UserCreditsPatch,
   type UserListParams,
 } from '@/lib/api/admin';
 
@@ -45,6 +48,8 @@ export const adminKeys = {
   aiAnalytics: (window: number) => [...adminKeys.all, 'ai-analytics', window] as const,
   errors: (window: number) => [...adminKeys.all, 'errors', window] as const,
   performance: () => [...adminKeys.all, 'performance'] as const,
+  aiChannels: () => [...adminKeys.all, 'ai-channels'] as const,
+  userCredits: (userId: string) => [...adminKeys.all, 'user-credits', userId] as const,
   storage: () => [...adminKeys.all, 'storage'] as const,
   security: () => [...adminKeys.all, 'security'] as const,
   kpis: () => [...adminKeys.all, 'kpis'] as const,
@@ -390,5 +395,83 @@ export function useRunMaintenance() {
       qc.invalidateQueries({ queryKey: adminKeys.jobs() });
       qc.invalidateQueries({ queryKey: adminKeys.stats() });
     },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// AI provider channels + per-user credits (spec: ai-provider-admin)
+// ---------------------------------------------------------------------------
+
+/** Channel list, including live health. */
+export function useAiChannels() {
+  return useQuery({
+    queryKey: adminKeys.aiChannels(),
+    queryFn: () => adminApi.listAiChannels(),
+    // Health (cooldowns, failure counts) changes on its own as traffic flows, so
+    // this list is stale the moment it is fetched. Refresh while the page is open.
+    refetchInterval: 15_000,
+  });
+}
+
+export function useCreateAiChannel() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: AiChannelInput) => adminApi.createAiChannel(input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: adminKeys.aiChannels() }),
+  });
+}
+
+/** Pessimistic: a channel change alters where real traffic goes, so wait for the
+ *  server rather than showing an optimistic state that may be rejected (e.g.
+ *  activating a channel with no credential). */
+export function useUpdateAiChannel() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: AiChannelPatch }) =>
+      adminApi.updateAiChannel(id, patch),
+    onSuccess: () => qc.invalidateQueries({ queryKey: adminKeys.aiChannels() }),
+  });
+}
+
+export function useDeleteAiChannel() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => adminApi.deleteAiChannel(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: adminKeys.aiChannels() }),
+  });
+}
+
+export function useUserCredits(userId: string | null) {
+  return useQuery({
+    queryKey: adminKeys.userCredits(userId ?? '-'),
+    queryFn: () => adminApi.getUserCredits(userId as string),
+    enabled: !!userId,
+  });
+}
+
+export function usePatchUserCredits() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, patch }: { userId: string; patch: UserCreditsPatch }) =>
+      adminApi.patchUserCredits(userId, patch),
+    onSuccess: (_data, vars) =>
+      qc.invalidateQueries({ queryKey: adminKeys.userCredits(vars.userId) }),
+  });
+}
+
+export function useGrantUserCredits() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      userId,
+      credits,
+      reason,
+    }: {
+      userId: string;
+      credits: number;
+      reason: string;
+    }) => adminApi.grantUserCredits(userId, credits, reason),
+    onSuccess: (_data, vars) =>
+      qc.invalidateQueries({ queryKey: adminKeys.userCredits(vars.userId) }),
   });
 }
