@@ -1475,3 +1475,252 @@ class DiscoveryResult(Base):
         Index("ix_discovery_results_user_status", "user_id", "status"),
         Index("ix_discovery_results_user_created", "user_id", "created_at"),
     )
+
+
+class AiChannel(Base):
+    """One configured, credentialled route to a model (migration 0033).
+
+    Two channels may target the same provider and model with different
+    credentials (e.g. two OpenAI accounts) - they are independent for health and
+    budget purposes, which is why identity is the row, not (provider, model).
+
+    Credentials are deliberately NOT stored here. They live in the existing
+    encrypted per-provider key store keyed by channel id, so the codebase keeps
+    exactly one encryption path and one place that can leak.
+    """
+
+    __tablename__ = "ai_channels"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_new_uuid)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    provider: Mapped[str] = mapped_column(String, nullable=False)
+    model: Mapped[str] = mapped_column(String, nullable=False)
+    api_base: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Lower = preferred. Ties break on created_at so ordering is deterministic.
+    priority: Mapped[int] = mapped_column(Integer, nullable=False, default=100, server_default="100")
+    # active | disabled | draining. ``draining`` serves in-flight requests only and
+    # is the required step before deletion, so a channel cannot vanish from under a
+    # request already using it.
+    state: Mapped[str] = mapped_column(
+        String, nullable=False, default="disabled", server_default="disabled"
+    )
+    # reliable | flaky | unsupported | unknown. An ``unsupported`` channel is barred
+    # from features needing valid JSON: a fallback that keeps the app "up" while
+    # returning unusable output is worse than an honest error.
+    structured_verdict: Mapped[str] = mapped_column(
+        String, nullable=False, default="unknown", server_default="unknown"
+    )
+    monthly_cost_cap_cents: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[str] = mapped_column(String, nullable=False, default=_utcnow_iso)
+    updated_at: Mapped[str] = mapped_column(String, nullable=False, default=_utcnow_iso)
+
+    __table_args__ = (
+        UniqueConstraint("name", name="uq_ai_channels_name"),
+        Index("ix_ai_channels_state_priority", "state", "priority"),
+    )
+
+
+class AiChannelHealth(Base):
+    """Runtime health for one channel (migration 0033).
+
+    Split from :class:`AiChannel` on purpose: this row changes constantly and
+    automatically, configuration changes rarely and by hand. Keeping them apart
+    means a transient provider blip can never rewrite the operator's config, and
+    wiping health to clear a bad cooldown cannot lose a key.
+    """
+
+    __tablename__ = "ai_channel_health"
+
+    channel_id: Mapped[str] = mapped_column(String, primary_key=True)
+    consecutive_failures: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    # While set, the channel is benched. One probe request is allowed through when
+    # it passes - not the full traffic, which would instantly re-break a provider
+    # that is still struggling.
+    cooling_until: Mapped[str | None] = mapped_column(String, nullable=True)
+    last_ok_at: Mapped[str | None] = mapped_column(String, nullable=True)
+    last_error_at: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Error CLASS only (timeout / rate_limit / server / auth / ...). Never the
+    # provider's message: those can carry prompt fragments.
+    last_error_class: Mapped[str | None] = mapped_column(String, nullable=True)
+    updated_at: Mapped[str] = mapped_column(String, nullable=False, default=_utcnow_iso)
+
+
+class AiUsageLedger(Base):
+    """One immutable row per AI call, per user (migration 0034).
+
+    Deliberately separate from ``app/admin/ai_metrics.py``, which is intentionally
+    anonymous and whose own docstrings reject the token breakdown as a field. That
+    module cannot be the billing record; this one cannot be anonymous. Two privacy
+    contracts, two tables, and they must not be merged later.
+
+    Append-only: a correction is a new compensating row, never an edit.
+    """
+
+    __tablename__ = "ai_usage_ledger"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_new_uuid)
+    user_id: Mapped[str] = mapped_column(String, nullable=False)
+    feature: Mapped[str] = mapped_column(String, nullable=False)
+    # Nullable: a call can fail before any channel is chosen (every channel cooling
+    # down), and that attempt still deserves a row.
+    channel_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    model: Mapped[str | None] = mapped_column(String, nullable=True)
+    prompt_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    completion_tokens: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    total_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    # True when the provider returned no usage block and these are our estimate. An
+    # estimate must never be indistinguishable from a measurement, or reconciling
+    # against the provider's invoice is impossible.
+    tokens_estimated: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("0")
+    )
+    # What the OPERATOR paid. Distinct from credits_charged: the user pays the
+    # primary channel's rate even when an expensive fallback served them, because
+    # failover is the operator's problem.
+    provider_cost_micros: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    credits_charged: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    reservation_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    request_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    # ok | failed | cancelled. ``failed`` rows exist precisely so a zero charge is
+    # provable rather than merely absent.
+    outcome: Mapped[str] = mapped_column(String, nullable=False, default="ok", server_default="ok")
+    created_at: Mapped[str] = mapped_column(String, nullable=False, default=_utcnow_iso)
+
+    __table_args__ = (
+        Index("ix_ai_usage_user_created", "user_id", "created_at"),
+        Index("ix_ai_usage_channel_created", "channel_id", "created_at"),
+        Index("ix_ai_usage_feature_created", "feature", "created_at"),
+    )
+
+
+class CreditAccount(Base):
+    """A user's credit balance - the authority (migration 0035).
+
+    Balance lives in the database, not in memory. This is explicit because this
+    app's existing per-minute rate limiter degrades to per-process when
+    ``KVSTORE_URL`` is unset, and it is unset in production. Survivable for a rate
+    limit; not survivable for money.
+
+    Available balance is NOT stored. It is derived:
+        available = allowance_credits + wallet_credits - reserved_credits
+    A separately-maintained "available" column would eventually disagree with its
+    own components.
+    """
+
+    __tablename__ = "credit_accounts"
+
+    user_id: Mapped[str] = mapped_column(String, primary_key=True)
+    # Recurring free grant. Use-it-or-lose-it.
+    allowance_credits: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    allowance_period_start: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Purchased. Never expires - expiring paid credits is the most resented pattern
+    # in prepaid products.
+    wallet_credits: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    reserved_credits: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    lifetime_granted: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    lifetime_spent: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    # Independent of balance: credits alone do not stop a stolen session draining a
+    # funded wallet in one minute.
+    velocity_window_start: Mapped[str | None] = mapped_column(String, nullable=True)
+    velocity_spent: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    # ok | blocked. ``blocked`` after a claw-back took back credits already spent -
+    # the one case a balance may legitimately go negative.
+    state: Mapped[str] = mapped_column(String, nullable=False, default="ok", server_default="ok")
+    # NULL = inherit the global default. An override is ABSOLUTE: raising the global
+    # default must never implicitly widen it.
+    monthly_allowance_override: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    velocity_cap_override: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Per-user kill switch, effective without a deploy.
+    ai_disabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("0")
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    created_at: Mapped[str] = mapped_column(String, nullable=False, default=_utcnow_iso)
+    updated_at: Mapped[str] = mapped_column(String, nullable=False, default=_utcnow_iso)
+
+    __table_args__ = (
+        CheckConstraint("reserved_credits >= 0", name="ck_credit_accounts_reserved_nonneg"),
+    )
+
+
+class CreditReservation(Base):
+    """A short-lived hold on a balance (migration 0035).
+
+    The hold is what makes concurrency safe: without it, N parallel requests all
+    pass the same balance check before any of them settles.
+    """
+
+    __tablename__ = "credit_reservations"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_new_uuid)
+    user_id: Mapped[str] = mapped_column(String, nullable=False)
+    feature: Mapped[str] = mapped_column(String, nullable=False)
+    credits_reserved: Mapped[int] = mapped_column(Integer, nullable=False)
+    # held | settled | released | expired. Forward-only.
+    state: Mapped[str] = mapped_column(String, nullable=False, default="held", server_default="held")
+    # Makes a retried request reuse its hold instead of taking a second one. The
+    # UNIQUE constraint is what enforces that, not an application check.
+    idempotency_key: Mapped[str] = mapped_column(String, nullable=False)
+    # A crashed worker must not freeze a balance forever.
+    expires_at: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[str] = mapped_column(String, nullable=False, default=_utcnow_iso)
+    settled_at: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("idempotency_key", name="uq_credit_reservations_idem"),
+        Index("ix_credit_reservations_state_expires", "state", "expires_at"),
+        Index("ix_credit_reservations_user", "user_id"),
+    )
+
+
+class CreditTransaction(Base):
+    """Every balance movement, append-only (migration 0035).
+
+    Exists so "why is my balance this?" is always answerable. The unique
+    idempotency key is the single constraint that makes double-charging impossible
+    rather than merely unlikely.
+    """
+
+    __tablename__ = "credit_transactions"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_new_uuid)
+    user_id: Mapped[str] = mapped_column(String, nullable=False)
+    # signup_grant | monthly_refill | purchase | spend | refund | admin_adjust |
+    # chargeback
+    kind: Mapped[str] = mapped_column(String, nullable=False)
+    credits_delta: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Balance after this movement, so history replays without recomputing from the
+    # beginning of time.
+    balance_after: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Mandatory for admin_adjust: an unexplained manual balance change is
+    # indistinguishable from a bug or an abuse.
+    reason: Mapped[str | None] = mapped_column(String, nullable=True)
+    actor_user_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    external_ref: Mapped[str | None] = mapped_column(String, nullable=True)
+    idempotency_key: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[str] = mapped_column(String, nullable=False, default=_utcnow_iso)
+
+    __table_args__ = (
+        UniqueConstraint("idempotency_key", name="uq_credit_transactions_idem"),
+        Index("ix_credit_transactions_user_created", "user_id", "created_at"),
+    )

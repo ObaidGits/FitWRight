@@ -44,6 +44,12 @@ from app.models import (
     AnalysisArtifact,
     ApiKey,
     Application,
+    AiChannel,
+    AiChannelHealth,
+    AiUsageLedger,
+    CreditAccount,
+    CreditReservation,
+    CreditTransaction,
     DiscoveryCache,
     DiscoveryResult,
     DiscoveryRun,
@@ -3763,6 +3769,638 @@ class Database:
             "partial": row.partial, "status": row.status, "seen": row.seen,
             "job_id": row.job_id,
             "group_fingerprint": row.group_fingerprint,
+            "created_at": row.created_at,
+        }
+
+    # ------------------------------------------------------------------
+    # AI provider channels (spec: ai-provider-admin, migration 0033)
+    # ------------------------------------------------------------------
+
+    async def list_ai_channels(self, *, only_active: bool = False) -> list[dict[str, Any]]:
+        """Channels in routing order: best priority first, then oldest.
+
+        Ties break on ``created_at`` so ordering is deterministic - two channels
+        sharing a priority must not swap places between requests, or failover
+        behaviour becomes unreproducible.
+
+        Not user-scoped: channels are operator configuration, not user data.
+        """
+        stmt = select(AiChannel).order_by(AiChannel.priority, AiChannel.created_at)
+        if only_active:
+            stmt = stmt.where(AiChannel.state == "active")
+        async with self._session() as session:
+            rows = (await session.execute(stmt)).scalars().all()
+            return [self._ai_channel_to_dict(r) for r in rows]
+
+    async def get_ai_channel(self, channel_id: str) -> dict[str, Any] | None:
+        async with self._session() as session:
+            row = (
+                await session.execute(select(AiChannel).where(AiChannel.id == channel_id))
+            ).scalars().first()
+            return self._ai_channel_to_dict(row) if row else None
+
+    async def create_ai_channel(
+        self,
+        *,
+        name: str,
+        provider: str,
+        model: str,
+        api_base: str | None = None,
+        priority: int = 100,
+        monthly_cost_cap_cents: int | None = None,
+    ) -> dict[str, Any]:
+        """Create a channel. Starts ``disabled`` so it cannot take traffic before
+        the operator has tested it."""
+        now = _now()
+        channel_id = str(uuid4())
+        async with self._session() as session:
+            async with session.begin():
+                session.add(
+                    AiChannel(
+                        id=channel_id,
+                        name=name,
+                        provider=provider,
+                        model=model,
+                        api_base=api_base,
+                        priority=priority,
+                        state="disabled",
+                        structured_verdict="unknown",
+                        monthly_cost_cap_cents=monthly_cost_cap_cents,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                )
+                session.add(AiChannelHealth(channel_id=channel_id, updated_at=now))
+        created = await self.get_ai_channel(channel_id)
+        assert created is not None
+        return created
+
+    async def update_ai_channel(self, channel_id: str, **fields: Any) -> dict[str, Any] | None:
+        """Patch a channel's configuration. Unknown keys are ignored rather than
+        raising, so a future field cannot break an older caller."""
+        allowed = {
+            "name",
+            "provider",
+            "model",
+            "api_base",
+            "priority",
+            "state",
+            "structured_verdict",
+            "monthly_cost_cap_cents",
+        }
+        clean = {k: v for k, v in fields.items() if k in allowed}
+        if not clean:
+            return await self.get_ai_channel(channel_id)
+        async with self._session() as session:
+            async with session.begin():
+                await session.execute(
+                    sa_update(AiChannel)
+                    .where(AiChannel.id == channel_id)
+                    .values(updated_at=_now(), **clean)
+                )
+        return await self.get_ai_channel(channel_id)
+
+    async def delete_ai_channel(self, channel_id: str) -> bool:
+        """Delete a channel and its health row.
+
+        Callers must ensure the channel is drained first - this method does not
+        know about in-flight requests.
+        """
+        async with self._session() as session:
+            async with session.begin():
+                await session.execute(
+                    delete(AiChannelHealth).where(AiChannelHealth.channel_id == channel_id)
+                )
+                result = await session.execute(delete(AiChannel).where(AiChannel.id == channel_id))
+                return bool(result.rowcount)
+
+    async def get_ai_channel_health(self) -> dict[str, dict[str, Any]]:
+        """All health rows, keyed by channel id."""
+        async with self._session() as session:
+            rows = (await session.execute(select(AiChannelHealth))).scalars().all()
+            return {
+                r.channel_id: {
+                    "channel_id": r.channel_id,
+                    "consecutive_failures": r.consecutive_failures,
+                    "cooling_until": r.cooling_until,
+                    "last_ok_at": r.last_ok_at,
+                    "last_error_at": r.last_error_at,
+                    "last_error_class": r.last_error_class,
+                }
+                for r in rows
+            }
+
+    async def record_ai_channel_result(
+        self,
+        channel_id: str,
+        *,
+        ok: bool,
+        error_class: str | None = None,
+        cooldown_seconds: int = 0,
+        failure_threshold: int = 3,
+    ) -> None:
+        """Record one call outcome against a channel's health.
+
+        Success resets the failure counter AND clears any cooldown - a channel that
+        just served a request is by definition healthy, so leaving it benched would
+        strand capacity.
+
+        Failure increments, and only benches the channel once it has failed
+        ``failure_threshold`` times in a row. One bad request must not remove a
+        provider from rotation.
+        """
+        now = _now()
+        async with self._session() as session:
+            async with session.begin():
+                row = (
+                    await session.execute(
+                        select(AiChannelHealth).where(AiChannelHealth.channel_id == channel_id)
+                    )
+                ).scalars().first()
+                if row is None:
+                    row = AiChannelHealth(channel_id=channel_id, updated_at=now)
+                    session.add(row)
+                if ok:
+                    row.consecutive_failures = 0
+                    row.cooling_until = None
+                    row.last_ok_at = now
+                else:
+                    row.consecutive_failures = (row.consecutive_failures or 0) + 1
+                    row.last_error_at = now
+                    row.last_error_class = error_class
+                    if cooldown_seconds > 0 and row.consecutive_failures >= failure_threshold:
+                        row.cooling_until = (
+                            datetime.now(timezone.utc) + timedelta(seconds=cooldown_seconds)
+                        ).isoformat()
+                row.updated_at = now
+
+    @staticmethod
+    def _ai_channel_to_dict(row: AiChannel) -> dict[str, Any]:
+        return {
+            "id": row.id,
+            "name": row.name,
+            "provider": row.provider,
+            "model": row.model,
+            "api_base": row.api_base,
+            "priority": row.priority,
+            "state": row.state,
+            "structured_verdict": row.structured_verdict,
+            "monthly_cost_cap_cents": row.monthly_cost_cap_cents,
+            "created_at": row.created_at,
+            "updated_at": row.updated_at,
+        }
+
+    # ------------------------------------------------------------------
+    # Credits: accounts, reservations, transactions (migration 0035)
+    # ------------------------------------------------------------------
+
+    async def get_or_create_credit_account(self, user_id: str) -> dict[str, Any]:
+        """Fetch a user's account, creating an empty one on first touch.
+
+        Created empty rather than pre-granted: granting is a transaction with its
+        own idempotency key, and doing it here would make "did this user get their
+        signup grant?" unanswerable.
+        """
+        now = _now()
+        async with self._session() as session:
+            async with session.begin():
+                row = (
+                    await session.execute(
+                        select(CreditAccount).where(CreditAccount.user_id == user_id)
+                    )
+                ).scalars().first()
+                if row is None:
+                    row = CreditAccount(user_id=user_id, created_at=now, updated_at=now)
+                    session.add(row)
+                    await session.flush()
+                return self._credit_account_to_dict(row)
+
+    async def reserve_credits(
+        self,
+        user_id: str,
+        *,
+        feature: str,
+        credits: int,
+        idempotency_key: str,
+        ttl_seconds: int = 900,
+    ) -> tuple[str, dict[str, Any] | None]:
+        """Place a hold on ``credits``. Returns ``(status, reservation)``.
+
+        Status is one of ``created`` / ``replayed`` / ``insufficient`` /
+        ``blocked`` / ``no_account``.
+
+        THE CRITICAL PROPERTY: the balance check and the hold are ONE conditional
+        UPDATE. Reading the balance and then writing it would let N concurrent
+        requests all pass the same check before any of them wrote - the classic
+        overdraft. Here the database evaluates availability at write time, so
+        exactly one of N racing callers can win.
+
+        A replayed idempotency key returns the existing hold instead of taking a
+        second one, so a retried HTTP request cannot double-charge.
+        """
+        now = _now()
+        expires = (datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds)).isoformat()
+        async with self._session() as session:
+            async with session.begin():
+                existing = (
+                    await session.execute(
+                        select(CreditReservation).where(
+                            CreditReservation.idempotency_key == idempotency_key
+                        )
+                    )
+                ).scalars().first()
+                if existing is not None:
+                    return "replayed", self._reservation_to_dict(existing)
+
+                account = (
+                    await session.execute(
+                        select(CreditAccount).where(CreditAccount.user_id == user_id)
+                    )
+                ).scalars().first()
+                if account is None:
+                    return "no_account", None
+                if account.state != "ok" or account.ai_disabled:
+                    return "blocked", None
+
+                # The atomic gate. `rowcount == 0` means insufficient funds - the
+                # database refused, not the application.
+                result = await session.execute(
+                    sa_update(CreditAccount)
+                    .where(
+                        CreditAccount.user_id == user_id,
+                        CreditAccount.state == "ok",
+                        CreditAccount.ai_disabled.is_(False),
+                        (
+                            CreditAccount.allowance_credits
+                            + CreditAccount.wallet_credits
+                            - CreditAccount.reserved_credits
+                        )
+                        >= credits,
+                    )
+                    .values(
+                        reserved_credits=CreditAccount.reserved_credits + credits,
+                        version=CreditAccount.version + 1,
+                        updated_at=now,
+                    )
+                )
+                if not result.rowcount:
+                    return "insufficient", None
+
+                reservation = CreditReservation(
+                    id=str(uuid4()),
+                    user_id=user_id,
+                    feature=feature,
+                    credits_reserved=credits,
+                    state="held",
+                    idempotency_key=idempotency_key,
+                    expires_at=expires,
+                    created_at=now,
+                )
+                session.add(reservation)
+                await session.flush()
+                return "created", self._reservation_to_dict(reservation)
+
+    async def settle_reservation(
+        self,
+        reservation_id: str,
+        *,
+        actual_credits: int,
+        ledger: dict[str, Any] | None = None,
+    ) -> str:
+        """Convert a hold into a real charge. Returns ``settled`` / ``not_held``.
+
+        The balance movement, the ledger row and the transaction row are written in
+        ONE database transaction. Splitting them would eventually produce a charge
+        with no audit trail, or an audit trail for a charge that never happened.
+
+        Spend order is allowance first, then wallet: the free grant expires, so
+        burning it first is strictly better for the user.
+        """
+        now = _now()
+        async with self._session() as session:
+            async with session.begin():
+                res = (
+                    await session.execute(
+                        select(CreditReservation).where(CreditReservation.id == reservation_id)
+                    )
+                ).scalars().first()
+                if res is None or res.state != "held":
+                    return "not_held"
+
+                account = (
+                    await session.execute(
+                        select(CreditAccount).where(CreditAccount.user_id == res.user_id)
+                    )
+                ).scalars().first()
+                if account is None:
+                    return "not_held"
+
+                charge = max(0, int(actual_credits))
+                # Never charge more than was held: the hold is the user's guarantee
+                # of the worst case. Overrun is the operator's to absorb.
+                charge = min(charge, res.credits_reserved)
+
+                from_allowance = min(charge, max(0, account.allowance_credits))
+                from_wallet = charge - from_allowance
+
+                account.allowance_credits -= from_allowance
+                account.wallet_credits -= from_wallet
+                account.reserved_credits = max(
+                    0, account.reserved_credits - res.credits_reserved
+                )
+                account.lifetime_spent += charge
+                account.velocity_spent = (account.velocity_spent or 0) + charge
+                account.version += 1
+                account.updated_at = now
+
+                res.state = "settled"
+                res.settled_at = now
+
+                balance_after = account.allowance_credits + account.wallet_credits
+                if charge:
+                    session.add(
+                        CreditTransaction(
+                            id=str(uuid4()),
+                            user_id=res.user_id,
+                            kind="spend",
+                            credits_delta=-charge,
+                            balance_after=balance_after,
+                            external_ref=reservation_id,
+                            idempotency_key=f"spend:{reservation_id}",
+                            created_at=now,
+                        )
+                    )
+                if ledger is not None:
+                    session.add(
+                        AiUsageLedger(
+                            id=str(uuid4()),
+                            user_id=res.user_id,
+                            feature=res.feature,
+                            reservation_id=reservation_id,
+                            credits_charged=charge,
+                            created_at=now,
+                            **ledger,
+                        )
+                    )
+                return "settled"
+
+    async def release_reservation(self, reservation_id: str, *, reason: str = "failed") -> str:
+        """Give a hold back without charging. Returns ``released`` / ``not_held``.
+
+        Used when the call failed for a reason that is not the user's fault -
+        provider 5xx, timeout, our bug. Billing for our own outage is the fastest
+        way to lose trust, so this path must be as reliable as settling.
+        """
+        now = _now()
+        async with self._session() as session:
+            async with session.begin():
+                res = (
+                    await session.execute(
+                        select(CreditReservation).where(CreditReservation.id == reservation_id)
+                    )
+                ).scalars().first()
+                if res is None or res.state != "held":
+                    return "not_held"
+                account = (
+                    await session.execute(
+                        select(CreditAccount).where(CreditAccount.user_id == res.user_id)
+                    )
+                ).scalars().first()
+                if account is not None:
+                    account.reserved_credits = max(
+                        0, account.reserved_credits - res.credits_reserved
+                    )
+                    account.version += 1
+                    account.updated_at = now
+                res.state = "released" if reason != "expired" else "expired"
+                res.settled_at = now
+                return "released"
+
+    async def sweep_expired_reservations(self, *, limit: int = 500) -> int:
+        """Release holds past their expiry. Returns how many were released.
+
+        Without this a crashed worker freezes part of a balance permanently, and
+        the user sees "insufficient credits" while their dashboard shows plenty.
+        Bounded by ``limit`` so one sweep cannot become a long transaction.
+        """
+        now_iso = _now()
+        async with self._session() as session:
+            stale = (
+                await session.execute(
+                    select(CreditReservation.id)
+                    .where(
+                        CreditReservation.state == "held",
+                        CreditReservation.expires_at < now_iso,
+                    )
+                    .limit(limit)
+                )
+            ).scalars().all()
+        released = 0
+        for rid in stale:
+            if await self.release_reservation(rid, reason="expired") == "released":
+                released += 1
+        return released
+
+    async def grant_credits(
+        self,
+        user_id: str,
+        *,
+        credits: int,
+        kind: str,
+        idempotency_key: str,
+        reason: str | None = None,
+        actor_user_id: str | None = None,
+        to_wallet: bool = True,
+        period_start: str | None = None,
+    ) -> str:
+        """Add credits. Returns ``granted`` / ``replayed`` / ``no_account``.
+
+        Idempotent by key, which is what makes a double-run refill job or a
+        redelivered payment webhook harmless. ``to_wallet=False`` targets the
+        expiring allowance instead (monthly refill).
+        """
+        now = _now()
+        async with self._session() as session:
+            async with session.begin():
+                dup = (
+                    await session.execute(
+                        select(CreditTransaction.id).where(
+                            CreditTransaction.idempotency_key == idempotency_key
+                        )
+                    )
+                ).scalars().first()
+                if dup is not None:
+                    return "replayed"
+
+                account = (
+                    await session.execute(
+                        select(CreditAccount).where(CreditAccount.user_id == user_id)
+                    )
+                ).scalars().first()
+                if account is None:
+                    return "no_account"
+
+                if to_wallet:
+                    account.wallet_credits += credits
+                else:
+                    # Refill REPLACES the allowance rather than adding to it:
+                    # unused free credits do not accumulate (stated in the UI).
+                    account.allowance_credits = credits
+                    account.allowance_period_start = period_start or now
+                account.lifetime_granted += max(0, credits)
+                account.version += 1
+                account.updated_at = now
+
+                session.add(
+                    CreditTransaction(
+                        id=str(uuid4()),
+                        user_id=user_id,
+                        kind=kind,
+                        credits_delta=credits,
+                        balance_after=account.allowance_credits + account.wallet_credits,
+                        reason=reason,
+                        actor_user_id=actor_user_id,
+                        idempotency_key=idempotency_key,
+                        created_at=now,
+                    )
+                )
+                return "granted"
+
+    async def set_credit_policy(
+        self,
+        user_id: str,
+        *,
+        monthly_allowance_override: int | None = ...,  # type: ignore[assignment]
+        velocity_cap_override: int | None = ...,  # type: ignore[assignment]
+        ai_disabled: bool | None = None,
+        state: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Set per-user policy. Sentinel ``...`` means "leave unchanged", so an
+        override can be explicitly cleared back to ``None`` (inherit global)."""
+        now = _now()
+        async with self._session() as session:
+            async with session.begin():
+                account = (
+                    await session.execute(
+                        select(CreditAccount).where(CreditAccount.user_id == user_id)
+                    )
+                ).scalars().first()
+                if account is None:
+                    return None
+                if monthly_allowance_override is not ...:
+                    account.monthly_allowance_override = monthly_allowance_override
+                if velocity_cap_override is not ...:
+                    account.velocity_cap_override = velocity_cap_override
+                if ai_disabled is not None:
+                    account.ai_disabled = ai_disabled
+                if state is not None:
+                    account.state = state
+                account.version += 1
+                account.updated_at = now
+                return self._credit_account_to_dict(account)
+
+    async def record_usage_only(self, user_id: str, **ledger: Any) -> None:
+        """Write a ledger row with no charge.
+
+        Two callers: a user on their own API key (metered for observability,
+        charged zero) and a failed call (so a zero charge is provable rather than
+        merely absent).
+        """
+        async with self._session() as session:
+            async with session.begin():
+                session.add(
+                    AiUsageLedger(
+                        id=str(uuid4()), user_id=user_id, created_at=_now(), **ledger
+                    )
+                )
+
+    async def list_usage(
+        self, user_id: str, *, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        """A user's own AI history, newest first."""
+        async with self._session() as session:
+            rows = (
+                await session.execute(
+                    Repo.scoped(select(AiUsageLedger), AiUsageLedger, user_id)
+                    .order_by(AiUsageLedger.created_at.desc())
+                    .limit(limit)
+                )
+            ).scalars().all()
+            return [
+                {
+                    "id": r.id,
+                    "feature": r.feature,
+                    "model": r.model,
+                    "total_tokens": r.total_tokens,
+                    "tokens_estimated": r.tokens_estimated,
+                    "credits_charged": r.credits_charged,
+                    "outcome": r.outcome,
+                    "created_at": r.created_at,
+                }
+                for r in rows
+            ]
+
+    async def feature_usage_percentile(
+        self, feature: str, *, percentile: float = 0.95, sample: int = 200
+    ) -> int | None:
+        """Observed token usage at ``percentile`` for ``feature``, or None.
+
+        This is what makes a pre-flight estimate honest instead of a hardcoded
+        guess: the reservation is sized from what this feature actually costs in
+        practice. Returns None until there is enough data, so the caller can fall
+        back to a conservative default rather than a fabricated one.
+        """
+        async with self._session() as session:
+            rows = (
+                await session.execute(
+                    select(AiUsageLedger.total_tokens)
+                    .where(
+                        AiUsageLedger.feature == feature,
+                        AiUsageLedger.outcome == "ok",
+                        AiUsageLedger.total_tokens > 0,
+                    )
+                    .order_by(AiUsageLedger.created_at.desc())
+                    .limit(sample)
+                )
+            ).scalars().all()
+        if len(rows) < 10:
+            return None
+        ordered = sorted(int(v) for v in rows)
+        idx = min(len(ordered) - 1, max(0, int(round(percentile * (len(ordered) - 1)))))
+        return ordered[idx]
+
+    @staticmethod
+    def _credit_account_to_dict(row: CreditAccount) -> dict[str, Any]:
+        allowance = row.allowance_credits or 0
+        wallet = row.wallet_credits or 0
+        reserved = row.reserved_credits or 0
+        return {
+            "user_id": row.user_id,
+            "allowance_credits": allowance,
+            "allowance_period_start": row.allowance_period_start,
+            "wallet_credits": wallet,
+            "reserved_credits": reserved,
+            # Derived, never stored - a maintained "available" column would
+            # eventually disagree with its own components.
+            "available_credits": allowance + wallet - reserved,
+            "lifetime_granted": row.lifetime_granted or 0,
+            "lifetime_spent": row.lifetime_spent or 0,
+            "state": row.state,
+            "monthly_allowance_override": row.monthly_allowance_override,
+            "velocity_cap_override": row.velocity_cap_override,
+            "ai_disabled": bool(row.ai_disabled),
+            "version": row.version,
+        }
+
+    @staticmethod
+    def _reservation_to_dict(row: CreditReservation) -> dict[str, Any]:
+        return {
+            "id": row.id,
+            "user_id": row.user_id,
+            "feature": row.feature,
+            "credits_reserved": row.credits_reserved,
+            "state": row.state,
+            "expires_at": row.expires_at,
             "created_at": row.created_at,
         }
 

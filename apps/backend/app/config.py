@@ -1101,6 +1101,27 @@ class Settings(BaseSettings):
     # shared KVStore so it holds across workers/instances (see app.llm_ratelimit).
     llm_rate_per_min_user: int = 20
 
+    # --- AI credits (spec: ai-provider-admin) ---------------------------------
+    # Master switch. OFF = exactly today's bring-your-own-key behaviour: no
+    # reservations, no charging, no allowance. Every credit code path is inert.
+    ai_credits_enabled: bool = False
+    # Free credits granted once on signup, and the recurring monthly allowance.
+    # A per-user override in `credit_accounts` beats both, absolutely.
+    ai_signup_grant_credits: int = 100
+    ai_monthly_allowance_credits: int = 50
+    # Credits/hour ceiling, independent of balance: credits alone do not stop a
+    # stolen session draining a funded wallet in one minute. 0 disables.
+    ai_velocity_cap_per_hour: int = 200
+    # How long a hold survives before the sweep releases it. Must comfortably
+    # exceed the slowest AI call, or a legitimate long request loses its hold
+    # mid-flight; short enough that a crashed worker does not strand a balance for
+    # long.
+    ai_reservation_ttl_seconds: int = 900
+    # Consecutive failures before a channel is benched, and for how long. One bad
+    # request must not remove a provider from rotation.
+    ai_channel_failure_threshold: int = 3
+    ai_channel_cooldown_seconds: int = 120
+
     @field_validator(
         "pdf_max_concurrency",
         "pdf_render_queue_timeout_seconds",
