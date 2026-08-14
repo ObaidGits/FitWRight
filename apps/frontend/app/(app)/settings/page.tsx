@@ -64,6 +64,7 @@ import {
   useUpdateLanguageConfig,
   useTestConnection,
 } from '@/features/settings/hooks';
+import { PAGE_WIDTH } from '@/lib/layout/page-width';
 
 const LANGS: { value: SupportedLanguage; label: string }[] = [
   { value: 'en', label: 'English' },
@@ -76,7 +77,7 @@ const LANGS: { value: SupportedLanguage; label: string }[] = [
 
 export default function SettingsPage() {
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className={`${PAGE_WIDTH.CONTENT} space-y-6`}>
       <h1 className="text-2xl font-semibold">Settings</h1>
       <Tabs defaultValue="ai">
         <TabsList>

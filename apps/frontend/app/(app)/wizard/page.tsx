@@ -55,6 +55,8 @@ import {
   applyStructuredToResume,
   isStructuredSection,
 } from './structured-sections';
+import { PAGE_WIDTH } from '@/lib/layout/page-width';
+import { PaneToggle, paneVisibility, type Pane } from '@/components/layout/pane-toggle';
 
 export default function WizardPage() {
   const router = useRouter();
@@ -69,6 +71,9 @@ export default function WizardPage() {
     createInitialResumeWizardState()
   );
   const [answer, setAnswer] = React.useState('');
+  // Which pane a phone shows. The live preview is a selling point of this flow,
+  // and stacked below the question card it was never seen on a narrow screen.
+  const [pane, setPane] = React.useState<Pane>('edit');
   const [busy, setBusy] = React.useState(false);
   const [finalizing, setFinalizing] = React.useState(false);
   // Live-preview template. Defaults to the standard template on the server and
@@ -259,7 +264,7 @@ export default function WizardPage() {
   if (aiBlocked && !aiUnconfigured) {
     const statusFailed = aiAvailability.state === 'status-error';
     return (
-      <div className="mx-auto max-w-lg space-y-4 py-6">
+      <div className={`${PAGE_WIDTH.NARROW} space-y-4 py-6`}>
         <Link
           href="/import"
           className="inline-flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
@@ -283,7 +288,7 @@ export default function WizardPage() {
 
   if (aiUnconfigured) {
     return (
-      <div className="mx-auto max-w-lg space-y-4 py-6">
+      <div className={`${PAGE_WIDTH.NARROW} space-y-4 py-6`}>
         <Link
           href="/import"
           className="inline-flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
@@ -323,16 +328,19 @@ export default function WizardPage() {
         confirmLabel="Leave wizard"
         cancelLabel="Keep building"
       />
-      <Link
-        href="/import"
-        className="inline-flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
-      >
-        <ArrowLeft className="h-4 w-4" /> Back to import
-      </Link>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Link
+          href="/import"
+          className="inline-flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+        >
+          <ArrowLeft className="h-4 w-4" /> Back to import
+        </Link>
+        <PaneToggle value={pane} onChange={setPane} editLabel="Questions" />
+      </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Question / conversation surface */}
-        <div className="space-y-4">
+        <div className={`space-y-4 ${paneVisibility(pane === 'edit')}`}>
           {/* Step progress */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between text-xs text-[var(--muted-foreground)]">
@@ -543,7 +551,7 @@ export default function WizardPage() {
         </div>
 
         {/* Live preview */}
-        <div className="lg:sticky lg:top-6 lg:self-start">
+        <div className={`lg:sticky lg:top-6 lg:self-start ${paneVisibility(pane === 'preview')}`}>
           <div className="mb-2 flex items-center justify-between">
             <p className="text-sm font-semibold text-[var(--muted-foreground)]">Live preview</p>
             <Link

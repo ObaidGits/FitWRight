@@ -53,6 +53,7 @@ import {
   useSaveProfile,
 } from '@/features/profile/hooks';
 import { ProfileConflictError, type ProfileData } from '@/lib/api/professional-profile';
+import { PAGE_WIDTH } from '@/lib/layout/page-width';
 
 type Section = 'overview' | 'experience' | 'education' | 'projects' | 'skills' | 'ai';
 
@@ -288,7 +289,7 @@ export function ProfileWorkspace() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div className={`${PAGE_WIDTH.CONTENT} space-y-6`}>
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Your profile</h1>

@@ -73,13 +73,11 @@ import {
 } from '@/components/atelier/dropdown-menu';
 import MoreHorizontal from 'lucide-react/dist/esm/icons/more-horizontal';
 import EyeOff from 'lucide-react/dist/esm/icons/eye-off';
+import { PaneToggle, paneVisibility, type Pane } from '@/components/layout/pane-toggle';
 import { cn } from '@/lib/utils';
 import type { RegenerateItemInput } from '@/lib/api/enrichment';
 
 type TabId = 'resume' | 'cover-letter' | 'outreach' | 'interview-prep' | 'jd-match';
-/** Which of the two panes a narrow screen is showing (they cannot fit side by
- *  side below `lg`, and stacking them hid the preview under the whole form). */
-type MobilePane = 'edit' | 'preview';
 type JobContextStatus = 'idle' | 'loading' | 'available' | 'missing';
 
 const STORAGE_KEY = 'resume_builder_draft';
@@ -175,7 +173,7 @@ const ResumeBuilderContent = () => {
   const [activeTab, setActiveTab] = useState<TabId>(() => getTabFromSearchParams(searchParams));
   // Narrow screens show one pane at a time, switched from the header. Defaults
   // to the editor: a user opening the editor came to change something.
-  const [mobilePane, setMobilePane] = useState<MobilePane>('edit');
+  const [mobilePane, setMobilePane] = useState<Pane>('edit');
 
   useEffect(() => {
     setActiveTab(getTabFromSearchParams(searchParams));
@@ -990,28 +988,13 @@ const ResumeBuilderContent = () => {
 
           {/* Which pane a phone shows. Below lg the two panes cannot sit side by
               side, and stacking them buried the preview under the whole form. */}
-          <div
-            role="group"
-            aria-label={t('dashboard.preview')}
-            className="flex shrink-0 gap-1 rounded-[var(--radius-at-lg)] bg-[var(--secondary)] p-1 lg:hidden"
-          >
-            {(['edit', 'preview'] as MobilePane[]).map((pane) => (
-              <button
-                key={pane}
-                type="button"
-                onClick={() => setMobilePane(pane)}
-                aria-pressed={mobilePane === pane}
-                className={cn(
-                  'rounded-[var(--radius-at-md)] px-2.5 py-1 text-xs font-medium transition-colors',
-                  mobilePane === pane
-                    ? 'bg-[var(--card)] text-[var(--foreground)] shadow-[var(--shadow-at-e1)]'
-                    : 'text-[var(--muted-foreground)]'
-                )}
-              >
-                {pane === 'edit' ? t('common.edit') : t('dashboard.preview')}
-              </button>
-            ))}
-          </div>
+          <PaneToggle
+            value={mobilePane}
+            onChange={setMobilePane}
+            editLabel={t('common.edit')}
+            previewLabel={t('dashboard.preview')}
+            label={t('dashboard.preview')}
+          />
 
           {hiddenItemCount > 0 && (
             <span
@@ -1177,8 +1160,7 @@ const ResumeBuilderContent = () => {
           <div
             className={cn(
               'no-print overflow-y-auto bg-[var(--background)] p-4 md:p-6 lg:p-8',
-              mobilePane === 'edit' ? 'block' : 'hidden',
-              'lg:block'
+              paneVisibility(mobilePane === 'edit')
             )}
           >
             <div className="mx-auto max-w-3xl space-y-6">
@@ -1327,8 +1309,7 @@ const ResumeBuilderContent = () => {
           <div
             className={cn(
               'no-print flex-col overflow-hidden bg-[var(--secondary)]',
-              mobilePane === 'preview' ? 'flex' : 'hidden',
-              'lg:flex'
+              paneVisibility(mobilePane === 'preview', 'flex')
             )}
           >
             {/* Tabs Header */}

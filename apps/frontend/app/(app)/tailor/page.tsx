@@ -40,6 +40,7 @@ import { Input, Textarea } from '@/components/atelier/input';
 import { Label } from '@/components/atelier/label';
 import { Switch } from '@/components/atelier/misc';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/atelier/tabs';
+import { PaneToggle, paneVisibility } from '@/components/layout/pane-toggle';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -1490,7 +1491,7 @@ export default function TailorPage() {
   );
 
   const previewPane = (
-    <div className={`lg:sticky lg:top-6 ${mobilePane === 'preview' ? 'block' : 'hidden'} lg:block`}>
+    <div className={`lg:sticky lg:top-6 ${paneVisibility(mobilePane === 'preview')}`}>
       <Card className="flex flex-col overflow-hidden p-0">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] px-4 py-3">
           <p className="flex items-center gap-1.5 text-sm font-medium">
@@ -1507,7 +1508,7 @@ export default function TailorPage() {
 
   return (
     <div
-      className={`mx-auto max-w-[1500px] space-y-6 ${
+      className={`space-y-6 ${
         // Clear the fixed mobile action bar so it cannot cover the last card.
         phase === 'review' && result ? 'pb-28 lg:pb-0' : ''
       }`}
@@ -1525,27 +1526,7 @@ export default function TailorPage() {
 
         {/* Which pane a narrow screen shows. Hidden from `lg` up, where both are
             on screen together and the control would be meaningless. */}
-        <div
-          role="group"
-          aria-label="Show inputs or preview"
-          className="flex shrink-0 gap-1 rounded-[var(--radius-at-lg)] bg-[var(--secondary)] p-1 lg:hidden"
-        >
-          {(['edit', 'preview'] as const).map((pane) => (
-            <button
-              key={pane}
-              type="button"
-              onClick={() => setMobilePane(pane)}
-              aria-pressed={mobilePane === pane}
-              className={`rounded-[var(--radius-at-md)] px-3 py-1.5 text-sm font-medium transition-colors ${
-                mobilePane === pane
-                  ? 'bg-[var(--card)] text-[var(--foreground)] shadow-[var(--shadow-at-e1)]'
-                  : 'text-[var(--muted-foreground)]'
-              }`}
-            >
-              {pane === 'edit' ? 'Edit' : 'Preview'}
-            </button>
-          ))}
-        </div>
+        <PaneToggle value={mobilePane} onChange={setMobilePane} />
       </div>
 
       {/* Actions for a finished result. Rendered exactly once: an inline
@@ -1562,7 +1543,7 @@ export default function TailorPage() {
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:items-start">
         {/* LEFT: inputs, controls, fit analysis + result metrics/changes. */}
-        <div className={`space-y-6 ${mobilePane === 'edit' ? 'block' : 'hidden'} lg:block`}>
+        <div className={`space-y-6 ${paneVisibility(mobilePane === 'edit')}`}>
           {aiUnconfigured && (
             <Card className="flex items-start gap-3 border-[var(--at-warning)]/40 bg-[var(--at-warning)]/8 p-4">
               <Key className="mt-0.5 h-5 w-5 shrink-0 text-[var(--at-warning)]" />
@@ -2437,7 +2418,7 @@ function CompanionDocuments({
   return (
     <Card className="p-4">
       <Tabs value={tab} onValueChange={(v) => onTabChange(v as ExtraKind)}>
-        <TabsList className="w-full flex-wrap justify-start">
+        <TabsList className="w-full justify-start">
           {enabledKinds.map((kind) => {
             const meta = EXTRA_META[kind];
             return (

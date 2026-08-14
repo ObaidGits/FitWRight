@@ -38,6 +38,7 @@ import {
   useSnoozeReminder,
   type AgendaItem,
 } from '@/features/agenda/hooks';
+import { PAGE_WIDTH } from '@/lib/layout/page-width';
 
 type Bucket = 'Overdue' | 'Today' | 'This week' | 'Later';
 type Filter = 'all' | 'reminder' | 'interview';
@@ -119,7 +120,7 @@ export default function AgendaPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className={`${PAGE_WIDTH.CONTENT} space-y-6`}>
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Agenda</h1>

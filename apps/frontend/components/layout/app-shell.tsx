@@ -28,6 +28,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // must not impose the reading-width column and page padding it gives content
   // pages - that would squeeze a side-by-side editor into half the screen.
   const fullBleed = pathname === '/builder' || pathname.startsWith('/builder/');
+  // Tailor is not full-height (it scrolls like a normal page) but it IS a
+  // two-pane surface with an A4 preview, so the reading-width cap is too narrow.
+  // It used to ask for this itself with `max-w-[1500px]`, which did nothing:
+  // the shell's `max-w-6xl` (1152px) was already the binding constraint.
+  const wideContent = pathname === '/tailor';
   return (
     // Dashboard shell: exactly one viewport tall (`h-dvh` handles mobile browser
     // chrome), and the shell itself never scrolls (`overflow-hidden`). The fixed
@@ -95,7 +100,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {fullBleed ? (
             children
           ) : (
-            <div className="mx-auto w-full max-w-6xl px-4 py-6 md:px-8 md:py-8">{children}</div>
+            <div
+              className={cn(
+                'mx-auto w-full px-4 py-6 md:px-8 md:py-8',
+                wideContent ? 'max-w-[1500px]' : 'max-w-6xl'
+              )}
+            >
+              {children}
+            </div>
           )}
         </main>
       </div>

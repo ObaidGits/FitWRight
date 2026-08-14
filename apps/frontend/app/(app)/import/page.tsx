@@ -32,6 +32,7 @@ import {
   PARSE_MESSAGES,
   ESTIMATE_PARSE,
 } from '@/lib/ai-progress-copy';
+import { PAGE_WIDTH } from '@/lib/layout/page-width';
 
 type Phase = 'idle' | 'uploading' | 'error';
 
@@ -162,7 +163,7 @@ export default function ImportPage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
+    <div className={`${PAGE_WIDTH.NARROW} space-y-6`}>
       <div>
         <h1 className="text-2xl font-semibold">Add a resume</h1>
         <p className="text-sm text-[var(--muted-foreground)]">

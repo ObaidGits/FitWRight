@@ -81,4 +81,16 @@ describe('AppShell layout architecture', () => {
     expect(main.className).not.toContain('overflow-y-auto');
     expect(main.innerHTML).not.toContain('max-w-6xl');
   });
+
+  it('gives the tailor route a wider column than a reading-width page', () => {
+    // Tailor is two panes plus an A4 preview. It used to ask for this itself
+    // with `max-w-[1500px]`, which did nothing: the shell's own `max-w-6xl`
+    // (1152px) was already the binding constraint, so the request was dead and
+    // the layout was narrower than intended.
+    mockPathname.value = '/tailor';
+    render(<AppShell>content</AppShell>);
+    const wrapper = document.getElementById('main-content')!.firstElementChild!;
+    expect(wrapper.className).toContain('max-w-[1500px]');
+    expect(wrapper.className).not.toContain('max-w-6xl');
+  });
 });

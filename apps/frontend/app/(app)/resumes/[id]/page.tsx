@@ -18,6 +18,7 @@ import Sparkles from 'lucide-react/dist/esm/icons/sparkles';
 import SlidersHorizontal from 'lucide-react/dist/esm/icons/sliders-horizontal';
 
 import { Button } from '@/components/atelier/button';
+import { PaneToggle, paneVisibility, type Pane } from '@/components/layout/pane-toggle';
 import { Card } from '@/components/atelier/card';
 import { Badge } from '@/components/atelier/badge';
 import { Input, Textarea } from '@/components/atelier/input';
@@ -126,6 +127,9 @@ export default function ResumeEditorPage() {
   const [edit, setEdit] = React.useState<Editable | null>(null);
   const [dirty, setDirty] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
+  // Which pane a phone shows - below `lg` the preview stacks under the whole
+  // editor, so without this it sits well below the fold.
+  const [pane, setPane] = React.useState<Pane>('edit');
   const [settings, setSettings] = React.useState<TemplateSettings>(DEFAULT_TEMPLATE_SETTINGS);
   const [askAiOpen, setAskAiOpen] = React.useState(false);
   const [askAiTarget, setAskAiTarget] = React.useState<AskAiTarget | null>(null);
@@ -575,12 +579,13 @@ export default function ResumeEditorPage() {
           <Button size="sm" onClick={onSave} loading={saving} disabled={!dirty}>
             Save
           </Button>
+          <PaneToggle value={pane} onChange={setPane} />
         </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Content editor */}
-        <div className="space-y-4">
+        <div className={`space-y-4 ${paneVisibility(pane === 'edit')}`}>
           <Card className="space-y-3 p-5">
             <h2 className="text-sm font-semibold text-[var(--muted-foreground)]">Details</h2>
             <div className="grid gap-3 sm:grid-cols-2">
@@ -767,7 +772,7 @@ export default function ResumeEditorPage() {
         </div>
 
         {/* Live preview */}
-        <div className="lg:sticky lg:top-6 lg:self-start">
+        <div className={`lg:sticky lg:top-6 lg:self-start ${paneVisibility(pane === 'preview')}`}>
           <p className="mb-2 text-sm font-semibold text-[var(--muted-foreground)]">Live preview</p>
           <div className="overflow-hidden rounded-[var(--radius-at-lg)] border border-[var(--border)] bg-white">
             {/* scrollbar-gutter:stable reserves the scrollbar track so toggling

@@ -13,7 +13,14 @@ export const TabsList = React.forwardRef<
   <TabsPrimitive.List
     ref={ref}
     className={cn(
-      'inline-flex items-center gap-1 rounded-[var(--radius-at-lg)] bg-[var(--secondary)] p-1',
+      // `max-w-full` + `flex-wrap` so a strip of tabs can never exceed its
+      // container. Without them this was a non-wrapping `inline-flex` sized to
+      // its content: five tabs ("Overview / Schedule / Cover Letter / Interview
+      // Prep / Outreach") simply overflowed a phone, clipping the last ones or
+      // pushing the page sideways. Wrapping is chosen over horizontal scroll so
+      // every tab stays visible - a scrolled strip hides tabs behind a swipe the
+      // user has no reason to know about.
+      'inline-flex max-w-full flex-wrap items-center gap-1 rounded-[var(--radius-at-lg)] bg-[var(--secondary)] p-1',
       className
     )}
     {...props}

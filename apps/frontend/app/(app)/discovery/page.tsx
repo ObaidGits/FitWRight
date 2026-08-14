@@ -362,7 +362,7 @@ export default function DiscoveryPage() {
   const canSearch = useResume ? Boolean(resumeId) : Boolean(queryText.trim());
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
+    <div>
       <div className="flex gap-6">
         {/* Left: search + feed */}
         <div className={`min-w-0 flex-1 space-y-5 ${selectedResult ? 'max-w-[55%]' : ''}`}>
