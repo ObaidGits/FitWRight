@@ -30,7 +30,6 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from uuid import uuid4
 
 from app.ai_credits import resolve_allowance
 from app.config import settings
