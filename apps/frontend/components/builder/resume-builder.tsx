@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, Suspense, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, Suspense, useCallback, useMemo } from 'react';
 import Image from 'next/image';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { type ResumeData } from '@/components/dashboard/resume-component';
@@ -46,6 +46,8 @@ import {
   generateInterviewPrep,
   fetchJobDescription,
   buildResumeStreamTransport,
+  updateResumeTemplateSettings,
+  normalizeTemplateSettings,
 } from '@/lib/api/resume';
 import { StreamController } from '@/lib/resilience/stream-client';
 import { JDComparisonView } from './jd-comparison-view';
@@ -55,6 +57,8 @@ import { useTranslations } from '@/lib/i18n';
 import { type TemplateSettings, DEFAULT_TEMPLATE_SETTINGS } from '@/lib/types/template-settings';
 import { withLocalizedDefaultSections } from '@/lib/utils/section-helpers';
 import { stripHiddenItems, countHiddenItems } from '@/lib/utils/hidden-items';
+import { appearanceStorageKey } from '@/lib/resume/appearance-storage';
+import { getTabFromSearchParams, type TabId } from '@/components/builder/tab-ids';
 import { useLanguage } from '@/lib/context/language-context';
 import { useSession } from '@/lib/context/session';
 import { useResilienceFlags } from '@/lib/hooks/use-resilience-flags';
@@ -77,19 +81,11 @@ import { PaneToggle, paneVisibility, type Pane } from '@/components/layout/pane-
 import { cn } from '@/lib/utils';
 import type { RegenerateItemInput } from '@/lib/api/enrichment';
 
-type TabId = 'resume' | 'cover-letter' | 'outreach' | 'interview-prep' | 'jd-match';
 type JobContextStatus = 'idle' | 'loading' | 'available' | 'missing';
 
 const STORAGE_KEY = 'resume_builder_draft';
-const SETTINGS_STORAGE_KEY = 'resume_builder_settings';
-const TAB_IDS: TabId[] = ['resume', 'cover-letter', 'outreach', 'interview-prep', 'jd-match'];
 
 type Translate = (key: string, params?: Record<string, string | number>) => string;
-
-const getTabFromSearchParams = (searchParams: Pick<URLSearchParams, 'get'>): TabId => {
-  const tab = searchParams.get('tab');
-  return TAB_IDS.includes(tab as TabId) ? (tab as TabId) : 'resume';
-};
 
 const buildInitialData = (t: Translate): ResumeData => ({
   personalInfo: {
@@ -148,6 +144,9 @@ const ResumeBuilderContent = () => {
   const [, setLoadingState] = useState<'idle' | 'loading' | 'loaded' | 'error'>('idle');
   const [templateSettings, setTemplateSettings] =
     useState<TemplateSettings>(DEFAULT_TEMPLATE_SETTINGS);
+  // Has this resume's server-persisted appearance been adopted yet? Also set by
+  // the first user change, so a late fetch can never overwrite their choice.
+  const settingsAdoptedRef = useRef(false);
   const { improvedData } = useResumePreview();
   const improvedPreview = improvedData?.data?.resume_preview;
   const improvedCoverLetter = improvedData?.data?.cover_letter;
@@ -321,29 +320,52 @@ const ResumeBuilderContent = () => {
   );
   const hiddenItemCount = useMemo(() => countHiddenItems(resumeData), [resumeData]);
 
-  // Load template settings from localStorage on mount
+  // Local appearance cache, read per resume. Only used until the resume's own
+  // persisted settings arrive from the server (adopted in loadResumeData below).
   useEffect(() => {
-    const savedSettings = localStorage.getItem(SETTINGS_STORAGE_KEY);
+    const savedSettings = localStorage.getItem(appearanceStorageKey(resumeId));
     if (savedSettings) {
       try {
-        const parsed = JSON.parse(savedSettings);
-        setTemplateSettings({
-          ...DEFAULT_TEMPLATE_SETTINGS,
-          ...parsed,
-          margins: { ...DEFAULT_TEMPLATE_SETTINGS.margins, ...parsed.margins },
-          spacing: { ...DEFAULT_TEMPLATE_SETTINGS.spacing, ...parsed.spacing },
-          fontSize: { ...DEFAULT_TEMPLATE_SETTINGS.fontSize, ...parsed.fontSize },
-        });
+        setTemplateSettings(normalizeTemplateSettings(JSON.parse(savedSettings)));
       } catch {
         // Use defaults
       }
+    } else {
+      // Switching to a resume with no cached appearance must not inherit the
+      // previous resume's - that was the leak.
+      setTemplateSettings(DEFAULT_TEMPLATE_SETTINGS);
     }
-  }, []);
+    settingsAdoptedRef.current = false;
+  }, [resumeId]);
 
-  // Save template settings to localStorage when they change
-  useEffect(() => {
-    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(templateSettings));
-  }, [templateSettings]);
+  /**
+   * Persist appearance to the resume itself, not just this browser.
+   *
+   * The builder used to write only to a global localStorage key, so a margin or
+   * font change was never attached to the resume: it disappeared on another
+   * device and bled onto every other resume here. Fire-and-forget because
+   * appearance does not bump the content version, so it cannot conflict with an
+   * in-flight content save - the same contract the resume editor relies on.
+   */
+  const persistTemplateSettings = useCallback(
+    (next: TemplateSettings) => {
+      // Once the user changes appearance we own it; a late server adoption must
+      // not overwrite the choice.
+      settingsAdoptedRef.current = true;
+      setTemplateSettings(next);
+      try {
+        localStorage.setItem(appearanceStorageKey(resumeId), JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
+      if (resumeId) {
+        void updateResumeTemplateSettings(resumeId, next).catch(() => {
+          /* best-effort; the local cache keeps this session correct */
+        });
+      }
+    },
+    [resumeId]
+  );
 
   // Warn user before leaving with unsaved changes
   useEffect(() => {
@@ -369,6 +391,21 @@ const ResumeBuilderContent = () => {
           setIsTailoredResume(Boolean(data.parent_id));
           // Store resume title for downloads
           setResumeTitle(data.title ?? null);
+          // Adopt the resume's OWN persisted appearance - the server is the
+          // source of truth, so the resume looks the same here as it does in the
+          // resume editor and on another device. Guarded so it happens once per
+          // resume and can never overwrite an appearance the user has already
+          // changed in this session.
+          if (data.template_settings && !settingsAdoptedRef.current) {
+            settingsAdoptedRef.current = true;
+            const adopted = normalizeTemplateSettings(data.template_settings);
+            setTemplateSettings(adopted);
+            try {
+              localStorage.setItem(appearanceStorageKey(resumeId), JSON.stringify(adopted));
+            } catch {
+              /* ignore */
+            }
+          }
           // Load cover letter and outreach message if available
           if (data.cover_letter) {
             setCoverLetter(data.cover_letter);
@@ -512,9 +549,14 @@ const ResumeBuilderContent = () => {
     [autosave]
   );
 
-  const handleSettingsChange = useCallback((newSettings: TemplateSettings) => {
-    setTemplateSettings(newSettings);
-  }, []);
+  const handleSettingsChange = useCallback(
+    (newSettings: TemplateSettings) => {
+      // Goes through persistTemplateSettings so the change is attached to THIS
+      // resume on the server, not just cached in this browser.
+      persistTemplateSettings(newSettings);
+    },
+    [persistTemplateSettings]
+  );
 
   /**
    * Persist the current draft and report whether it landed.
@@ -1021,8 +1063,9 @@ const ResumeBuilderContent = () => {
               in four different colours (outline / amber warning / primary /
               green success), so nothing read as the main action. */}
           <div className="flex shrink-0 items-center gap-2">
-            {/* Resume tab actions */}
-            {activeTab === 'resume' && (
+            {/* Resume + Design actions: both edit the resume itself, so both
+                need Save / Download / Regenerate. */}
+            {(activeTab === 'resume' || activeTab === 'design') && (
               <>
                 {flags.advanced_autosave && resumeId && (
                   <SaveStatusChip
@@ -1152,6 +1195,46 @@ const ResumeBuilderContent = () => {
           </div>
         </div>
 
+        {/* Mode strip. Spans the whole workspace because that is what it does:
+            it changes the left pane, the preview AND the header actions
+            together. It used to sit inside the preview pane, which implied it
+            only changed the preview - one control silently reaching into three
+            regions. Content and Design are always available; the document modes
+            need a resume tailored to a job first, and say so rather than
+            presenting a dead tab. */}
+        <div className="no-print shrink-0 border-b border-[var(--border)] bg-[var(--background)] px-4 pb-2 md:px-6">
+          <TabStrip
+            aria-label={t('nav.builder')}
+            tabs={[
+              { id: 'resume', label: t('builder.previewTabs.resume') },
+              { id: 'design', label: t('builder.formatting.options') },
+              {
+                id: 'cover-letter',
+                label: t('builder.previewTabs.coverLetter'),
+                disabled: !coverLetter && !isTailoredResume,
+              },
+              {
+                id: 'outreach',
+                label: t('builder.previewTabs.outreach'),
+                disabled: !outreachMessage && !isTailoredResume,
+              },
+              {
+                id: 'interview-prep',
+                label: t('builder.previewTabs.interviewPrep'),
+                disabled: !isTailoredResume,
+              },
+              {
+                id: 'jd-match',
+                label: t('builder.previewTabs.jdMatch'),
+                disabled: !jobDescription,
+              },
+            ]}
+            activeTab={activeTab}
+            onTabChange={(id) => setActiveTab(id as TabId)}
+            className="flex-wrap"
+          />
+        </div>
+
         {/* Content grid. Side by side from `lg`; below that only the pane the
             header's Edit/Preview switch selects is mounted-visible, so the
             preview is one tap away instead of buried below the whole form. */}
@@ -1168,6 +1251,7 @@ const ResumeBuilderContent = () => {
                 <div className="h-3 w-3 rounded-full bg-[var(--primary)]"></div>
                 <h2 className="text-lg font-semibold text-[var(--foreground)]">
                   {activeTab === 'resume' && t('builder.leftPanel.editorPanel')}
+                  {activeTab === 'design' && t('builder.formatting.options')}
                   {activeTab === 'cover-letter' && t('builder.leftPanel.coverLetterEditor')}
                   {activeTab === 'outreach' && t('builder.leftPanel.outreachEditor')}
                   {activeTab === 'interview-prep' && t('builder.leftPanel.interviewPrep')}
@@ -1175,8 +1259,14 @@ const ResumeBuilderContent = () => {
                 </h2>
               </div>
 
-              {/* Resume Editor */}
+              {/* Content mode - what the resume SAYS. */}
               {activeTab === 'resume' && (
+                <ResumeForm resumeData={resumeData} onUpdate={handleUpdate} />
+              )}
+
+              {/* Design mode - how it LOOKS. Same preview beside it, so a margin
+                  or font change is visible as it is made. */}
+              {activeTab === 'design' && (
                 <>
                   <FormattingControls settings={templateSettings} onChange={handleSettingsChange} />
                   <div className="rounded-[var(--radius-at-lg)] border border-[var(--border)] bg-[var(--card)] p-4">
@@ -1200,7 +1290,6 @@ const ResumeBuilderContent = () => {
                       onError={(message) => showNotification(message, 'danger')}
                     />
                   </div>
-                  <ResumeForm resumeData={resumeData} onUpdate={handleUpdate} />
                 </>
               )}
 
@@ -1312,43 +1401,10 @@ const ResumeBuilderContent = () => {
               paneVisibility(mobilePane === 'preview', 'flex')
             )}
           >
-            {/* Tabs Header */}
-            <div className="shrink-0 bg-[var(--secondary)] px-6 pt-3">
-              <TabStrip
-                aria-label={t('builder.leftPanel.jdMatchAnalysis')}
-                tabs={[
-                  { id: 'resume', label: t('builder.previewTabs.resume') },
-                  {
-                    id: 'cover-letter',
-                    label: t('builder.previewTabs.coverLetter'),
-                    disabled: !coverLetter,
-                  },
-                  {
-                    id: 'outreach',
-                    label: t('builder.previewTabs.outreach'),
-                    disabled: !outreachMessage,
-                  },
-                  {
-                    id: 'interview-prep',
-                    label: t('builder.previewTabs.interviewPrep'),
-                    disabled: !isTailoredResume,
-                  },
-                  {
-                    id: 'jd-match',
-                    label: t('builder.previewTabs.jdMatch'),
-                    disabled: !jobDescription,
-                  },
-                ]}
-                activeTab={activeTab}
-                onTabChange={(id) => setActiveTab(id as TabId)}
-                className="flex-wrap"
-              />
-            </div>
-
             {/* Preview Content */}
             <div className="flex-1 overflow-y-auto">
-              {/* Resume Preview */}
-              {activeTab === 'resume' && (
+              {/* Resume Preview - shared by Content and Design. */}
+              {(activeTab === 'resume' || activeTab === 'design') && (
                 <PaginatedPreview
                   resumeData={localizedResumeDataForPreview}
                   settings={templateSettings}

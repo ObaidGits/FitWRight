@@ -66,6 +66,7 @@ import {
   type ResumeTemplate,
 } from '@/lib/resume/template-catalog';
 import { getPreferredTemplateId } from '@/lib/resume/preferred-template';
+import { appearanceStorageKey } from '@/lib/resume/appearance-storage';
 import {
   Dialog,
   DialogContent,
@@ -113,10 +114,6 @@ function toLines(value: string): string[] {
     .filter(Boolean);
 }
 
-function settingsKey(id: string) {
-  return `fitwright-template-${id}`;
-}
-
 export default function ResumeEditorPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
@@ -152,7 +149,7 @@ export default function ResumeEditorPage() {
   React.useEffect(() => {
     adoptedRef.current = false;
     try {
-      const raw = localStorage.getItem(settingsKey(id));
+      const raw = localStorage.getItem(appearanceStorageKey(id));
       if (raw) setSettings(normalizeTemplateSettings(JSON.parse(raw)));
     } catch {
       /* ignore */
@@ -167,7 +164,7 @@ export default function ResumeEditorPage() {
       const normalized = normalizeTemplateSettings(persisted);
       setSettings(normalized);
       try {
-        localStorage.setItem(settingsKey(id), JSON.stringify(normalized));
+        localStorage.setItem(appearanceStorageKey(id), JSON.stringify(normalized));
       } catch {
         /* ignore */
       }
@@ -233,7 +230,7 @@ export default function ResumeEditorPage() {
     adoptedRef.current = true;
     setSettings(next);
     try {
-      localStorage.setItem(settingsKey(id), JSON.stringify(next));
+      localStorage.setItem(appearanceStorageKey(id), JSON.stringify(next));
     } catch {
       /* ignore */
     }
@@ -560,7 +557,7 @@ export default function ResumeEditorPage() {
                     size="sm"
                     className="text-[var(--muted-foreground)]"
                   >
-                    <Link href={`/builder?id=${id}`}>
+                    <Link href={`/builder?id=${id}&tab=design`}>
                       <SlidersHorizontal className="h-4 w-4" /> Fine-grained formatting (margins,
                       fonts, colors)
                     </Link>
