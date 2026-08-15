@@ -127,14 +127,79 @@ class TestRefusal:
 
 @pytest.mark.asyncio
 class TestSettlement:
-    async def test_settles_at_actual_usage(self, isolated_db, owner_id, credits_on):
+    async def test_settles_at_the_published_price_not_the_token_count(
+        self, isolated_db, owner_id, credits_on
+    ):
+        """The user is charged the price they were shown, whatever the tokens came to.
+
+        This replaced a token-derived charge. A variable charge cannot be quoted before
+        the action runs, and a final charge that differs from the number on screen reads
+        as being cheated - so the published price wins even when the real usage was
+        cheaper. The true token cost is still recorded in the ledger for the operator's
+        own margin view.
+        """
+        await isolated_db.upsert_feature_price(
+            "cover_letter", label="Cover letter", credits=4, is_charged=True, active=True
+        )
+        from app.ai_feature_prices import invalidate_price_cache
+
+        invalidate_price_cache()
+
         await _fund(isolated_db, owner_id, wallet=1000)
         async with ai_spend(owner_id, feature="cover_letter") as spend:
+            # Deliberately far below the 4-credit price: 3000 tokens would have been
+            # 3 credits under the old rule.
             spend.record(total_tokens=3000, channel_id="c1", model="gpt-5-nano")
 
         acct = await isolated_db.get_or_create_credit_account(owner_id)
-        assert acct["lifetime_spent"] == 3, "3000 tokens -> 3 credits"
+        assert acct["lifetime_spent"] == 4, "charged the published price, not 3"
         assert acct["reserved_credits"] == 0, "hold fully resolved"
+
+        # And the real consumption is still on record.
+        history = await isolated_db.list_usage(owner_id)
+        assert history[0]["total_tokens"] == 3000
+
+    async def test_a_feature_marked_free_charges_nothing_but_is_still_metered(
+        self, isolated_db, owner_id, credits_on
+    ):
+        """Free must not mean invisible: the operator still needs the cost data."""
+        await isolated_db.upsert_feature_price(
+            "match_score", label="Match score", credits=4, is_charged=False, active=True
+        )
+        from app.ai_feature_prices import invalidate_price_cache
+
+        invalidate_price_cache()
+
+        await _fund(isolated_db, owner_id, wallet=1000)
+        async with ai_spend(owner_id, feature="match_score") as spend:
+            spend.record(total_tokens=4000, channel_id="c1", model="gpt-5-nano")
+
+        acct = await isolated_db.get_or_create_credit_account(owner_id)
+        assert acct["lifetime_spent"] == 0, "free action charged nothing"
+        assert acct["wallet_credits"] == 1000, "balance untouched"
+
+        history = await isolated_db.list_usage(owner_id)
+        assert len(history) == 1, "still metered"
+        assert history[0]["credits_charged"] == 0
+        assert history[0]["total_tokens"] == 4000
+
+    async def test_a_free_feature_works_on_an_empty_balance(
+        self, isolated_db, owner_id, credits_on
+    ):
+        """A user with nothing left must still be able to run a free action - being
+        refused for something the operator marked free would be indefensible."""
+        await isolated_db.upsert_feature_price(
+            "match_score", label="Match score", credits=4, is_charged=False, active=True
+        )
+        from app.ai_feature_prices import invalidate_price_cache
+
+        invalidate_price_cache()
+
+        async with ai_spend(owner_id, feature="match_score") as spend:
+            spend.record(total_tokens=1000)
+
+        acct = await isolated_db.get_or_create_credit_account(owner_id)
+        assert acct["lifetime_spent"] == 0
 
     async def test_an_exception_releases_the_hold_and_charges_nothing(
         self, isolated_db, owner_id, credits_on

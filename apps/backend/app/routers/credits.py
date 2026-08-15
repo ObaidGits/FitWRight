@@ -10,21 +10,23 @@ end: their own provider key works forever and costs the operator nothing, so the
 out-of-credits state is a fork in the road, not a wall. Presenting it as a wall would
 simply lose the user.
 
-Deliberately NOT here: prices, purchase links, or a top-up button. Metering runs
-first so the pricing is set from observed usage rather than guessed - see the spec's
-Phase 4.
+Prices now live here too (``/pricing``), which they deliberately did not before -
+metering ran first so the price list could be set from observed cost rather than
+guessed. Every number a user sees comes from the same admin-editable rows the charge
+comes from, and the "one application" figure is computed from those rows rather than
+written down separately, because a headline that disagrees with the price list beside
+it is worse than no headline.
+
+Searches are reported separately from credits on purpose. They are capped, not charged,
+so running out of them means "come back tomorrow" - telling that user to buy credits
+would not help them at all.
 """
 
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 
-from app.ai_credits import (
-    FEATURE_FALLBACK_TOKENS,
-    credits_for_tokens,
-    describe_balance,
-    resolve_allowance,
-)
+from app.ai_credits import describe_balance, resolve_allowance
 from app.ai_metered import user_has_own_key
 from app.auth.principal import get_effective_user_id
 from app.config import settings
@@ -47,12 +49,10 @@ def _db():
 
 
 #: The features worth showing a user, in the order they matter to them. Not every
-#: metered feature: nobody plans their month around "match score".
-_HEADLINE_FEATURES = [
-    ("resume_tailor", "Tailored resumes"),
-    ("cover_letter", "Cover letters"),
-    ("interview_prep", "Interview prep"),
-]
+#: priced feature: nobody plans their month around "match score". Labels come from the
+#: admin-editable price rows, so this is only a selection, never a second copy of the
+#: names or the numbers.
+_HEADLINE_FEATURES = ("resume_tailor", "cover_letter", "interview_prep")
 
 
 @router.get("")
@@ -85,13 +85,18 @@ async def get_my_credits(user_id: str = Depends(get_effective_user_id)) -> dict:
             "credits_enabled": False,
         }
 
-    account = await _db().get_or_create_credit_account(user_id)
+    db = _db()
+    account = await db.get_or_create_credit_account(user_id)
     # Same lazy grant the spend path uses, so the balance shown is the balance that
     # will actually be honoured a moment later.
     from app.ai_allowance import ensure_allowance
 
     account = await ensure_allowance(user_id, account=account) or account
     available = int(account.get("available_credits") or 0)
+
+    from app.ai_plans import check_search_allowance, resolve_account_plan
+
+    plan = await resolve_account_plan(db, account)
 
     if account.get("ai_disabled") or account.get("state") != "ok":
         return {
@@ -101,11 +106,31 @@ async def get_my_credits(user_id: str = Depends(get_effective_user_id)) -> dict:
             "summary": "AI features are turned off for this account.",
             "actions": [],
             "credits_enabled": True,
+            "plan": _plan_payload(plan),
         }
 
-    monthly = resolve_allowance(
-        account, global_default=settings.ai_monthly_allowance_credits
-    )
+    monthly = resolve_allowance(account, global_default=plan.monthly_credits)
+
+    from app.ai_feature_prices import application_bundle_credits, resolve_feature_cost
+
+    per_application = await application_bundle_credits(db)
+    search = await check_search_allowance(db, user_id, plan)
+
+    actions = []
+    for feature in _HEADLINE_FEATURES:
+        cost = await resolve_feature_cost(db, feature)
+        per_action = cost.effective_credits
+        actions.append(
+            {
+                "feature": feature,
+                "label": cost.label,
+                "credits_each": per_action,
+                # Free actions are unlimited by definition; -1 would be a magic number,
+                # so the flag says so explicitly and the UI renders "included".
+                "is_free": per_action <= 0,
+                "remaining": (available // per_action) if per_action > 0 else None,
+            }
+        )
 
     return {
         "mode": "credits",
@@ -118,43 +143,121 @@ async def get_my_credits(user_id: str = Depends(get_effective_user_id)) -> dict:
         # date applies to the free portion only - conflating them would imply a
         # user's paid balance is about to disappear.
         "allowance_period_start": account.get("allowance_period_start"),
-        "summary": describe_balance(available),
-        "actions": _actions_remaining(available),
+        "summary": describe_balance(available, per_action_credits=per_application),
+        "credits_per_application": per_application,
+        "actions": actions,
         # Drives the gentle warning in the UI. A threshold rather than a raw count so
         # the copy stays in one place.
-        "low": _is_low(available),
+        "low": per_application > 0 and available < per_application * 2,
         "own_key_is_free": True,
         "credits_enabled": True,
+        "plan": _plan_payload(plan),
+        # Searches are capped but never charged, so they are reported as their own
+        # thing. Folding them into the credit balance would tell a user who has run out
+        # of searches to buy credits, which would not help them at all.
+        "search": {
+            "used_today": search.used,
+            "daily_limit": search.limit,
+            "remaining": search.remaining,
+            "exhausted": not search.allowed,
+        },
     }
 
 
-def _actions_remaining(available: int) -> list[dict]:
-    """How many of each headline action the user can still do.
+def _plan_payload(plan) -> dict:
+    return {
+        "id": plan.id,
+        "label": plan.label,
+        "price_minor": plan.price_minor,
+        "currency": plan.currency,
+        "monthly_credits": plan.monthly_credits,
+        "search_daily_limit": plan.search_daily_limit,
+        "is_free": plan.is_free,
+        "description": plan.description,
+    }
 
-    Uses the same estimate the reserve uses, so the number shown here cannot promise
-    more than the spend guard will actually allow.
+
+@router.get("/pricing")
+async def get_pricing(user_id: str = Depends(get_effective_user_id)) -> dict:
+    """Everything the user needs to understand what things cost.
+
+    One endpoint for the whole pricing screen - the per-action price list, the plans,
+    and the headline "one application" figure - because these three numbers must agree
+    and the surest way to make them agree is to derive them together, from the same
+    rows, in one response.
     """
-    out = []
-    for feature, label in _HEADLINE_FEATURES:
-        per_action = credits_for_tokens(FEATURE_FALLBACK_TOKENS.get(feature, 8000))
-        out.append(
+    db = _db()
+    from app.ai_feature_prices import application_bundle_credits, resolve_all_feature_costs
+    from app.ai_plans import resolve_account_plan
+
+    costs = await resolve_all_feature_costs(db, only_active=True)
+    plans = await db.list_subscription_plans(only_active=True)
+    account = await db.get_or_create_credit_account(user_id)
+    current = await resolve_account_plan(db, account)
+
+    return {
+        "credits_enabled": settings.ai_credits_enabled,
+        "credits_per_application": await application_bundle_credits(db),
+        "current_plan_id": current.id,
+        "features": [
             {
-                "feature": feature,
-                "label": label,
-                "remaining": (available // per_action) if per_action > 0 else 0,
+                "feature": c.feature,
+                "label": c.label,
+                "credits": c.effective_credits,
+                "is_free": not c.is_charged or c.credits <= 0,
+                "description": c.description,
             }
-        )
-    return out
+            for c in costs
+        ],
+        "plans": [
+            {
+                "id": p["id"],
+                "label": p["label"],
+                "price_minor": p["price_minor"],
+                "currency": p["currency"],
+                "monthly_credits": p["monthly_credits"],
+                "search_daily_limit": p["search_daily_limit"],
+                "is_free": int(p["price_minor"]) <= 0,
+                "is_current": p["id"] == current.id,
+                "description": p["description"],
+            }
+            for p in plans
+        ],
+    }
 
 
-def _is_low(available: int) -> bool:
-    """Low = not enough left for a tailored resume, the product's core action.
+@router.get("/purchases")
+async def get_my_purchases(
+    limit: int = 20, user_id: str = Depends(get_effective_user_id)
+) -> dict:
+    """This user's payment history.
 
-    Defined against what the user can still DO rather than a percentage, because a
-    percentage of a number they never see is meaningless.
+    The repository could already answer this; nothing exposed it, so a customer had no
+    way to see what they had paid for and no invoice reference to quote in a support
+    message. Only completed and in-flight purchases carry meaning to a user, but
+    failures are included too - a failed attempt they can SEE is one they will not
+    report as a missing payment.
     """
-    per_tailor = credits_for_tokens(FEATURE_FALLBACK_TOKENS["resume_tailor"])
-    return per_tailor > 0 and available < per_tailor * 2
+    limit = max(1, min(int(limit or 20), 100))
+    rows = await _db().list_purchases(user_id, limit=limit)
+    return {
+        "items": [
+            {
+                "id": r.get("id"),
+                "pack_id": r.get("pack_id"),
+                "credits": r.get("credits"),
+                "amount_minor": r.get("amount_minor"),
+                "currency": r.get("currency"),
+                "state": r.get("state"),
+                "invoice_number": r.get("invoice_number"),
+                "failure_reason": r.get("failure_reason"),
+                "created_at": r.get("created_at"),
+                "granted_at": r.get("granted_at"),
+                "refunded_at": r.get("refunded_at"),
+            }
+            for r in rows
+        ]
+    }
 
 
 @router.get("/packs")

@@ -29,7 +29,6 @@ from dataclasses import dataclass, field
 
 from app.ai_credits import (
     SpendDecision,
-    credits_for_tokens,
     estimate_credits,
     resolve_velocity_cap,
     velocity_exceeded,
@@ -184,6 +183,18 @@ async def ai_spend(
 
     from app.database import db
 
+    # An action the operator has marked free costs nothing and must not take a hold.
+    # Reserving zero would create a reservation row that can only ever settle to zero,
+    # and would let a user with an empty balance be refused for a free feature.
+    price = await estimate_credits(db, feature)
+    if price <= 0:
+        handle.billing_bypassed = True
+        try:
+            yield handle
+        finally:
+            await _record_unbilled(handle, outcome="ok" if handle._recorded else "failed")
+        return
+
     decision = await check_can_spend(user_id, feature, has_own_key=False)
     if not decision.allowed:
         if decision.reason == "velocity":
@@ -230,7 +241,11 @@ async def ai_spend(
         if handle.reservation_id and handle._recorded:
             await db.settle_reservation(
                 handle.reservation_id,
-                actual_credits=credits_for_tokens(handle._tokens),
+                # The PUBLISHED price, not what the tokens came to. The user was shown
+                # this number before the action ran, so charging anything else - even
+                # less - makes the price list a lie. The real token cost is still
+                # recorded in the ledger below for the operator's own margin view.
+                actual_credits=decision.estimated_credits,
                 ledger=_ledger_fields(handle, outcome="ok"),
             )
             settled = True

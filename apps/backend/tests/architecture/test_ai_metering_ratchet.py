@@ -206,15 +206,21 @@ class TestMeteringRatchet:
             "Documented as exempt but actually metered: " f"{sorted(contradictory)}"
         )
 
-    def test_every_feature_name_has_an_estimate(self, app):
-        """A feature with no estimate silently falls back to a generic guess, so its
-        hold is the wrong size for every call it ever makes."""
-        from app.ai_credits import FEATURE_FALLBACK_TOKENS
+    def test_every_feature_name_has_a_price(self, app):
+        """A metered feature with no price entry falls back to a generic guess, so it
+        is neither visible nor editable in Admin > Feature prices.
+
+        Checked against the seeded default list rather than the database, because this
+        is a static guardrail: it asks "did someone add a metered endpoint without
+        giving it a price?", which is a code review question, not a runtime one.
+        """
+        from app.ai_feature_prices import DEFAULT_FEATURE_PRICES
 
         for endpoint, feature in sorted(_metered_routes(app).items()):
-            assert feature in FEATURE_FALLBACK_TOKENS, (
+            assert feature in DEFAULT_FEATURE_PRICES, (
                 f"{endpoint} meters as {feature!r}, which has no entry in "
-                "FEATURE_FALLBACK_TOKENS - its hold would be sized by a default."
+                "DEFAULT_FEATURE_PRICES - it would charge a fallback price that no "
+                "operator can see or edit. Add it there and to the seed script."
             )
 
     def test_reports_how_much_wiring_remains(self, app):

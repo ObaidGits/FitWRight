@@ -45,6 +45,15 @@ _HERMETIC_ENV = {
     "OWNER_PASSWORD": "",
     "APP_ENCRYPTION_KEY": "",
     "SCHEDULER_MODE": "external_cron",
+    # The credits/purchase feature ships dark, so OFF is the zero-config default and
+    # every test that cares turns it on explicitly (the ``credits_on`` fixtures).
+    # Without pinning these, a developer who enabled charging in ``.env`` to test a
+    # payment flow makes every metered endpoint return 402 for test users who have no
+    # balance - 30-odd failures that do not reproduce in CI and look like a code
+    # regression rather than a leaked local setting.
+    "AI_CREDITS_ENABLED": "false",
+    "AI_PURCHASES_ENABLED": "false",
+    "AI_MONTHLY_ALLOWANCE_CREDITS": "50",
 }
 for _key, _value in _HERMETIC_ENV.items():
     _os.environ[_key] = _value

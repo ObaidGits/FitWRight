@@ -96,22 +96,33 @@ class TestMyCredits:
     async def test_never_promises_more_than_the_spend_guard_allows(
         self, isolated_db, owner_client, me, credits_on
     ):
-        """The count shown must come from the same estimate the reserve uses.
+        """The count shown must come from the same price the charge uses.
 
         If the screen promised 5 and the guard allowed 3, the product would be lying
         to the user twice: once optimistically, then once as a refusal.
         """
-        from app.ai_credits import FEATURE_FALLBACK_TOKENS, credits_for_tokens
         from app.database import db
+
+        await db.upsert_feature_price(
+            "resume_tailor",
+            label="Tailored resume",
+            credits=20,
+            is_charged=True,
+            active=True,
+        )
+        from app.ai_feature_prices import invalidate_price_cache
+
+        invalidate_price_cache()
 
         await _fund(db, me, allowance=200)
         res = await owner_client.get("/api/v1/credits")
         body = res.json()
 
-        per_action = credits_for_tokens(FEATURE_FALLBACK_TOKENS["resume_tailor"])
-        expected = body["available_credits"] // per_action
-        shown = next(a["remaining"] for a in body["actions"] if a["feature"] == "resume_tailor")
-        assert shown == expected
+        action = next(a for a in body["actions"] if a["feature"] == "resume_tailor")
+        # The response now carries the price alongside the count, so the two cannot be
+        # derived from different numbers.
+        assert action["credits_each"] == 20
+        assert action["remaining"] == body["available_credits"] // 20
 
     async def test_running_out_still_names_the_free_alternative(
         self, isolated_db, owner_client, me, credits_on

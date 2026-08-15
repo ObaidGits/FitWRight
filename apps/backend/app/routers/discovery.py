@@ -704,6 +704,7 @@ async def manual_search(
     routinely outlives Heroku's 30-second request ceiling.
     """
     _check_search_rate(user_id)  # Rate limit: 1 search per 10s per user
+    await _enforce_daily_search_cap(user_id, db)
     return await _execute_manual_search(payload, user_id, db, config)
 
 
@@ -731,6 +732,11 @@ async def start_manual_search(
     existing = search_jobs.running_for(user_id)
     if existing is not None:
         return {**existing.to_dict(), "already_running": True}
+
+    # Counted only once the search is actually going to start. Charging a search
+    # against the daily cap and then returning "already running" would burn one of
+    # the user's searches for a request that did no work.
+    await _enforce_daily_search_cap(user_id, db)
 
     sites = payload.sites or config.job_discovery_jobspy_sites
 
@@ -1033,6 +1039,47 @@ def _check_search_rate(user_id: str) -> None:
             detail=f"Please wait {int(_SEARCH_COOLDOWN_SECONDS - (now - last))}s before searching again",
         )
     _search_timestamps[user_id] = now
+
+
+async def _enforce_daily_search_cap(user_id: str, db) -> None:
+    """Spend one of today's searches, or explain that they are used up.
+
+    Two DIFFERENT limits guard search and they must not be confused in the UI:
+
+    * ``_check_search_rate`` above is a 10-second cooldown - "you're going too fast".
+    * this is the plan's per-day ceiling - "you've used today's searches".
+
+    Neither is a charge. Searching costs no credits on purpose, because metering
+    exploration teaches people to stop exploring and exploring is what produces the
+    applications that ARE charged. So the error here deliberately does NOT suggest
+    buying credits: credits would not buy another search. It names the plan, the
+    ceiling, and when it resets, which are the only three facts that help.
+    """
+    from app.ai_plans import consume_search, resolve_account_plan
+    from app.errors import ApiError
+
+    account = await db.get_or_create_credit_account(user_id)
+    plan = await resolve_account_plan(db, account)
+    allowance = await consume_search(db, user_id, plan)
+    if allowance.allowed:
+        return
+
+    raise ApiError(
+        429,
+        "search_limit_reached",
+        f"You've used all {allowance.limit} of today's job searches on the "
+        f"{allowance.plan_label} plan. They reset at midnight UTC - or upgrade for "
+        f"a higher daily limit.",
+        details={
+            "used_today": allowance.used,
+            "daily_limit": allowance.limit,
+            "plan": plan.id,
+            "plan_label": plan.label,
+            # Names the remedy explicitly so the UI does not have to infer that this
+            # is an upgrade prompt rather than a top-up prompt.
+            "remedy": "upgrade_or_wait",
+        },
+    )
 
 
 # 8. Scheduled run editing

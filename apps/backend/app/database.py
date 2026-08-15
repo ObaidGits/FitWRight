@@ -53,9 +53,11 @@ from app.models import (
     CreditPurchase,
     CreditReservation,
     CreditTransaction,
+    DailyUsageCounter,
     DiscoveryCache,
     DiscoveryResult,
     DiscoveryRun,
+    FeaturePrice,
     Improvement,
     Interview,
     Job,
@@ -69,6 +71,7 @@ from app.models import (
     ResumeVersion,
     SearchDocument,
     SiteRecipeModel,
+    SubscriptionPlan,
     TailorPreview,
     User,
     UserErrorReport,
@@ -4379,6 +4382,321 @@ class Database:
             "created_at": row.created_at,
             "updated_at": row.updated_at,
         }
+
+    # ------------------------------------------------------------------
+    # Feature prices (admin-editable, migration 0040)
+    # ------------------------------------------------------------------
+
+    async def list_feature_prices(
+        self, *, only_active: bool = False
+    ) -> list[dict[str, Any]]:
+        """Every priced action, in the operator's chosen display order.
+
+        ``only_active`` is what the customer-facing pricing screen uses; the admin sees
+        withdrawn rows too, because a retired price is a state to manage rather than a
+        row to lose (the usage ledger still references its feature key).
+        """
+        async with self._session() as session:
+            stmt = select(FeaturePrice).order_by(
+                FeaturePrice.sort_order, FeaturePrice.credits.desc()
+            )
+            if only_active:
+                stmt = stmt.where(FeaturePrice.active.is_(True))
+            rows = (await session.execute(stmt)).scalars().all()
+            return [self._feature_price_to_dict(r) for r in rows]
+
+    async def get_feature_price(self, feature: str) -> dict[str, Any] | None:
+        async with self._session() as session:
+            row = (
+                await session.execute(
+                    select(FeaturePrice).where(FeaturePrice.feature == feature)
+                )
+            ).scalars().first()
+            return self._feature_price_to_dict(row) if row is not None else None
+
+    async def upsert_feature_price(self, feature: str, **fields: Any) -> dict[str, Any]:
+        """Create or update one feature's price.
+
+        Validation sits here, at the last point before the number that gets charged is
+        written: a negative price would credit the user for using a feature, and a
+        charged action priced at zero is almost always a half-finished edit rather than
+        an intention (``is_charged=False`` is how you make something free on purpose).
+        """
+        now = _now()
+
+        credits = fields.get("credits")
+        if credits is not None and int(credits) < 0:
+            raise ValueError("A feature price cannot be negative.")
+
+        async with self._session() as session:
+            async with session.begin():
+                row = (
+                    await session.execute(
+                        select(FeaturePrice).where(FeaturePrice.feature == feature)
+                    )
+                ).scalars().first()
+
+                if row is None:
+                    row = FeaturePrice(
+                        feature=feature,
+                        label=str(fields.get("label") or feature),
+                        credits=int(fields.get("credits") or 0),
+                        created_at=now,
+                        updated_at=now,
+                    )
+                    session.add(row)
+
+                for key in (
+                    "label",
+                    "credits",
+                    "is_charged",
+                    "active",
+                    "sort_order",
+                    "description",
+                ):
+                    if key in fields:
+                        setattr(row, key, fields[key])
+
+                # Judged after the merge so it evaluates the resulting row, not the
+                # patch: flipping is_charged on while credits are still 0 would
+                # otherwise slip through and silently make a paid action free.
+                if row.is_charged and row.credits <= 0:
+                    raise ValueError(
+                        "A charged feature must cost at least one credit. "
+                        "Turn off 'charged' to make it free instead."
+                    )
+
+                row.updated_at = now
+                await session.flush()
+                return self._feature_price_to_dict(row)
+
+    @staticmethod
+    def _feature_price_to_dict(row: FeaturePrice) -> dict[str, Any]:
+        return {
+            "feature": row.feature,
+            "label": row.label,
+            "credits": int(row.credits),
+            "is_charged": bool(row.is_charged),
+            "active": bool(row.active),
+            "sort_order": row.sort_order,
+            "description": row.description,
+            "created_at": row.created_at,
+            "updated_at": row.updated_at,
+        }
+
+    # ------------------------------------------------------------------
+    # Subscription plans (admin-editable, migration 0040)
+    # ------------------------------------------------------------------
+
+    async def list_subscription_plans(
+        self, *, only_active: bool = False
+    ) -> list[dict[str, Any]]:
+        async with self._session() as session:
+            stmt = select(SubscriptionPlan).order_by(
+                SubscriptionPlan.sort_order, SubscriptionPlan.price_minor
+            )
+            if only_active:
+                stmt = stmt.where(SubscriptionPlan.active.is_(True))
+            rows = (await session.execute(stmt)).scalars().all()
+            return [self._plan_to_dict(r) for r in rows]
+
+    async def get_subscription_plan(self, plan_id: str) -> dict[str, Any] | None:
+        async with self._session() as session:
+            row = (
+                await session.execute(
+                    select(SubscriptionPlan).where(SubscriptionPlan.id == plan_id)
+                )
+            ).scalars().first()
+            return self._plan_to_dict(row) if row is not None else None
+
+    async def get_default_subscription_plan(self) -> dict[str, Any] | None:
+        """The plan a new account lands on.
+
+        Prefers the explicitly-flagged default; falls back to the cheapest active plan
+        so a deployment that forgot to flag one still behaves sanely instead of
+        granting nobody anything.
+        """
+        async with self._session() as session:
+            row = (
+                await session.execute(
+                    select(SubscriptionPlan)
+                    .where(SubscriptionPlan.is_default.is_(True))
+                    .where(SubscriptionPlan.active.is_(True))
+                    .order_by(SubscriptionPlan.sort_order)
+                )
+            ).scalars().first()
+            if row is None:
+                row = (
+                    await session.execute(
+                        select(SubscriptionPlan)
+                        .where(SubscriptionPlan.active.is_(True))
+                        .order_by(SubscriptionPlan.price_minor, SubscriptionPlan.sort_order)
+                    )
+                ).scalars().first()
+            return self._plan_to_dict(row) if row is not None else None
+
+    async def upsert_subscription_plan(self, plan_id: str, **fields: Any) -> dict[str, Any]:
+        """Create or update one plan.
+
+        ``is_default`` is exclusive: setting it here clears it everywhere else in the
+        same transaction. Two default plans would make "which tier does a new user get?"
+        depend on row order, which is the kind of ambiguity that only shows up once real
+        users are landing on the wrong tier.
+        """
+        now = _now()
+
+        if (credits := fields.get("monthly_credits")) is not None and int(credits) < 0:
+            raise ValueError("Monthly credits cannot be negative.")
+        if (price := fields.get("price_minor")) is not None and int(price) < 0:
+            raise ValueError("A price cannot be negative.")
+        if (limit := fields.get("search_daily_limit")) is not None and int(limit) < 0:
+            raise ValueError("A daily search limit cannot be negative.")
+
+        async with self._session() as session:
+            async with session.begin():
+                row = (
+                    await session.execute(
+                        select(SubscriptionPlan).where(SubscriptionPlan.id == plan_id)
+                    )
+                ).scalars().first()
+
+                if row is None:
+                    row = SubscriptionPlan(
+                        id=plan_id,
+                        label=str(fields.get("label") or plan_id),
+                        created_at=now,
+                        updated_at=now,
+                    )
+                    session.add(row)
+
+                for key in (
+                    "label",
+                    "price_minor",
+                    "currency",
+                    "monthly_credits",
+                    "search_daily_limit",
+                    "is_default",
+                    "active",
+                    "sort_order",
+                    "description",
+                ):
+                    if key in fields:
+                        setattr(row, key, fields[key])
+
+                row.updated_at = now
+                await session.flush()
+
+                if row.is_default:
+                    await session.execute(
+                        sa_update(SubscriptionPlan)
+                        .where(SubscriptionPlan.id != plan_id)
+                        .values(is_default=False, updated_at=now)
+                    )
+
+                return self._plan_to_dict(row)
+
+    async def delete_subscription_plan(self, plan_id: str) -> bool:
+        """Remove a plan. Accounts that were on it fall back to the default at read
+        time, which is why there is no foreign key and nothing to cascade."""
+        async with self._session() as session:
+            async with session.begin():
+                result = await session.execute(
+                    delete(SubscriptionPlan).where(SubscriptionPlan.id == plan_id)
+                )
+                return bool(result.rowcount)
+
+    async def set_account_plan(self, user_id: str, plan_id: str | None) -> None:
+        """Place an account on a plan. Does not touch the balance.
+
+        Granting the new plan's allowance is deliberately a separate step
+        (``ai_allowance.ensure_allowance``), so moving someone between tiers cannot
+        accidentally mint credits as a side effect of an admin edit.
+        """
+        now = _now()
+        async with self._session() as session:
+            async with session.begin():
+                await session.execute(
+                    sa_update(CreditAccount)
+                    .where(CreditAccount.user_id == user_id)
+                    .values(plan_id=plan_id, updated_at=now)
+                )
+
+    @staticmethod
+    def _plan_to_dict(row: SubscriptionPlan) -> dict[str, Any]:
+        return {
+            "id": row.id,
+            "label": row.label,
+            "price_minor": int(row.price_minor),
+            "currency": row.currency,
+            "monthly_credits": int(row.monthly_credits),
+            "search_daily_limit": row.search_daily_limit,
+            "is_default": bool(row.is_default),
+            "active": bool(row.active),
+            "sort_order": row.sort_order,
+            "description": row.description,
+            "created_at": row.created_at,
+            "updated_at": row.updated_at,
+        }
+
+    # ------------------------------------------------------------------
+    # Daily usage counters - free actions that still need a ceiling (0040)
+    # ------------------------------------------------------------------
+
+    async def get_daily_usage(self, user_id: str, *, kind: str, day: str) -> int:
+        async with self._session() as session:
+            row = (
+                await session.execute(
+                    select(DailyUsageCounter.count)
+                    .where(DailyUsageCounter.user_id == user_id)
+                    .where(DailyUsageCounter.kind == kind)
+                    .where(DailyUsageCounter.day == day)
+                )
+            ).scalars().first()
+            return int(row or 0)
+
+    async def increment_daily_usage(
+        self, user_id: str, *, kind: str, day: str, limit: int | None = None
+    ) -> tuple[bool, int]:
+        """Count one use of a capped free action. Returns ``(allowed, count_after)``.
+
+        The check and the increment are ONE atomic statement, because the whole point of
+        a cap is that concurrent requests cannot each read "9 of 10" and both proceed.
+        Implemented as an insert-then-conditional-update rather than a read-modify-write
+        for the same reason the credit reserve path is: this app has already shipped a
+        lost-update bug in exactly that shape.
+
+        ``limit=None`` means uncapped - the counter is still recorded, so an operator can
+        see the volume before deciding to cap it.
+        """
+        now = _now()
+        async with self._session() as session:
+            async with session.begin():
+                row = (
+                    await session.execute(
+                        select(DailyUsageCounter)
+                        .where(DailyUsageCounter.user_id == user_id)
+                        .where(DailyUsageCounter.kind == kind)
+                        .where(DailyUsageCounter.day == day)
+                        .with_for_update()
+                    )
+                ).scalars().first()
+
+                if row is None:
+                    if limit is not None and limit <= 0:
+                        return (False, 0)
+                    session.add(
+                        DailyUsageCounter(
+                            user_id=user_id, kind=kind, day=day, count=1, updated_at=now
+                        )
+                    )
+                    return (True, 1)
+
+                if limit is not None and int(row.count) >= limit:
+                    return (False, int(row.count))
+
+                row.count = int(row.count) + 1
+                row.updated_at = now
+                return (True, int(row.count))
 
     # ------------------------------------------------------------------
     # Credit purchases (spec Phase 4). Grants happen ONLY here, from a verified

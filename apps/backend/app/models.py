@@ -1516,6 +1516,109 @@ class CreditPack(Base):
     __table_args__ = (Index("ix_credit_packs_active_sort", "active", "sort_order"),)
 
 
+class FeaturePrice(Base):
+    """What one AI action costs, editable from the admin panel (migration 0040).
+
+    This replaced a variable charge. The cost used to be the p95 of what the feature
+    had recently consumed in tokens, which is the honest figure for what the OPERATOR
+    paid but an unusable one to quote to a user: a range cannot be displayed as a
+    price, and a charge that differs from the number the user was shown reads as being
+    cheated. One published integer per feature fixes that.
+
+    Token metering is unaffected and still records real consumption - that is what the
+    admin spend and margin views are built from. It simply no longer decides what the
+    user pays.
+    """
+
+    __tablename__ = "feature_prices"
+
+    #: The key the spend path already uses ("resume_tailor"). Stable: the usage ledger
+    #: records it and those rows outlive any price edit.
+    feature: Mapped[str] = mapped_column(String, primary_key=True)
+    #: User-facing name. "Tailored resume", never "resume_tailor".
+    label: Mapped[str] = mapped_column(String, nullable=False)
+    credits: Mapped[int] = mapped_column(Integer, nullable=False)
+    #: False = runs without spending credits. Deliberately separate from a price of 0,
+    #: so "free on purpose" and "not priced yet" cannot be confused.
+    is_charged: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    sort_order: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=100, server_default="100"
+    )
+    description: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[str] = mapped_column(String, nullable=False, default=_utcnow_iso)
+    updated_at: Mapped[str] = mapped_column(String, nullable=False, default=_utcnow_iso)
+
+    __table_args__ = (Index("ix_feature_prices_active_sort", "active", "sort_order"),)
+
+
+class SubscriptionPlan(Base):
+    """A monthly tier: its price, its credit allowance, its search ceiling (0040).
+
+    The monthly grant used to be one global env var, so every user necessarily got the
+    same allowance and there was no notion of a paid tier at all. A plan row is what
+    makes "which package am I on?" answerable - which is the prerequisite for a badge,
+    an upgrade screen, and admin plan management.
+
+    ``search_daily_limit`` prices nothing; it caps a FREE action. Job search is not
+    charged because metering exploration teaches users to stop exploring, and
+    exploring is what produces the applications that are charged. An uncapped search
+    would still be an invitation to hammer job boards, so it gets a ceiling instead.
+    """
+
+    __tablename__ = "subscription_plans"
+
+    #: Operator-chosen slug ("free", "job_hunt"). Recorded on credit_accounts, so it
+    #: must stay stable across edits to the plan's label or price.
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    label: Mapped[str] = mapped_column(String, nullable=False)
+    #: 0 for the free tier. Smallest currency unit, tax-inclusive, as credit_packs.
+    price_minor: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, server_default="INR")
+    #: Granted on first touch and re-granted at each monthly period boundary.
+    monthly_credits: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    #: Fair-use ceiling for non-billed searches. 0 = none allowed; NULL = uncapped.
+    search_daily_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    #: The tier a new account lands on. Exactly one plan should carry this.
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    sort_order: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=100, server_default="100"
+    )
+    description: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[str] = mapped_column(String, nullable=False, default=_utcnow_iso)
+    updated_at: Mapped[str] = mapped_column(String, nullable=False, default=_utcnow_iso)
+
+    __table_args__ = (
+        Index("ix_subscription_plans_active_sort", "active", "sort_order"),
+    )
+
+
+class DailyUsageCounter(Base):
+    """Per-day count of a free-but-capped action (migration 0040).
+
+    Generic in ``kind`` on purpose: the next rate-limited-but-unpriced action should
+    not need another table. The composite primary key is what makes "one row per user
+    per kind per day" a database guarantee rather than application discipline.
+    """
+
+    __tablename__ = "daily_usage_counters"
+
+    user_id: Mapped[str] = mapped_column(String, primary_key=True)
+    #: UTC calendar day, "YYYY-MM-DD". A date string, not a timestamp, so the key
+    #: itself enforces one row per day.
+    day: Mapped[str] = mapped_column(String(10), primary_key=True)
+    kind: Mapped[str] = mapped_column(String, primary_key=True)
+    count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    updated_at: Mapped[str] = mapped_column(String, nullable=False, default=_utcnow_iso)
+
+
 class CreditPurchase(Base):
     """One attempt to buy credits (migration 0038).
 
@@ -1715,6 +1818,11 @@ class CreditAccount(Base):
     __tablename__ = "credit_accounts"
 
     user_id: Mapped[str] = mapped_column(String, primary_key=True)
+    # Which subscription plan this account is on (migration 0040). NULL = "not placed
+    # on a plan yet", resolved to the default plan at READ time rather than backfilled,
+    # because a backfill misses every account created after it ran. No FK on purpose: a
+    # retired plan must not stop its former accounts from rendering.
+    plan_id: Mapped[str | None] = mapped_column(String, nullable=True)
     # Recurring free grant. Use-it-or-lose-it.
     allowance_credits: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default="0"

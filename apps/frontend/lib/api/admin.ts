@@ -1020,6 +1020,107 @@ async function deleteCreditPack(id: string): Promise<void> {
   if (!res.ok) await json<unknown>(res);
 }
 
+/* ---------------------------------------------------------------- *
+ * Feature prices and subscription plans (migration 0040)
+ * ---------------------------------------------------------------- */
+
+export interface FeaturePriceRow {
+  feature: string;
+  label: string;
+  credits: number;
+  /** False = free on purpose. Kept separate from a price of 0 so the number survives. */
+  is_charged: boolean;
+  active: boolean;
+  sort_order: number;
+  description: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FeaturePriceInput {
+  label?: string;
+  credits?: number;
+  is_charged?: boolean;
+  active?: boolean;
+  sort_order?: number;
+  description?: string | null;
+}
+
+export interface SubscriptionPlanRow {
+  id: string;
+  label: string;
+  price_minor: number;
+  currency: string;
+  monthly_credits: number;
+  /** null = uncapped searches. */
+  search_daily_limit: number | null;
+  is_default: boolean;
+  active: boolean;
+  sort_order: number;
+  description: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SubscriptionPlanInput {
+  label?: string;
+  price_minor?: number;
+  currency?: string;
+  monthly_credits?: number;
+  search_daily_limit?: number | null;
+  is_default?: boolean;
+  active?: boolean;
+  sort_order?: number;
+  description?: string | null;
+  /** Explicit, because `null` on search_daily_limit means "leave alone". */
+  clear_search_limit?: boolean;
+}
+
+async function listFeaturePrices(): Promise<{ prices: FeaturePriceRow[]; unpriced: string[] }> {
+  return json<{ prices: FeaturePriceRow[]; unpriced: string[] }>(
+    await apiFetch('/admin/ai/feature-prices')
+  );
+}
+
+async function createFeaturePrice(
+  feature: string,
+  input: FeaturePriceInput
+): Promise<FeaturePriceRow> {
+  return json<FeaturePriceRow>(
+    await apiPost(`/admin/ai/feature-prices/${encodeURIComponent(feature)}`, input)
+  );
+}
+
+async function updateFeaturePrice(
+  feature: string,
+  input: FeaturePriceInput
+): Promise<FeaturePriceRow> {
+  return json<FeaturePriceRow>(
+    await apiPatch(`/admin/ai/feature-prices/${encodeURIComponent(feature)}`, input)
+  );
+}
+
+async function listPlans(): Promise<SubscriptionPlanRow[]> {
+  return json<SubscriptionPlanRow[]>(await apiFetch('/admin/ai/plans'));
+}
+
+async function createPlan(id: string, input: SubscriptionPlanInput): Promise<SubscriptionPlanRow> {
+  return json<SubscriptionPlanRow>(
+    await apiPost(`/admin/ai/plans/${encodeURIComponent(id)}`, input)
+  );
+}
+
+async function updatePlan(id: string, input: SubscriptionPlanInput): Promise<SubscriptionPlanRow> {
+  return json<SubscriptionPlanRow>(
+    await apiPatch(`/admin/ai/plans/${encodeURIComponent(id)}`, input)
+  );
+}
+
+async function deletePlan(id: string): Promise<void> {
+  const res = await apiDelete(`/admin/ai/plans/${encodeURIComponent(id)}`);
+  if (!res.ok) await json<unknown>(res);
+}
+
 export const adminApi = {
   getStats,
   getUsageSeries,
@@ -1043,6 +1144,13 @@ export const adminApi = {
   createCreditPack,
   updateCreditPack,
   deleteCreditPack,
+  listFeaturePrices,
+  createFeaturePrice,
+  updateFeaturePrice,
+  listPlans,
+  createPlan,
+  updatePlan,
+  deletePlan,
   createAiChannel,
   updateAiChannel,
   deleteAiChannel,

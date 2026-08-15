@@ -468,6 +468,240 @@ async def delete_pack(
     )
 
 
+# ======================================================================
+# Feature prices - what each AI action costs the user
+# ======================================================================
+
+
+class FeaturePriceIn(BaseModel):
+    """Create or update one feature's price.
+
+    ``is_charged`` is separate from ``credits`` on purpose. Making something free by
+    setting its price to zero loses the price you had, and makes "free on purpose"
+    indistinguishable from "not filled in yet" - so free is its own switch and the
+    number it would otherwise cost is preserved underneath it.
+    """
+
+    label: str = Field(min_length=1, max_length=80)
+    credits: int = Field(ge=0, le=1_000_000)
+    is_charged: bool = True
+    active: bool = True
+    sort_order: int = 100
+    description: str | None = Field(default=None, max_length=200)
+
+
+class FeaturePricePatch(BaseModel):
+    label: str | None = Field(default=None, min_length=1, max_length=80)
+    credits: int | None = Field(default=None, ge=0, le=1_000_000)
+    is_charged: bool | None = None
+    active: bool | None = None
+    sort_order: int | None = None
+    description: str | None = Field(default=None, max_length=200)
+
+
+@router.get("/feature-prices")
+async def list_feature_prices(
+    _admin: Principal = Depends(require_admin_read),
+) -> dict[str, Any]:
+    """Every priced action, plus the features the code spends against.
+
+    ``unpriced`` matters: a feature the code charges for but which has no row runs on
+    the built-in fallback, so it is neither visible nor editable here. Surfacing the
+    gap is the difference between an operator who knows their price list is incomplete
+    and one who finds out from a margin report.
+    """
+    from app.ai_feature_prices import DEFAULT_FEATURE_PRICES
+
+    rows = await db.list_feature_prices()
+    known = {r["feature"] for r in rows}
+    return {
+        "prices": rows,
+        "unpriced": sorted(f for f in DEFAULT_FEATURE_PRICES if f not in known),
+    }
+
+
+@router.post("/feature-prices/{feature}", status_code=201)
+async def create_feature_price(
+    feature: str,
+    payload: FeaturePriceIn,
+    _admin: Principal = Depends(require_admin_manage),
+) -> dict[str, Any]:
+    if await db.get_feature_price(feature) is not None:
+        raise HTTPException(
+            status_code=409, detail="A price for that feature already exists."
+        )
+    try:
+        created = await db.upsert_feature_price(feature, **payload.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    from app.ai_feature_prices import invalidate_price_cache
+
+    invalidate_price_cache()
+    await _audit(
+        AuditEvent.ADMIN_AI_FEATURE_PRICE_CHANGED,
+        _admin,
+        meta={
+            "feature": feature,
+            "action": "created",
+            "credits": payload.credits,
+            "is_charged": payload.is_charged,
+        },
+    )
+    return created
+
+
+@router.patch("/feature-prices/{feature}")
+async def update_feature_price(
+    feature: str,
+    payload: FeaturePricePatch,
+    _admin: Principal = Depends(require_admin_manage),
+) -> dict[str, Any]:
+    if await db.get_feature_price(feature) is None:
+        raise HTTPException(status_code=404, detail="Feature price not found")
+
+    fields = payload.model_dump(exclude_unset=True)
+    fields = {k: v for k, v in fields.items() if v is not None}
+    try:
+        updated = await db.upsert_feature_price(feature, **fields)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    from app.ai_feature_prices import invalidate_price_cache
+
+    # Dropped immediately so the operator's next page load reflects the edit. Other
+    # workers catch up within the cache TTL - see app/ai_feature_prices.
+    invalidate_price_cache()
+    await _audit(
+        AuditEvent.ADMIN_AI_FEATURE_PRICE_CHANGED,
+        _admin,
+        meta={"feature": feature, "action": "updated", "changed": sorted(fields.keys())},
+    )
+    return updated
+
+
+# ======================================================================
+# Subscription plans - the monthly tiers
+# ======================================================================
+
+
+class PlanIn(BaseModel):
+    label: str = Field(min_length=1, max_length=80)
+    price_minor: int = Field(default=0, ge=0, le=100_000_000)
+    currency: str = Field(default="INR", min_length=3, max_length=3)
+    monthly_credits: int = Field(default=0, ge=0, le=10_000_000)
+    #: ``None`` = uncapped searches. Deliberately expressible, deliberately not default.
+    search_daily_limit: int | None = Field(default=None, ge=0, le=100_000)
+    is_default: bool = False
+    active: bool = False
+    sort_order: int = 100
+    description: str | None = Field(default=None, max_length=200)
+
+
+class PlanPatch(BaseModel):
+    label: str | None = Field(default=None, min_length=1, max_length=80)
+    price_minor: int | None = Field(default=None, ge=0, le=100_000_000)
+    currency: str | None = Field(default=None, min_length=3, max_length=3)
+    monthly_credits: int | None = Field(default=None, ge=0, le=10_000_000)
+    search_daily_limit: int | None = Field(default=None, ge=0, le=100_000)
+    is_default: bool | None = None
+    active: bool | None = None
+    sort_order: int | None = None
+    description: str | None = Field(default=None, max_length=200)
+    #: Explicit, because `None` on ``search_daily_limit`` means "leave alone" - there has
+    #: to be an unambiguous way to say "remove the cap".
+    clear_search_limit: bool = False
+
+
+@router.get("/plans")
+async def list_plans(_admin: Principal = Depends(require_admin_read)) -> list[dict[str, Any]]:
+    """Every plan, active or not."""
+    return await db.list_subscription_plans()
+
+
+@router.post("/plans/{plan_id}", status_code=201)
+async def create_plan(
+    plan_id: str,
+    payload: PlanIn,
+    _admin: Principal = Depends(require_admin_manage),
+) -> dict[str, Any]:
+    """Create a plan. It starts INACTIVE unless explicitly activated.
+
+    The slug is permanent: accounts record it, and those rows must keep resolving after
+    the plan is renamed, repriced or withdrawn.
+    """
+    if await db.get_subscription_plan(plan_id) is not None:
+        raise HTTPException(status_code=409, detail="A plan with that id already exists.")
+
+    fields = payload.model_dump()
+    fields["currency"] = str(fields["currency"]).upper()
+    try:
+        created = await db.upsert_subscription_plan(plan_id, **fields)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    await _audit(
+        AuditEvent.ADMIN_AI_PLAN_CHANGED,
+        _admin,
+        meta={
+            "plan_id": plan_id,
+            "action": "created",
+            "price_minor": payload.price_minor,
+            "monthly_credits": payload.monthly_credits,
+            "active": payload.active,
+        },
+    )
+    return created
+
+
+@router.patch("/plans/{plan_id}")
+async def update_plan(
+    plan_id: str,
+    payload: PlanPatch,
+    _admin: Principal = Depends(require_admin_manage),
+) -> dict[str, Any]:
+    if await db.get_subscription_plan(plan_id) is None:
+        raise HTTPException(status_code=404, detail="Plan not found")
+
+    fields = payload.model_dump(exclude_unset=True, exclude={"clear_search_limit"})
+    fields = {k: v for k, v in fields.items() if v is not None}
+    if "currency" in fields:
+        fields["currency"] = str(fields["currency"]).upper()
+    if payload.clear_search_limit:
+        fields["search_daily_limit"] = None
+
+    try:
+        updated = await db.upsert_subscription_plan(plan_id, **fields)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    await _audit(
+        AuditEvent.ADMIN_AI_PLAN_CHANGED,
+        _admin,
+        meta={"plan_id": plan_id, "action": "updated", "changed": sorted(fields.keys())},
+    )
+    return updated
+
+
+@router.delete("/plans/{plan_id}", status_code=204)
+async def delete_plan(
+    plan_id: str, _admin: Principal = Depends(require_admin_manage)
+) -> None:
+    """Delete a plan. Accounts on it fall back to the default at read time.
+
+    Deactivating is usually better: a withdrawn-but-present plan still explains the
+    accounts that reference it, whereas a deleted one leaves them silently on the
+    default tier.
+    """
+    if not await db.delete_subscription_plan(plan_id):
+        raise HTTPException(status_code=404, detail="Plan not found")
+    await _audit(
+        AuditEvent.ADMIN_AI_PLAN_CHANGED,
+        _admin,
+        meta={"plan_id": plan_id, "action": "deleted"},
+    )
+
+
 @router.post("/channels/{channel_id}/test")
 async def test_channel(
     channel_id: str, _admin: Principal = Depends(require_admin_manage)

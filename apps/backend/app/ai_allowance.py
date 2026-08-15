@@ -82,14 +82,30 @@ async def ensure_allowance(user_id: str, *, account: dict | None = None) -> dict
     if _period_of(acct.get("allowance_period_start")) == period:
         return acct
 
-    amount = resolve_allowance(acct, global_default=settings.ai_monthly_allowance_credits)
+    # The monthly grant now comes from the user's PLAN, not one global number. A
+    # per-user override still wins over both, because an operator who deliberately
+    # restricted (or comped) one account must not have that silently widened by a plan
+    # edit. Falls back to the global setting only when no plan can be resolved at all.
+    from app.ai_plans import resolve_account_plan
+
+    plan = await resolve_account_plan(db, acct)
+    # A real plan row wins. When none exists, the operator's configured setting wins
+    # over the built-in stand-in - an install that never seeded plans has often still
+    # set AI_MONTHLY_ALLOWANCE_CREDITS deliberately, and quietly replacing it with a
+    # default would change what its existing users are granted.
+    plan_default = (
+        settings.ai_monthly_allowance_credits
+        if plan.is_fallback
+        else plan.monthly_credits
+    )
+    amount = resolve_allowance(acct, global_default=plan_default)
     status = await db.grant_credits(
         user_id,
         credits=amount,
         kind="allowance",
         # The whole idempotency story in one string.
         idempotency_key=f"allowance:{user_id}:{period}",
-        reason=f"Monthly free allowance for {period}",
+        reason=f"Monthly {'free' if plan.is_fallback else plan.label} allowance for {period}",
         to_wallet=False,
         period_start=datetime.now(timezone.utc).isoformat(),
     )

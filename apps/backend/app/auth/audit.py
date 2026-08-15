@@ -122,6 +122,11 @@ class AuditEvent:
     # CUSTOMER is charged, and "who lowered this price and when" is the first question
     # asked after a bad month.
     ADMIN_AI_PACK_CHANGED = "admin.ai_pack_changed"
+    # Feature prices and plan definitions. Same reasoning as pack pricing: both decide
+    # what a customer is charged and what they receive for it, so an unexplained change
+    # to either needs a name and a timestamp attached to it.
+    ADMIN_AI_FEATURE_PRICE_CHANGED = "admin.ai_feature_price_changed"
+    ADMIN_AI_PLAN_CHANGED = "admin.ai_plan_changed"
     ADMIN_INVITE_REDEEMED = "admin.invite_redeemed"
 
 

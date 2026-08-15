@@ -3,6 +3,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import Settings from 'lucide-react/dist/esm/icons/settings';
+import CreditCard from 'lucide-react/dist/esm/icons/credit-card';
 import LogOut from 'lucide-react/dist/esm/icons/log-out';
 import Shield from 'lucide-react/dist/esm/icons/shield';
 import { useSession } from '@/lib/context/session';
@@ -44,6 +45,14 @@ export function AccountMenu() {
         <DropdownMenuItem asChild>
           <Link href="/settings" className="flex items-center gap-2">
             <Settings className="h-4 w-4" /> Settings
+          </Link>
+        </DropdownMenuItem>
+        {/* Billing lives beside Settings rather than inside it: "what am I paying and
+            what do I have left" is a question of its own, and it used to be answerable
+            only from a card buried in the AI Provider tab. */}
+        <DropdownMenuItem asChild>
+          <Link href="/billing" className="flex items-center gap-2">
+            <CreditCard className="h-4 w-4" /> Plan &amp; billing
           </Link>
         </DropdownMenuItem>
         {isAdmin && (

@@ -37,6 +37,7 @@ const NAV = [
   { href: '/admin/spend', label: 'AI spend', icon: Coins },
   { href: '/admin/ai-ops', label: 'AI ops', icon: Activity },
   { href: '/admin/packs', label: 'Credit packs', icon: Tag },
+  { href: '/admin/pricing', label: 'Pricing', icon: Coins },
   { href: '/admin/storage', label: 'Storage', icon: Database },
   { href: '/admin/errors', label: 'Error reports', icon: TriangleAlert },
   { href: '/admin/audit', label: 'Audit', icon: ScrollText },

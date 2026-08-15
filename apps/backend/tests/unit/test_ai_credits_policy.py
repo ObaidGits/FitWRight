@@ -5,7 +5,6 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from app.ai_credits import (
-    FEATURE_FALLBACK_TOKENS,
     credits_for_tokens,
     describe_balance,
     estimate_credits,
@@ -38,42 +37,110 @@ class TestConversion:
         assert isinstance(credits_for_tokens(12345), int)
 
 
-class TestEstimates:
-    @pytest.mark.asyncio
-    async def test_uses_observed_usage_when_available(self):
-        class Db:
-            async def feature_usage_percentile(self, feature, percentile=0.95):
-                return 10000
+class TestPublishedPrice:
+    """The charge is the PUBLISHED price now, not a percentile of past token use.
 
-        got = await estimate_credits(Db(), "resume_tailor")
-        # 10000 tokens * 1.3 headroom = 13000 -> 13 credits
-        assert got == 13
+    A variable charge cannot be quoted before the action runs, and a final charge that
+    differs from the number the user was shown reads as being cheated. These tests pin
+    that the price comes from the admin-editable rows and that nothing about a token
+    measurement can move it.
+    """
 
     @pytest.mark.asyncio
-    async def test_falls_back_to_a_conservative_constant_when_data_is_thin(self):
+    async def test_uses_the_admin_set_price(self):
         class Db:
-            async def feature_usage_percentile(self, feature, percentile=0.95):
-                return None
+            async def list_feature_prices(self, only_active: bool = False):
+                return [
+                    {
+                        "feature": "resume_tailor",
+                        "label": "Tailored resume",
+                        "credits": 20,
+                        "is_charged": True,
+                        "active": True,
+                        "sort_order": 10,
+                        "description": None,
+                    }
+                ]
 
-        got = await estimate_credits(Db(), "cover_letter")
-        expected = credits_for_tokens(int(FEATURE_FALLBACK_TOKENS["cover_letter"] * 1.3))
-        assert got == expected
+        from app.ai_feature_prices import invalidate_price_cache
+
+        invalidate_price_cache()
+        assert await estimate_credits(Db(), "resume_tailor") == 20
 
     @pytest.mark.asyncio
-    async def test_an_unknown_feature_still_gets_an_estimate(self):
-        """A new feature must not crash a request just because it has no entry."""
-        class Db:
-            async def feature_usage_percentile(self, feature, percentile=0.95):
-                return None
+    async def test_observed_token_usage_does_not_change_the_charge(self):
+        """The old behaviour, explicitly rejected: a feature that happened to consume
+        more tokens must not silently cost the user more than the price list says."""
 
+        class Db:
+            async def list_feature_prices(self, only_active: bool = False):
+                return [
+                    {
+                        "feature": "cover_letter",
+                        "label": "Cover letter",
+                        "credits": 4,
+                        "is_charged": True,
+                        "active": True,
+                        "sort_order": 10,
+                        "description": None,
+                    }
+                ]
+
+            async def feature_usage_percentile(self, feature, percentile=0.95):
+                return 999_000  # enormous real usage
+
+        from app.ai_feature_prices import invalidate_price_cache
+
+        invalidate_price_cache()
+        assert await estimate_credits(Db(), "cover_letter") == 4
+
+    @pytest.mark.asyncio
+    async def test_a_feature_marked_free_costs_nothing(self):
+        class Db:
+            async def list_feature_prices(self, only_active: bool = False):
+                return [
+                    {
+                        "feature": "match_score",
+                        "label": "Match score",
+                        "credits": 4,
+                        # Free on purpose. The price is retained underneath so turning
+                        # charging back on does not require re-entering it.
+                        "is_charged": False,
+                        "active": True,
+                        "sort_order": 10,
+                        "description": None,
+                    }
+                ]
+
+        from app.ai_feature_prices import invalidate_price_cache
+
+        invalidate_price_cache()
+        assert await estimate_credits(Db(), "match_score") == 0
+
+    @pytest.mark.asyncio
+    async def test_an_unpriced_feature_falls_back_rather_than_running_free(self):
+        """A missing price row must not mean free. An unpriced feature that runs for
+        nothing is a revenue leak nobody notices."""
+
+        class Db:
+            async def list_feature_prices(self, only_active: bool = False):
+                return []
+
+        from app.ai_feature_prices import invalidate_price_cache
+
+        invalidate_price_cache()
+        assert await estimate_credits(Db(), "resume_tailor") > 0
         assert await estimate_credits(Db(), "brand_new_feature") > 0
 
     @pytest.mark.asyncio
-    async def test_estimation_failure_does_not_block_the_user(self):
+    async def test_a_lookup_failure_does_not_block_the_user(self):
         class Db:
-            async def feature_usage_percentile(self, feature, percentile=0.95):
-                raise RuntimeError("ledger unavailable")
+            async def list_feature_prices(self, only_active: bool = False):
+                raise RuntimeError("database unavailable")
 
+        from app.ai_feature_prices import invalidate_price_cache
+
+        invalidate_price_cache()
         assert await estimate_credits(Db(), "resume_tailor") > 0
 
 
@@ -134,15 +201,22 @@ class TestVelocity:
 
 class TestUserFacingDescription:
     def test_describes_balance_in_actions_not_credits(self):
-        """'About 12 more tailorings' is actionable; '148 credits' is not."""
-        text = describe_balance(260, feature="resume_tailor")
-        assert "resume" in text and "10" in text
+        """'About 10 more applications' is actionable; '260 credits' is not."""
+        text = describe_balance(260, per_action_credits=26)
+        assert "application" in text and "10" in text
 
     def test_singular_reads_naturally(self):
-        per_action = credits_for_tokens(int(FEATURE_FALLBACK_TOKENS["resume_tailor"] * 1.3))
-        assert describe_balance(per_action, feature="resume_tailor") == (
-            "about 1 more tailored resume"
-        )
+        assert describe_balance(26, per_action_credits=26) == "about 1 more application"
 
     def test_an_empty_balance_says_so_plainly(self):
-        assert "not enough" in describe_balance(0, feature="resume_tailor")
+        assert "not enough" in describe_balance(0, per_action_credits=26)
+
+    def test_the_per_action_figure_is_supplied_not_assumed(self):
+        """It is passed in so the sentence uses the SAME number the pricing screen
+        shows. Deriving it independently in two places is how a balance summary ends up
+        contradicting the price list beside it."""
+        assert describe_balance(100, per_action_credits=10) == "about 10 more applications"
+        assert describe_balance(100, per_action_credits=50) == "about 2 more applications"
+
+    def test_a_zero_price_cannot_divide_by_zero(self):
+        assert "application" in describe_balance(100, per_action_credits=0)

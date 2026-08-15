@@ -30,7 +30,6 @@ logger = logging.getLogger(__name__)
 
 __all__ = [
     "CREDITS_PER_1K_TOKENS",
-    "FEATURE_FALLBACK_TOKENS",
     "SpendDecision",
     "credits_for_tokens",
     "describe_balance",
@@ -40,39 +39,10 @@ __all__ = [
     "velocity_exceeded",
 ]
 
-#: Credits charged per 1,000 tokens. The single conversion between the internal
-#: metering unit (tokens) and the user-facing unit (credits). Deliberately a round
-#: number so a user can reason about it, and deliberately NOT derived from a
-#: provider's price list - if it were, switching provider would silently change what
-#: a credit buys, which users experience as being cheated.
+#: Credits charged per 1,000 tokens. Still the conversion used when RECORDING what a
+#: call consumed (the ledger, the admin spend view, margin). It no longer decides what
+#: a user pays - that is the published per-feature price in ``app.ai_feature_prices``.
 CREDITS_PER_1K_TOKENS = 1
-
-#: Conservative per-feature token estimates, used ONLY until the ledger has enough
-#: observations to compute a real p95. Sized generously on purpose: a hold that is
-#: too small gets truncated at settle time and the operator absorbs the overrun,
-#: whereas a hold that is too large only briefly over-reserves.
-FEATURE_FALLBACK_TOKENS = {
-    "resume_parse": 8000,
-    "resume_tailor": 20000,
-    "resume_wizard": 6000,
-    "cover_letter": 4000,
-    "outreach": 2000,
-    "interview_prep": 12000,
-    "enrichment": 3000,
-    "jd_extract": 6000,
-    "discovery_recommend": 10000,
-    "extension_draft": 2000,
-    "match_score": 4000,
-}
-
-#: Used when a feature is not in the table at all - better than raising, so a new
-#: feature cannot crash a request before it has an estimate.
-_DEFAULT_FALLBACK_TOKENS = 8000
-
-#: Multiplier applied to the observed p95 when sizing a hold. The p95 is a typical
-#: worst case, not an absolute one; this leaves headroom so most calls settle inside
-#: their hold rather than being capped.
-_HEADROOM = 1.3
 
 
 @dataclass(frozen=True)
@@ -105,21 +75,26 @@ def credits_for_tokens(total_tokens: int) -> int:
 
 
 async def estimate_credits(db, feature: str) -> int:
-    """Size the hold for ``feature`` from what it has actually been costing.
+    """What ``feature`` will cost this user, from the admin-set price list.
 
-    Falls back to a conservative constant while the ledger is still thin. Never
-    raises: an estimate failure must not block a user from working.
+    This used to be the 95th percentile of the feature's own recent token usage. That
+    is the right number for what the OPERATOR paid, and the wrong one to quote to a
+    user: a variable charge cannot be shown as a price before the action runs, and a
+    final charge that differs from the number on screen reads as being cheated. The
+    published price is now the charge, and it is the same integer the pricing screen
+    renders.
+
+    Token metering did not go away - ``ai_usage_ledger`` still records real consumption,
+    which is what the admin spend and margin views are built from. It simply no longer
+    decides what the user pays.
+
+    Never raises: a pricing lookup failure falls back to the built-in list rather than
+    blocking a user from working.
     """
-    observed: int | None = None
-    try:
-        observed = await db.feature_usage_percentile(feature, percentile=0.95)
-    except Exception:  # pragma: no cover - estimation must never break a request
-        logger.warning("Usage percentile lookup failed for %s; using fallback", feature)
+    from app.ai_feature_prices import resolve_feature_cost
 
-    tokens = observed if observed else FEATURE_FALLBACK_TOKENS.get(
-        feature, _DEFAULT_FALLBACK_TOKENS
-    )
-    return credits_for_tokens(int(tokens * _HEADROOM))
+    cost = await resolve_feature_cost(db, feature)
+    return cost.effective_credits
 
 
 def resolve_allowance(account: dict, *, global_default: int) -> int:
@@ -166,20 +141,27 @@ def velocity_exceeded(
     return (spent + max(0, additional)) > cap
 
 
-def describe_balance(available_credits: int, *, feature: str = "resume_tailor") -> str:
+def describe_balance(
+    available_credits: int,
+    *,
+    per_action_credits: int,
+    action_singular: str = "application",
+    action_plural: str = "applications",
+) -> str:
     """Turn a credit count into something a human can act on.
 
-    "About 12 more tailorings" answers the question a user actually has. A raw
-    credit count does not, which is why credits are never the only thing shown.
+    "About 12 more applications" answers the question a user actually has; "148 credits"
+    does not, which is why credits are never the only thing shown.
+
+    ``per_action_credits`` is passed in rather than looked up here so this stays a pure
+    function, and - more importantly - so the number in this sentence is the same one the
+    pricing screen shows. Deriving it independently in two places is how a balance
+    summary ends up contradicting the price list beside it.
     """
-    per_action = credits_for_tokens(
-        int(FEATURE_FALLBACK_TOKENS.get(feature, _DEFAULT_FALLBACK_TOKENS) * _HEADROOM)
-    )
-    if per_action <= 0:
-        return f"{available_credits} credits"
-    actions = available_credits // per_action
+    per_action = max(1, int(per_action_credits))
+    actions = max(0, int(available_credits)) // per_action
     if actions <= 0:
-        return "not enough for another tailored resume"
+        return f"not enough for another {action_singular}"
     if actions == 1:
-        return "about 1 more tailored resume"
-    return f"about {actions} more tailored resumes"
+        return f"about 1 more {action_singular}"
+    return f"about {actions} more {action_plural}"

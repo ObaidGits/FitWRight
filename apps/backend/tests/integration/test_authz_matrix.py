@@ -229,6 +229,10 @@ OWNED_ENDPOINTS: list[tuple[str, str]] = [
     ("GET", "/api/v1/credits"),
     ("GET", "/api/v1/credits/usage"),
     ("GET", "/api/v1/credits/packs"),
+    # What things cost, and what this user has paid for. Both are the user's OWN data
+    # and both must require a session: the price list names the plan they are on.
+    ("GET", "/api/v1/credits/pricing"),
+    ("GET", "/api/v1/credits/purchases"),
     # The purchase webhook is deliberately NOT here: Razorpay cannot hold a session, so
     # its authentication is the HMAC signature over the raw body. That is pinned by
     # tests/integration/test_ai_razorpay.py instead.
