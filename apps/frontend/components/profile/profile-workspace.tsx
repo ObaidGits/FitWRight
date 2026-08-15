@@ -174,6 +174,16 @@ export function ProfileWorkspace() {
   function patchIdentity(update: Partial<ProfileData['identity']>) {
     setDraft((prev) => (prev ? { ...prev, identity: { ...prev.identity, ...update } } : prev));
   }
+  function patchAddress(update: Partial<ProfileData['identity']['address']>) {
+    setDraft((prev) =>
+      prev
+        ? {
+            ...prev,
+            identity: { ...prev.identity, address: { ...prev.identity.address, ...update } },
+          }
+        : prev
+    );
+  }
 
   async function onSave() {
     if (!draft) return;
@@ -356,6 +366,7 @@ export function ProfileWorkspace() {
             <OverviewSection
               draft={draft}
               onIdentity={patchIdentity}
+              onAddress={patchAddress}
               onPatch={patch}
               onImproveSummary={onImproveSummary}
               improving={aiSuggestMutation.isPending}
@@ -427,6 +438,7 @@ function Field({
 function OverviewSection({
   draft,
   onIdentity,
+  onAddress,
   onPatch,
   onImproveSummary,
   improving,
@@ -437,6 +449,7 @@ function OverviewSection({
 }: {
   draft: ProfileData;
   onIdentity: (u: Partial<ProfileData['identity']>) => void;
+  onAddress: (u: Partial<ProfileData['identity']['address']>) => void;
   onPatch: (u: Partial<ProfileData>) => void;
   onImproveSummary: () => void;
   improving: boolean;
@@ -446,6 +459,7 @@ function OverviewSection({
   onAvatarError: (message: string) => void;
 }) {
   const id = draft.identity;
+  const address = id.address;
   return (
     <Card className="space-y-4 p-5">
       {/* Profile photo - the shared canonical-photo uploader (same as Settings +
@@ -522,6 +536,9 @@ function OverviewSection({
           />
         </Field>
       </div>
+
+      <AddressDisclosure address={address} onChange={onAddress} />
+
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
           <Label htmlFor="p-summary">Professional summary</Label>
@@ -547,6 +564,89 @@ function OverviewSection({
         </p>
       </div>
     </Card>
+  );
+}
+
+function AddressDisclosure({
+  address,
+  onChange,
+}: {
+  address: ProfileData['identity']['address'];
+  onChange: (u: Partial<ProfileData['identity']['address']>) => void;
+}) {
+  const filled = Object.values(address).filter((v) => v.trim() !== '').length;
+  // Collapsed by default so it does not compete with identity fields most
+  // people edit every visit - this is filled once and then forgotten. Auto-open
+  // if there's a draft in progress so an in-flight edit is never hidden.
+  const [open, setOpen] = React.useState(filled > 0 && filled < 6);
+
+  return (
+    <div className="rounded-[var(--radius-at-md)] border border-[var(--border)]">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between px-3 py-2.5 text-left"
+      >
+        <span className="text-sm font-medium text-[var(--foreground)]">
+          Address{' '}
+          <span className="font-normal text-[var(--muted-foreground)]">({filled}/6 filled)</span>
+        </span>
+        <span className="text-[var(--muted-foreground)]">{open ? '−' : '+'}</span>
+      </button>
+      {open && (
+        <div className="space-y-3 border-t border-[var(--border)] p-3">
+          <p className="text-xs text-[var(--muted-foreground)]">
+            Some application forms ask for street, city, state and postal code as separate boxes
+            instead of one line. Fill this once and the extension answers them for you.
+          </p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Street address" htmlFor="p-addr-line1">
+              <Input
+                id="p-addr-line1"
+                value={address.line1}
+                onChange={(e) => onChange({ line1: e.target.value })}
+              />
+            </Field>
+            <Field label="Apartment, suite, etc. (optional)" htmlFor="p-addr-line2">
+              <Input
+                id="p-addr-line2"
+                value={address.line2}
+                onChange={(e) => onChange({ line2: e.target.value })}
+              />
+            </Field>
+            <Field label="City" htmlFor="p-addr-city">
+              <Input
+                id="p-addr-city"
+                value={address.city}
+                onChange={(e) => onChange({ city: e.target.value })}
+              />
+            </Field>
+            <Field label="State or province" htmlFor="p-addr-state">
+              <Input
+                id="p-addr-state"
+                value={address.state}
+                onChange={(e) => onChange({ state: e.target.value })}
+              />
+            </Field>
+            <Field label="Postal code" htmlFor="p-addr-postal">
+              <Input
+                id="p-addr-postal"
+                value={address.postalCode}
+                onChange={(e) => onChange({ postalCode: e.target.value })}
+              />
+            </Field>
+            <Field label="Country" htmlFor="p-addr-country">
+              <Input
+                id="p-addr-country"
+                value={address.country}
+                onChange={(e) => onChange({ country: e.target.value })}
+              />
+            </Field>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

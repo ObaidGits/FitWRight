@@ -12,6 +12,16 @@ import type { TemplateSettings } from '@/lib/types/template-settings';
 
 // --- Domain types (mirror app/profile/schemas.py) --------------------------
 
+/** A postal address, broken into the parts application forms ask for (mirrors ProfileAddress). */
+export interface ProfileAddress {
+  line1: string;
+  line2: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  country: string;
+}
+
 export interface ProfileIdentity {
   name: string;
   headline: string;
@@ -40,6 +50,8 @@ export interface ProfileIdentity {
   linkedin: string | null;
   github: string | null;
   avatarUrl: string | null;
+  /** Structured address for application forms - see ProfileAddress docstring. */
+  address: ProfileAddress;
 }
 
 export interface ProfileExperience {

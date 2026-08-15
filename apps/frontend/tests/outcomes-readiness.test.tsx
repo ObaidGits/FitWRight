@@ -16,12 +16,15 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi } from 'vitest';
 
+import { ToastProvider } from '@/components/atelier/toast';
 import type { Outcomes as OutcomesData, ResumeOutcome } from '@/lib/api/apply-queue';
 import type { Readiness } from '@/lib/api/application-fields';
+import type { ProfileData } from '@/lib/api/professional-profile';
 
 const getOutcomesMock = vi.fn();
 const getReadinessMock = vi.fn();
 const getSummaryMock = vi.fn();
+const getProfessionalProfileMock = vi.fn();
 
 vi.mock('@/lib/api/apply-queue', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/api/apply-queue')>();
@@ -36,6 +39,61 @@ vi.mock('@/lib/api/application-fields', async (importOriginal) => {
     getFieldSummary: (...a: unknown[]) => getSummaryMock(...a),
     listApplicationFields: () => Promise.resolve([]),
   };
+});
+
+vi.mock('@/lib/api/professional-profile', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/api/professional-profile')>();
+  return {
+    ...actual,
+    getProfessionalProfile: (...a: unknown[]) => getProfessionalProfileMock(...a),
+  };
+});
+
+function emptyIdentity(): ProfileData['identity'] {
+  return {
+    name: '',
+    headline: '',
+    currentRole: '',
+    currentCompany: '',
+    yearsExperience: null,
+    industry: '',
+    careerStage: '',
+    targetRoles: [],
+    careerObjective: '',
+    employmentStatus: '',
+    availability: '',
+    remotePreference: '',
+    relocation: null,
+    noticePeriod: '',
+    workAuthorization: '',
+    visaStatus: '',
+    preferredLocations: [],
+    salaryExpectation: '',
+    careerVisibility: 'private',
+    email: '',
+    phone: '',
+    location: '',
+    timezone: '',
+    website: null,
+    linkedin: null,
+    github: null,
+    avatarUrl: null,
+    address: { line1: '', line2: '', city: '', state: '', postalCode: '', country: '' },
+  };
+}
+
+getProfessionalProfileMock.mockResolvedValue({
+  version: 1,
+  data: {
+    identity: emptyIdentity(),
+    summary: '',
+    workExperience: [],
+    education: [],
+    personalProjects: [],
+    skills: { technical: [], soft: [], languages: [], tools: [] },
+    certifications: [],
+    aiMemory: { tone: '', writingStyle: '', targetCompanies: [], targetIndustries: [] },
+  } as unknown as ProfileData,
 });
 
 function resumeRow(overrides: Partial<ResumeOutcome> = {}): ResumeOutcome {
@@ -72,7 +130,11 @@ function readiness(overrides: Partial<Readiness> = {}): Readiness {
 
 function wrap(ui: React.ReactElement) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+  return render(
+    <QueryClientProvider client={client}>
+      <ToastProvider>{ui}</ToastProvider>
+    </QueryClientProvider>
+  );
 }
 
 describe('Outcomes', () => {
@@ -150,7 +212,7 @@ describe('Answers page readiness card', () => {
     wrap(<AnswersPage />);
 
     expect(await screen.findByText(/Eligibility · 2 missing/)).toBeInTheDocument();
-    expect(screen.getByText('Work authorization')).toBeInTheDocument();
+    expect(screen.getAllByText('Work authorization').length).toBeGreaterThan(0);
     expect(screen.getByText(/every form asks you again/i)).toBeInTheDocument();
   });
 

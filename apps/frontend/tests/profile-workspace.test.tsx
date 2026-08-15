@@ -90,6 +90,7 @@ function emptyProfileData(overrides: Partial<ProfileData> = {}): ProfileData {
       linkedin: null,
       github: null,
       avatarUrl: null,
+      address: { line1: '', line2: '', city: '', state: '', postalCode: '', country: '' },
     },
     summary: 'Builds systems.',
     workExperience: [],

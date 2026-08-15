@@ -18,6 +18,7 @@ import ArrowRight from 'lucide-react/dist/esm/icons/arrow-right';
 import CircleAlert from 'lucide-react/dist/esm/icons/circle-alert';
 
 import { ApplicationAnswers } from '@/components/answers/application-answers';
+import { EligibilityAnswers } from '@/components/answers/eligibility-answers';
 import { Card } from '@/components/atelier/card';
 import { useAutofillReadiness } from '@/features/application-fields/hooks';
 import { PAGE_WIDTH } from '@/lib/layout/page-width';
@@ -51,6 +52,7 @@ function ReadinessCard() {
   const groups = ['essential', 'eligibility', 'common'].filter((group) =>
     missing.some((field) => field.group === group)
   );
+  const hasEssentialOrCommon = groups.some((g) => g !== 'eligibility');
 
   return (
     <Card className="space-y-4 p-5">
@@ -65,12 +67,14 @@ function ReadinessCard() {
               : 'These are the questions application forms ask most. Anything missing is something you retype.'}
           </p>
         </div>
-        <Link
-          href="/profile"
-          className="flex shrink-0 items-center gap-1 text-sm font-medium text-[var(--primary)] hover:underline"
-        >
-          Edit profile <ArrowRight className="h-3.5 w-3.5" />
-        </Link>
+        {hasEssentialOrCommon && (
+          <Link
+            href="/profile"
+            className="flex shrink-0 items-center gap-1 text-sm font-medium text-[var(--primary)] hover:underline"
+          >
+            Edit profile <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+        )}
       </div>
 
       <div>
@@ -99,6 +103,7 @@ function ReadinessCard() {
 
       {groups.map((group) => {
         const fields = missing.filter((field) => field.group === group);
+        const isEligibility = group === 'eligibility';
         return (
           <div key={group} className="space-y-1.5">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
@@ -106,14 +111,25 @@ function ReadinessCard() {
             </h3>
             <p className="text-xs text-[var(--muted-foreground)]">{GROUP_COST[group]}</p>
             <ul className="flex flex-wrap gap-1.5">
-              {fields.map((field) => (
-                <li
-                  key={field.key}
-                  className="rounded-[var(--radius-at-sm)] border border-[var(--border)] px-2 py-0.5 text-xs"
-                >
-                  {field.label}
-                </li>
-              ))}
+              {fields.map((field) =>
+                isEligibility ? (
+                  <li key={field.key}>
+                    <a
+                      href="#eligibility-answers"
+                      className="rounded-[var(--radius-at-sm)] border border-[var(--primary)]/30 bg-[var(--primary)]/5 px-2 py-0.5 text-xs text-[var(--primary)] hover:underline"
+                    >
+                      {field.label}
+                    </a>
+                  </li>
+                ) : (
+                  <li
+                    key={field.key}
+                    className="rounded-[var(--radius-at-sm)] border border-[var(--border)] px-2 py-0.5 text-xs"
+                  >
+                    {field.label}
+                  </li>
+                )
+              )}
             </ul>
           </div>
         );
@@ -133,6 +149,7 @@ export default function AnswersPage() {
       </header>
 
       <ReadinessCard />
+      <EligibilityAnswers />
       <ApplicationAnswers />
     </div>
   );
