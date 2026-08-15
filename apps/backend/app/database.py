@@ -4529,6 +4529,12 @@ class Database:
                     row.provider_event_id = event_id
                     row.granted_at = now
                     row.updated_at = now
+                    # A prior attempt on this same purchase row may have failed and
+                    # left its reason here (fail_purchase() only guards `state`, not
+                    # this field) - a granted purchase succeeded, so the stale reason
+                    # from that earlier attempt must not survive into the completed
+                    # record and read as "granted, but also failed".
+                    row.failure_reason = None
                     # Invoice number assigned at grant time, when the sale is real.
                     row.invoice_number = row.invoice_number or f"INV-{now[:10]}-{row.id[:8]}"
                     return "granted"

@@ -232,6 +232,34 @@ class TestForwardOnlyState:
         account = await db.get_or_create_credit_account("u-1")
         assert account["wallet_credits"] == 100
 
+    async def test_a_grant_after_an_earlier_failure_clears_the_stale_reason(
+        self, isolated_db, purchases_on
+    ):
+        """The reverse order: an earlier declined attempt on the SAME purchase row
+        fails it first, then a later successful webhook grants it. A real production
+        row hit exactly this - `state` correctly ended up "granted" (fail_purchase's
+        own guard already protects that), but `failure_reason` from the earlier
+        decline survived onto the completed record, reading as "granted, but also
+        failed". A granted purchase succeeded; nothing about it should say otherwise.
+        """
+        from app.database import db
+
+        started = await start_purchase("u-1", "small")
+        order_id = started["order"]["order_id"]
+
+        await db.fail_purchase(started["purchase_id"], reason="provider_failed", event_id="ev-1")
+        purchases = await db.list_purchases("u-1")
+        assert purchases[0]["state"] == "failed"
+        assert purchases[0]["failure_reason"] == "provider_failed"
+
+        await handle_webhook(**_webhook("paid", order_id=order_id, event_id="ev-2"))
+
+        purchases = await db.list_purchases("u-1")
+        assert purchases[0]["state"] == "granted"
+        assert purchases[0]["failure_reason"] is None
+        account = await db.get_or_create_credit_account("u-1")
+        assert account["wallet_credits"] == 100
+
 
 @pytest.mark.asyncio
 class TestRefundClawBack:
