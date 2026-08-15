@@ -130,6 +130,80 @@ month rolls over, keyed `allowance:<user>:<YYYY-MM>`.
 
 ---
 
+## Setting prices and running an offer
+
+Prices live in **Admin → Credit packs**, not in configuration. Changing one takes effect
+immediately — no deploy.
+
+1. **Add pack** — short id (permanent, receipts reference it), name, credits, price in ₹.
+2. New packs start **switched off**. Turn the toggle on when you want it sold.
+3. For an offer, set **% off** and optionally an end date. The screen shows exactly what a
+   customer will pay, resolved by the same code the payment order uses.
+
+Two behaviours worth knowing:
+
+- **An offer expires by itself.** The price returns to normal the moment the end date
+  passes. There is no job to run, so there is nothing to forget. An expired offer shows as
+  "offer ended" in the admin list.
+- **A discount that is not cheaper is refused.** Typing an offer price above the regular
+  price is rejected rather than saved, in either direction — including lowering the regular
+  price beneath an existing offer.
+
+Deleting a pack is possible but switching it off is usually better: past purchases keep
+their own recorded price and credits either way, but an inactive pack still explains the
+purchases that reference it.
+
+---
+
+## Turning payments on (Razorpay)
+
+Set these on the server (never in frontend code):
+
+```
+AI_CREDITS_ENABLED=true
+AI_PURCHASES_ENABLED=true
+AI_PAYMENT_PROVIDER=razorpay
+RAZORPAY_KEY_ID=rzp_test_...        # publishable; the browser gets it from the API
+RAZORPAY_KEY_SECRET=...             # server only
+RAZORPAY_WEBHOOK_SECRET=...         # a DIFFERENT secret, see below
+```
+
+**The webhook is a separate manual step**, and payments still work without it — just less
+reliably. In the Razorpay dashboard: Settings → Webhooks → Add.
+
+- URL: `https://<your-domain>/api/v1/credits/purchase/webhook`
+- Events: `order.paid`, `payment.captured`, `payment.failed`, `refund.processed`
+- Copy the **webhook secret** it shows you into `RAZORPAY_WEBHOOK_SECRET`. This is **not**
+  your key secret. Using the key secret makes every webhook fail verification.
+
+Why bother, when the browser already confirms the payment? Because the browser sometimes
+does not get the chance — the customer closes the tab, the phone dies, the train enters a
+tunnel. The webhook credits them anyway. Both paths grant through the same idempotent
+step, so nobody is ever credited twice.
+
+### Testing it
+
+Razorpay test mode never moves real money. Use card `4111 1111 1111 1111`, any future
+expiry, any CVV. Then check:
+
+- **Admin → AI spend** shows the purchase.
+- The user's **Settings → AI** balance went up.
+- **Admin → Users → (user) → AI credits** shows the wallet increase (purchased credits go
+  to the wallet, which never expires — not the monthly allowance, which resets).
+
+### If a payment succeeds but no credits appear
+
+1. Check the webhook secret is the **webhook** one.
+2. **Admin → AI ops → Accounting checks**: `paid_not_granted` above zero means the money
+   arrived and the grant did not.
+3. The customer can be credited manually from **Admin → Users → (user) → AI credits** with
+   a reason. The grant is recorded against your name in the audit trail.
+
+Never tell a customer a payment failed on the strength of the browser going quiet. The
+payment may well have gone through; the webhook is the answer.
+
+---
+
 ## Rolling back
 
 Migrations `0033`–`0037` are additive and reversible. `alembic downgrade 0032` removes

@@ -285,6 +285,189 @@ async def delete_channel(
 # ---------------------------------------------------------------------------
 
 
+class PackIn(BaseModel):
+    """Create or update a pack.
+
+    ``discount_percent`` is a CONVENIENCE, not storage: the operator thinks in
+    percentages, and the exact sale price is computed once here and stored as an integer.
+    A stored percentage would be re-multiplied on every render and every check, and a
+    one-paisa disagreement between the buy screen and the webhook amount check fails a
+    purchase for a customer who did nothing wrong.
+
+    If both ``discount_percent`` and ``sale_amount_minor`` are given, the explicit amount
+    wins - an operator who typed an exact figure meant it.
+    """
+
+    label: str = Field(min_length=1, max_length=80)
+    credits: int = Field(gt=0, le=1_000_000)
+    amount_minor: int = Field(ge=0, le=100_000_000)
+    currency: str = Field(default="INR", min_length=3, max_length=3)
+    description: str | None = Field(default=None, max_length=200)
+    active: bool = False
+    sort_order: int = 100
+    sale_amount_minor: int | None = Field(default=None, ge=0, le=100_000_000)
+    discount_percent: float | None = Field(default=None, ge=0, le=100)
+    sale_label: str | None = Field(default=None, max_length=60)
+    sale_starts_at: str | None = None
+    sale_ends_at: str | None = None
+
+
+class PackPatch(BaseModel):
+    label: str | None = Field(default=None, min_length=1, max_length=80)
+    credits: int | None = Field(default=None, gt=0, le=1_000_000)
+    amount_minor: int | None = Field(default=None, ge=0, le=100_000_000)
+    currency: str | None = Field(default=None, min_length=3, max_length=3)
+    description: str | None = Field(default=None, max_length=200)
+    active: bool | None = None
+    sort_order: int | None = None
+    sale_amount_minor: int | None = Field(default=None, ge=0, le=100_000_000)
+    discount_percent: float | None = Field(default=None, ge=0, le=100)
+    sale_label: str | None = Field(default=None, max_length=60)
+    sale_starts_at: str | None = None
+    sale_ends_at: str | None = None
+    #: Explicit, because `None` on the fields above means "leave alone" - there has to be
+    #: a way to say "end the offer" that is not ambiguous with "do not touch it".
+    clear_sale: bool = False
+
+
+def _pack_out(pack: dict) -> dict[str, Any]:
+    """A pack plus what a customer would be charged for it right now.
+
+    The admin sees the resolved price from the SAME function the buy screen uses, so the
+    preview cannot drift from reality - which is the only way to be sure a discount is
+    actually live when the panel says it is.
+    """
+    from app.ai_pack_pricing import effective_offer, percent_off
+
+    offer = effective_offer(pack)
+    return {
+        **pack,
+        "effective_amount_minor": offer.amount_minor,
+        "on_sale": offer.on_sale,
+        "percent_off": percent_off(pack["amount_minor"], offer.amount_minor),
+    }
+
+
+def _resolve_sale_fields(payload: Any, *, base_amount: int | None) -> dict[str, Any]:
+    """Turn a percentage into the stored integer, if that is what was given."""
+    from app.ai_pack_pricing import discounted_amount
+
+    fields: dict[str, Any] = {}
+    if payload.sale_amount_minor is not None:
+        fields["sale_amount_minor"] = payload.sale_amount_minor
+    elif payload.discount_percent is not None and base_amount is not None:
+        fields["sale_amount_minor"] = discounted_amount(base_amount, payload.discount_percent)
+    for key in ("sale_label", "sale_starts_at", "sale_ends_at"):
+        value = getattr(payload, key, None)
+        if value is not None:
+            fields[key] = value
+    return fields
+
+
+@router.get("/packs")
+async def list_packs(_admin: Principal = Depends(require_admin_read)) -> list[dict[str, Any]]:
+    """Every pack, active or not, each with its live effective price."""
+    return [_pack_out(p) for p in await db.list_credit_packs()]
+
+
+@router.post("/packs/{pack_id}", status_code=201)
+async def create_pack(
+    pack_id: str,
+    payload: PackIn,
+    _admin: Principal = Depends(require_admin_manage),
+) -> dict[str, Any]:
+    """Create a pack. It starts INACTIVE unless explicitly activated.
+
+    The slug is chosen by the operator and is permanent, because purchase history records
+    it and those rows must keep making sense after the pack is edited or withdrawn.
+    """
+    if await db.get_credit_pack(pack_id) is not None:
+        raise HTTPException(status_code=409, detail="A pack with that id already exists.")
+
+    fields: dict[str, Any] = {
+        "label": payload.label,
+        "credits": payload.credits,
+        "amount_minor": payload.amount_minor,
+        "currency": payload.currency.upper(),
+        "description": payload.description,
+        "active": payload.active,
+        "sort_order": payload.sort_order,
+        **_resolve_sale_fields(payload, base_amount=payload.amount_minor),
+    }
+    try:
+        created = await db.upsert_credit_pack(pack_id, **fields)
+    except ValueError as exc:
+        # Money validation - a "discount" above the regular price, or a pack with no
+        # credits. The operator's own words back, not a stack trace.
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    await _audit(
+        AuditEvent.ADMIN_AI_PACK_CHANGED,
+        _admin,
+        meta={"pack_id": pack_id, "action": "created", "amount_minor": payload.amount_minor,
+              "credits": payload.credits, "active": payload.active},
+    )
+    return _pack_out(created)
+
+
+@router.patch("/packs/{pack_id}")
+async def update_pack(
+    pack_id: str,
+    payload: PackPatch,
+    _admin: Principal = Depends(require_admin_manage),
+) -> dict[str, Any]:
+    existing = await db.get_credit_pack(pack_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Pack not found")
+
+    fields = payload.model_dump(
+        exclude_unset=True,
+        exclude={"discount_percent", "clear_sale", "sale_amount_minor",
+                 "sale_label", "sale_starts_at", "sale_ends_at"},
+    )
+    fields = {k: v for k, v in fields.items() if v is not None}
+    if "currency" in fields:
+        fields["currency"] = str(fields["currency"]).upper()
+
+    if payload.clear_sale:
+        # Ending an offer clears the whole thing. Leaving a stale label or window behind
+        # is how a finished promotion reappears months later.
+        fields.update(
+            sale_amount_minor=None, sale_label=None, sale_starts_at=None, sale_ends_at=None
+        )
+    else:
+        base = fields.get("amount_minor", existing["amount_minor"])
+        fields.update(_resolve_sale_fields(payload, base_amount=base))
+
+    try:
+        updated = await db.upsert_credit_pack(pack_id, **fields)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    await _audit(
+        AuditEvent.ADMIN_AI_PACK_CHANGED,
+        _admin,
+        meta={"pack_id": pack_id, "action": "updated", "changed": sorted(fields.keys())},
+    )
+    return _pack_out(updated)
+
+
+@router.delete("/packs/{pack_id}", status_code=204)
+async def delete_pack(
+    pack_id: str, _admin: Principal = Depends(require_admin_manage)
+) -> None:
+    """Delete a pack. Past purchases keep their own recorded price and credits.
+
+    Deactivating is usually the better move and the UI says so - a deleted pack no longer
+    appears anywhere, while an inactive one still explains the purchases that reference it.
+    """
+    if not await db.delete_credit_pack(pack_id):
+        raise HTTPException(status_code=404, detail="Pack not found")
+    await _audit(
+        AuditEvent.ADMIN_AI_PACK_CHANGED, _admin, meta={"pack_id": pack_id, "action": "deleted"}
+    )
+
+
 @router.post("/channels/{channel_id}/test")
 async def test_channel(
     channel_id: str, _admin: Principal = Depends(require_admin_manage)

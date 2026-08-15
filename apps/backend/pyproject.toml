@@ -30,6 +30,10 @@ dependencies = [
     "itsdangerous>=2.2.0",
     "redis>=8.0.1",
     "pillow==11.3.0",
+    # Explicit runtime dependency: the Razorpay order call uses it. It was already
+    # present transitively via litellm, but a payment path must not rest on another
+    # package's dependency choices.
+    "httpx>=0.28.0",
 ]
 
 [project.scripts]

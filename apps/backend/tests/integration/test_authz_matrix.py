@@ -228,6 +228,12 @@ OWNED_ENDPOINTS: list[tuple[str, str]] = [
     # a user's own AI allowance and their own usage history
     ("GET", "/api/v1/credits"),
     ("GET", "/api/v1/credits/usage"),
+    ("GET", "/api/v1/credits/packs"),
+    # The purchase webhook is deliberately NOT here: Razorpay cannot hold a session, so
+    # its authentication is the HMAC signature over the raw body. That is pinned by
+    # tests/integration/test_ai_razorpay.py instead.
+    ("POST", "/api/v1/credits/purchase"),
+    ("POST", "/api/v1/credits/purchase/confirm"),
 ]
 
 # Provider-cost actions gated behind email verification (R5.6). These must 403

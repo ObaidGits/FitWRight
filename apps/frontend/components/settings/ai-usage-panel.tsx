@@ -27,6 +27,7 @@ import { Badge } from '@/components/atelier/badge';
 import { Button } from '@/components/atelier/button';
 import { LoadingSkeleton } from '@/components/atelier/states';
 import { featureLabel, getMyCredits, getMyUsage } from '@/lib/api/credits';
+import { BuyCredits } from '@/components/settings/buy-credits';
 import type { MyCredits, UsageItem } from '@/lib/api/credits';
 
 export function AiUsagePanel() {
@@ -150,6 +151,10 @@ export function AiUsagePanel() {
           </p>
         </div>
       )}
+
+      {/* Only in the credits view: someone on their own key or an unlimited plan has
+          nothing to buy, and offering it would be noise. */}
+      <BuyCredits onPurchased={() => window.location.reload()} />
 
       <div className="flex items-center justify-between border-t border-[var(--border)] pt-3">
         <button

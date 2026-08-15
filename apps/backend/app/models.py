@@ -1477,6 +1477,45 @@ class DiscoveryResult(Base):
     )
 
 
+class CreditPack(Base):
+    """A buyable bundle, priced from the admin panel (migration 0039).
+
+    Two prices, both integers in the smallest currency unit: ``amount_minor`` is the
+    regular price and ``sale_amount_minor`` is the discount, valid only inside its
+    window. The operator enters a percentage in the admin form; the computed figure is
+    what gets stored, so exactly one integer is ever displayed, charged, and re-checked
+    against the payment provider's webhook.
+
+    The sale expires on its own - effective price falls back to the regular price the
+    moment the window closes, with no job to run and nothing to forget.
+    """
+
+    __tablename__ = "credit_packs"
+
+    #: Operator-chosen slug. Stable on purpose: credit_purchases records it, and those
+    #: rows must keep making sense after the pack is edited or withdrawn.
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    label: Mapped[str] = mapped_column(String, nullable=False)
+    credits: Mapped[int] = mapped_column(Integer, nullable=False)
+    amount_minor: Mapped[int] = mapped_column(Integer, nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, server_default="INR")
+    sale_amount_minor: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    sale_label: Mapped[str | None] = mapped_column(String, nullable=True)
+    sale_starts_at: Mapped[str | None] = mapped_column(String, nullable=True)
+    sale_ends_at: Mapped[str | None] = mapped_column(String, nullable=True)
+    active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("0")
+    )
+    sort_order: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=100, server_default="100"
+    )
+    description: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[str] = mapped_column(String, nullable=False, default=_utcnow_iso)
+    updated_at: Mapped[str] = mapped_column(String, nullable=False, default=_utcnow_iso)
+
+    __table_args__ = (Index("ix_credit_packs_active_sort", "active", "sort_order"),)
+
+
 class CreditPurchase(Base):
     """One attempt to buy credits (migration 0038).
 

@@ -1126,13 +1126,22 @@ class Settings(BaseSettings):
     # observed cost (that is why metering ships first), and a payment integration is not
     # verified until it has handled a real webhook from a real provider account.
     ai_purchases_enabled: bool = False
-    # Only "fake" is implemented. Setting anything else refuses every purchase rather
-    # than half-taking money through an unfinished adapter.
+    # "razorpay" or "fake". An unknown value refuses every purchase rather than
+    # half-taking money through an adapter that does not exist.
     ai_payment_provider: str = "fake"
-    # JSON list of packs: [{"id","credits","amount_minor","currency","label"}].
-    # Amounts are the smallest currency unit and tax-INCLUSIVE - a price that changes at
-    # checkout reads as a trick even when it is legal. Empty means nothing is on sale.
-    ai_credit_packs: str = ""
+    # Razorpay credentials. The KEY ID is publishable - the browser needs it to open the
+    # checkout modal and it authorises nothing on its own. The KEY SECRET and the WEBHOOK
+    # SECRET must never leave the server.
+    razorpay_key_id: str = ""
+    razorpay_key_secret: str = ""
+    # A SEPARATE secret, set in the Razorpay dashboard when creating the webhook. Using
+    # the key secret here silently rejects every webhook, because webhooks are signed
+    # with this one over the raw request body.
+    razorpay_webhook_secret: str = ""
+    # Pack prices are NOT configured here. They live in the `credit_packs` table and are
+    # edited in Admin > Credit packs, so a price change or a weekend offer needs no
+    # redeploy. Deliberately one source of truth: an env var alongside the table would
+    # eventually disagree with it.
     # How long a hold survives before the sweep releases it. Must comfortably
     # exceed the slowest AI call, or a legitimate long request loses its hold
     # mid-flight; short enough that a crashed worker does not strand a balance for

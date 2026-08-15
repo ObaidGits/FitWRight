@@ -967,6 +967,59 @@ async function getReconciliation(): Promise<ReconciliationReport> {
   return json<ReconciliationReport>(await apiFetch('/admin/ai/reconciliation'));
 }
 
+export interface CreditPackRow {
+  id: string;
+  label: string;
+  credits: number;
+  amount_minor: number;
+  currency: string;
+  sale_amount_minor: number | null;
+  sale_label: string | null;
+  sale_starts_at: string | null;
+  sale_ends_at: string | null;
+  active: boolean;
+  sort_order: number;
+  description: string | null;
+  /** Resolved by the SAME code the buy screen uses, so the preview cannot drift. */
+  effective_amount_minor: number;
+  on_sale: boolean;
+  percent_off: number;
+}
+
+export interface CreditPackInput {
+  label: string;
+  credits: number;
+  amount_minor: number;
+  currency?: string;
+  description?: string | null;
+  active?: boolean;
+  sort_order?: number;
+  /** Convenience only: the server computes and stores an exact price from this. */
+  discount_percent?: number | null;
+  sale_amount_minor?: number | null;
+  sale_label?: string | null;
+  sale_starts_at?: string | null;
+  sale_ends_at?: string | null;
+  clear_sale?: boolean;
+}
+
+async function listCreditPacks(): Promise<CreditPackRow[]> {
+  return json<CreditPackRow[]>(await apiFetch('/admin/ai/packs'));
+}
+
+async function createCreditPack(id: string, input: CreditPackInput): Promise<CreditPackRow> {
+  return json<CreditPackRow>(await apiPost(`/admin/ai/packs/${encodeURIComponent(id)}`, input));
+}
+
+async function updateCreditPack(id: string, input: CreditPackInput): Promise<CreditPackRow> {
+  return json<CreditPackRow>(await apiPatch(`/admin/ai/packs/${encodeURIComponent(id)}`, input));
+}
+
+async function deleteCreditPack(id: string): Promise<void> {
+  const res = await apiDelete(`/admin/ai/packs/${encodeURIComponent(id)}`);
+  if (!res.ok) await json<unknown>(res);
+}
+
 export const adminApi = {
   getStats,
   getUsageSeries,
@@ -986,6 +1039,10 @@ export const adminApi = {
   getChannelPerformance,
   getAiAlerts,
   getReconciliation,
+  listCreditPacks,
+  createCreditPack,
+  updateCreditPack,
+  deleteCreditPack,
   createAiChannel,
   updateAiChannel,
   deleteAiChannel,

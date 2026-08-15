@@ -20,6 +20,7 @@ import {
   type AiChannelInput,
   type AiChannelPatch,
   type AuditListParams,
+  type CreditPackInput,
   type ErrorReportListParams,
   type MaintenanceAction,
   type MetricName,
@@ -53,6 +54,7 @@ export const adminKeys = {
   aiPerformance: (days: number) => [...adminKeys.all, 'ai-performance', days] as const,
   aiAlerts: (days: number) => [...adminKeys.all, 'ai-alerts', days] as const,
   aiReconciliation: () => [...adminKeys.all, 'ai-reconciliation'] as const,
+  creditPacks: () => [...adminKeys.all, 'credit-packs'] as const,
   userCredits: (userId: string) => [...adminKeys.all, 'user-credits', userId] as const,
   storage: () => [...adminKeys.all, 'storage'] as const,
   security: () => [...adminKeys.all, 'security'] as const,
@@ -520,5 +522,30 @@ export function useReconciliation() {
   return useQuery({
     queryKey: adminKeys.aiReconciliation(),
     queryFn: () => adminApi.getReconciliation(),
+  });
+}
+
+export function useCreditPacks() {
+  return useQuery({
+    queryKey: adminKeys.creditPacks(),
+    queryFn: () => adminApi.listCreditPacks(),
+  });
+}
+
+/** Pessimistic: this changes what a customer is charged, so wait for the server. */
+export function useSaveCreditPack() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, input, isNew }: { id: string; input: CreditPackInput; isNew: boolean }) =>
+      isNew ? adminApi.createCreditPack(id, input) : adminApi.updateCreditPack(id, input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: adminKeys.creditPacks() }),
+  });
+}
+
+export function useDeleteCreditPack() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => adminApi.deleteCreditPack(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: adminKeys.creditPacks() }),
   });
 }

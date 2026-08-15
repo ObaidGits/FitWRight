@@ -49,6 +49,7 @@ from app.models import (
     AiUsageLedger,
     AuditLog,
     CreditAccount,
+    CreditPack,
     CreditPurchase,
     CreditReservation,
     CreditTransaction,
@@ -4242,6 +4243,142 @@ class Database:
                 res.state = "released" if reason != "expired" else "expired"
                 res.settled_at = now
                 return "released"
+
+    # ------------------------------------------------------------------
+    # Credit packs (admin-priced, migration 0039)
+    # ------------------------------------------------------------------
+
+    async def list_credit_packs(self, *, only_active: bool = False) -> list[dict[str, Any]]:
+        """Every pack, cheapest-first within the operator's chosen order.
+
+        ``only_active`` is what the customer-facing surface uses. The admin sees
+        inactive ones too, because a pack being withdrawn is a state to manage rather
+        than a row to lose.
+        """
+        async with self._session() as session:
+            stmt = select(CreditPack).order_by(
+                CreditPack.sort_order, CreditPack.amount_minor
+            )
+            if only_active:
+                stmt = stmt.where(CreditPack.active.is_(True))
+            rows = (await session.execute(stmt)).scalars().all()
+            return [self._pack_to_dict(r) for r in rows]
+
+    async def get_credit_pack(self, pack_id: str) -> dict[str, Any] | None:
+        async with self._session() as session:
+            row = (
+                await session.execute(select(CreditPack).where(CreditPack.id == pack_id))
+            ).scalars().first()
+            return self._pack_to_dict(row) if row is not None else None
+
+    async def upsert_credit_pack(self, pack_id: str, **fields: Any) -> dict[str, Any]:
+        """Create or update one pack. Returns the stored row.
+
+        Validation lives here rather than in the router because this is the last point
+        before money is written, and a bad price is the one mistake in this system that
+        reaches a customer's card:
+
+        * A sale must be CHEAPER than the regular price. An operator who fat-fingers a
+          "discount" that raises the price would otherwise be charging more under a
+          banner that says less.
+        * Prices and credits cannot be negative.
+        * A pack with zero credits cannot be sold - it would take money for nothing.
+        """
+        now = _now()
+
+        amount = fields.get("amount_minor")
+        sale = fields.get("sale_amount_minor")
+        credits = fields.get("credits")
+
+        if credits is not None and int(credits) <= 0:
+            raise ValueError("A pack must include at least one credit.")
+        if amount is not None and int(amount) < 0:
+            raise ValueError("A price cannot be negative.")
+        if sale is not None and int(sale) < 0:
+            raise ValueError("A sale price cannot be negative.")
+
+        async with self._session() as session:
+            async with session.begin():
+                row = (
+                    await session.execute(
+                        select(CreditPack).where(CreditPack.id == pack_id)
+                    )
+                ).scalars().first()
+
+                if row is None:
+                    row = CreditPack(
+                        id=pack_id,
+                        label=str(fields.get("label") or pack_id),
+                        credits=int(fields.get("credits") or 0),
+                        amount_minor=int(fields.get("amount_minor") or 0),
+                        currency=str(fields.get("currency") or "INR"),
+                        created_at=now,
+                        updated_at=now,
+                    )
+                    session.add(row)
+
+                for key in (
+                    "label",
+                    "credits",
+                    "amount_minor",
+                    "currency",
+                    "sale_amount_minor",
+                    "sale_label",
+                    "sale_starts_at",
+                    "sale_ends_at",
+                    "active",
+                    "sort_order",
+                    "description",
+                ):
+                    if key in fields:
+                        setattr(row, key, fields[key])
+
+                # Checked AFTER the merge so it judges the resulting row, not the patch:
+                # lowering the regular price alone could otherwise leave a stale sale
+                # sitting above it.
+                if row.sale_amount_minor is not None and row.sale_amount_minor >= row.amount_minor:
+                    raise ValueError(
+                        "The offer price must be lower than the regular price."
+                    )
+                if row.credits <= 0:
+                    raise ValueError("A pack must include at least one credit.")
+
+                row.updated_at = now
+                await session.flush()
+                return self._pack_to_dict(row)
+
+    async def delete_credit_pack(self, pack_id: str) -> bool:
+        """Remove a pack. Existing purchases are unaffected.
+
+        Purchases record the pack id, the credits and the price they were charged, so a
+        deleted pack leaves its history intact and readable - which is why there is no
+        foreign key here.
+        """
+        async with self._session() as session:
+            async with session.begin():
+                result = await session.execute(
+                    delete(CreditPack).where(CreditPack.id == pack_id)
+                )
+                return bool(result.rowcount)
+
+    @staticmethod
+    def _pack_to_dict(row: CreditPack) -> dict[str, Any]:
+        return {
+            "id": row.id,
+            "label": row.label,
+            "credits": row.credits,
+            "amount_minor": row.amount_minor,
+            "currency": row.currency,
+            "sale_amount_minor": row.sale_amount_minor,
+            "sale_label": row.sale_label,
+            "sale_starts_at": row.sale_starts_at,
+            "sale_ends_at": row.sale_ends_at,
+            "active": bool(row.active),
+            "sort_order": row.sort_order,
+            "description": row.description,
+            "created_at": row.created_at,
+            "updated_at": row.updated_at,
+        }
 
     # ------------------------------------------------------------------
     # Credit purchases (spec Phase 4). Grants happen ONLY here, from a verified

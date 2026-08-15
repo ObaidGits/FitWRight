@@ -13,6 +13,10 @@ vi.mock('@/lib/api/credits', async () => {
   };
 });
 
+// The top-up options are a separate concern with their own network call and their own
+// tests. Stubbing them keeps this file about the panel's four account modes.
+vi.mock('@/components/settings/buy-credits', () => ({ BuyCredits: () => null }));
+
 const { getMyCredits } = await import('@/lib/api/credits');
 
 function credits(over: Partial<MyCredits> = {}): MyCredits {

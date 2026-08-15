@@ -3,6 +3,7 @@
 from app.routers.admin import router as admin_router
 from app.routers.admin_ai import router as admin_ai_router
 from app.routers.credits import router as credits_router
+from app.routers.purchases import router as purchases_router
 from app.routers.agenda import router as agenda_router
 from app.routers.applications import router as applications_router
 from app.routers.auth import router as auth_router
@@ -49,6 +50,7 @@ __all__ = [
     "admin_router",
     "admin_ai_router",
     "credits_router",
+    "purchases_router",
     "notifications_router",
     "search_router",
     "reminders_router",

@@ -28,16 +28,21 @@ from app.errors import ApiError
 
 
 @pytest.fixture
-def purchases_on(monkeypatch):
+async def purchases_on(isolated_db, monkeypatch):
+    """Purchases enabled, with one pack ON SALE IN THE DATABASE.
+
+    Packs used to come from an env var; they are now rows, so the fixture seeds one. That
+    is the point of the change - a price is data an operator edits, not configuration that
+    needs a redeploy.
+    """
     from app.config import settings
+    from app.database import db
 
     monkeypatch.setattr(settings, "ai_credits_enabled", True)
     monkeypatch.setattr(settings, "ai_purchases_enabled", True)
     monkeypatch.setattr(settings, "ai_payment_provider", "fake")
-    monkeypatch.setattr(
-        settings,
-        "ai_credit_packs",
-        json.dumps([{"id": "small", "credits": 100, "amount_minor": 19900, "currency": "INR"}]),
+    await db.upsert_credit_pack(
+        "small", label="Small", credits=100, amount_minor=19900, currency="INR", active=True
     )
     return settings
 
@@ -56,18 +61,22 @@ def _webhook(kind: str, *, order_id: str, event_id: str, amount_minor: int = 199
     return {"body": body, "headers": {"x-fake-signature": "valid"}}
 
 
+@pytest.mark.asyncio
 class TestPacks:
-    def test_nothing_is_on_sale_by_default(self):
+    async def test_nothing_is_on_sale_by_default(self, isolated_db):
         """No default pricing. A default price is a guess, and a guess here is either a
         loss on every sale or an overcharge."""
-        assert available_packs() == []
+        assert await available_packs() == []
 
-    def test_a_malformed_pack_list_sells_nothing(self, monkeypatch):
-        """It must not degrade into a zero price or a free pack."""
-        from app.config import settings
+    async def test_an_inactive_pack_is_not_on_sale(self, isolated_db):
+        """Creating a pack does not start selling it - activation is a separate,
+        deliberate act."""
+        from app.database import db
 
-        monkeypatch.setattr(settings, "ai_credit_packs", "{not json")
-        assert available_packs() == []
+        await db.upsert_credit_pack(
+            "draft", label="Draft", credits=10, amount_minor=1000, active=False
+        )
+        assert await available_packs() == []
 
 
 @pytest.mark.asyncio
@@ -91,11 +100,30 @@ class TestPurchasesDisabledByDefault:
     async def test_an_unimplemented_provider_refuses_rather_than_half_working(
         self, isolated_db, monkeypatch, purchases_on
     ):
+        """Razorpay is implemented now, so this uses one that is not. An unknown provider
+        must refuse every purchase rather than half-take money through an adapter that
+        does not exist."""
         from app.config import settings
 
-        monkeypatch.setattr(settings, "ai_payment_provider", "razorpay")
+        monkeypatch.setattr(settings, "ai_payment_provider", "stripe")
         with pytest.raises(PurchasesDisabled):
             await start_purchase("u-1", "small")
+
+    async def test_razorpay_without_credentials_refuses_before_charging(
+        self, isolated_db, monkeypatch, purchases_on
+    ):
+        """A configured provider with no keys must fail loudly at the start, not halfway
+        through a payment the customer has already begun."""
+        from app.config import settings
+        from app.errors import ApiError
+
+        monkeypatch.setattr(settings, "ai_payment_provider", "razorpay")
+        monkeypatch.setattr(settings, "razorpay_key_id", "")
+        monkeypatch.setattr(settings, "razorpay_key_secret", "")
+
+        with pytest.raises(ApiError) as caught:
+            await start_purchase("u-1", "small")
+        assert caught.value.status_code == 503
 
 
 class TestWebhookVerification:

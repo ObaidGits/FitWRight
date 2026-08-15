@@ -118,6 +118,10 @@ class AuditEvent:
     ADMIN_AI_CHANNEL_TESTED = "admin.ai_channel_tested"
     ADMIN_AI_CREDITS_GRANTED = "admin.ai_credits_granted"
     ADMIN_AI_CREDIT_POLICY_CHANGED = "admin.ai_credit_policy_changed"
+    # Pack pricing. Audited because it is the one admin action that changes what a
+    # CUSTOMER is charged, and "who lowered this price and when" is the first question
+    # asked after a bad month.
+    ADMIN_AI_PACK_CHANGED = "admin.ai_pack_changed"
     ADMIN_INVITE_REDEEMED = "admin.invite_redeemed"
 
 

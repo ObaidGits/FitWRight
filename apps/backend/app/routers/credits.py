@@ -157,6 +157,44 @@ def _is_low(available: int) -> bool:
     return per_tailor > 0 and available < per_tailor * 2
 
 
+@router.get("/packs")
+async def get_packs(user_id: str = Depends(get_effective_user_id)) -> dict:
+    """The packs this user can buy, with any live discount already applied.
+
+    Prices come from the same resolver the charge uses, so what is shown here is by
+    construction what gets charged - a buy screen that advertises one price while the
+    order is created for another is a chargeback, not a bug report.
+
+    Returns an empty list when nothing is on sale (no packs configured, or purchases
+    switched off). The UI treats that as "not available yet" rather than an error.
+    """
+    from app.ai_purchases import available_packs
+
+    if not getattr(settings, "ai_purchases_enabled", False):
+        return {"enabled": False, "packs": []}
+
+    offers = await available_packs()
+    return {
+        "enabled": True,
+        "packs": [
+            {
+                "id": o.id,
+                "label": o.label,
+                "credits": o.credits,
+                "currency": o.currency,
+                "amount_minor": o.amount_minor,
+                "compare_at_minor": o.compare_at_minor,
+                "on_sale": o.on_sale,
+                "percent_off": o.percent_off,
+                "sale_label": o.sale_label,
+                "sale_ends_at": o.sale_ends_at,
+                "description": o.description,
+            }
+            for o in offers
+        ],
+    }
+
+
 @router.get("/usage")
 async def get_my_usage(
     limit: int = 20, user_id: str = Depends(get_effective_user_id)

@@ -69,6 +69,7 @@ READ_ENDPOINTS = [
     "/api/v1/admin/ai/alerts",
     "/api/v1/admin/ai/reconciliation",
     "/api/v1/admin/ai/abuse-review",
+    "/api/v1/admin/ai/packs",
 ]
 
 # Every maintenance action (all ``require_admin_manage``, POST, audited

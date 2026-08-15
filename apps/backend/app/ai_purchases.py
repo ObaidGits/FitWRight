@@ -35,16 +35,16 @@ must never move a balance.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
 from typing import Any, Protocol
 
+from app.ai_pack_pricing import PackOffer, effective_offer
 from app.config import settings
 from app.errors import ApiError
 
 logger = logging.getLogger(__name__)
 
 __all__ = [
-    "CreditPack",
+    "PackOffer",
     "FakePaymentProvider",
     "PaymentProvider",
     "PurchasesDisabled",
@@ -65,50 +65,27 @@ class PurchasesDisabled(ApiError):
         super().__init__(503, "purchases_disabled", reason)
 
 
-@dataclass(frozen=True)
-class CreditPack:
-    """A buyable bundle.
+async def available_packs() -> list[PackOffer]:
+    """The packs on sale right now, with any live discount already applied.
 
-    Amounts are in the smallest currency unit and tax-INCLUSIVE, which is what Indian
-    consumers expect to see: a price that changes at checkout reads as a trick even when
-    it is legal.
+    Reads the database, which is the ONLY source of pack prices. They used to come from
+    an environment variable, so changing a price - or running a weekend offer - needed a
+    redeploy; that is the wrong shape for something an operator adjusts on a Tuesday.
+
+    Returns EMPTY until the operator creates and activates a pack. There is deliberately
+    no default pricing: a default price is a guess, and a guess here is either a loss on
+    every sale or an overcharge.
     """
-
-    id: str
-    credits: int
-    amount_minor: int
-    currency: str = "INR"
-    label: str = ""
-
-
-def available_packs() -> list[CreditPack]:
-    """The packs on sale.
-
-    EMPTY until an operator configures them, on purpose. There is no default pricing,
-    because a default price is a guess, and a guess here is either a loss on every sale
-    or an overcharge. Metering runs first; prices follow the observed cost.
-    """
-    raw = (getattr(settings, "ai_credit_packs", "") or "").strip()
-    if not raw:
-        return []
-    import json
+    from app.database import db
 
     try:
-        parsed = json.loads(raw)
-        return [
-            CreditPack(
-                id=str(p["id"]),
-                credits=int(p["credits"]),
-                amount_minor=int(p["amount_minor"]),
-                currency=str(p.get("currency", "INR")),
-                label=str(p.get("label", "")),
-            )
-            for p in parsed
-        ]
+        rows = await db.list_credit_packs(only_active=True)
     except Exception:
-        # A malformed pack list must not appear as "free credits" or a zero price.
-        logger.error("AI_CREDIT_PACKS is not valid JSON; no packs are on sale")
+        # Failing closed means nothing is on sale, which is the safe direction: showing
+        # no packs loses a sale, while showing a wrong price takes the wrong money.
+        logger.exception("Could not read credit packs; nothing is on sale")
         return []
+    return [effective_offer(row) for row in rows]
 
 
 class PaymentProvider(Protocol):
@@ -180,8 +157,14 @@ def get_payment_provider() -> PaymentProvider:
     interface.
     """
     configured = (getattr(settings, "ai_payment_provider", "") or "fake").lower()
+    if configured == "razorpay":
+        from app.ai_razorpay import RazorpayProvider
+
+        return RazorpayProvider()
     if configured == "fake":
         return FakePaymentProvider()
+    # An unknown provider refuses every purchase rather than half-taking money through
+    # an adapter that does not exist.
     raise PurchasesDisabled(
         f"Payment provider {configured!r} is configured but not implemented. "
         "No purchase can be taken."
@@ -203,7 +186,9 @@ async def start_purchase(user_id: str, pack_id: str) -> dict[str, Any]:
             "Credits are not enabled, so there is nothing to buy yet."
         )
 
-    pack = next((p for p in available_packs() if p.id == pack_id), None)
+    # Resolved through the same function the buy screen used, so the amount charged is
+    # by construction the amount advertised - including any live discount.
+    pack = next((p for p in await available_packs() if p.id == pack_id), None)
     if pack is None:
         raise ApiError(404, "pack_not_found", "That credit pack is not available.")
 
@@ -225,7 +210,9 @@ async def start_purchase(user_id: str, pack_id: str) -> dict[str, Any]:
     return {"purchase_id": purchase["id"], "order": order}
 
 
-async def handle_webhook(*, body: bytes, headers: dict[str, str]) -> dict[str, Any]:
+async def handle_webhook(
+    *, body: bytes, headers: dict[str, str], event_id: str | None = None
+) -> dict[str, Any]:
     """Process one provider webhook. The ONLY path that grants purchased credits.
 
     Idempotent by the provider's event id: a redelivery finds the id already recorded and
@@ -238,7 +225,10 @@ async def handle_webhook(*, body: bytes, headers: dict[str, str]) -> dict[str, A
     payload = provider.verify_webhook(body=body, headers=headers)
     event = provider.parse_event(payload)
 
-    event_id = event.get("event_id")
+    # The provider's per-delivery id wins when present: it is what makes a REDELIVERY of
+    # the same event distinguishable from a genuinely new one, which a body-derived id
+    # cannot always be.
+    event_id = event_id or event.get("event_id")
     if not event_id:
         # Without an event id there is no way to be idempotent, so the safe answer is to
         # do nothing rather than risk granting twice.
