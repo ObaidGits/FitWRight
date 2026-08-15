@@ -22,6 +22,18 @@ export interface ProfileAddress {
   country: string;
 }
 
+/**
+ * One eligibility field's country-conditional rule (mirrors
+ * app.eligibility_rules.ConditionalAnswer). `enabled: false` means the field
+ * behaves exactly as its flat value always has - no rule builder, exactly
+ * this shape, for exactly the four fields that need it.
+ */
+export interface ConditionalEligibilityRule {
+  enabled: boolean;
+  default: string;
+  same_country_value: string;
+}
+
 export interface ProfileIdentity {
   name: string;
   headline: string;
@@ -42,6 +54,18 @@ export interface ProfileIdentity {
   preferredLocations: string[];
   salaryExpectation: string;
   careerVisibility: 'private' | 'unlisted' | 'public';
+  /**
+   * Country-conditional overrides for visaStatus/workAuthorization/relocation/
+   * salaryExpectation (auto-apply-brain Phase 1) - fixes one saved answer being
+   * wrong for half the user's applications (e.g. sponsorship: No in-country,
+   * Yes abroad). Optional; a field absent here uses its flat value unchanged.
+   */
+  conditionalEligibility: Partial<
+    Record<
+      'visaStatus' | 'workAuthorization' | 'relocation' | 'salaryExpectation',
+      ConditionalEligibilityRule
+    >
+  >;
   email: string;
   phone: string;
   location: string;

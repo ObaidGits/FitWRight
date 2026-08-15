@@ -192,10 +192,17 @@ export async function ping(): Promise<
  * not an error, it just means the generic resume goes out - which is the whole
  * thing FitWright exists to avoid.
  */
-export function getProfile(job?: { company?: string; title?: string }): Promise<AutofillProfile> {
+export function getProfile(
+  job?: { company?: string; title?: string; location?: string },
+): Promise<AutofillProfile> {
   const qs = new URLSearchParams();
   if (job?.company?.trim()) qs.set('company', job.company.trim());
   if (job?.title?.trim()) qs.set('title', job.title.trim());
+  // The job's free-text location ("Pune, India") - resolves the four
+  // country-conditional eligibility answers (visa, work auth, relocation,
+  // salary) for THIS job instead of leaving them frozen at whatever was saved
+  // last (auto-apply-brain Phase 1).
+  if (job?.location?.trim()) qs.set('job_location', job.location.trim());
   const query = qs.toString();
   return request<AutofillProfile>(`/extension/profile${query ? `?${query}` : ''}`);
 }

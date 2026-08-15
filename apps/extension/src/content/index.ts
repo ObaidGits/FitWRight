@@ -280,6 +280,7 @@ async function handleMessage(message: ToContent): Promise<Reply<unknown>> {
       const report = await autofill(root, {
         company: formJob?.company,
         title: formJob?.title,
+        location: formJob?.location,
       });
       const parts = [`${report.filled} field${report.filled === 1 ? '' : 's'} filled`];
       if (report.resumeAttached) {
@@ -360,7 +361,15 @@ async function handleMessage(message: ToContent): Promise<Reply<unknown>> {
       if (!scope.isApplicationForm) {
         return ok({ plan: [], reason: 'no-application-form' });
       }
-      return ok({ plan: await planFill(scope.root), reason: null });
+      const previewJob = currentJob ?? extractJob();
+      return ok({
+        plan: await planFill(scope.root, {
+          company: previewJob?.company,
+          title: previewJob?.title,
+          location: previewJob?.location,
+        }),
+        reason: null,
+      });
     }
 
     case 'scrape-list': {

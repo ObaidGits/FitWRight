@@ -91,6 +91,7 @@ function emptyProfileData(overrides: Partial<ProfileData> = {}): ProfileData {
       github: null,
       avatarUrl: null,
       address: { line1: '', line2: '', city: '', state: '', postalCode: '', country: '' },
+      conditionalEligibility: {},
     },
     summary: 'Builds systems.',
     workExperience: [],

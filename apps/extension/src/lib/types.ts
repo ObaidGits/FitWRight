@@ -93,6 +93,14 @@ export interface AutofillProfile {
   willing_to_relocate: boolean | null;
   availability: string;
   remote_preference: string;
+  /**
+   * Which eligibility fields above were computed by the country-conditional
+   * rule for the CURRENT job, rather than read as a flat stored value
+   * (auto-apply-brain Phase 1). Field names match this interface, e.g.
+   * "visa_status". Drives the value_source tagged in the decision trail -
+   * `derived_rule` for these, `exact_rule` for everything else.
+   */
+  derived_eligibility_fields: string[];
   highest_degree: string;
   highest_institution: string;
   education_years: string;

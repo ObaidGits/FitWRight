@@ -40,6 +40,8 @@ from app.auth import get_effective_user_id, require_verified_user_id
 from app.config import Settings, settings
 from app.database import Database
 from app.ai_metered import ai_metered
+from app.eligibility_rules import resolve_conditional
+from app.job_geography import country_from_location
 from app.llm_ratelimit import llm_rate_limit_dep
 
 logger = logging.getLogger(__name__)
@@ -298,6 +300,13 @@ class AutofillProfile(BaseModel):
     willing_to_relocate: bool | None = None
     availability: str = ""
     remote_preference: str = ""
+    # Which of the fields above (in AutofillProfile field-name form, e.g.
+    # "visa_status") were computed by the country-conditional rule rather than
+    # read as a flat stored value (auto-apply-brain Phase 1, R2.3). The
+    # extension reports these to the decision trail as `derived_rule`, not
+    # `exact_rule` - a computed answer and a stored one are not the same
+    # confidence source even though both are trusted for grading purposes.
+    derived_eligibility_fields: list[str] = Field(default_factory=list)
 
     # --- Highest education -------------------------------------------------- #
     highest_degree: str = ""
@@ -559,6 +568,7 @@ async def get_autofill_profile(
     resume_id: str | None = None,
     company: str | None = None,
     title: str | None = None,
+    job_location: str | None = None,
     user_id: str = Depends(get_effective_user_id),
     db: Database = Depends(get_db),
 ) -> AutofillProfile:
@@ -568,8 +578,15 @@ async def get_autofill_profile(
     so the resume attached is the one tailored for it. Without them the master
     resume goes out - correct, but the generic answer, and the whole point of
     tailoring is lost at the one moment it counts.
+
+    ``job_location`` is the job's free-text location as the board wrote it
+    ("Pune, India", "Remote - US") - what makes the four country-conditional
+    eligibility answers (Phase 1) resolve for THIS job rather than staying
+    frozen at whatever was saved last.
     """
-    return await build_autofill_profile(db, user_id, resume_id, company=company, title=title)
+    return await build_autofill_profile(
+        db, user_id, resume_id, company=company, title=title, job_location=job_location
+    )
 
 
 async def build_autofill_profile(
@@ -579,6 +596,7 @@ async def build_autofill_profile(
     *,
     company: str | None = None,
     title: str | None = None,
+    job_location: str | None = None,
 ) -> AutofillProfile:
     """Build the autofill profile: **Profile first, resume as fallback**.
 
@@ -666,6 +684,60 @@ async def build_autofill_profile(
     rid = resume.get("resume_id") if resume else None
     relocation = identity.get("relocation")
 
+    # Country-conditional eligibility (Phase 1). Resolved from the job's own
+    # location string and the profile's structured address - no LLM call, per
+    # tasks.md 1.3. A field with no rule configured behaves exactly as before.
+    job_country = country_from_location(job_location)
+    # The profile's own address.country is free text ("India", "USA") as the
+    # user typed it, not an ISO code - it must go through the same resolver as
+    # the job's location so both sides of the comparison speak the same
+    # vocabulary. A country that does not resolve is treated as unknown, same
+    # as an unresolvable job location.
+    profile_country = country_from_location(address.get("country") or None)
+    conditional = identity.get("conditionalEligibility")
+    conditional = conditional if isinstance(conditional, dict) else {}
+
+    def _resolved(field: str, flat_value: Any) -> tuple[str, bool]:
+        rule = conditional.get(field)
+        if not rule:
+            return _pick(flat_value), False
+        value, derived = resolve_conditional(
+            field,  # type: ignore[arg-type]
+            rule,
+            job_country=job_country,
+            profile_country=profile_country,
+        )
+        # An enabled-but-unfilled rule (no default typed yet) must not
+        # overwrite a flat value the user already saved before this feature
+        # existed - fall back rather than replace with blank.
+        return (value, derived) if value else (_pick(flat_value), False)
+
+    work_authorization, work_auth_derived = _resolved(
+        "workAuthorization", identity.get("workAuthorization")
+    )
+    visa_status, visa_derived = _resolved("visaStatus", identity.get("visaStatus"))
+    salary_expectation, salary_derived = _resolved(
+        "salaryExpectation", identity.get("salaryExpectation")
+    )
+    relocation_str, relocation_derived = _resolved(
+        "relocation", "Yes" if relocation is True else "No" if relocation is False else ""
+    )
+    if relocation_derived:
+        willing_to_relocate = relocation_str.strip().lower() == "yes"
+    else:
+        willing_to_relocate = relocation if isinstance(relocation, bool) else None
+
+    derived_fields = [
+        name
+        for name, flag in (
+            ("work_authorization", work_auth_derived),
+            ("visa_status", visa_derived),
+            ("salary_expectation", salary_derived),
+            ("willing_to_relocate", relocation_derived),
+        )
+        if flag
+    ]
+
     return AutofillProfile(
         full_name=name,
         first_name=first_name,
@@ -696,13 +768,14 @@ async def build_autofill_profile(
         postal_code=_pick(address.get("postalCode")),
         country=_pick(address.get("country")),
         # Eligibility - Profile only, never inferred. See the docstring.
-        work_authorization=_pick(identity.get("workAuthorization")),
-        visa_status=_pick(identity.get("visaStatus")),
+        work_authorization=work_authorization,
+        visa_status=visa_status,
         notice_period=_pick(identity.get("noticePeriod")),
-        salary_expectation=_pick(identity.get("salaryExpectation")),
-        willing_to_relocate=relocation if isinstance(relocation, bool) else None,
+        salary_expectation=salary_expectation,
+        willing_to_relocate=willing_to_relocate,
         availability=_pick(identity.get("availability")),
         remote_preference=_pick(identity.get("remotePreference")),
+        derived_eligibility_fields=derived_fields,
         highest_degree=_pick(top_education.get("degree")),
         highest_institution=_pick(top_education.get("institution")),
         education_years=_pick(top_education.get("years")),

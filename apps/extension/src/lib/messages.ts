@@ -88,7 +88,15 @@ export type ToWorker =
       query: string;
       location?: string;
     }
-  | { type: 'get-profile' }
+  | {
+      type: 'get-profile';
+      /**
+       * The job this form belongs to. `location` resolves the four
+       * country-conditional eligibility answers for this specific job
+       * (auto-apply-brain Phase 1); `company`/`title` pick the tailored resume.
+       */
+      job?: { company?: string; title?: string; location?: string };
+    }
   | { type: 'get-queue' }
   | {
       type: 'read-jd';

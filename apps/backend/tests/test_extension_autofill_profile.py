@@ -84,9 +84,9 @@ PROFILE = {
 }
 
 
-async def build(profile_data=None, resume=None):
+async def build(profile_data=None, resume=None, job_location=None):
     return await get_autofill_profile(
-        resume_id=None, user_id=USER, db=FakeDb(profile_data, resume)
+        resume_id=None, user_id=USER, db=FakeDb(profile_data, resume), job_location=job_location
     )
 
 
@@ -164,6 +164,78 @@ class TestKnockoutAnswers:
         """None means unanswered; False means "no" and would be a real answer."""
         result = await build({"identity": {"name": "X"}}, None)
         assert result.willing_to_relocate is None
+
+
+class TestConditionalEligibility:
+    """Country-conditional visa/relocation/salary answers (auto-apply-brain
+    Phase 1) - the fix for one saved answer being wrong on half the user's
+    applications."""
+
+    def _profile_with_rule(self, **rule_overrides):
+        rule = {
+            "enabled": True,
+            "default": "Yes - requires sponsorship",
+            "same_country_value": "No - authorized to work",
+        }
+        rule.update(rule_overrides)
+        return {
+            "identity": {
+                **PROFILE["identity"],
+                "conditionalEligibility": {"visaStatus": rule},
+            }
+        }
+
+    async def test_same_country_job_resolves_to_the_same_country_value(self):
+        profile = self._profile_with_rule()
+        result = await build(profile, None, job_location="Pune, India")
+        assert result.visa_status == "No - authorized to work"
+        assert "visa_status" in result.derived_eligibility_fields
+
+    async def test_different_country_job_resolves_to_the_default(self):
+        profile = self._profile_with_rule()
+        result = await build(profile, None, job_location="Austin, TX")
+        assert result.visa_status == "Yes - requires sponsorship"
+        assert "visa_status" in result.derived_eligibility_fields
+
+    async def test_unresolvable_job_location_falls_back_and_is_not_derived(self):
+        """A bare 'Remote' job must not silently claim the same-country answer -
+        that is a guessed knockout answer, and R1.6/1.6 says a guess must never
+        look as trustworthy as a computed one."""
+        profile = self._profile_with_rule()
+        result = await build(profile, None, job_location="Remote")
+        assert result.visa_status == "Yes - requires sponsorship"
+        assert "visa_status" not in result.derived_eligibility_fields
+
+    async def test_disabled_rule_behaves_exactly_like_the_old_flat_value(self):
+        profile = self._profile_with_rule(enabled=False)
+        result = await build(profile, None, job_location="Pune, India")
+        assert result.visa_status == "Yes - requires sponsorship"
+        assert "visa_status" not in result.derived_eligibility_fields
+
+    async def test_no_rule_configured_is_unaffected_existing_behaviour(self):
+        """The regression guard: an existing profile with no rule at all (every
+        profile before this phase shipped) must resolve exactly as before."""
+        result = await build(PROFILE, RESUME, job_location="Pune, India")
+        assert result.visa_status == "Not required"
+        assert result.derived_eligibility_fields == []
+
+    async def test_relocation_boolean_round_trips_through_the_rule(self):
+        profile = {
+            "identity": {
+                **PROFILE["identity"],
+                "conditionalEligibility": {
+                    "relocation": {
+                        "enabled": True,
+                        "default": "Yes",
+                        "same_country_value": "No",
+                    }
+                },
+            }
+        }
+        same_country = await build(profile, None, job_location="Pune, India")
+        assert same_country.willing_to_relocate is False
+        different_country = await build(profile, None, job_location="Austin, TX")
+        assert different_country.willing_to_relocate is True
 
 
 class TestEducation:

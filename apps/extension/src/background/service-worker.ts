@@ -163,7 +163,7 @@ async function handle(message: ToWorker, sender: chrome.runtime.MessageSender): 
       );
 
     case 'get-profile':
-      return ok(await api.getProfile());
+      return ok(await api.getProfile(message.job));
 
     case 'read-jd':
       return readJobDescription(message.url);

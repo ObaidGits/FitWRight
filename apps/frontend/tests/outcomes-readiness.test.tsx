@@ -79,6 +79,7 @@ function emptyIdentity(): ProfileData['identity'] {
     github: null,
     avatarUrl: null,
     address: { line1: '', line2: '', city: '', state: '', postalCode: '', country: '' },
+    conditionalEligibility: {},
   };
 }
 

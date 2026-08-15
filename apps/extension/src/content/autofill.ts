@@ -46,16 +46,34 @@ export interface Decision {
   label: string;
   resolved_target: string | null;
   /**
-   * Phase 0 only ever produces 'exact_rule' (matched and filled from the
-   * profile) or 'user_answer' (already held a value, i.e. the user's own
-   * typing). The remaining sources exist in the wire type because later
-   * phases will produce them from this same call site.
+   * Phase 0 only ever produced 'exact_rule' or 'user_answer'. Phase 1 adds
+   * 'derived_rule' for the four eligibility fields resolved from the job's
+   * country rather than read as a flat stored value - see
+   * `profile.derived_eligibility_fields` and `PROFILE_FIELD_FOR_KEY` below.
    */
-  value_source: 'exact_rule' | 'user_answer';
+  value_source: 'exact_rule' | 'user_answer' | 'derived_rule';
   filled: boolean;
   /** Null when nothing was attempted (classified but no value to fill). */
   readback_ok: boolean | null;
   required: boolean;
+}
+
+/**
+ * Maps this file's FieldKey vocabulary to the AutofillProfile field name that
+ * `derived_eligibility_fields` names, for the subset where the two differ.
+ * Keys absent here either share the same name already (`visa_status`,
+ * `willing_to_relocate`) or can never be derived (identity fields), so a
+ * lookup miss correctly means "not a derivable field".
+ */
+const PROFILE_FIELD_FOR_KEY: Partial<Record<string, string>> = {
+  workAuthorization: 'work_authorization',
+  salaryExpectation: 'salary_expectation',
+};
+
+function isDerivedField(key: string | null, profile: AutofillProfile): boolean {
+  if (!key) return false;
+  const profileField = PROFILE_FIELD_FOR_KEY[key] ?? key;
+  return (profile.derived_eligibility_fields ?? []).includes(profileField);
 }
 
 export interface AutofillReport {
@@ -148,8 +166,9 @@ function hasValue(el: Fillable): boolean {
  */
 export async function planFill(
   root: ParentNode = document,
+  job?: { company?: string; title?: string; location?: string },
 ): Promise<{ label: string; value: string }[]> {
-  const profileReply = await sendToWorker({ type: 'get-profile' });
+  const profileReply = await sendToWorker({ type: 'get-profile', job });
   if (!profileReply.ok) throw new Error(profileReply.error);
   const profile: AutofillProfile = profileReply.data;
   const { preferences } = await getSettings();
@@ -169,7 +188,7 @@ export async function planFill(
 
 export async function autofill(
   root: ParentNode = document,
-  job?: { company?: string; title?: string },
+  job?: { company?: string; title?: string; location?: string },
 ): Promise<AutofillReport> {
   const report: AutofillReport = {
     filled: 0,
@@ -181,7 +200,7 @@ export async function autofill(
     decisions: [],
   };
 
-  const profileReply = await sendToWorker({ type: 'get-profile' });
+  const profileReply = await sendToWorker({ type: 'get-profile', job });
   if (!profileReply.ok) throw new Error(profileReply.error);
   const profile: AutofillProfile = profileReply.data;
   const { preferences } = await getSettings();
@@ -260,9 +279,8 @@ export async function autofill(
     else report.skipped += 1;
     note(el, key, ok);
     // setValue's own return IS the read-back result (see lib/dom.ts), so
-    // `filled` and `readback_ok` collapse to the same boolean here - Phase 0
-    // has no source that fills without verifying.
-    decide(el, key, 'exact_rule', ok, ok);
+    // `filled` and `readback_ok` collapse to the same boolean here.
+    decide(el, key, isDerivedField(key, profile) ? 'derived_rule' : 'exact_rule', ok, ok);
   }
 
   // --- Radio / checkbox groups ---------------------------------------------
@@ -289,7 +307,7 @@ export async function autofill(
     const ok = setRadioGroup(name, value, root);
     if (ok) report.filled += 1;
     note(sample, key, ok);
-    decide(sample, key, 'exact_rule', ok, ok);
+    decide(sample, key, isDerivedField(key, profile) ? 'derived_rule' : 'exact_rule', ok, ok);
   }
 
   // --- Resume upload -------------------------------------------------------

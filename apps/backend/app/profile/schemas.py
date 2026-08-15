@@ -119,6 +119,21 @@ class ProfileAddress(BaseModel):
     country: str = ""
 
 
+class ConditionalEligibility(BaseModel):
+    """Country-conditional rules for the four eligibility fields that a wrong
+    flat answer auto-rejects on (auto-apply-brain Phase 1). See
+    app.eligibility_rules for the resolver; this is just the storage shape.
+
+    Optional and additive - a profile with none configured behaves exactly as
+    before this phase shipped.
+    """
+
+    visaStatus: dict[str, object] = Field(default_factory=dict)
+    workAuthorization: dict[str, object] = Field(default_factory=dict)
+    relocation: dict[str, object] = Field(default_factory=dict)
+    salaryExpectation: dict[str, object] = Field(default_factory=dict)
+
+
 class ProfileIdentity(BaseModel):
     """The "who am I professionally" header read first by every projection."""
 
@@ -143,6 +158,11 @@ class ProfileIdentity(BaseModel):
     # Private + future-ready; never projected unless explicitly requested.
     salaryExpectation: str = ""
     careerVisibility: Literal["private", "unlisted", "public"] = "private"
+    # Country-conditional overrides for the four fields above that a wrong flat
+    # answer auto-rejects on. Optional; see ConditionalEligibility.
+    conditionalEligibility: ConditionalEligibility = Field(
+        default_factory=ConditionalEligibility
+    )
 
     # Contact (mirrors resume PersonalInfo so projection is lossless).
     email: str = ""

@@ -37,6 +37,7 @@ function minimalProfile(overrides: Partial<AutofillProfile> = {}): AutofillProfi
     willing_to_relocate: null,
     availability: '',
     remote_preference: '',
+    derived_eligibility_fields: [],
     highest_degree: '',
     highest_institution: '',
     education_years: '',
@@ -137,5 +138,46 @@ describe('autofill decision recording', () => {
     // decided.
     expect(report.seen.some((f) => f.label === 'Favourite fruit')).toBe(true);
     expect(report.decisions.some((d) => d.label === 'Favourite fruit')).toBe(false);
+  });
+
+  it('tags a field the profile marked as country-derived as derived_rule, not exact_rule', async () => {
+    vi.stubGlobal('chrome', {
+      runtime: {
+        sendMessage: vi.fn(async (message: { type: string }) => {
+          if (message.type === 'get-profile') {
+            return {
+              ok: true,
+              data: minimalProfile({
+                work_authorization: 'No - authorized to work',
+                // FieldKey 'workAuthorization' maps to profile field
+                // 'work_authorization' via PROFILE_FIELD_FOR_KEY - this is
+                // exactly the non-trivial case that mapping exists for.
+                derived_eligibility_fields: ['work_authorization'],
+              }),
+            };
+          }
+          if (message.type === 'get-resume-pdf') return { ok: true, data: null };
+          return { ok: false, error: `unhandled message: ${message.type}` };
+        }),
+      },
+      storage: {
+        sync: { get: vi.fn(async () => ({})), set: vi.fn(async () => undefined) },
+        local: { get: vi.fn(async () => ({})), set: vi.fn(async () => undefined) },
+      },
+    });
+    document.body.innerHTML = `
+      <form>
+        <label for="auth">Are you legally authorized to work in this country?</label>
+        <input id="auth" name="auth" />
+      </form>
+    `;
+    const { autofill } = await import('@/content/autofill');
+    const report = await autofill(document);
+
+    const decision = report.decisions.find(
+      (d) => d.label === 'Are you legally authorized to work in this country?',
+    );
+    expect(decision?.value_source).toBe('derived_rule');
+    expect(decision?.filled).toBe(true);
   });
 });
