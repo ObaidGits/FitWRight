@@ -136,10 +136,11 @@ export interface PerSiteResult {
   /**
    * Set when we can name why nothing came back:
    * `signed-out` - a login wall (see lib/login-wall.ts)
+   * `captcha`    - a captcha challenge is showing (see lib/login-wall.ts)
    * `capped`     - the board's daily allowance is spent (see lib/pacing.ts)
    * `empty`      - the search genuinely matched nothing
    */
-  reason?: 'signed-out' | 'capped' | 'empty';
+  reason?: 'signed-out' | 'captcha' | 'capped' | 'empty';
 }
 
 /** Per-message reply payloads. */
@@ -183,7 +184,7 @@ export interface ReplyMap {
      * distinct from ``unrecognised`` below, which means we ARE on a form and
      * genuinely could not read it.
      */
-    reason?: 'signed-out' | 'empty' | 'no-application-form';
+    reason?: 'signed-out' | 'captcha' | 'empty' | 'no-application-form';
     /**
      * Fields present but unreadable - a stale adapter rather than a complete
      * form. See content/autofill.ts.
@@ -191,7 +192,7 @@ export interface ReplyMap {
     unrecognised?: number;
   };
   'capture-current': CaptureResponse;
-  'scrape-list': { found: number; saved: number; reason?: 'signed-out' | 'empty' };
+  'scrape-list': { found: number; saved: number; reason?: 'signed-out' | 'captcha' | 'empty' };
   'preview-fill': {
     plan: { label: string; value: string }[];
     /**

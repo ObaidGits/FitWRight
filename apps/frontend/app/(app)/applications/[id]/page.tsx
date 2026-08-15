@@ -43,6 +43,7 @@ import {
   ESTIMATE_MEDIUM,
 } from '@/lib/ai-progress-copy';
 import { SchedulingPanel } from '@/components/scheduling/scheduling-panel';
+import { DecisionTrailCard } from '@/components/applications/decision-trail-card';
 import {
   APPLICATION_STATUS_ORDER,
   createApplication,
@@ -311,6 +312,9 @@ export default function ApplicationWorkspacePage() {
                 </Button>
               </div>
             </Card>
+          </div>
+          <div className="mt-4">
+            <DecisionTrailCard applicationId={id} />
           </div>
         </TabsContent>
 

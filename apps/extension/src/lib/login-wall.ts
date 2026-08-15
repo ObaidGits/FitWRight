@@ -48,6 +48,28 @@ export function hasVisiblePasswordField(root: ParentNode = document): boolean {
 }
 
 /**
+ * Does the page show a captcha challenge right now?
+ *
+ * Detected the same way `hasVisiblePasswordField` detects a login wall: by the
+ * widget's own markup, not by inference from an empty result. reCAPTCHA and
+ * hCaptcha both render into an iframe with a recognisable src host; Cloudflare
+ * Turnstile uses a `data-sitekey` div with no iframe at all until solved. All
+ * three are checked because a form protected by one of them looks identical to
+ * "no form here" from autofill's point of view, and the two need different
+ * messages: one says "come back after solving it", the other says "click
+ * Apply first".
+ */
+export function hasVisibleCaptcha(root: ParentNode = document): boolean {
+  const candidates = Array.from(
+    root.querySelectorAll<HTMLElement>(
+      'iframe[src*="recaptcha"], iframe[src*="hcaptcha"], ' +
+        '.g-recaptcha, .h-captcha, [data-sitekey], #cf-turnstile, .cf-turnstile',
+    ),
+  );
+  return candidates.some(isVisible);
+}
+
+/**
  * Does this URL look like somewhere a site sends you to authenticate?
  *
  * Path only. A `?next=` or `?returnUrl=` parameter is tempting as a second
@@ -69,12 +91,14 @@ export function looksSignedOut(url: URL = new URL(location.href)): boolean {
 }
 
 /** Why a page yielded nothing, in the order of how much we can say for sure. */
-export type EmptyReason = 'signed-out' | 'empty';
+export type EmptyReason = 'signed-out' | 'captcha' | 'empty';
 
 /**
  * Classify an empty harvest. Separated from the message text so the content
  * script stays a DOM reader and the wording lives with the UI.
  */
 export function classifyEmpty(url: URL = new URL(location.href)): EmptyReason {
-  return looksSignedOut(url) ? 'signed-out' : 'empty';
+  if (looksSignedOut(url)) return 'signed-out';
+  if (hasVisibleCaptcha()) return 'captcha';
+  return 'empty';
 }

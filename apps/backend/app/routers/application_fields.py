@@ -242,6 +242,28 @@ class DecisionBatchResult(BaseModel):
     grade: str
 
 
+class DecisionOut(BaseModel):
+    """One field's fill decision, as the UI shows it - the audit trail."""
+
+    label: str
+    resolved_target: str | None = None
+    value_source: str
+    confidence: float
+    is_knockout: bool
+    filled: bool
+    readback_ok: bool | None = None
+    grade_contribution: str
+
+
+class ApplicationDecisions(BaseModel):
+    """Every decision for one application, plus the grade and why it isn't green."""
+
+    application_id: str
+    grade: str
+    decisions: list[DecisionOut]
+    held_reasons: list[str]
+
+
 class FieldOut(BaseModel):
     """A registry row, with any Profile pointer already resolved."""
 
@@ -568,6 +590,37 @@ async def record_decisions(
         user_id, decisions=rows, application_id=payload.application_id
     )
     return DecisionBatchResult(recorded=recorded, grade=grade)
+
+
+@router.get(
+    "/application-fields/decisions/{application_id}",
+    response_model=ApplicationDecisions,
+    summary="How one application's fields were filled",
+)
+async def get_application_decisions(
+    application_id: str,
+    user_id: str = Depends(get_effective_user_id),
+    db: Database = Depends(get_db),
+) -> ApplicationDecisions:
+    """The audit trail for one application - why each field was filled the way
+    it was, and why the application isn't green if it isn't.
+
+    Recomputes the grade from the stored rows rather than trusting
+    ``grade_contribution`` verbatim, so this endpoint stays correct even if the
+    grading rules change after the rows were written.
+    """
+    from app.brain_grading import grade_application, held_reasons
+
+    rows = await db.list_brain_decisions(user_id, application_id=application_id)
+    for_grading = [{**row, "required": True} for row in rows]
+    grade = grade_application(for_grading) if rows else "yellow"
+
+    return ApplicationDecisions(
+        application_id=application_id,
+        grade=grade,
+        decisions=[DecisionOut(**row) for row in rows],
+        held_reasons=held_reasons(for_grading),
+    )
 
 
 @router.get(

@@ -12,7 +12,13 @@
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { classifyEmpty, hasVisiblePasswordField, isAuthUrl, looksSignedOut } from '@/lib/login-wall';
+import {
+  classifyEmpty,
+  hasVisibleCaptcha,
+  hasVisiblePasswordField,
+  isAuthUrl,
+  looksSignedOut,
+} from '@/lib/login-wall';
 
 function setBody(html: string): void {
   document.body.innerHTML = html;
@@ -111,5 +117,41 @@ describe('classifyEmpty', () => {
   it('reports a genuinely empty search as empty', () => {
     setBody('<main>No results found</main>');
     expect(classifyEmpty(new URL('https://example.test/search?q=nothing'))).toBe('empty');
+  });
+});
+
+describe('hasVisibleCaptcha', () => {
+  beforeEach(() => setBody(''));
+
+  it('reports false when no captcha markup is present at all', () => {
+    setBody('<form><input type="text" /><input type="email" /></form>');
+    expect(hasVisibleCaptcha()).toBe(false);
+  });
+
+  it('ignores a display:none captcha container', () => {
+    setBody('<div style="display:none" class="g-recaptcha"></div>');
+    expect(hasVisibleCaptcha()).toBe(false);
+  });
+
+  it('does not fire on an ordinary application form with no captcha widget', () => {
+    setBody('<form><input type="text" /><input type="email" /><input type="file" /></form>');
+    expect(hasVisibleCaptcha()).toBe(false);
+  });
+
+  it('recognises the recaptcha, hcaptcha and turnstile markers it looks for', () => {
+    // jsdom never lays anything out, so offsetParent is always null and none of
+    // these can be asserted true here - see the module docstring and the same
+    // caveat on hasVisiblePasswordField above. This pins that the selector
+    // itself does not throw on any of the three shapes.
+    for (const html of [
+      '<iframe src="https://www.google.com/recaptcha/api2/anchor"></iframe>',
+      '<iframe src="https://newassets.hcaptcha.com/captcha/v1/frame"></iframe>',
+      '<div class="g-recaptcha" data-sitekey="abc"></div>',
+      '<div class="h-captcha"></div>',
+      '<div id="cf-turnstile"></div>',
+    ]) {
+      setBody(html);
+      expect(typeof hasVisibleCaptcha()).toBe('boolean');
+    }
   });
 });

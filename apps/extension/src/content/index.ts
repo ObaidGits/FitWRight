@@ -18,7 +18,7 @@ import { resolveFormRoot } from '@/lib/application-form';
 import { waitFor } from '@/lib/dom';
 import { collectFields } from '@/lib/fields';
 import { t } from '@/lib/i18n';
-import { classifyEmpty, looksSignedOut } from '@/lib/login-wall';
+import { classifyEmpty, hasVisibleCaptcha, looksSignedOut } from '@/lib/login-wall';
 import { getSitePreference, isSiteEnabled } from '@/lib/site-prefs';
 import { fail, ok } from '@/lib/messages';
 import type { Reply, ToContent } from '@/lib/messages';
@@ -244,6 +244,15 @@ async function handleMessage(message: ToContent): Promise<Reply<unknown>> {
       if (looksSignedOut()) {
         toast(t('toastSignInFirst', [adapter.label]), 'err');
         return ok({ filled: 0, skipped: 0, questions: [], reason: 'signed-out' });
+      }
+
+      // A captcha challenge on the page means any fill attempt is a guess about
+      // a form the widget may still be blocking - and clicking through it is
+      // exactly the kind of automated interaction these widgets exist to catch.
+      // Stop and name it, rather than filling around it and hoping.
+      if (hasVisibleCaptcha()) {
+        toast('A captcha is showing. Solve it, then run autofill again.', 'err');
+        return ok({ filled: 0, skipped: 0, questions: [], reason: 'captcha' });
       }
 
       // THE most common case on a job board, and the one that used to look like a

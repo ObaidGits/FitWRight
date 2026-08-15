@@ -164,6 +164,10 @@ function render(tabId: number, context: PageContext, health: { hasResume: boolea
           setStatus('You appear signed out of this site. Sign in, then autofill.', 'err');
           return;
         }
+        if (reason === 'captcha') {
+          setStatus('A captcha is showing on this page. Solve it, then autofill.', 'err');
+          return;
+        }
         if (reason === 'no-application-form') {
           // The single most common case on a job board, and previously reported as
           // an unreadable form - which sent the user hunting for a bug that was

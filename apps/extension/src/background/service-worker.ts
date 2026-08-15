@@ -393,7 +393,9 @@ async function scrapeEntries(
             reply.data.found === 0
               ? reply.data.reason === 'signed-out'
                 ? `Signed out of ${entry.source} - sign in to that site, then search again`
-                : 'No results on the page for this search'
+                : reply.data.reason === 'captcha'
+                  ? `${entry.source} is showing a captcha - solve it, then search again`
+                  : 'No results on the page for this search'
               : undefined,
         });
       } else {

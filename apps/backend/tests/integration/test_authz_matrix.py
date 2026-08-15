@@ -210,6 +210,7 @@ OWNED_ENDPOINTS: list[tuple[str, str]] = [
     ("GET", "/api/v1/application-fields/summary"),
     ("GET", "/api/v1/application-fields/readiness"),
     ("POST", "/api/v1/application-fields/decisions"),
+    ("GET", "/api/v1/application-fields/decisions/aid"),
     ("PATCH", "/api/v1/application-fields/fid"),
     ("DELETE", "/api/v1/application-fields/fid"),
     ("POST", "/api/v1/application-fields/fid/merge"),

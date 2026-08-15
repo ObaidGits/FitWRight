@@ -388,6 +388,49 @@ class TestRecordDecisionsEndpoint:
             )
 
 
+class TestGetApplicationDecisions:
+    """`GET /application-fields/decisions/{application_id}` - the read side of
+    the audit trail, used by the Applications page's "How this was filled" panel."""
+
+    async def test_recomputes_the_grade_rather_than_trusting_the_stored_value(self, db):
+        from app.routers.application_fields import get_application_decisions
+
+        # Stored as green, but a knockout field from an untrusted source must
+        # never actually grade green - this proves the endpoint recomputes
+        # rather than echoing back whatever was written at record time.
+        await db.record_brain_decisions(
+            USER,
+            decisions=[
+                {
+                    "site_host": "boards.greenhouse.io",
+                    "label": "Visa status",
+                    "label_normalized": "visa status",
+                    "resolved_target": "visa_status",
+                    "value_source": "brain_classification",
+                    "confidence": 0.9,
+                    "is_knockout": True,
+                    "filled": True,
+                    "readback_ok": True,
+                    "grade_contribution": "green",  # stale/wrong on purpose
+                    "brain_tokens": 5,
+                },
+            ],
+            application_id="app-recompute",
+        )
+        result = await get_application_decisions(
+            "app-recompute", user_id=USER, db=db
+        )
+        assert result.grade == "red"
+        assert any("Screening question" in reason for reason in result.held_reasons)
+
+    async def test_an_application_with_no_decisions_grades_yellow_not_green(self, db):
+        from app.routers.application_fields import get_application_decisions
+
+        result = await get_application_decisions("no-such-app", user_id=USER, db=db)
+        assert result.grade == "yellow"
+        assert result.decisions == []
+
+
 class TestSavingTypedAnswers:
     """`POST /extension/answers` - the learn-in-place path.
 
