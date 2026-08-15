@@ -13,12 +13,14 @@ import {
   updateLanguageConfig,
   fetchApiKeyStatus,
   updateApiKeys,
+  deleteApiKey,
   fetchFeaturePrompts,
   updateFeaturePrompts,
   type LLMConfigUpdate,
   type FeatureConfigUpdate,
   type LanguageConfigUpdate,
   type ApiKeysUpdateRequest,
+  type ApiKeyProvider,
   type FeaturePromptsUpdate,
 } from '@/lib/api/config';
 
@@ -77,6 +79,17 @@ export function useUpdateApiKeys() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (keys: ApiKeysUpdateRequest) => updateApiKeys(keys),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['config'] });
+      qc.invalidateQueries({ queryKey: queryKeys.status });
+      qc.invalidateQueries({ queryKey: queryKeys.setup });
+    },
+  });
+}
+export function useDeleteApiKey() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (provider: ApiKeyProvider) => deleteApiKey(provider),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['config'] });
       qc.invalidateQueries({ queryKey: queryKeys.status });
