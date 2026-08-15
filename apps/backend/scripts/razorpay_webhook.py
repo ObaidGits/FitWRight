@@ -90,7 +90,13 @@ def cmd_list() -> None:
         return
     for item in items:
         print(f"{item.get('id')}  active={item.get('active')}  {item.get('url')}")
-        print(f"    events: {', '.join(sorted((item.get('events') or {}).keys()))}")
+        # Razorpay returns the FULL catalogue of available events with a 0/1 flag each,
+        # so printing every key lists ~50 events that are not subscribed and makes the
+        # webhook look wired to everything. Only the enabled ones are real.
+        enabled = sorted(
+            name for name, on in (item.get("events") or {}).items() if on
+        )
+        print(f"    subscribed ({len(enabled)}): {', '.join(enabled) or 'none'}")
 
 
 def cmd_create(site_root: str) -> None:
@@ -111,7 +117,14 @@ def cmd_create(site_root: str) -> None:
     status, body = _call(
         "POST",
         API,
-        {"url": url, "secret": secret, "events": EVENTS, "alert_email": ""},
+        {
+            "url": url,
+            "secret": secret,
+            # Razorpay expects a MAP of event name -> 1, not a list. Sending a list makes
+            # it read the indices as event names and reject "1, 2, 3" - which is exactly
+            # what happened on the first attempt.
+            "events": {name: 1 for name in EVENTS},
+        },
     )
     if status not in (200, 201):
         sys.exit(f"Razorpay returned {status}: {body}")
