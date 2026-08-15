@@ -46,6 +46,7 @@ import {
 import { useToast } from '@/components/atelier/toast';
 import { useResumeLibrary, useDeleteResume, useRetryProcessing } from '@/features/resumes/hooks';
 import { ResumeThumbnail } from '@/components/resume/resume-thumbnail';
+import MoreHorizontal from 'lucide-react/dist/esm/icons/more-horizontal';
 import { compareByMatchScore } from '@/lib/utils/resume-sort';
 import type { ResumeListItem } from '@/lib/api/resume';
 
@@ -62,6 +63,21 @@ const SORT_LABELS: Record<SortKey, string> = {
 /** A score badge, or nothing. An unscored resume shows no badge rather than a
  *  zero: a master resume has no job to be measured against, so "0%" would read
  *  as a terrible match instead of an absent one. */
+/** "24 Jul 2026" rather than "7/24/2026".
+ *
+ * The numeric form is ambiguous outside the US - 7/24 and 24/7 read differently - and
+ * on a card where the date sits beside badges the month name is easier to scan than
+ * three groups of digits. */
+function formatShortDate(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
 function ScoreBadge({ score }: { score?: number | null }) {
   if (score == null) return null;
   const rounded = Math.round(score);
@@ -296,16 +312,19 @@ export default function ResumesPage() {
           }
         />
       ) : (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 xl:grid-cols-4">
           {filtered.map((r) => (
-            <Card key={r.resume_id} className="group relative flex flex-col overflow-hidden p-0">
-              {/* The preview IS the affordance. A grid of documents is scannable by
-                  shape and header the way a list of near-identical generated names
-                  never is - which is the reason the thumbnail exists at all, and it
-                  was wasted at row size. */}
+            <Card
+              key={r.resume_id}
+              className="group relative flex flex-col overflow-hidden p-0 transition-shadow hover:shadow-md"
+            >
+              {/* The whole preview is the link, so the obvious thing to click is the
+                  thing being looked at. aria-hidden because the title link below carries
+                  the accessible name - two links to one destination is noise in a screen
+                  reader. */}
               <Link
                 href={`/builder?id=${r.resume_id}`}
-                className="block bg-[var(--at-surface-2)] p-3 pb-0"
+                className="block border-b border-[var(--border)]"
                 tabIndex={-1}
                 aria-hidden="true"
               >
@@ -316,45 +335,54 @@ export default function ResumesPage() {
                 />
               </Link>
 
-              <div className="flex min-w-0 flex-1 flex-col gap-2 p-3">
-                <div className="min-w-0">
-                  <Link
-                    href={`/builder?id=${r.resume_id}`}
-                    className="block truncate text-sm font-medium hover:text-[var(--primary)]"
-                    title={r.title || r.filename || 'Untitled resume'}
-                  >
-                    {r.title || r.filename || 'Untitled resume'}
-                  </Link>
-                  <p className="text-xs text-[var(--muted-foreground)]">
-                    {new Date(r.created_at).toLocaleDateString()}
-                  </p>
-                </div>
+              <div className="flex min-w-0 flex-1 flex-col gap-1 p-2.5 sm:p-3">
+                <Link
+                  href={`/builder?id=${r.resume_id}`}
+                  className="text-[13px] font-medium leading-snug hover:text-[var(--primary)] sm:text-sm"
+                  title={r.title || r.filename || 'Untitled resume'}
+                >
+                  {/* Two lines, not one truncated line: these titles are generated and
+                      the distinguishing part is usually at the END ("... - UI
+                      Automation"), so cutting after a few words hides exactly what tells
+                      one variant from another. */}
+                  <span className="line-clamp-2">{r.title || r.filename || 'Untitled resume'}</span>
+                </Link>
 
-                {/* Badges wrap rather than compete for one line: at three columns a
-                    card is narrow, and a master resume that also has a score and a
-                    processing state would otherwise clip whichever came last. */}
-                <div className="mt-auto flex flex-wrap items-center gap-1.5">
-                  {r.is_master && <Badge variant="primary">Master</Badge>}
+                {/* One meta line rather than a badge row. "Ready" on its own line cost
+                    every card a strip of empty space, and it is the least interesting
+                    thing about a resume that is working normally. */}
+                <div className="mt-auto flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-[var(--muted-foreground)]">
+                  <span>{formatShortDate(r.created_at)}</span>
+                  {r.is_master && (
+                    <Badge variant="primary" className="px-1.5 py-0 text-[10px]">
+                      Master
+                    </Badge>
+                  )}
                   <ScoreBadge score={r.ats_score} />
-                  <StatusBadge
-                    status={retryingId === r.resume_id ? 'processing' : r.processing_status}
-                  />
+                  {/* Status only when it is NOT the normal case: a grid of green "Ready"
+                      pills is decoration, while a "Failed" pill is information. */}
+                  {(retryingId === r.resume_id || r.processing_status !== 'ready') && (
+                    <StatusBadge
+                      status={retryingId === r.resume_id ? 'processing' : r.processing_status}
+                    />
+                  )}
                 </div>
               </div>
 
-              {/* Pinned to the corner so it never shifts the card's text, and always
-                  visible rather than hover-only - a menu that appears on hover is
-                  unreachable by touch, which is most of this page's traffic. */}
-              <div className="absolute right-1 top-1">
+              {/* Solid background and a border, not a faint glyph over white paper - at
+                  thumbnail scale the previous version was almost invisible. Always
+                  rendered rather than hover-only, because a hover-only control cannot be
+                  reached on a phone. */}
+              <div className="absolute right-1.5 top-1.5">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="icon"
                       aria-label={`Actions for ${r.title || r.filename || 'this resume'}`}
-                      className="h-7 w-7 bg-[var(--card)]/80 backdrop-blur-sm hover:bg-[var(--card)]"
+                      className="h-7 w-7 border-[var(--border)] bg-[var(--card)] shadow-sm"
                     >
-                      ⋯
+                      <MoreHorizontal className="h-4 w-4" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">

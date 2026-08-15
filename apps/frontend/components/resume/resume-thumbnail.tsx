@@ -65,40 +65,62 @@ export function ResumeThumbnail({
   const data = query.data?.processed_resume as ResumeData | undefined;
   const template = query.data?.template_settings?.template ?? DEFAULT_TEMPLATE_SETTINGS.template;
 
-  // Fluid mode fills whatever width the card gives it, using container-query units so
-  // the page scales in CSS with no measurement in JavaScript. The alternative - a
-  // ResizeObserver feeding a state update - would re-render every card on every layout
-  // change, and a grid of twenty of them is exactly where that gets expensive.
+  // MEASURED width, not a CSS container-query expression.
+  //
+  // The first attempt used `transform: scale(calc(100cqw / 794))`, which is INVALID -
+  // `scale()` needs a plain number and dividing a length by a number yields a length.
+  // The browser dropped the transform silently, so every page rendered at its full
+  // 794px inside a ~200px card and was simply clipped: titles cut mid-word, right
+  // margin gone. It looked like a cropping choice rather than a broken rule, which is
+  // why nothing flagged it.
+  //
+  // A ResizeObserver costs one callback per card on mount and on resize, which is
+  // cheaper than being wrong.
+  const [boxWidth, setBoxWidth] = React.useState(0);
+
+  React.useEffect(() => {
+    if (!fluid) return;
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width ?? 0;
+      // Only commit real changes: sub-pixel jitter during layout would otherwise
+      // re-render the whole grid repeatedly.
+      setBoxWidth((current) => (Math.abs(current - width) > 1 ? width : current));
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [fluid]);
+
+  const scale = fluid ? (boxWidth > 0 ? boxWidth / A4_WIDTH_PX : 0) : SCALE;
+
   const wrapperStyle: React.CSSProperties = fluid
-    ? { containerType: 'inline-size', aspectRatio: '210 / 297' }
+    ? // Deliberately NOT the full A4 1:1.414 shape. A full page makes a very tall card
+      // for content that is unreadable at this size anyway; this crops to the top of the
+      // page - name, contact line, summary heading - which is what actually
+      // distinguishes one tailored variant from another.
+      { aspectRatio: '5 / 4' }
     : { width: THUMB_WIDTH, height: Math.round(THUMB_WIDTH * 1.414) };
 
-  const pageStyle: React.CSSProperties = fluid
-    ? {
-        width: A4_WIDTH_PX,
-        // 1cqw is 1% of the container's width, so this is "scale the A4 page down to
-        // exactly the container width" and it stays correct at every breakpoint.
-        transform: `scale(calc(100cqw / ${A4_WIDTH_PX}))`,
-        transformOrigin: 'top left',
-        pointerEvents: 'none',
-      }
-    : {
-        width: A4_WIDTH_PX,
-        transform: `scale(${SCALE})`,
-        transformOrigin: 'top left',
-        pointerEvents: 'none',
-      };
+  const pageStyle: React.CSSProperties = {
+    width: A4_WIDTH_PX,
+    transform: `scale(${scale})`,
+    transformOrigin: 'top left',
+    pointerEvents: 'none',
+  };
 
   return (
     <div
       ref={ref}
       aria-hidden="true"
-      className={`relative overflow-hidden rounded-[var(--radius-at-sm)] border border-[var(--border)] bg-white ${
-        fluid ? 'w-full' : 'shrink-0'
+      className={`relative overflow-hidden bg-white ${
+        fluid ? 'w-full' : 'shrink-0 rounded-[var(--radius-at-sm)] border border-[var(--border)]'
       } ${className ?? ''}`}
       style={wrapperStyle}
     >
-      {data ? (
+      {/* Held back until the width is known: rendering at scale 0 then jumping to the
+          real size is a visible flash on every card in the grid. */}
+      {data && scale > 0 ? (
         <div style={pageStyle}>
           <Resume resumeData={stripHiddenItems(data)} template={template} />
         </div>
@@ -106,7 +128,7 @@ export function ResumeThumbnail({
         // Placeholder that still reads as a document, so the card height never
         // jumps when the real thumbnail arrives.
         <div className="flex h-full w-full items-center justify-center bg-[var(--at-surface-2)]">
-          <FileText className={`text-[var(--muted-foreground)] ${fluid ? 'h-8 w-8' : 'h-5 w-5'}`} />
+          <FileText className={`text-[var(--muted-foreground)] ${fluid ? 'h-7 w-7' : 'h-5 w-5'}`} />
         </div>
       )}
     </div>
