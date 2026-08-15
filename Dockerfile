@@ -99,6 +99,12 @@ COPY apps/backend/app /app/backend/app
 # Without these the container fails to boot on Postgres.
 COPY apps/backend/alembic.ini /app/backend/
 COPY apps/backend/alembic /app/backend/alembic
+# Operational scripts, needed for tasks that can only be done against the real
+# database: seeding credit pack prices, and checking model/migration parity before or
+# after a manual migration. Without these, `heroku run python scripts/...` fails with a
+# confusing "No such file or directory" that looks like a wrong path rather than a
+# missing file - which is exactly how it was first hit.
+COPY apps/backend/scripts /app/backend/scripts
 
 WORKDIR /app/backend
 

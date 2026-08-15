@@ -38,16 +38,32 @@ API = "https://api.razorpay.com/v1/webhooks"
 
 
 def _env() -> dict[str, str]:
-    """Read apps/backend/.env without importing the app (no DB, no settings)."""
+    """Credentials from the real environment first, then apps/backend/.env.
+
+    Production has no ``.env`` file - Heroku supplies config as environment variables -
+    so reading only the file would make this script work locally and fail in the one
+    place an operator most needs it.
+    """
+    import os
+
+    keys = ("RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "RAZORPAY_WEBHOOK_SECRET")
+    out = {key: os.environ[key] for key in keys if os.environ.get(key)}
+    if all(key in out for key in ("RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET")):
+        return out
+
     path = Path(__file__).resolve().parent.parent / ".env"
     if not path.exists():
-        sys.exit(f"No .env found at {path}")
-    out: dict[str, str] = {}
+        sys.exit(
+            "Razorpay credentials not found in the environment, and no .env at "
+            f"{path}"
+        )
     for line in path.read_text().splitlines():
         line = line.strip()
         if line and not line.startswith("#") and "=" in line:
             key, value = line.split("=", 1)
-            out[key.strip()] = value.strip()
+            key = key.strip()
+            # Real environment wins: it is what the running app itself reads.
+            out.setdefault(key, value.strip())
     return out
 
 
