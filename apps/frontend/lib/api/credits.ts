@@ -131,6 +131,47 @@ export async function getMyPurchases(limit = 20): Promise<{ items: PurchaseRecor
   return res.json();
 }
 
+/**
+ * Download one purchase's receipt.
+ *
+ * Fetched as a blob rather than linked directly, because the endpoint needs the session
+ * cookie and returns a Content-Disposition attachment - a plain anchor would work for the
+ * cookie but gives no way to surface a failure to the user.
+ */
+export async function downloadReceipt(purchaseId: string, invoiceNumber?: string | null) {
+  const res = await apiFetch(`/credits/purchases/${encodeURIComponent(purchaseId)}/receipt`);
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.error?.message ?? 'Could not download the receipt');
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `receipt-${invoiceNumber || purchaseId}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // Revoked on the next tick: revoking immediately can cancel the download in some
+  // browsers before it has actually started reading the blob.
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** Ask the operator for a plan none of the published tiers covers. */
+export async function requestCustomPlan(input: {
+  applications_per_month: number;
+  message?: string;
+  company?: string;
+}): Promise<{ status: string; reference: string }> {
+  const res = await apiFetch('/credits/custom-plan-request', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw new Error('Could not send your request');
+  return res.json();
+}
+
 /** Rupees (or whatever currency) from a minor-unit integer. */
 export function formatMoney(minor: number, currency = 'INR'): string {
   const symbol = currency === 'INR' ? '₹' : `${currency} `;

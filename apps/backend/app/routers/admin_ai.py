@@ -627,6 +627,205 @@ class PlanPatch(BaseModel):
     clear_search_limit: bool = False
 
 
+# ======================================================================
+# Business settings - receipt seller block and mail transport
+# ======================================================================
+
+
+class SellerIn(BaseModel):
+    """What appears on a receipt as the seller.
+
+    ``gstin`` blank means "not registered": the receipt then calls itself a payment
+    receipt and shows no tax line at all, rather than an empty tax field. Setting a tax
+    percent without a GSTIN is rejected by the settings module.
+    """
+
+    business_name: str = Field(default="", max_length=200)
+    address: str = Field(default="", max_length=500)
+    email: str = Field(default="", max_length=200)
+    phone: str = Field(default="", max_length=50)
+    gstin: str = Field(default="", max_length=20)
+    tax_percent: int = Field(default=0, ge=0, le=100)
+    footer_note: str = Field(default="", max_length=300)
+
+
+class MailIn(BaseModel):
+    """Mail transport. ``secret`` blank keeps whatever is stored.
+
+    Blank cannot mean "clear the password", because a settings form has no way to show a
+    stored password back and therefore submits blank whenever the operator edited an
+    unrelated field - treating that as a clear would break delivery constantly.
+    """
+
+    provider: str = Field(default="", max_length=20)
+    from_email: str = Field(default="", max_length=200)
+    from_name: str = Field(default="", max_length=100)
+    smtp_host: str = Field(default="", max_length=200)
+    smtp_port: int = Field(default=587, ge=1, le=65535)
+    smtp_user: str = Field(default="", max_length=200)
+    smtp_use_tls: bool = True
+    secret: str = Field(default="", max_length=500)
+    enabled_events: dict[str, bool] = Field(default_factory=dict)
+
+
+@router.get("/settings/business")
+async def get_business_settings(
+    _admin: Principal = Depends(require_admin_read),
+) -> dict[str, Any]:
+    """Seller block plus mail transport, with the mail secret never returned.
+
+    ``mail.source`` tells the UI whether the environment is in charge. Showing an editable
+    form that a live env var silently overrides would be lying to the operator, so the panel
+    can render it read-only with an explanation instead.
+    """
+    from app.app_settings import MAIL_EVENTS, get_mail_transport, get_seller_details
+
+    seller = await get_seller_details(db)
+    mail = await get_mail_transport(db)
+    return {
+        "seller": {
+            "business_name": seller.business_name,
+            "address": seller.address,
+            "email": seller.email,
+            "phone": seller.phone,
+            "gstin": seller.gstin,
+            "tax_percent": seller.tax_percent,
+            "footer_note": seller.footer_note,
+            "is_configured": seller.is_configured,
+            "charges_tax": seller.charges_tax,
+        },
+        "mail": {
+            "provider": mail.provider,
+            "from_email": mail.from_email,
+            "from_name": mail.from_name,
+            "smtp_host": mail.smtp_host,
+            "smtp_port": mail.smtp_port,
+            "smtp_user": mail.smtp_user,
+            "smtp_use_tls": mail.smtp_use_tls,
+            # Presence only. The value never leaves the server.
+            "has_secret": bool(mail.secret),
+            "enabled_events": {k: mail.sends(k) for k in MAIL_EVENTS},
+            "source": mail.source,
+        },
+        "mail_events": MAIL_EVENTS,
+    }
+
+
+@router.put("/settings/seller")
+async def put_seller_settings(
+    payload: SellerIn,
+    _admin: Principal = Depends(require_admin_manage),
+) -> dict[str, Any]:
+    from app.app_settings import save_seller_details
+
+    try:
+        seller = await save_seller_details(
+            db, payload.model_dump(), updated_by=getattr(_admin, "user_id", None)
+        )
+    except ValueError as exc:
+        # e.g. a tax percent with no GSTIN. The operator's own words back.
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    await _audit(
+        AuditEvent.ADMIN_SETTINGS_CHANGED,
+        _admin,
+        meta={"setting": "billing.seller", "charges_tax": seller.charges_tax},
+    )
+    return {"status": "saved", "charges_tax": seller.charges_tax}
+
+
+@router.put("/settings/mail")
+async def put_mail_settings(
+    payload: MailIn,
+    _admin: Principal = Depends(require_admin_manage),
+) -> dict[str, Any]:
+    from app.app_settings import get_mail_transport, save_mail_transport
+
+    current = await get_mail_transport(db)
+    if current.source == "env":
+        # Refused rather than silently ignored: writing a row that the env var overrides
+        # would leave the panel showing settings that are not in effect.
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Mail is configured by environment variables on this deployment, so it "
+                "cannot be edited here. Remove EMAIL_PROVIDER from the environment to "
+                "manage mail from this panel."
+            ),
+        )
+
+    try:
+        mail = await save_mail_transport(
+            db,
+            payload.model_dump(exclude={"secret"}),
+            secret=payload.secret or None,
+            updated_by=getattr(_admin, "user_id", None),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    await _audit(
+        AuditEvent.ADMIN_SETTINGS_CHANGED,
+        _admin,
+        meta={"setting": "mail.transport", "provider": mail.provider},
+    )
+    return {"status": "saved", "provider": mail.provider, "has_secret": bool(mail.secret)}
+
+
+@router.post("/settings/mail/test")
+async def test_mail_settings(
+    _admin: Principal = Depends(require_admin_manage),
+) -> dict[str, Any]:
+    """Send one email to the admin's own address and report what happened.
+
+    Exists so a wrong SMTP password is found HERE rather than by a customer never receiving
+    a receipt. Without it the only way to validate mail is to wait for a real event and
+    then try to work out from logs whether it left the building.
+    """
+    from app.app_settings import get_mail_transport
+    from app.auth.email import EmailMessage, send_email_safe
+    from app.platform import get_container
+
+    mail = await get_mail_transport(db)
+    if not mail.provider:
+        raise HTTPException(status_code=400, detail="No mail provider is configured yet.")
+
+    to = getattr(_admin, "email", "") or mail.from_email
+    if not to:
+        raise HTTPException(
+            status_code=400, detail="No address to send the test to - set the 'from' address."
+        )
+
+    sender = get_container().email_sender_for(mail)
+    ok = await send_email_safe(
+        sender,
+        EmailMessage(
+            to=to,
+            subject="FitWright mail test",
+            text_body=(
+                "This is a test from your FitWright admin panel.\n\n"
+                "If you received it, receipts and verification emails will send too."
+            ),
+        ),
+    )
+    await _audit(
+        AuditEvent.ADMIN_SETTINGS_CHANGED,
+        _admin,
+        meta={"setting": "mail.transport", "action": "test", "delivered": bool(ok)},
+    )
+    # `ok=False` here means the send failed, not that the address is wrong - the operator
+    # needs both possibilities named.
+    return {
+        "delivered": bool(ok),
+        "to": to,
+        "detail": (
+            "Sent - check that inbox."
+            if ok
+            else "The provider rejected it. Check the host, port, username and password."
+        ),
+    }
+
+
 @router.get("/plans")
 async def list_plans(_admin: Principal = Depends(require_admin_read)) -> list[dict[str, Any]]:
     """Every plan, active or not."""

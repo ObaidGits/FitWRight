@@ -249,6 +249,16 @@ async def handle_webhook(
             await db.fail_purchase(purchase["id"], reason="amount_mismatch", event_id=str(event_id))
             return {"status": "failed", "reason": "amount mismatch"}
         granted = await db.grant_purchase(purchase["id"], event_id=str(event_id))
+        if granted == "granted":
+            # After the grant has COMMITTED, never inside it: sending mail from within the
+            # granting transaction would hold a write lock open for an SMTP round trip, and
+            # a mail timeout would roll back a completed payment. Its own failures are
+            # caught internally, so a notification problem cannot fail the webhook and
+            # invite a duplicate payment.
+            from app.ai_purchase_notify import notify_purchase_complete
+
+            delivery = await notify_purchase_complete(purchase["id"])
+            logger.info("Purchase %s notification: %s", purchase["id"], delivery)
         return {"status": granted}
     if kind == "failed":
         await db.fail_purchase(purchase["id"], reason="provider_failed", event_id=str(event_id))

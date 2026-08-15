@@ -77,6 +77,23 @@ class Container:
 
         return self._get_or_build("email_sender", build_email_sender)
 
+    def email_sender_for(self, transport):
+        """An email sender built from DB-backed mail settings (migration 0041).
+
+        Separate from :meth:`email_sender` and deliberately NOT cached: that one is the
+        process-wide adapter built from environment config, whereas this is built per call
+        from a row an admin can change at any moment. Caching it would keep sending through
+        the previous SMTP host until a restart.
+
+        It lives here because adapter construction belongs to the composition root - the
+        architecture guard enforces that, and it is right to: a second construction site is
+        how two parts of the app end up sending through different providers without anyone
+        noticing.
+        """
+        from app.auth.runtime import build_email_sender
+
+        return build_email_sender(transport.as_email_config())
+
     def captcha_verifier(self):
         from app.auth.runtime import build_captcha_verifier
 

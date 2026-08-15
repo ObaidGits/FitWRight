@@ -26,14 +26,18 @@ import Link from 'next/link';
 import { Card } from '@/components/atelier/card';
 import { Badge } from '@/components/atelier/badge';
 import { Button } from '@/components/atelier/button';
+import { Input } from '@/components/atelier/input';
+import { Label } from '@/components/atelier/label';
 import { EmptyState, ErrorState, LoadingSkeleton } from '@/components/atelier/states';
 import { BuyCredits } from '@/components/settings/buy-credits';
 import { PAGE_WIDTH } from '@/lib/layout/page-width';
 import {
+  downloadReceipt,
   formatMoney,
   getMyCredits,
   getMyPurchases,
   getPricing,
+  requestCustomPlan,
   type MyCredits,
   type Pricing,
   type PurchaseRecord,
@@ -87,6 +91,7 @@ export default function BillingPage() {
 
       <BalanceCard credits={credits} />
       <PlansCard pricing={pricing} />
+      <CustomPlanCard />
       <PricesCard pricing={pricing} />
       <HistoryCard purchases={purchases} onChanged={load} />
     </div>
@@ -289,14 +294,11 @@ function PlansCard({ pricing }: { pricing: Pricing }) {
         ))}
       </ul>
       {/* Honest about what is not built rather than showing a button that does nothing.
-          Changing plans is a payment flow, and a dead "Upgrade" button is worse than an
-          explanation of how to actually do it. */}
+          Changing plans is a payment flow; a dead "Upgrade" button is worse than an
+          explanation of how to actually do it. The custom-plan form is below. */}
       <p className="text-xs text-[var(--muted-foreground)]">
-        To change plan, top up your credits below or{' '}
-        <Link href="/contact" className="underline">
-          contact us
-        </Link>{' '}
-        - including for a custom plan if none of these fit.
+        To change plan, top up your credits above - or request a custom plan below if none of these
+        fit.
       </p>
     </Card>
   );
@@ -354,6 +356,22 @@ function HistoryCard({
   purchases: PurchaseRecord[] | null;
   onChanged: () => void;
 }) {
+  const [busy, setBusy] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+
+  async function download(p: PurchaseRecord) {
+    setBusy(p.id);
+    setError(null);
+    try {
+      await downloadReceipt(p.id, p.invoice_number);
+    } catch (err) {
+      // A failed download must say so. A button that silently does nothing reads as broken.
+      setError(err instanceof Error ? err.message : 'Could not download the receipt');
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
     <Card className="space-y-3 p-6">
       <div className="flex items-center justify-between gap-2">
@@ -362,10 +380,11 @@ function HistoryCard({
           Refresh
         </Button>
       </div>
+      {error && <p className="text-xs text-[var(--destructive)]">{error}</p>}
       {purchases === null || purchases.length === 0 ? (
         <EmptyState
           title="No payments yet"
-          description="Anything you buy will show up here with its reference number."
+          description="Anything you buy will show up here with its receipt."
         />
       ) : (
         <ul className="divide-y divide-[var(--border)]">
@@ -392,10 +411,127 @@ function HistoryCard({
                   </p>
                 )}
               </div>
-              <PurchaseStateBadge state={p.state} />
+              <div className="flex items-center gap-2">
+                {/* Offered only where a receipt exists: an incomplete payment has no
+                    document, and a button that 409s is worse than no button. */}
+                {(p.state === 'granted' || p.state === 'refunded') && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    loading={busy === p.id}
+                    onClick={() => void download(p)}
+                  >
+                    Receipt
+                  </Button>
+                )}
+                <PurchaseStateBadge state={p.state} />
+              </div>
             </li>
           ))}
         </ul>
+      )}
+    </Card>
+  );
+}
+
+/**
+ * Asking for a plan the published tiers do not cover.
+ *
+ * Deliberately collects the ONE number that makes a quote possible - applications a month -
+ * rather than a free-text-only form. It routes into the existing contact pipeline, so the
+ * request is persisted before any delivery is attempted and cannot be lost to a mail outage.
+ */
+function CustomPlanCard() {
+  const [open, setOpen] = React.useState(false);
+  const [perMonth, setPerMonth] = React.useState('300');
+  const [message, setMessage] = React.useState('');
+  const [company, setCompany] = React.useState('');
+  const [sending, setSending] = React.useState(false);
+  const [sent, setSent] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+
+  async function submit() {
+    setSending(true);
+    setError(null);
+    try {
+      const res = await requestCustomPlan({
+        applications_per_month: Math.max(1, Number(perMonth) || 1),
+        message: message.trim(),
+        company: company.trim(),
+      });
+      setSent(res.reference);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not send your request');
+    } finally {
+      setSending(false);
+    }
+  }
+
+  if (sent) {
+    return (
+      <Card className="space-y-1 p-6">
+        <p className="text-sm font-medium">Request received</p>
+        <p className="text-sm text-[var(--muted-foreground)]">
+          We&apos;ll get back to you by email. Your reference is{' '}
+          <code className="rounded bg-[var(--secondary)] px-1">{sent}</code>.
+        </p>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="space-y-3 p-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-sm font-medium">Need more than these plans?</p>
+          <p className="text-xs text-[var(--muted-foreground)]">
+            Tell us your volume and we&apos;ll put together a custom plan.
+          </p>
+        </div>
+        {!open && (
+          <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+            Request a custom plan
+          </Button>
+        )}
+      </div>
+
+      {open && (
+        <div className="space-y-3 border-t border-[var(--border)] pt-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="cp-apps">Applications a month</Label>
+              <Input
+                id="cp-apps"
+                type="number"
+                min={1}
+                value={perMonth}
+                onChange={(e) => setPerMonth(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="cp-company">Company (optional)</Label>
+              <Input id="cp-company" value={company} onChange={(e) => setCompany(e.target.value)} />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="cp-message">Anything else? (optional)</Label>
+            <Input
+              id="cp-message"
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              placeholder="Team size, billing needs, timeline..."
+            />
+          </div>
+          {error && <p className="text-xs text-[var(--destructive)]">{error}</p>}
+          <div className="flex gap-2">
+            <Button size="sm" loading={sending} onClick={() => void submit()}>
+              Send request
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+          </div>
+        </div>
       )}
     </Card>
   );

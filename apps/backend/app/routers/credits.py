@@ -24,12 +24,14 @@ would not help them at all.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
+from pydantic import BaseModel, Field
 
 from app.ai_credits import describe_balance, resolve_allowance
 from app.ai_metered import user_has_own_key
 from app.auth.principal import get_effective_user_id
 from app.config import settings
+from app.errors import ApiError
 
 router = APIRouter(prefix="/credits", tags=["credits"])
 
@@ -226,7 +228,146 @@ async def get_pricing(user_id: str = Depends(get_effective_user_id)) -> dict:
     }
 
 
+@router.get("/purchases/{purchase_id}/receipt")
+async def download_receipt(
+    purchase_id: str, user_id: str = Depends(get_effective_user_id)
+) -> Response:
+    """The receipt for one of THIS user's purchases, as a PDF.
+
+    Scoped to the caller: a purchase id is a guessable-ish opaque string, and a receipt
+    carries a name, an email and an amount, so ownership is checked rather than assumed
+    from possession of the id.
+
+    Only issued once the purchase is complete. A receipt for money that has not finished
+    moving would be a document asserting something untrue.
+    """
+    db = _db()
+    purchase = await db.get_purchase(purchase_id)
+    if purchase is None or purchase.get("user_id") != user_id:
+        # Same answer for "not yours" as for "does not exist", so the endpoint cannot be
+        # used to discover whether an id belongs to somebody else.
+        raise ApiError(404, "not_found", "Receipt not found.")
+    if purchase.get("state") not in ("granted", "refunded"):
+        raise ApiError(
+            409,
+            "receipt_not_ready",
+            "This payment hasn't completed yet, so there's no receipt for it.",
+        )
+
+    from app.ai_receipts import build_receipt, render_receipt_pdf
+    from app.app_settings import get_seller_details
+    from app.auth import accounts
+
+    seller = await get_seller_details(db)
+    record = await accounts.get_by_id(user_id)
+    receipt = build_receipt(
+        purchase,
+        seller=seller,
+        buyer_name=getattr(record, "name", "") or "",
+        buyer_email=getattr(record, "email", "") or "",
+    )
+    pdf = await render_receipt_pdf(receipt)
+    filename = f"receipt-{receipt.number}.pdf".replace("/", "-")
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+class CustomPlanRequest(BaseModel):
+    """A request for a plan none of the published tiers covers."""
+
+    #: Roughly how many applications a month they need. The single most useful number for
+    #: quoting, and the one thing a slider on the pricing page already made them think about.
+    applications_per_month: int = Field(ge=1, le=100_000)
+    message: str = Field(default="", max_length=2000)
+    company: str = Field(default="", max_length=200)
+
+
+@router.post("/custom-plan-request")
+async def request_custom_plan(
+    payload: CustomPlanRequest,
+    user_id: str = Depends(get_effective_user_id),
+) -> dict:
+    """Ask the operator for a custom plan.
+
+    Routed through the EXISTING contact pipeline rather than a new inbox: that path already
+    persists the message durably BEFORE attempting delivery, notifies the operator, and
+    survives an unconfigured mail provider. A second half-built channel is how requests get
+    silently lost.
+
+    Deliberately does not create a pack or quote a price. Only the operator can decide what
+    a bespoke plan costs, and a system that invented one would be negotiating for them.
+    """
+    from uuid import uuid4
+
+    from app.auth import accounts
+    from app.auth.email import (
+        build_contact_notification_email,
+        get_email_sender,
+        send_email_safe,
+    )
+    from app.services.intake import persist_record
+
+    record = await accounts.get_by_id(user_id)
+    email = (getattr(record, "email", "") or "").strip()
+    name = (getattr(record, "name", "") or "").strip()
+    reference = f"plan-{uuid4().hex[:12]}"
+
+    message = (
+        f"Needs about {payload.applications_per_month} applications a month.\n\n"
+        f"{payload.message or '(no message)'}"
+    )
+
+    # Persisted first, exactly as the contact form does, so a mail outage cannot lose a
+    # sales lead.
+    await persist_record(
+        "contact",
+        reference,
+        {
+            "reference": reference,
+            "name": name,
+            "email": email,
+            "subject": "Custom plan request",
+            "message": message,
+            "purpose": "custom_plan",
+            "company": payload.company,
+            "user_id": user_id,
+            "applications_per_month": payload.applications_per_month,
+        },
+    )
+
+    recipient = (settings.contact_recipient_email or settings.email_from or "").strip()
+    if recipient:
+        await send_email_safe(
+            get_email_sender(),
+            build_contact_notification_email(
+                to=recipient,
+                reference=reference,
+                name=name,
+                email=email,
+                subject="Custom plan request",
+                message=message,
+                purpose="custom_plan",
+                company=payload.company,
+            ),
+        )
+    else:
+        # Said out loud rather than silently dropped: the request IS saved, but nobody is
+        # being told about it until a recipient is configured.
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "Custom plan request %s persisted but no contact recipient is configured",
+            reference,
+        )
+
+    return {"status": "received", "reference": reference}
+
+
 @router.get("/purchases")
+
 async def get_my_purchases(
     limit: int = 20, user_id: str = Depends(get_effective_user_id)
 ) -> dict:

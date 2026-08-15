@@ -127,6 +127,10 @@ class AuditEvent:
     # to either needs a name and a timestamp attached to it.
     ADMIN_AI_FEATURE_PRICE_CHANGED = "admin.ai_feature_price_changed"
     ADMIN_AI_PLAN_CHANGED = "admin.ai_plan_changed"
+    # Business/mail configuration. Audited because configuration is the first thing looked
+    # at after "it worked yesterday", and because the seller block appears on documents
+    # customers keep.
+    ADMIN_SETTINGS_CHANGED = "admin.settings_changed"
     ADMIN_INVITE_REDEEMED = "admin.invite_redeemed"
 
 

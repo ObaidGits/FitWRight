@@ -233,6 +233,10 @@ OWNED_ENDPOINTS: list[tuple[str, str]] = [
     # and both must require a session: the price list names the plan they are on.
     ("GET", "/api/v1/credits/pricing"),
     ("GET", "/api/v1/credits/purchases"),
+    # A receipt carries a name, an email and an amount, so it is scoped to its owner and
+    # must 401 for an anonymous caller like any other owned resource.
+    ("GET", "/api/v1/credits/purchases/pid/receipt"),
+    ("POST", "/api/v1/credits/custom-plan-request"),
     # The purchase webhook is deliberately NOT here: Razorpay cannot hold a session, so
     # its authentication is the HMAC signature over the raw body. That is pinned by
     # tests/integration/test_ai_razorpay.py instead.
@@ -339,6 +343,7 @@ class TestAnonymousRejected:
                 ("{field_id}", "fid"),
                 ("{search_id}", "sid"),
                 ("{provider}", "prov"),
+                ("{purchase_id}", "pid"),
                 ("{session_id}", "sid"),
                 ("{slug}", "sl"),
                 ("{result_id}", "resid"),

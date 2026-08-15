@@ -105,6 +105,29 @@ class MailTransport:
     def sends(self, event: str) -> bool:
         return bool(self.enabled_events.get(event, True))
 
+    def as_email_config(self):
+        """This transport in the shape ``build_email_sender`` expects.
+
+        That factory reads a ``Settings``-like object. Presenting the resolved transport in
+        the same shape means the env-var path stays completely untouched and no caller has
+        to know which source won.
+
+        Note the field name: the factory reads ``email_api_key`` for the Resend path, not
+        ``resend_api_key``.
+        """
+        from types import SimpleNamespace
+
+        return SimpleNamespace(
+            email_provider=self.provider,
+            email_from=self.from_email,
+            email_smtp_host=self.smtp_host,
+            email_smtp_port=self.smtp_port,
+            email_smtp_user=self.smtp_user,
+            email_smtp_password=self.secret,
+            email_smtp_use_tls=self.smtp_use_tls,
+            email_api_key=self.secret,
+        )
+
 
 _cache: dict[str, object] = {}
 

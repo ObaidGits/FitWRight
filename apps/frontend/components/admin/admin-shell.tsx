@@ -17,6 +17,7 @@ import UserPlus from 'lucide-react/dist/esm/icons/user-plus';
 import Sparkles from 'lucide-react/dist/esm/icons/sparkles';
 import Radio from 'lucide-react/dist/esm/icons/radio-tower';
 import Coins from 'lucide-react/dist/esm/icons/coins';
+import Building2 from 'lucide-react/dist/esm/icons/building-2';
 import Activity from 'lucide-react/dist/esm/icons/activity';
 import Tag from 'lucide-react/dist/esm/icons/tag';
 import Database from 'lucide-react/dist/esm/icons/database';
@@ -38,6 +39,7 @@ const NAV = [
   { href: '/admin/ai-ops', label: 'AI ops', icon: Activity },
   { href: '/admin/packs', label: 'Credit packs', icon: Tag },
   { href: '/admin/pricing', label: 'Pricing', icon: Coins },
+  { href: '/admin/business', label: 'Business', icon: Building2 },
   { href: '/admin/storage', label: 'Storage', icon: Database },
   { href: '/admin/errors', label: 'Error reports', icon: TriangleAlert },
   { href: '/admin/audit', label: 'Audit', icon: ScrollText },

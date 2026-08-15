@@ -11,7 +11,7 @@
  * Every shape here mirrors a backend Pydantic response model exactly (camelCase,
  * allowlisted). No secrets/content ever cross this boundary.
  */
-import { apiDelete, apiFetch, apiPatch, apiPost } from './client';
+import { apiDelete, apiFetch, apiPatch, apiPost, apiPut } from './client';
 import type { ErrorReportPayload } from './error-reports';
 
 export type AdminUserRole = 'user' | 'admin';
@@ -1121,6 +1121,57 @@ async function deletePlan(id: string): Promise<void> {
   if (!res.ok) await json<unknown>(res);
 }
 
+/* ---------------------------------------------------------------- *
+ * Business settings - receipt seller block and mail transport (0041)
+ * ---------------------------------------------------------------- */
+
+export interface BusinessSettings {
+  seller: {
+    business_name: string;
+    address: string;
+    email: string;
+    phone: string;
+    gstin: string;
+    tax_percent: number;
+    footer_note: string;
+    is_configured: boolean;
+    charges_tax: boolean;
+  };
+  mail: {
+    provider: string;
+    from_email: string;
+    from_name: string;
+    smtp_host: string;
+    smtp_port: number;
+    smtp_user: string;
+    smtp_use_tls: boolean;
+    /** Presence only - the secret itself never leaves the server. */
+    has_secret: boolean;
+    enabled_events: Record<string, boolean>;
+    /** "env" means the environment is in charge and the form must be read-only. */
+    source: string;
+  };
+  mail_events: Record<string, string>;
+}
+
+async function getBusinessSettings(): Promise<BusinessSettings> {
+  return json<BusinessSettings>(await apiFetch('/admin/ai/settings/business'));
+}
+
+async function putSellerSettings(input: Record<string, unknown>): Promise<unknown> {
+  return json<unknown>(await apiPut('/admin/ai/settings/seller', input));
+}
+
+async function putMailSettings(input: Record<string, unknown>): Promise<unknown> {
+  return json<unknown>(await apiPut('/admin/ai/settings/mail', input));
+}
+
+async function testMailSettings(): Promise<{ delivered: boolean; to: string; detail: string }> {
+  return json<{ delivered: boolean; to: string; detail: string }>(
+    await apiPost('/admin/ai/settings/mail/test', {})
+  );
+}
+
 export const adminApi = {
   getStats,
   getUsageSeries,
@@ -1151,6 +1202,10 @@ export const adminApi = {
   createPlan,
   updatePlan,
   deletePlan,
+  getBusinessSettings,
+  putSellerSettings,
+  putMailSettings,
+  testMailSettings,
   createAiChannel,
   updateAiChannel,
   deleteAiChannel,

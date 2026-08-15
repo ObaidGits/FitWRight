@@ -305,6 +305,55 @@ async def close_pdf_renderer() -> None:
         _playwright = None
 
 
+async def render_html_to_pdf(html: str, *, page_size: str = "A4") -> bytes:
+    """Render an HTML string to PDF, through the same browser and the same gate.
+
+    Exists for documents the SERVER composes rather than pages the app serves - a
+    payment receipt is the first. Going through a print route like resumes do would mean
+    a financial document depended on a frontend page load and a session cookie; composing
+    it here keeps it derived purely from stored data.
+
+    Shares ``render_resume_pdf``'s concurrency semaphore deliberately: both drive the same
+    single Chromium, and giving receipts their own limit would let a receipt burst exhaust
+    the memory that resume exports were being throttled to protect.
+    """
+    from app.config import settings
+
+    sem = _get_render_semaphore()
+    timeout = max(1, int(settings.pdf_render_queue_timeout_seconds))
+    try:
+        await asyncio.wait_for(sem.acquire(), timeout=timeout)
+    except asyncio.TimeoutError as exc:
+        raise PDFRenderError(
+            "The PDF service is busy. Please try again in a moment."
+        ) from exc
+    try:
+        if _browser is None:
+            # The lazy initialiser normally runs on first resume export. A receipt can be
+            # the first render of the process, so it must not assume a warm browser.
+            await init_pdf_renderer()
+        if _browser is None:  # pragma: no cover - init raises rather than returning None
+            raise PDFRenderError("The PDF service is unavailable.")
+
+        page: Page = await _browser.new_page()
+        try:
+            await page.set_content(html, wait_until="load")
+            await page.wait_for_function(
+                "() => document.fonts.ready.then(() => true)", timeout=_NAV_TIMEOUT_MS
+            )
+            return await page.pdf(
+                format=_resolve_pdf_format(page_size),
+                print_background=True,
+                margin=_resolve_pdf_margins(None),
+            )
+        finally:
+            await page.close()
+    except PlaywrightError as exc:
+        raise PDFRenderError(f"Could not render the document: {exc}") from exc
+    finally:
+        sem.release()
+
+
 async def render_resume_pdf(
     url: str,
     page_size: str = "A4",
