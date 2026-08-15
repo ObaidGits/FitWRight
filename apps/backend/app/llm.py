@@ -400,6 +400,64 @@ def provider_uses_custom_base(provider: str) -> bool:
     return provider in _CUSTOM_BASE_PROVIDERS
 
 
+#: Fragments that only ever appear in a template value, never in a real credential.
+#: Provider keys are opaque base62-ish strings; the words below come from the example
+#: env file and from documentation snippets people paste by mistake.
+_PLACEHOLDER_MARKERS = (
+    "your",
+    "here",
+    "changeme",
+    "change-me",
+    "replace",
+    "example",
+    "placeholder",
+    "xxxx",
+    "<",
+    ">",
+    "...",
+)
+
+
+def is_placeholder_key(api_key: str | None) -> bool:
+    """Whether this "key" is obviously a template value rather than a credential.
+
+    Why this exists: ``LLM_API_KEY=sk-your-openai-key-here`` copied from
+    ``.env.example`` is a non-empty string, so every presence check treated the
+    deployment as configured. The UI then showed AI as available, every feature
+    attempted a real call, and the provider answered 401 - so the app reported
+    "unavailable" for something that had simply never been set up. "Add your API key"
+    and "the provider is down" are different instructions to the user, and one of them
+    was unreachable.
+
+    Detects only the unmistakable cases. A wrong-but-plausible key still has to be
+    learned from the provider's refusal (see app/llm_health.py); this catches the value
+    that could never have worked, without a network call.
+    """
+    if not api_key:
+        return False
+    lowered = api_key.strip().lower()
+    if lowered in ("sk-", "sk-...", "none", "null"):
+        return True
+    return any(marker in lowered for marker in _PLACEHOLDER_MARKERS)
+
+
+def has_usable_credential(config: "LLMConfig") -> bool:
+    """Whether this config could actually talk to a provider.
+
+    The single answer to "is AI set up?", so every surface agrees. A placeholder key
+    counts as NOT set up: telling a user to add their key is useful, whereas showing the
+    feature and then reporting the provider unavailable is not.
+
+    Self-hosted providers (Ollama, openai_compatible) need no key and are treated as
+    configured, exactly as before. Requiring a base URL from them was tempting - one
+    cannot work without it - but that is a different problem from this one, and changing
+    it here would quietly alter what "configured" means for local installs.
+    """
+    if config.provider in _PROVIDERS_WITHOUT_ENV_KEY_FALLBACK:
+        return True
+    return bool(config.api_key) and not is_placeholder_key(config.api_key)
+
+
 def resolve_api_key(stored: dict, provider: str) -> str:
     """Resolve the effective API key from stored config.
 
@@ -760,7 +818,7 @@ def _config_has_usable_credential(config: LLMConfig) -> bool:
     if config.provider in _PROVIDERS_WITHOUT_ENV_KEY_FALLBACK:
         # Self-hosted: a base URL is the credential.
         return bool(config.api_base)
-    return bool(config.api_key)
+    return bool(config.api_key) and not is_placeholder_key(config.api_key)
 
 
 def _guard_input_size(*parts: str | None) -> None:

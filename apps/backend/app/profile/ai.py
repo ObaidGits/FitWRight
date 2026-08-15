@@ -21,6 +21,7 @@ from typing import Any
 from app.profile.schemas import ProfileData
 from app.profile.skills import canonicalize
 from app.schemas.llm_outputs import ProfileBulletsOutput, ProfileSummaryOutput
+from app.llm import has_usable_credential
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +61,7 @@ def is_llm_available(user_id: str | None = None) -> bool:
         from app.llm import get_llm_config
 
         config = get_llm_config(user_id)
-        return bool(config.api_key) or config.provider in ("ollama", "openai_compatible")
+        return has_usable_credential(config)
     except Exception:  # pragma: no cover - defensive
         return False
 

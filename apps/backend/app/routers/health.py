@@ -9,7 +9,7 @@ from sqlalchemy import text
 
 from app.auth import get_optional_principal, require_verified_user_id
 from app.database import db
-from app.llm import get_llm_config
+from app.llm import has_usable_credential, get_llm_config
 from app.llm_health import credentials_rejected
 from app.schemas import HealthResponse, SetupStatusResponse, StatusResponse
 
@@ -113,10 +113,7 @@ async def get_setup_status(
     established user back through first-time setup.
     """
     config = get_llm_config(user_id)
-    llm_configured = bool(config.api_key) or config.provider in (
-        "ollama",
-        "openai_compatible",
-    )
+    llm_configured = has_usable_credential(config)
     stats = await db.get_stats(user_id)
     has_master_resume = bool(stats.get("has_master_resume"))
     return SetupStatusResponse(
@@ -156,10 +153,7 @@ async def get_status(request: Request) -> StatusResponse:
     if user_id is not None:
         try:
             config = get_llm_config(user_id)
-            llm_configured = bool(config.api_key) or config.provider in (
-                "ollama",
-                "openai_compatible",
-            )
+            llm_configured = has_usable_credential(config)
         except Exception:
             logger.exception("Status: persisted LLM configuration lookup failed")
 

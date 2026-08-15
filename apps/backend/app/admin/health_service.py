@@ -48,6 +48,7 @@ from sqlalchemy import text
 from app import __version__
 from app.admin.schemas import AdminHealth, HealthTile, ReleaseInfo
 from app.config import settings
+from app.llm import has_usable_credential
 
 logger = logging.getLogger(__name__)
 
@@ -390,7 +391,7 @@ class HealthService:
         # The authenticated endpoint passes the viewing admin explicitly so
         # health never falls back to another user's persisted provider key.
         config = get_llm_config(llm_user_id)
-        configured = bool(config.api_key) or config.provider in (
+        configured = has_usable_credential(config) or config.provider in (
             "ollama",
             "openai_compatible",
         )
