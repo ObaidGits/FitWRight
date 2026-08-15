@@ -27,6 +27,9 @@ import Brain from 'lucide-react/dist/esm/icons/brain';
 import Target from 'lucide-react/dist/esm/icons/target';
 import ListChecks from 'lucide-react/dist/esm/icons/list-checks';
 import Eye from 'lucide-react/dist/esm/icons/eye';
+import Compass from 'lucide-react/dist/esm/icons/compass';
+import MousePointerClick from 'lucide-react/dist/esm/icons/mouse-pointer-click';
+import Languages from 'lucide-react/dist/esm/icons/languages';
 
 import { Button } from '@/components/atelier/button';
 import { Card } from '@/components/atelier/card';
@@ -34,6 +37,7 @@ import { Reveal } from '@/components/marketing/reveal';
 import { ContactCta } from '@/components/marketing/contact-cta';
 import { Hero } from '@/components/marketing/hero';
 import { Faq } from '@/components/marketing/faq';
+import { HomePricing } from '@/components/marketing/home-pricing';
 import { LANDING_FAQS } from '@/components/marketing/faq-data';
 import { AnalysisMock, KanbanMock, ResumeDocMock } from '@/components/marketing/mockups';
 import { CAPABILITY_NAV } from '@/components/marketing/capabilities-data';
@@ -134,6 +138,21 @@ const CAPABILITIES = [
     body: 'A real match score with keyword, skills, and section sub-scores - plus exactly what is missing.',
   },
   {
+    icon: Compass,
+    title: 'Job discovery',
+    body: 'Search 14 job boards at once and get roles ranked against your actual resume, not just keywords.',
+  },
+  {
+    icon: MousePointerClick,
+    title: 'Application autofill',
+    body: 'A browser extension fills Greenhouse, Lever, Ashby, Workday and more from your profile. It never submits - you review first.',
+  },
+  {
+    icon: MessageSquare,
+    title: 'Application answers',
+    body: 'Drafts those open-ended "why this company?" boxes from your resume and the job description.',
+  },
+  {
     icon: Mail,
     title: 'Cover letters',
     body: 'Generate a tailored cover letter grounded in your resume and the job, then export to PDF.',
@@ -147,6 +166,11 @@ const CAPABILITIES = [
     icon: LayoutTemplate,
     title: 'Polished templates',
     body: 'Multiple templates with a live preview that matches the exported PDF exactly.',
+  },
+  {
+    icon: Languages,
+    title: 'Six languages',
+    body: 'Use the app - and generate resumes and cover letters - in English, Spanish, Chinese, Japanese, French or Portuguese.',
   },
   {
     icon: BadgeCheck,
@@ -474,6 +498,24 @@ export default function LandingPage() {
                 </Button>
               </div>
             </Card>
+          </Reveal>
+        </div>
+      </section>
+
+      {/* Pricing - interactive, because the visitor's real question is "which plan do I
+          need?", not "what are your tiers?". Prices are fetched server-side from the same
+          admin-editable rows the app charges from, so this cannot advertise a stale number. */}
+      <section id="pricing" className="border-y border-[var(--border)] bg-[var(--at-surface-2)]">
+        <div className="mx-auto w-full max-w-6xl px-4 py-20 md:px-8">
+          <Reveal>
+            <SectionHeading
+              eyebrow="Pricing"
+              title="Pay for the writing, not the searching"
+              sub="Start free. Searching job boards never costs a credit - you're only charged when AI writes something for you, and never when it fails."
+            />
+          </Reveal>
+          <Reveal delay={80}>
+            <HomePricing />
           </Reveal>
         </div>
       </section>

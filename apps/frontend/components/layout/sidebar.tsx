@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils';
 import { PRIMARY_NAV, TAILOR_HREF } from '@/components/layout/nav-items';
 import { ThemeToggle } from '@/components/theme/theme-toggle';
 import { AccountMenu } from '@/components/layout/account-menu';
+import { PlanBadge } from '@/components/billing/plan-badge';
 import { NotificationCenter } from '@/components/notifications/notification-center';
 import { useCommandPalette } from '@/components/command/command-palette';
 import { useFieldSummary } from '@/features/application-fields/hooks';
@@ -115,7 +116,11 @@ export function Sidebar() {
       </nav>
 
       <div className="flex shrink-0 items-center justify-between border-t border-[var(--border)] px-4 py-3">
-        <AccountMenu />
+        <div className="flex min-w-0 items-center gap-2">
+          <AccountMenu />
+          {/* Renders nothing on the free tier - see PlanBadge. */}
+          <PlanBadge />
+        </div>
         <div className="flex items-center gap-1">
           <NotificationCenter />
           <ThemeToggle />

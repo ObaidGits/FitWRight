@@ -20,6 +20,7 @@ const NAV_LINKS: { href: string; label: string }[] = [
   { href: '/#how', label: 'How it works' },
   { href: '/#features', label: 'Features' },
   { href: '/resume-tailoring', label: 'Tailoring' },
+  { href: '/pricing', label: 'Pricing' },
   { href: '/#faq', label: 'FAQ' },
   { href: '/connect', label: 'Connect' },
   { href: '/contact', label: 'Contact' },

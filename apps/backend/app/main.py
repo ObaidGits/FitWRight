@@ -45,6 +45,7 @@ from app.routers import (
     media_router,
     notifications_router,
     profile_router,
+    public_pricing_router,
     public_profile_router,
     reminders_router,
     resume_wizard_router,
@@ -430,6 +431,7 @@ app.include_router(jd_router, prefix="/api/v1")
 app.include_router(media_router, prefix="/api/v1")
 app.include_router(resume_wizard_router, prefix="/api/v1")
 app.include_router(profile_router, prefix="/api/v1")
+app.include_router(public_pricing_router, prefix="/api/v1")
 app.include_router(public_profile_router, prefix="/api/v1")
 app.include_router(discovery_router, prefix="/api/v1")
 app.include_router(extension_router, prefix="/api/v1")

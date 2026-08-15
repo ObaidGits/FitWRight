@@ -66,6 +66,11 @@ class PlanView:
 #: Seed values for a fresh deployment, and the fallback when no plan row exists at all.
 #: The database is authoritative once seeded; this exists so an unseeded install still
 #: grants a sane free tier instead of granting nobody anything.
+#:
+#: Descriptions deliberately contain NO application counts. The UI computes that figure
+#: from the live per-action prices and prints it right beside the description, so a number
+#: written in here too would contradict it the moment a price changed - which it did:
+#: "about 65 applications" sat directly above a computed "~76 applications".
 #: (id, label, price_minor, monthly_credits, search_daily_limit, is_default, description)
 DEFAULT_PLANS: tuple[tuple[str, str, int, int, int | None, bool, str], ...] = (
     (
@@ -84,7 +89,7 @@ DEFAULT_PLANS: tuple[tuple[str, str, int, int, int | None, bool, str], ...] = (
         2000,
         100,
         False,
-        "For an active search - about 65 applications a month",
+        "For an active search, with room to apply every day",
     ),
     (
         "serious",
@@ -93,7 +98,7 @@ DEFAULT_PLANS: tuple[tuple[str, str, int, int, int | None, bool, str], ...] = (
         6000,
         300,
         False,
-        "For an aggressive search - about 200 applications a month",
+        "For an aggressive search across many roles at once",
     ),
 )
 

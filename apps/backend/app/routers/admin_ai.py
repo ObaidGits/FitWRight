@@ -585,6 +585,20 @@ async def update_feature_price(
 # ======================================================================
 
 
+class UserPlanIn(BaseModel):
+    """Move one user onto a plan.
+
+    ``plan_id=None`` clears the assignment, which means "resolve to the default plan"
+    rather than "no plan" - an account with no tier at all would have no allowance and no
+    search ceiling, so it is not an expressible state.
+    """
+
+    plan_id: str | None = None
+    #: Apply the new plan's allowance immediately instead of at the next period boundary.
+    #: Off by default: a plan change should not mint credits as a side effect.
+    grant_now: bool = False
+
+
 class PlanIn(BaseModel):
     label: str = Field(min_length=1, max_length=80)
     price_minor: int = Field(default=0, ge=0, le=100_000_000)
@@ -820,6 +834,9 @@ async def get_user_credits(
     user_id: str, _admin: Principal = Depends(require_admin_read)
 ) -> dict[str, Any]:
     account = await db.get_or_create_credit_account(user_id)
+    from app.ai_plans import resolve_account_plan
+
+    plan = await resolve_account_plan(db, account)
     return {
         **account,
         # Echo the effective defaults so the UI can show "inherited: 50" next to an
@@ -827,7 +844,116 @@ async def get_user_credits(
         "global_monthly_allowance": settings.ai_monthly_allowance_credits,
         "global_velocity_cap": settings.ai_velocity_cap_per_hour,
         "credits_enabled": settings.ai_credits_enabled,
+        # The RESOLVED plan, not the raw column: a null plan_id or one pointing at a
+        # retired plan both resolve to the default, and showing the raw value would tell
+        # the admin something different from what the user actually gets.
+        "plan": {
+            "id": plan.id,
+            "label": plan.label,
+            "monthly_credits": plan.monthly_credits,
+            "search_daily_limit": plan.search_daily_limit,
+            "is_fallback": plan.is_fallback,
+        },
+        "plan_id_raw": account.get("plan_id"),
+        "available_plans": [
+            {"id": p["id"], "label": p["label"], "monthly_credits": p["monthly_credits"]}
+            for p in await db.list_subscription_plans()
+        ],
     }
+
+
+@router.post("/users/{user_id}/plan")
+async def set_user_plan(
+    user_id: str,
+    payload: UserPlanIn,
+    _admin: Principal = Depends(require_admin_manage),
+) -> dict[str, Any]:
+    """Move a user between plans.
+
+    Assigning a plan does NOT grant its credits on the spot. The allowance lands at the
+    next period boundary (or immediately, if ``grant_now`` is set and their period has
+    already rolled), because a plan change that mints credits as a side effect makes an
+    admin correcting a typo indistinguishable from an admin issuing a comp - and only one
+    of those should move a balance.
+    """
+    await db.get_or_create_credit_account(user_id)
+
+    if payload.plan_id is not None and await db.get_subscription_plan(payload.plan_id) is None:
+        raise HTTPException(status_code=404, detail="Plan not found")
+
+    await db.set_account_plan(user_id, payload.plan_id)
+
+    granted = False
+    if payload.grant_now:
+        # Clearing the period stamp makes the lazy grant treat this as a new period, so
+        # the new plan's allowance is applied through the SAME path a normal renewal
+        # uses rather than a second, differently-behaving one.
+        await db.reset_allowance_period(user_id)
+        from app.ai_allowance import ensure_allowance
+
+        await ensure_allowance(user_id)
+        granted = True
+
+    await _audit(
+        AuditEvent.ADMIN_AI_PLAN_CHANGED,
+        _admin,
+        meta={
+            "target_user_id": user_id,
+            "action": "assigned",
+            "plan_id": payload.plan_id,
+            "granted_now": granted,
+        },
+    )
+    account = await db.get_or_create_credit_account(user_id)
+    from app.ai_plans import resolve_account_plan
+
+    plan = await resolve_account_plan(db, account)
+    return {"plan_id": account.get("plan_id"), "resolved_plan": plan.id, "granted": granted}
+
+
+@router.get("/users/{user_id}/purchases")
+async def get_user_purchases(
+    user_id: str, limit: int = 50, _admin: Principal = Depends(require_admin_read)
+) -> list[dict[str, Any]]:
+    """What this user has paid. Support cannot answer a billing question without it."""
+    return await db.list_purchases(user_id, limit=max(1, min(int(limit or 50), 200)))
+
+
+@router.post("/purchases/{purchase_id}/refund")
+async def refund_purchase(
+    purchase_id: str,
+    _admin: Principal = Depends(require_admin_manage),
+) -> dict[str, Any]:
+    """Claw back a purchase's credits.
+
+    This records the refund on OUR side only - it does not move money. The actual refund
+    is issued in the payment provider's dashboard, and doing it there normally triggers
+    the ``refund.processed`` webhook that lands here on its own. This endpoint exists for
+    the case where that webhook never arrived, so an operator is not stuck with a
+    refunded payment whose credits were never taken back.
+
+    The balance MAY go negative and the account is then blocked, which is deliberate:
+    refusing to go negative would let someone buy, spend, refund and keep the value.
+    """
+    purchase = await db.get_purchase(purchase_id)
+    if purchase is None:
+        raise HTTPException(status_code=404, detail="Purchase not found")
+
+    outcome = await db.refund_purchase(
+        purchase_id, event_id=f"admin-refund:{purchase_id}"
+    )
+    await _audit(
+        AuditEvent.ADMIN_AI_CREDITS_GRANTED,
+        _admin,
+        meta={
+            "target_user_id": purchase.get("user_id"),
+            "action": "refund",
+            "purchase_id": purchase_id,
+            "credits": purchase.get("credits"),
+            "outcome": outcome,
+        },
+    )
+    return {"status": outcome, "purchase_id": purchase_id}
 
 
 @router.patch("/users/{user_id}/credits")

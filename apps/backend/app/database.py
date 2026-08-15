@@ -47,6 +47,7 @@ from app.models import (
     AiChannel,
     AiChannelHealth,
     AiUsageLedger,
+    AppSetting,
     AuditLog,
     CreditAccount,
     CreditPack,
@@ -4699,6 +4700,69 @@ class Database:
                 return (True, int(row.count))
 
     # ------------------------------------------------------------------
+    # App settings - admin-editable configuration (migration 0041)
+    # ------------------------------------------------------------------
+
+    async def get_app_setting(self, key: str) -> dict[str, Any] | None:
+        """One setting row, or None. Includes the ciphertext, never the plaintext."""
+        async with self._session() as session:
+            row = (
+                await session.execute(select(AppSetting).where(AppSetting.key == key))
+            ).scalars().first()
+            if row is None:
+                return None
+            return {
+                "key": row.key,
+                "value": dict(row.value or {}),
+                "secret_ciphertext": row.secret_ciphertext,
+                "updated_by": row.updated_by,
+                "updated_at": row.updated_at,
+            }
+
+    async def set_app_setting(
+        self,
+        key: str,
+        *,
+        value: dict[str, Any],
+        secret_ciphertext: str | None = None,
+        keep_existing_secret: bool = True,
+        updated_by: str | None = None,
+    ) -> dict[str, Any]:
+        """Create or replace a setting.
+
+        ``keep_existing_secret`` is the default because a settings form cannot show a
+        stored password back to the operator - it submits a blank field, and treating
+        blank as "clear it" would silently break mail delivery every time someone edited
+        an unrelated field on the same form. Passing ``keep_existing_secret=False`` with a
+        ``None`` ciphertext is the explicit way to remove a secret.
+        """
+        now = _now()
+        async with self._session() as session:
+            async with session.begin():
+                row = (
+                    await session.execute(select(AppSetting).where(AppSetting.key == key))
+                ).scalars().first()
+                if row is None:
+                    row = AppSetting(key=key, value={}, created_at=now, updated_at=now)
+                    session.add(row)
+
+                row.value = dict(value or {})
+                if secret_ciphertext is not None:
+                    row.secret_ciphertext = secret_ciphertext
+                elif not keep_existing_secret:
+                    row.secret_ciphertext = None
+                row.updated_by = updated_by
+                row.updated_at = now
+                await session.flush()
+                return {
+                    "key": row.key,
+                    "value": dict(row.value or {}),
+                    "secret_ciphertext": row.secret_ciphertext,
+                    "updated_by": row.updated_by,
+                    "updated_at": row.updated_at,
+                }
+
+    # ------------------------------------------------------------------
     # Credit purchases (spec Phase 4). Grants happen ONLY here, from a verified
     # webhook - never from a client callback.
     # ------------------------------------------------------------------
@@ -4766,6 +4830,34 @@ class Database:
                     )
                 )
             ).scalars().first() is not None
+
+    async def get_purchase(self, purchase_id: str) -> dict[str, Any] | None:
+        """One purchase by its own id. Used by admin support tooling."""
+        async with self._session() as session:
+            row = (
+                await session.execute(
+                    select(CreditPurchase).where(CreditPurchase.id == purchase_id)
+                )
+            ).scalars().first()
+            return self._purchase_to_dict(row) if row is not None else None
+
+    async def reset_allowance_period(self, user_id: str) -> None:
+        """Clear the allowance period stamp so the next touch re-grants.
+
+        Deliberately its own method rather than another parameter on
+        ``set_credit_policy``: that function's ``...`` sentinel already distinguishes
+        "leave alone" from "clear", and adding a third meaning to the same call is how a
+        policy edit ends up minting credits by accident. Here the whole purpose IS to
+        make the next read re-grant, so it says so in its name.
+        """
+        now = _now()
+        async with self._session() as session:
+            async with session.begin():
+                await session.execute(
+                    sa_update(CreditAccount)
+                    .where(CreditAccount.user_id == user_id)
+                    .values(allowance_period_start=None, updated_at=now)
+                )
 
     async def get_purchase_by_order(self, order_id: str) -> dict[str, Any] | None:
         if not order_id:

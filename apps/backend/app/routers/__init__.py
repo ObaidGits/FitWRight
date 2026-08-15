@@ -20,6 +20,7 @@ from app.routers.jobs import router as jobs_router
 from app.routers.media import router as media_router
 from app.routers.notifications import router as notifications_router
 from app.routers.profile import router as profile_router
+from app.routers.public_pricing import router as public_pricing_router
 from app.routers.public_profile import router as public_profile_router
 from app.routers.reminders import router as reminders_router
 from app.routers.reviews import router as reviews_router
@@ -60,6 +61,7 @@ __all__ = [
     "jd_router",
     "media_router",
     "profile_router",
+    "public_pricing_router",
     "public_profile_router",
     "discovery_router",
     "extension_router",

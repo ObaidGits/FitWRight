@@ -1598,6 +1598,30 @@ class SubscriptionPlan(Base):
     )
 
 
+class AppSetting(Base):
+    """One namespaced configuration value, editable from the admin panel (0041).
+
+    Namespaced key + JSON value rather than a column per setting, because a schema
+    migration for every new setting is exactly the friction this removes. The shape of
+    each value is validated by the module that owns the key, so the structure stays in
+    reviewable code while the values live where an operator can change them.
+
+    ``secret_ciphertext`` holds the single encrypted field a setting may need - an SMTP
+    password, say - deliberately outside ``value`` so that logging or dumping the JSON
+    can never leak it.
+    """
+
+    __tablename__ = "app_settings"
+
+    key: Mapped[str] = mapped_column(String(100), primary_key=True)
+    value: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    secret_ciphertext: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: Configuration changes are the first thing looked at after "it worked yesterday".
+    updated_by: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[str] = mapped_column(String, nullable=False, default=_utcnow_iso)
+    updated_at: Mapped[str] = mapped_column(String, nullable=False, default=_utcnow_iso)
+
+
 class DailyUsageCounter(Base):
     """Per-day count of a free-but-capped action (migration 0040).
 
