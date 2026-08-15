@@ -301,6 +301,24 @@ async function handleMessage(message: ToContent): Promise<Reply<unknown>> {
       // answers by hand from here.
       void reportAndOfferToLearn(root, report);
 
+      // The auto-apply-brain audit trail (Phase 0): fire-and-forget, same rule
+      // as reportAndOfferToLearn above - a failed report must never disrupt an
+      // application.
+      if (report.decisions.length) {
+        void sendToWorker({
+          type: 'record-decisions',
+          decisions: report.decisions.map((d) => ({
+            site_host: location.hostname,
+            label: d.label,
+            resolved_target: d.resolved_target,
+            value_source: d.value_source,
+            filled: d.filled,
+            readback_ok: d.readback_ok,
+            required: d.required,
+          })),
+        });
+      }
+
       // Drafting is opt-in per page and only worth doing when we know the JD.
       const job = currentJob ?? extractJob();
       if (report.questions.length && job?.description) {

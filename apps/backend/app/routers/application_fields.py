@@ -182,6 +182,66 @@ class FormReport(BaseModel):
         return value
 
 
+# Sources the extension may declare for a filled field. Kept here (not just in
+# app.brain_grading) because this is the wire boundary - a client sending
+# anything outside this set is a bug in the client, not a new source.
+_VALUE_SOURCES = frozenset(
+    {
+        "exact_rule",
+        "cached_classification",
+        "brain_classification",
+        "brain_draft",
+        "user_answer",
+        "derived_rule",
+    }
+)
+
+
+class DecisionIn(BaseModel):
+    """One field's fill decision, as the extension observed it.
+
+    Auto-apply-brain Phase 0 (.kiro/specs/auto-apply-brain/). No values here,
+    consistent with the rest of this module - a decision records how a field was
+    filled, not what was typed into it.
+    """
+
+    site_host: str = Field(max_length=255)
+    label: str = Field(max_length=400)
+    resolved_target: str | None = Field(default=None, max_length=100)
+    value_source: str
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+    filled: bool = False
+    readback_ok: bool | None = None
+    required: bool = True
+    brain_tokens: int = Field(default=0, ge=0)
+
+    @field_validator("value_source")
+    @classmethod
+    def _known_source(cls, value: str) -> str:
+        if value not in _VALUE_SOURCES:
+            raise ValueError(f"unknown value_source: {value}")
+        return value
+
+    @field_validator("label")
+    @classmethod
+    def _label_present(cls, value: str) -> str:
+        if not (value or "").strip():
+            raise ValueError("label is required")
+        return value.strip()[:400]
+
+
+class DecisionBatch(BaseModel):
+    """A batch of decisions for one application (or one page, pre-submit)."""
+
+    decisions: list[DecisionIn] = Field(default_factory=list, max_length=300)
+    application_id: str | None = Field(default=None, max_length=100)
+
+
+class DecisionBatchResult(BaseModel):
+    recorded: int
+    grade: str
+
+
 class FieldOut(BaseModel):
     """A registry row, with any Profile pointer already resolved."""
 
@@ -457,6 +517,57 @@ async def field_summary(
     rows = await db.list_application_fields(user_id, status=None)
     needs = sum(1 for row in rows if row.get("status") == "needs_answer")
     return FieldSummary(needs_answer=needs, answered=len(rows) - needs, total=len(rows))
+
+
+@router.post(
+    "/application-fields/decisions",
+    response_model=DecisionBatchResult,
+    summary="Record how a form's fields were filled",
+)
+async def record_decisions(
+    payload: DecisionBatch,
+    user_id: str = Depends(get_effective_user_id),
+    db: Database = Depends(get_db),
+) -> DecisionBatchResult:
+    """The auto-apply-brain audit trail (Phase 0 - no LLM is involved yet).
+
+    For every field a fill attempted, the extension reports where the value came
+    from and whether it actually stuck. Grading is computed here, from these rows,
+    never estimated after the fact - see app.brain_grading.
+    """
+    from app.brain_grading import grade_application
+
+    rows = []
+    decisions_for_grading = []
+    for decision in payload.decisions:
+        label_normalized = normalize_label(decision.label)
+        is_knockout = (
+            label_normalized.replace(" ", "_") in KNOCKOUT_KEYS
+            or _looks_like_knockout(label_normalized)
+        )
+        row = {
+            "site_host": decision.site_host,
+            "label": decision.label,
+            "label_normalized": label_normalized,
+            "resolved_target": decision.resolved_target,
+            "value_source": decision.value_source,
+            "confidence": decision.confidence,
+            "is_knockout": is_knockout,
+            "filled": decision.filled,
+            "readback_ok": decision.readback_ok,
+            "brain_tokens": decision.brain_tokens,
+        }
+        rows.append(row)
+        decisions_for_grading.append({**row, "required": decision.required})
+
+    grade = grade_application(decisions_for_grading)
+    for row in rows:
+        row["grade_contribution"] = grade
+
+    recorded = await db.record_brain_decisions(
+        user_id, decisions=rows, application_id=payload.application_id
+    )
+    return DecisionBatchResult(recorded=recorded, grade=grade)
 
 
 @router.get(

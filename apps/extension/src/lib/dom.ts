@@ -131,7 +131,10 @@ export function fieldSignals(el: Fillable): string {
 
 /**
  * Set a field's value so React/Vue-controlled inputs actually register it.
- * Returns false when the value could not be applied (e.g. no matching option).
+ * Returns false when the value could not be applied (e.g. no matching option)
+ * OR when a read-back immediately after dispatch shows the framework reverted
+ * it - a controlled input that rejects an update on its next render looks
+ * identical to success until you check.
  */
 export function setValue(el: Fillable, value: string): boolean {
   if (el instanceof HTMLSelectElement) return setSelectValue(el, value);
@@ -149,7 +152,18 @@ export function setValue(el: Fillable, value: string): boolean {
   el.dispatchEvent(new Event('input', { bubbles: true }));
   el.dispatchEvent(new Event('change', { bubbles: true }));
   el.blur();
-  return true;
+  return readsBack(el, value);
+}
+
+/**
+ * Re-read the element's actual value and compare it to what was intended.
+ *
+ * Exported so callers that need the finer-grained signal - "filled" vs "filled
+ * AND verified" - can record them separately (see the brain decision trail in
+ * content/autofill.ts) rather than only getting setValue's collapsed boolean.
+ */
+export function readsBack(el: Fillable, intended: string): boolean {
+  return el.value.trim() === intended.trim();
 }
 
 /** Choose the option that best matches `value`, exact match preferred. */
@@ -174,7 +188,7 @@ function setSelectValue(el: HTMLSelectElement, value: string): boolean {
   el.dispatchEvent(new Event('input', { bubbles: true }));
   el.dispatchEvent(new Event('change', { bubbles: true }));
   el.blur();
-  return true;
+  return el.value === partial.value;
 }
 
 /** Check a radio/checkbox whose label matches `value`. */

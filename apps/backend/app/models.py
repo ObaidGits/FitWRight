@@ -247,6 +247,56 @@ class Application(Base):
     updated_at: Mapped[str] = mapped_column(String, default=_utcnow_iso)
 
 
+class BrainDecision(Base):
+    """One field's fill decision, for one application. The audit trail.
+
+    Every field autofill touches gets a row here, whether or not any AI was
+    involved (Phase 0 of the auto-apply-brain spec ships before the brain does -
+    see .kiro/specs/auto-apply-brain/design.md). Grading, and any answer to
+    "why did it fill that", is computed FROM these rows, never estimated after
+    the fact.
+
+    ``value_source`` is a closed vocabulary on purpose: it is what lets a
+    knockout question ("visa status") be restricted to trusted sources in code,
+    without depending on anything the model says about its own confidence.
+    """
+
+    __tablename__ = "brain_decisions"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_new_uuid)
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # Nullable: a decision can be recorded mid-fill, before an Application row
+    # exists yet (autofill runs before the user ever presses submit). Not a
+    # foreign key for the same reason: the id is provisional at fill time, and
+    # ApplicationField follows the same pattern (its rows are not FK'd to
+    # applications either).
+    application_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    site_host: Mapped[str] = mapped_column(String, nullable=False, index=True)
+
+    label: Mapped[str] = mapped_column(String, nullable=False)
+    label_normalized: Mapped[str] = mapped_column(String, nullable=False)
+    resolved_target: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    # exact_rule | cached_classification | brain_classification | brain_draft |
+    # user_answer | derived_rule. Enforced at the API boundary, not by a DB enum,
+    # so adding a source is a code change, not a migration.
+    value_source: Mapped[str] = mapped_column(String, nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    is_knockout: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    filled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Null until read-back verification runs; false means the DOM value did not
+    # match what we intended to set (a controlled-input revert, a site reformat).
+    readback_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+
+    grade_contribution: Mapped[str] = mapped_column(String, nullable=False, default="green")
+    brain_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    created_at: Mapped[str] = mapped_column(String, default=_utcnow_iso)
+
+
 class ApplicationField(Base):
     """One question an application form asked, and the user's answer to it.
 

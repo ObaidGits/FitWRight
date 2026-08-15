@@ -154,6 +154,14 @@ async function handle(message: ToWorker, sender: chrome.runtime.MessageSender): 
       return ok(result);
     }
 
+    case 'record-decisions':
+      return ok(
+        await api.recordDecisions({
+          application_id: message.application_id,
+          decisions: message.decisions,
+        }),
+      );
+
     case 'get-profile':
       return ok(await api.getProfile());
 

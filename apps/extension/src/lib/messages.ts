@@ -59,6 +59,30 @@ export type ToWorker =
       url?: string;
     }
   | {
+      /**
+       * The auto-apply-brain audit trail (Phase 0). Reports where each field's
+       * value came from and whether a read-back confirmed it stuck, so grading
+       * and "why did it fill that" are answerable without asking a model.
+       */
+      type: 'record-decisions';
+      application_id?: string;
+      decisions: {
+        site_host: string;
+        label: string;
+        resolved_target: string | null;
+        value_source:
+          | 'exact_rule'
+          | 'cached_classification'
+          | 'brain_classification'
+          | 'brain_draft'
+          | 'user_answer'
+          | 'derived_rule';
+        filled: boolean;
+        readback_ok: boolean | null;
+        required?: boolean;
+      }[];
+    }
+  | {
       type: 'bridge-scrape';
       sites: string[];
       query: string;
@@ -135,6 +159,7 @@ export interface ReplyMap {
   'scrape-results': ScrapeResponse;
   'report-form': { seen: number; created: number; updated: number; needs_answer: number };
   'save-answers': { saved: number };
+  'record-decisions': { recorded: number; grade: 'green' | 'yellow' | 'red' };
   'bridge-scrape': {
     /** Rows harvested off the boards. */
     total: number;

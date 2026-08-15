@@ -294,6 +294,34 @@ export function markApplied(input: {
 }
 
 /**
+ * Report how each field on a form was filled - the auto-apply-brain audit
+ * trail (Phase 0, .kiro/specs/auto-apply-brain/). Fire-and-forget from the
+ * caller's point of view: a failed report must never disrupt an application,
+ * same rule as reportForm above.
+ */
+export function recordDecisions(payload: {
+  application_id?: string;
+  decisions: {
+    site_host: string;
+    label: string;
+    resolved_target: string | null;
+    value_source:
+      | 'exact_rule'
+      | 'cached_classification'
+      | 'brain_classification'
+      | 'brain_draft'
+      | 'user_answer'
+      | 'derived_rule';
+    confidence?: number;
+    filled: boolean;
+    readback_ok: boolean | null;
+    required?: boolean;
+  }[];
+}): Promise<{ recorded: number; grade: 'green' | 'yellow' | 'red' }> {
+  return request('/application-fields/decisions', { method: 'POST', body: payload });
+}
+
+/**
  * Fetch the tailored resume PDF and return it as a data URL.
  *
  * A data URL rather than a Blob because the value has to survive

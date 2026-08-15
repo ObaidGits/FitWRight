@@ -36,6 +36,28 @@ export interface SeenField {
   matched_key: string | null;
 }
 
+/**
+ * One field's fill decision - the auto-apply-brain audit trail (Phase 0,
+ * .kiro/specs/auto-apply-brain/). Every fill attempt produces one of these,
+ * whether or not any AI was involved, so grading and "why did it fill that"
+ * are answerable from a record instead of estimated after the fact.
+ */
+export interface Decision {
+  label: string;
+  resolved_target: string | null;
+  /**
+   * Phase 0 only ever produces 'exact_rule' (matched and filled from the
+   * profile) or 'user_answer' (already held a value, i.e. the user's own
+   * typing). The remaining sources exist in the wire type because later
+   * phases will produce them from this same call site.
+   */
+  value_source: 'exact_rule' | 'user_answer';
+  filled: boolean;
+  /** Null when nothing was attempted (classified but no value to fill). */
+  readback_ok: boolean | null;
+  required: boolean;
+}
+
 export interface AutofillReport {
   filled: number;
   skipped: number;
@@ -61,6 +83,8 @@ export interface AutofillReport {
    * saves them.
    */
   seen: SeenField[];
+  /** Per-field fill decisions, for the audit trail. See `Decision` above. */
+  decisions: Decision[];
 }
 
 /** The visible question for a field, as a person reads it. Re-exported so the
@@ -154,6 +178,7 @@ export async function autofill(
     resumeAttached: false,
     resumeTailored: false,
     seen: [],
+    decisions: [],
   };
 
   const profileReply = await sendToWorker({ type: 'get-profile' });
@@ -176,13 +201,42 @@ export async function autofill(
     });
   }
 
+  /**
+   * Record a fill decision for the audit trail. `readbackOk` is null when
+   * nothing was attempted (classified but no value to offer) - distinct from
+   * false, which means a fill was attempted and the DOM did not keep it.
+   */
+  function decide(
+    el: Fillable,
+    key: string | null,
+    source: Decision['value_source'],
+    filled: boolean,
+    readbackOk: boolean | null,
+  ): void {
+    const label = labelFor(el);
+    if (!label) return;
+    if ((el as HTMLInputElement).type === 'password') return;
+    report.decisions.push({
+      label,
+      resolved_target: key,
+      value_source: source,
+      filled,
+      readback_ok: readbackOk,
+      required: (el as HTMLInputElement).required ?? false,
+    });
+  }
+
   // --- Text / select fields -------------------------------------------------
   for (const el of collectFields(root)) {
     if (hasValue(el)) {
       report.skipped += 1;
       // Already answered - by us on an earlier step, or by the user. Either way
-      // this question is not outstanding, so it is reported as filled.
-      note(el, classify(el), true);
+      // this question is not outstanding, so it is reported as filled. Not
+      // something we verify: it is the user's own typing, so there is nothing
+      // to read back against.
+      const key = classify(el);
+      note(el, key, true);
+      decide(el, key, 'user_answer', true, null);
       continue;
     }
     const key = classify(el);
@@ -205,6 +259,10 @@ export async function autofill(
     if (ok) report.filled += 1;
     else report.skipped += 1;
     note(el, key, ok);
+    // setValue's own return IS the read-back result (see lib/dom.ts), so
+    // `filled` and `readback_ok` collapse to the same boolean here - Phase 0
+    // has no source that fills without verifying.
+    decide(el, key, 'exact_rule', ok, ok);
   }
 
   // --- Radio / checkbox groups ---------------------------------------------
@@ -231,6 +289,7 @@ export async function autofill(
     const ok = setRadioGroup(name, value, root);
     if (ok) report.filled += 1;
     note(sample, key, ok);
+    decide(sample, key, 'exact_rule', ok, ok);
   }
 
   // --- Resume upload -------------------------------------------------------

@@ -238,6 +238,172 @@ class TestSavingTypedAnswers:
         )
         row = (await db.list_application_fields(USER))[0]
         assert row["value"] == "they/them"
+
+
+class TestBrainDecisions:
+    """The auto-apply-brain audit trail (Phase 0, no LLM involved yet).
+
+    See app.brain_grading for the grading rules themselves; these tests cover
+    only the storage contract - record, re-fill idempotency, and read-back.
+    """
+
+    async def test_records_one_row_per_field(self, db):
+        recorded = await db.record_brain_decisions(
+            USER,
+            decisions=[
+                {
+                    "site_host": "boards.greenhouse.io",
+                    "label": "Email",
+                    "label_normalized": "email",
+                    "resolved_target": "email",
+                    "value_source": "exact_rule",
+                    "confidence": 1.0,
+                    "is_knockout": False,
+                    "filled": True,
+                    "readback_ok": True,
+                    "grade_contribution": "green",
+                    "brain_tokens": 0,
+                },
+                {
+                    "site_host": "boards.greenhouse.io",
+                    "label": "Visa status",
+                    "label_normalized": "visa status",
+                    "resolved_target": "visa_status",
+                    "value_source": "user_answer",
+                    "confidence": 1.0,
+                    "is_knockout": True,
+                    "filled": True,
+                    "readback_ok": True,
+                    "grade_contribution": "green",
+                    "brain_tokens": 0,
+                },
+            ],
+            application_id="app-1",
+        )
+        assert recorded == 2
+        rows = await db.list_brain_decisions(USER, application_id="app-1")
+        assert len(rows) == 2
+        visa = next(r for r in rows if r["label_normalized"] == "visa status")
+        assert visa["is_knockout"] is True
+        assert visa["value_source"] == "user_answer"
+
+    async def test_refilling_the_same_application_updates_rather_than_duplicates(self, db):
+        # A multi-step wizard re-runs autofill on every step advance
+        # (content/index.ts fillCurrentStep). The same field reappearing must
+        # update its row, not pile up a duplicate that would double-count in
+        # grading.
+        decision = {
+            "site_host": "jobs.lever.co",
+            "label": "Notice period",
+            "label_normalized": "notice period",
+            "resolved_target": "notice_period",
+            "value_source": "brain_classification",
+            "confidence": 0.7,
+            "is_knockout": True,
+            "filled": False,
+            "readback_ok": None,
+            "grade_contribution": "red",
+            "brain_tokens": 12,
+        }
+        await db.record_brain_decisions(USER, decisions=[decision], application_id="app-2")
+        updated = {**decision, "filled": True, "readback_ok": True, "grade_contribution": "green"}
+        recorded_second = await db.record_brain_decisions(
+            USER, decisions=[updated], application_id="app-2"
+        )
+        assert recorded_second == 0  # updated in place, not inserted again
+        rows = await db.list_brain_decisions(USER, application_id="app-2")
+        assert len(rows) == 1
+        assert rows[0]["filled"] is True
+        assert rows[0]["grade_contribution"] == "green"
+
+    async def test_decisions_for_different_applications_do_not_collide(self, db):
+        base = {
+            "site_host": "boards.greenhouse.io",
+            "label": "City",
+            "label_normalized": "city",
+            "resolved_target": "city",
+            "value_source": "exact_rule",
+            "confidence": 1.0,
+            "is_knockout": False,
+            "filled": True,
+            "readback_ok": True,
+            "grade_contribution": "green",
+            "brain_tokens": 0,
+        }
+        await db.record_brain_decisions(USER, decisions=[base], application_id="app-a")
+        await db.record_brain_decisions(USER, decisions=[base], application_id="app-b")
+        assert len(await db.list_brain_decisions(USER, application_id="app-a")) == 1
+        assert len(await db.list_brain_decisions(USER, application_id="app-b")) == 1
+
+
+class TestRecordDecisionsEndpoint:
+    """`POST /application-fields/decisions` - grading computed server-side."""
+
+    async def test_endpoint_computes_and_returns_the_grade(self, db):
+        from app.routers.application_fields import DecisionBatch, DecisionIn, record_decisions
+
+        payload = DecisionBatch(
+            application_id="app-endpoint-1",
+            decisions=[
+                DecisionIn(
+                    site_host="boards.greenhouse.io",
+                    label="Email",
+                    resolved_target="email",
+                    value_source="exact_rule",
+                    filled=True,
+                    readback_ok=True,
+                    required=True,
+                ),
+                DecisionIn(
+                    site_host="boards.greenhouse.io",
+                    label="Are you legally entitled to work here?",
+                    resolved_target="visa_status",
+                    value_source="brain_classification",
+                    filled=True,
+                    readback_ok=True,
+                    required=True,
+                ),
+            ],
+        )
+        result = await record_decisions(payload, user_id=USER, db=db)
+        # The second field's label matches the knockout heuristic AND was filled
+        # by an untrusted source, so the whole application must grade red - not
+        # yellow - per R1.4.
+        assert result.grade == "red"
+        assert result.recorded == 2
+
+        rows = await db.list_brain_decisions(USER, application_id="app-endpoint-1")
+        knockout_row = next(r for r in rows if "legally entitled" in r["label"])
+        assert knockout_row["is_knockout"] is True
+        assert knockout_row["grade_contribution"] == "red"
+
+    async def test_endpoint_rejects_an_unknown_value_source(self):
+        from app.routers.application_fields import DecisionIn
+
+        with pytest.raises(Exception):
+            DecisionIn(
+                site_host="example.com",
+                label="Anything",
+                value_source="guessed_vibes",
+            )
+
+
+class TestSavingTypedAnswers:
+    """`POST /extension/answers` - the learn-in-place path.
+
+    This is the one endpoint that accepts values, and the distinction from
+    form-report is consent: it runs because the user pressed "save my answers",
+    not automatically on every form they open.
+    """
+
+    async def test_saving_an_answer_records_the_value(self, db):
+        await db.upsert_application_field(
+            USER, label="Preferred pronouns", label_normalized="preferred pronouns"
+        )
+        assert await db.set_application_field_value(
+            USER, label_normalized="preferred pronouns", company=None, value="they/them"
+        )
+        row = (await db.list_application_fields(USER))[0]
         assert row["status"] == "answered"
 
     async def test_saving_again_overwrites_because_the_user_said_so(self, db):

@@ -1478,6 +1478,128 @@ class Database:
             "last_seen_ats": row.last_seen_ats,
         }
 
+    # --- Brain decisions (auto-apply-brain Phase 0) --------------------------- #
+
+    async def record_brain_decisions(
+        self,
+        user_id: str,
+        *,
+        decisions: list[dict[str, Any]],
+        application_id: str | None = None,
+    ) -> int:
+        """Insert a batch of per-field fill decisions. Returns the count inserted.
+
+        Idempotent on ``(user_id, application_id, label_normalized)``: a re-fill of
+        the same wizard step (the mutation watcher in the extension re-runs on every
+        DOM change) must update the existing row rather than pile up duplicates that
+        would double-count a field in grading.
+        """
+        from sqlalchemy import select
+
+        from app.models import BrainDecision, _new_uuid, _utcnow_iso
+
+        if not decisions:
+            return 0
+
+        async with self._session() as session:
+            async with session.begin():
+                existing_by_label: dict[str, BrainDecision] = {}
+                if application_id:
+                    rows = (
+                        (
+                            await session.execute(
+                                select(BrainDecision).where(
+                                    (BrainDecision.user_id == user_id)
+                                    & (BrainDecision.application_id == application_id)
+                                )
+                            )
+                        )
+                        .scalars()
+                        .all()
+                    )
+                    existing_by_label = {r.label_normalized: r for r in rows}
+
+                inserted = 0
+                for decision in decisions:
+                    label_normalized = decision["label_normalized"]
+                    existing = existing_by_label.get(label_normalized)
+                    if existing is not None:
+                        existing.resolved_target = decision.get("resolved_target")
+                        existing.value_source = decision["value_source"]
+                        existing.confidence = decision.get("confidence", 1.0)
+                        existing.is_knockout = decision.get("is_knockout", False)
+                        existing.filled = decision.get("filled", False)
+                        existing.readback_ok = decision.get("readback_ok")
+                        existing.grade_contribution = decision.get(
+                            "grade_contribution", "green"
+                        )
+                        existing.brain_tokens = decision.get("brain_tokens", 0)
+                        continue
+                    session.add(
+                        BrainDecision(
+                            id=_new_uuid(),
+                            user_id=user_id,
+                            application_id=application_id,
+                            site_host=decision["site_host"],
+                            label=decision["label"],
+                            label_normalized=label_normalized,
+                            resolved_target=decision.get("resolved_target"),
+                            value_source=decision["value_source"],
+                            confidence=decision.get("confidence", 1.0),
+                            is_knockout=decision.get("is_knockout", False),
+                            filled=decision.get("filled", False),
+                            readback_ok=decision.get("readback_ok"),
+                            grade_contribution=decision.get("grade_contribution", "green"),
+                            brain_tokens=decision.get("brain_tokens", 0),
+                            created_at=_utcnow_iso(),
+                        )
+                    )
+                    inserted += 1
+                return inserted
+
+    async def list_brain_decisions(
+        self, user_id: str, *, application_id: str
+    ) -> list[dict[str, Any]]:
+        """Every field decision recorded for one application - the audit trail."""
+        from sqlalchemy import select
+
+        from app.models import BrainDecision
+
+        async with self._session() as session:
+            rows = (
+                (
+                    await session.execute(
+                        select(BrainDecision)
+                        .where(
+                            (BrainDecision.user_id == user_id)
+                            & (BrainDecision.application_id == application_id)
+                        )
+                        .order_by(BrainDecision.created_at)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            return [self._brain_decision_to_dict(r) for r in rows]
+
+    def _brain_decision_to_dict(self, row: Any) -> dict[str, Any]:
+        return {
+            "id": row.id,
+            "application_id": row.application_id,
+            "site_host": row.site_host,
+            "label": row.label,
+            "label_normalized": row.label_normalized,
+            "resolved_target": row.resolved_target,
+            "value_source": row.value_source,
+            "confidence": row.confidence,
+            "is_knockout": row.is_knockout,
+            "filled": row.filled,
+            "readback_ok": row.readback_ok,
+            "grade_contribution": row.grade_contribution,
+            "brain_tokens": row.brain_tokens,
+            "created_at": row.created_at,
+        }
+
     async def get_profile(self, user_id: str) -> dict[str, Any] | None:
         """Return the user's profile (one per user), or ``None`` if not created."""
         async with self._session() as session:
