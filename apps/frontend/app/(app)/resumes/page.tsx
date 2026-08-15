@@ -296,70 +296,103 @@ export default function ResumesPage() {
           }
         />
       ) : (
-        <div className="space-y-2">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
           {filtered.map((r) => (
-            <Card key={r.resume_id} className="flex items-center gap-4 p-4">
-              {/* A real preview of the document, not a generic icon: once you
-                  have a dozen tailored variants with similar generated names,
-                  the only reliable way to tell them apart is to see them. */}
-              <ResumeThumbnail resumeId={r.resume_id} ready={r.processing_status === 'ready'} />
-              <div className="min-w-0 flex-1">
-                <Link
-                  href={`/builder?id=${r.resume_id}`}
-                  className="block truncate font-medium hover:text-[var(--primary)]"
-                >
-                  {r.title || r.filename || 'Untitled resume'}
-                </Link>
-                <p className="text-xs text-[var(--muted-foreground)]">
-                  {new Date(r.created_at).toLocaleDateString()}
-                </p>
-              </div>
-              {r.is_master && <Badge variant="primary">Master</Badge>}
-              <ScoreBadge score={r.ats_score} />
-              <StatusBadge
-                status={retryingId === r.resume_id ? 'processing' : r.processing_status}
-              />
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" aria-label="Resume actions">
-                    ⋯
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem asChild>
-                    <Link href={`/builder?id=${r.resume_id}`}>
-                      <PenLine className="h-4 w-4" /> Open in editor
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link href={`/tailor?resume=${r.resume_id}`}>
-                      <Sparkles className="h-4 w-4" /> Tailor to a job
-                    </Link>
-                  </DropdownMenuItem>
-                  {r.processing_status === 'failed' && (
-                    <DropdownMenuItem
-                      onClick={() => onRetry(r.resume_id)}
-                      disabled={retryingId !== null}
-                    >
-                      <RefreshCw
-                        className={`h-4 w-4 ${retryingId === r.resume_id ? 'animate-spin' : ''}`}
-                      />
-                      {retryingId === r.resume_id ? 'Processing…' : 'Retry processing'}
-                    </DropdownMenuItem>
-                  )}
-                  <DropdownMenuItem
-                    onClick={() => {
-                      setToRename(r);
-                      setNewTitle(r.title ?? '');
-                    }}
+            <Card key={r.resume_id} className="group relative flex flex-col overflow-hidden p-0">
+              {/* The preview IS the affordance. A grid of documents is scannable by
+                  shape and header the way a list of near-identical generated names
+                  never is - which is the reason the thumbnail exists at all, and it
+                  was wasted at row size. */}
+              <Link
+                href={`/builder?id=${r.resume_id}`}
+                className="block bg-[var(--at-surface-2)] p-3 pb-0"
+                tabIndex={-1}
+                aria-hidden="true"
+              >
+                <ResumeThumbnail
+                  resumeId={r.resume_id}
+                  ready={r.processing_status === 'ready'}
+                  fluid
+                />
+              </Link>
+
+              <div className="flex min-w-0 flex-1 flex-col gap-2 p-3">
+                <div className="min-w-0">
+                  <Link
+                    href={`/builder?id=${r.resume_id}`}
+                    className="block truncate text-sm font-medium hover:text-[var(--primary)]"
+                    title={r.title || r.filename || 'Untitled resume'}
                   >
-                    <Pencil className="h-4 w-4" /> Rename
-                  </DropdownMenuItem>
-                  <DropdownMenuItem destructive onClick={() => setToDelete(r)}>
-                    <Trash2 className="h-4 w-4" /> Delete
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+                    {r.title || r.filename || 'Untitled resume'}
+                  </Link>
+                  <p className="text-xs text-[var(--muted-foreground)]">
+                    {new Date(r.created_at).toLocaleDateString()}
+                  </p>
+                </div>
+
+                {/* Badges wrap rather than compete for one line: at three columns a
+                    card is narrow, and a master resume that also has a score and a
+                    processing state would otherwise clip whichever came last. */}
+                <div className="mt-auto flex flex-wrap items-center gap-1.5">
+                  {r.is_master && <Badge variant="primary">Master</Badge>}
+                  <ScoreBadge score={r.ats_score} />
+                  <StatusBadge
+                    status={retryingId === r.resume_id ? 'processing' : r.processing_status}
+                  />
+                </div>
+              </div>
+
+              {/* Pinned to the corner so it never shifts the card's text, and always
+                  visible rather than hover-only - a menu that appears on hover is
+                  unreachable by touch, which is most of this page's traffic. */}
+              <div className="absolute right-1 top-1">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Actions for ${r.title || r.filename || 'this resume'}`}
+                      className="h-7 w-7 bg-[var(--card)]/80 backdrop-blur-sm hover:bg-[var(--card)]"
+                    >
+                      ⋯
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem asChild>
+                      <Link href={`/builder?id=${r.resume_id}`}>
+                        <PenLine className="h-4 w-4" /> Open in editor
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href={`/tailor?resume=${r.resume_id}`}>
+                        <Sparkles className="h-4 w-4" /> Tailor to a job
+                      </Link>
+                    </DropdownMenuItem>
+                    {r.processing_status === 'failed' && (
+                      <DropdownMenuItem
+                        onClick={() => onRetry(r.resume_id)}
+                        disabled={retryingId !== null}
+                      >
+                        <RefreshCw
+                          className={`h-4 w-4 ${retryingId === r.resume_id ? 'animate-spin' : ''}`}
+                        />
+                        {retryingId === r.resume_id ? 'Processing…' : 'Retry processing'}
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuItem
+                      onClick={() => {
+                        setToRename(r);
+                        setNewTitle(r.title ?? '');
+                      }}
+                    >
+                      <Pencil className="h-4 w-4" /> Rename
+                    </DropdownMenuItem>
+                    <DropdownMenuItem destructive onClick={() => setToDelete(r)}>
+                      <Trash2 className="h-4 w-4" /> Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             </Card>
           ))}
         </div>
