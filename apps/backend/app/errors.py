@@ -23,7 +23,7 @@ from fastapi.responses import JSONResponse
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["ApiError", "error_envelope", "install_error_handlers"]
+__all__ = ["ApiError", "error_envelope", "install_error_handlers", "_handle_unexpected_error"]
 
 
 class ApiError(Exception):
@@ -90,3 +90,37 @@ async def _handle_api_error(request: Request, exc: ApiError) -> JSONResponse:
 def install_error_handlers(app) -> None:
     """Register the :class:`ApiError` -> envelope handler on ``app``."""
     app.add_exception_handler(ApiError, _handle_api_error)
+    app.add_exception_handler(Exception, _handle_unexpected_error)
+
+
+async def _handle_unexpected_error(request: Request, exc: Exception) -> JSONResponse:
+    """Catch-all for bugs/timeouts that reach no other handler.
+
+    Without this, FastAPI's own default (``debug=False``) renders a bare
+    ``{"detail": "Internal Server Error"}`` with no ``request_id`` in the body -
+    a user reporting "it just says error" has nothing to hand back to the
+    developer, and the developer has to correlate by timestamp instead of a
+    lookup key. The full exception (message + type) is still logged server-side
+    with the same request_id, so nothing about the cause is lost - only the
+    client response is generic, per ADR-7 (specifics logged, not returned).
+    """
+    request_id = getattr(request.state, "request_id", None)
+    logger.error(
+        "Unhandled exception on %s %s (request_id=%s): %s: %s",
+        request.method,
+        request.url.path,
+        request_id,
+        type(exc).__name__,
+        exc,
+        exc_info=exc,
+    )
+    return JSONResponse(
+        status_code=500,
+        content=error_envelope(
+            "internal_error",
+            "Something went wrong on our end. If this keeps happening, "
+            "please report it with the request ID below.",
+            details={"request_id": request_id} if request_id else None,
+        ),
+        headers={"X-Request-ID": request_id} if request_id else None,
+    )

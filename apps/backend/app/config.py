@@ -4,11 +4,12 @@ import copy
 import json
 import logging
 import secrets
+import sys
 import time
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import field_validator, model_validator
+from pydantic import ValidationError, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
@@ -1759,4 +1760,63 @@ class Settings(BaseSettings):
         return _get_llm_api_key_with_fallback()
 
 
-settings = Settings()
+def _format_settings_error(exc: ValidationError) -> str:
+    """Turn pydantic's validation report into one readable banner.
+
+    A bad ``.env`` value fails HERE, at import time - before logging is
+    configured and before ``main()`` runs - so this is the only place a plain
+    message can be produced. Without it every misconfiguration surfaces as a
+    10-line ``pydantic_core._pydantic_core.ValidationError`` traceback (repr'd
+    dict of every setting, a ``[type=value_error, ...]`` suffix, a docs URL)
+    with the actual reason buried in the middle. This keeps the reason our
+    validators already wrote (e.g. "DATABASE_URL must be a Postgres URL when
+    SINGLE_USER_MODE is off") and discards pydantic's wrapper text around it.
+    """
+    bullets: list[str] = []
+    for error in exc.errors():
+        message = str(error.get("msg", "")).strip()
+        # Our own model_validator raises one ValueError shaped as:
+        #   "Invalid auth configuration:\n  - reason a\n  - reason b"
+        # pydantic then prefixes the whole thing with "Value error, ". Strip
+        # that prefix, drop the "Invalid ... configuration:" header line (it
+        # is a label, not a reason), and keep each already-bulleted line as
+        # its own entry rather than re-wrapping the header as a bullet too.
+        if message.startswith("Value error, "):
+            message = message[len("Value error, ") :]
+        for raw_line in message.splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            line = line.removeprefix("- ").removeprefix("-")
+            line = line.strip()
+            if line.endswith(":") and not bullets:
+                # A bare header like "Invalid auth configuration:" carries no
+                # information beyond what the bullets underneath already say.
+                continue
+            if line:
+                bullets.append(line)
+    if not bullets:
+        bullets.append(str(exc))
+    body = "\n".join(f"  - {line}" for line in bullets)
+    rule = "=" * 70
+    divider = "-" * 70
+    return (
+        f"\n{rule}\n"
+        "FitWright backend refused to start: invalid configuration\n"
+        f"{divider}\n"
+        f"{body}\n"
+        f"{divider}\n"
+        "Fix the value(s) above in your .env file (see .env.example), then "
+        f"restart.\n{rule}"
+    )
+
+
+try:
+    settings = Settings()
+except ValidationError as exc:
+    # Print (not log): the logging system reads settings.log_level from the
+    # very object that failed to construct, so logging is not usable yet.
+    # This is the app's first line of output on a bad config - it must not
+    # depend on anything that could itself be broken.
+    print(_format_settings_error(exc), file=sys.stderr)
+    sys.exit(1)
