@@ -37,7 +37,7 @@ from app.admin.metric_registry import (
     REQUEST_4XX,
     REQUEST_5XX,
 )
-from app.admin.overview import OverviewService, _day_bounds, _day_str
+from app.admin.overview import OverviewService, _day_bounds
 from app.admin.schemas import OverviewKpis, assert_no_forbidden_fields
 
 pytestmark = pytest.mark.unit

@@ -33,6 +33,14 @@ from app.admin.metric_registry import AI_CALLS, REQUEST_2XX, REQUEST_4XX, REQUES
 from app.admin.repo import AdminRepo, get_admin_repo
 from app.models import MetricsDaily, User
 
+# Type-only imports. These modules import one another at runtime - the lazy
+# imports inside the functions below exist to break that cycle - so the names are
+# needed for annotations and for the linter, but must not be imported at load time.
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # pragma: no cover
+    from app.admin.rollup_pipeline import StepResult
+
 # NOTE: ``StepResult`` is imported LAZILY inside :meth:`MetricsFlushStep.run`
 # (not at module top-level) to avoid an import cycle: ``rollup_pipeline`` imports
 # ``METRICS_FLUSH_STEP`` from this module to build its static ``PIPELINE`` list,

@@ -2,6 +2,7 @@
 
 /** React Query hooks for the Job Discovery feature. */
 
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   postRecommend,
@@ -185,15 +186,76 @@ export function useToggleSchedule() {
 
 import {
   manualSearch,
+  startBackgroundSearch,
+  getSearchProgress,
   type ManualSearchRequest,
   type ManualSearchResponse,
+  type SearchProgress,
 } from '@/lib/api/discovery';
 
-/** Manual job search — direct query, no resume needed. */
+/** Manual job search — direct query, no resume needed. Waits for the result. */
 export function useManualSearch() {
   return useMutation<ManualSearchResponse, Error, ManualSearchRequest>({
     mutationFn: (params) => manualSearch(params),
   });
+}
+
+/**
+ * Manual search that outlives its own request.
+ *
+ * A scrape across job boards takes 15-35 seconds and the host destroys any
+ * request still open at 30, so waiting for the response reported failure for
+ * searches that had in fact filled the feed. This starts the work, then polls
+ * until it settles and calls `onFinished` so the caller can refresh the feed.
+ */
+export function useBackgroundSearch(onFinished?: (result: SearchProgress) => void) {
+  const [searchId, setSearchId] = useState<string | null>(null);
+  // Guards against firing the completion callback twice for one search, which
+  // would double-refetch the feed.
+  const announced = useRef<string | null>(null);
+
+  const start = useMutation<SearchProgress, Error, ManualSearchRequest>({
+    mutationFn: (params) => startBackgroundSearch(params),
+    onSuccess: (job) => {
+      announced.current = null;
+      setSearchId(job.search_id);
+    },
+  });
+
+  const progress = useQuery<SearchProgress>({
+    queryKey: ['discovery', 'search-progress', searchId],
+    queryFn: ({ signal }) => getSearchProgress(searchId as string, signal),
+    enabled: Boolean(searchId),
+    refetchInterval: (query) => {
+      // Stop the moment it settles; `expired` counts as settled because the
+      // server has forgotten the job and no amount of polling will revive it.
+      return query.state.data?.status === 'running' ? 2_000 : false;
+    },
+    refetchIntervalInBackground: false,
+  });
+
+  // Before the first poll lands, the start response is the only state we have.
+  const state: SearchProgress | null = progress.data ?? start.data ?? null;
+
+  useEffect(() => {
+    if (!state || state.status === 'running') return;
+    if (announced.current === state.search_id) return;
+    announced.current = state.search_id;
+    onFinished?.(state);
+  }, [state, onFinished]);
+
+  return {
+    startSearch: start.mutate,
+    isStarting: start.isPending,
+    isRunning: state?.status === 'running',
+    progress: state,
+    startError: start.error,
+    reset: () => {
+      announced.current = null;
+      setSearchId(null);
+      start.reset();
+    },
+  };
 }
 
 // -------------------------------------------------------------------------- //

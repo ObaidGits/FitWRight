@@ -62,7 +62,7 @@ class AshbyAdapter:
 
         title = info.get("title", "")
         description_html = info.get("descriptionHtml", "") or info.get("description", "")
-        team = info.get("team", "")
+        team = info.get("team", "")  # noqa: F841
         location = info.get("location", "") or info.get("locationName", "")
         employment_type = info.get("employmentType", "")
         company_name = info.get("organizationName", "") or info.get("companyName", "")

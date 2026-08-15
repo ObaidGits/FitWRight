@@ -41,6 +41,10 @@ export interface Experience {
   current?: boolean;
   tech?: string[];
   description?: string[];
+  /** Kept in the resume but left out of the rendered document and the PDF.
+   *  Tailoring is mostly choosing what to leave out, and deleting a real job to
+   *  fit one application loses it for every other one. */
+  hidden?: boolean;
 }
 
 export interface Education {
@@ -58,6 +62,8 @@ export interface Education {
   gradeType?: 'cgpa' | 'gpa' | 'percentage' | null;
   score?: string;
   achievements?: string[];
+  /** See Experience.hidden. */
+  hidden?: boolean;
 }
 
 export interface Project {
@@ -69,6 +75,8 @@ export interface Project {
   website?: string;
   tech?: string[];
   description?: string[];
+  /** See Experience.hidden. */
+  hidden?: boolean;
 }
 
 export interface AdditionalInfo {
@@ -123,6 +131,8 @@ export interface CustomSectionItem {
   location?: string;
   years?: string;
   description?: string[];
+  /** See Experience.hidden. */
+  hidden?: boolean;
 }
 
 // Custom section data container

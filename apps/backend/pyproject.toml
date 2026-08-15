@@ -30,6 +30,10 @@ dependencies = [
     "itsdangerous>=2.2.0",
     "redis>=8.0.1",
     "pillow==11.3.0",
+    # Explicit runtime dependency: the Razorpay order call uses it. It was already
+    # present transitively via litellm, but a payment path must not rest on another
+    # package's dependency choices.
+    "httpx>=0.28.0",
 ]
 
 [project.scripts]
@@ -38,6 +42,7 @@ app = "app.main:main"
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0.0",
+    "ruff>=0.9.0",
     "pytest-asyncio>=0.24.0",
     "pytest-timeout>=2.3.0",
     "httpx>=0.28.0",
@@ -107,3 +112,47 @@ markers = [
 # `numpy>=2.1.0`. jobspy only touches numpy transitively via pandas and runs
 # fine on numpy 2.x, so we relax that over-strict pin here.
 override-dependencies = ["numpy>=2.1.0,<3"]
+
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+# Generated migration bodies follow alembic's own style.
+exclude = ["alembic/versions"]
+
+[tool.ruff.lint]
+# Deliberately a SMALL rule set: the mistakes that survive a green test suite, not a
+# style guide. The backend had no linter at all, and within one session that cost a
+# dead import shipped past 3,400 passing tests plus TWO undefined names that would
+# have raised at runtime (an unimported model in a new query, and an unimported job in
+# the scheduler) - neither caught by any test, both caught by this on first run.
+#
+# Import sorting (I) and syntax modernisation (UP) are NOT enabled. They report ~400
+# findings across pre-existing code, and a linter whose first run demands a
+# whole-codebase reformat gets switched off - after which it catches nothing.
+select = [
+    "F",    # pyflakes: undefined names, unused imports, unused locals, f-string bugs
+    "E9",   # syntax and IO errors
+    "B",    # bugbear: mutable default args, except-without-raise, zip-without-strict
+]
+ignore = [
+    # `Depends(...)` in a parameter default is THE FastAPI idiom. Flagging it would
+    # mean disabling the rule per-line across every router in the project.
+    "B008",
+    # `raise X` inside `except` without `from`. Worth doing, but it is 65 call sites
+    # of pre-existing code and unrelated to correctness here.
+    "B904",
+    # Long lines are almost all explanatory comments, which is where they earn their
+    # keep.
+    "E501",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests import inside functions to pick up monkeypatched modules, and assert on
+# deliberately odd shapes.
+# Tests: unused locals are often "assert this call succeeded", blind-exception asserts
+# predate this linter, and unused loop vars appear in shape-only iterations. None of
+# these are correctness risks in test code, and fixing 27 of them would be churn.
+"tests/**" = ["B011", "F811", "F841", "B017", "B007", "F402"]
+# Router modules re-export names for the package's public surface.
+"app/routers/__init__.py" = ["F401"]

@@ -38,7 +38,6 @@ import app.admin.metrics as metrics_mod
 from app.admin.metric_registry import REQUEST_2XX, REQUEST_4XX, REQUEST_5XX
 from app.admin.metric_store import MetricStore
 from app.admin.metrics_service import MetricsFlushStep
-from app.admin.rollup_pipeline import StepResult
 
 pytestmark = pytest.mark.unit
 

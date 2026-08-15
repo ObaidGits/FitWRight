@@ -25,7 +25,7 @@ from httpx import ASGITransport, AsyncClient
 
 from app.auth.accounts import create_user
 from app.auth.passwords import get_password_service
-from app.auth.sessions import get_session_service, hash_token
+from app.auth.sessions import hash_token
 from app.config import settings as app_settings
 from app.main import app
 from app.models import EmailVerificationToken, Session as SessionRow

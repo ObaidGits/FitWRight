@@ -44,7 +44,6 @@ from sqlalchemy import func, select
 
 from app.admin.jobs import AUDIT_RETENTION_LOCK_KEY, run_audit_retention_job
 from app.admin.metric_registry import (
-    AUDIT_DOWNSAMPLED_USER_VIEWED,
     DownsamplableEvent,
     audit_downsample_key,
 )

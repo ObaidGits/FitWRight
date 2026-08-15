@@ -7,7 +7,6 @@ Resume projections - all user-scoped and version-CAS guarded.
 
 from __future__ import annotations
 
-import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.main import app

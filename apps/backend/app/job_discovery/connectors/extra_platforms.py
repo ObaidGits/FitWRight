@@ -14,7 +14,6 @@ from urllib.parse import quote_plus
 import httpx
 
 from app.job_discovery.connectors.base import (
-    Connector,
     RawListing,
     classify_failure,
 )
@@ -558,7 +557,7 @@ class ExtraPlatformConnector:
                 data = json.loads(nd.group(1))
                 apollo = data.get("props", {}).get("pageProps", {}).get("apolloState", {})
                 # Extract job-like objects from Apollo cache
-                for key, val in apollo.items():
+                for _key, val in apollo.items():
                     if not isinstance(val, dict):
                         continue
                     typename = val.get("__typename", "")

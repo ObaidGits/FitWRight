@@ -43,7 +43,7 @@ class GreenhouseAdapter:
     def parse_response(self, data: dict, source_url: str) -> ExtractionResult:
         title = data.get("title", "")
         content_html = data.get("content", "")
-        departments = [d.get("name", "") for d in data.get("departments", [])]
+        departments = [d.get("name", "") for d in data.get("departments", [])]  # noqa: F841
         offices = [o.get("name", "") for o in data.get("offices", [])]
         location = ", ".join(offices) if offices else ""
         company = data.get("company", {}).get("name", "")

@@ -62,6 +62,14 @@ READ_ENDPOINTS = [
     "/api/v1/admin/kpis",
     "/api/v1/admin/analytics/feature-usage",
     "/api/v1/admin/analytics/resumes",
+    # AI channels and operator spend (spec: ai-provider-admin)
+    "/api/v1/admin/ai/channels",
+    "/api/v1/admin/ai/spend",
+    "/api/v1/admin/ai/performance",
+    "/api/v1/admin/ai/alerts",
+    "/api/v1/admin/ai/reconciliation",
+    "/api/v1/admin/ai/abuse-review",
+    "/api/v1/admin/ai/packs",
 ]
 
 # Every maintenance action (all ``require_admin_manage``, POST, audited

@@ -45,16 +45,49 @@ import {
 } from '@/components/atelier/dialog';
 import { useToast } from '@/components/atelier/toast';
 import { useResumeLibrary, useDeleteResume, useRetryProcessing } from '@/features/resumes/hooks';
+import { ResumeThumbnail } from '@/components/resume/resume-thumbnail';
+import MoreHorizontal from 'lucide-react/dist/esm/icons/more-horizontal';
+import { compareByMatchScore } from '@/lib/utils/resume-sort';
 import type { ResumeListItem } from '@/lib/api/resume';
 
 type Filter = 'all' | 'master' | 'tailored';
-type SortKey = 'updated' | 'created' | 'name';
+type SortKey = 'updated' | 'created' | 'name' | 'score';
 
 const SORT_LABELS: Record<SortKey, string> = {
   updated: 'Recently updated',
   created: 'Recently added',
   name: 'Name (A-Z)',
+  score: 'Best match first',
 };
+
+/** A score badge, or nothing. An unscored resume shows no badge rather than a
+ *  zero: a master resume has no job to be measured against, so "0%" would read
+ *  as a terrible match instead of an absent one. */
+/** "24 Jul 2026" rather than "7/24/2026".
+ *
+ * The numeric form is ambiguous outside the US - 7/24 and 24/7 read differently - and
+ * on a card where the date sits beside badges the month name is easier to scan than
+ * three groups of digits. */
+function formatShortDate(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+function ScoreBadge({ score }: { score?: number | null }) {
+  if (score == null) return null;
+  const rounded = Math.round(score);
+  const variant = rounded >= 75 ? 'success' : rounded >= 50 ? 'warning' : 'danger';
+  return (
+    <Badge variant={variant} title="How well this resume matched its job description">
+      {rounded}% match
+    </Badge>
+  );
+}
 
 function StatusBadge({ status }: { status: string }) {
   if (status === 'ready') return <Badge variant="success">Ready</Badge>;
@@ -96,6 +129,7 @@ export default function ResumesPage() {
     const bySearch = q ? byTab.filter((r) => resumeName(r).includes(q)) : byTab;
     const sorted = [...bySearch].sort((a, b) => {
       if (sort === 'name') return resumeName(a).localeCompare(resumeName(b));
+      if (sort === 'score') return compareByMatchScore(a, b);
       const key = sort === 'created' ? 'created_at' : 'updated_at';
       return (b[key] ?? '').localeCompare(a[key] ?? '');
     });
@@ -278,66 +312,115 @@ export default function ResumesPage() {
           }
         />
       ) : (
-        <div className="space-y-2">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 xl:grid-cols-4">
           {filtered.map((r) => (
-            <Card key={r.resume_id} className="flex items-center gap-3 p-4">
-              <FileText className="h-5 w-5 shrink-0 text-[var(--muted-foreground)]" />
-              <div className="min-w-0 flex-1">
+            <Card
+              key={r.resume_id}
+              className="group relative flex flex-col overflow-hidden p-0 transition-shadow hover:shadow-md"
+            >
+              {/* The whole preview is the link, so the obvious thing to click is the
+                  thing being looked at. aria-hidden because the title link below carries
+                  the accessible name - two links to one destination is noise in a screen
+                  reader. */}
+              <Link
+                href={`/builder?id=${r.resume_id}`}
+                className="block border-b border-[var(--border)]"
+                tabIndex={-1}
+                aria-hidden="true"
+              >
+                <ResumeThumbnail
+                  resumeId={r.resume_id}
+                  ready={r.processing_status === 'ready'}
+                  fluid
+                />
+              </Link>
+
+              <div className="flex min-w-0 flex-1 flex-col gap-1 p-2.5 sm:p-3">
                 <Link
-                  href={`/resumes/${r.resume_id}`}
-                  className="block truncate font-medium hover:text-[var(--primary)]"
+                  href={`/builder?id=${r.resume_id}`}
+                  className="text-[13px] font-medium leading-snug hover:text-[var(--primary)] sm:text-sm"
+                  title={r.title || r.filename || 'Untitled resume'}
                 >
-                  {r.title || r.filename || 'Untitled resume'}
+                  {/* Two lines, not one truncated line: these titles are generated and
+                      the distinguishing part is usually at the END ("... - UI
+                      Automation"), so cutting after a few words hides exactly what tells
+                      one variant from another. */}
+                  <span className="line-clamp-2">{r.title || r.filename || 'Untitled resume'}</span>
                 </Link>
-                <p className="text-xs text-[var(--muted-foreground)]">
-                  {new Date(r.created_at).toLocaleDateString()}
-                </p>
-              </div>
-              {r.is_master && <Badge variant="primary">Master</Badge>}
-              <StatusBadge
-                status={retryingId === r.resume_id ? 'processing' : r.processing_status}
-              />
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" aria-label="Resume actions">
-                    ⋯
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem asChild>
-                    <Link href={`/resumes/${r.resume_id}`}>
-                      <PenLine className="h-4 w-4" /> Open in editor
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link href={`/tailor?resume=${r.resume_id}`}>
-                      <Sparkles className="h-4 w-4" /> Tailor to a job
-                    </Link>
-                  </DropdownMenuItem>
-                  {r.processing_status === 'failed' && (
-                    <DropdownMenuItem
-                      onClick={() => onRetry(r.resume_id)}
-                      disabled={retryingId !== null}
-                    >
-                      <RefreshCw
-                        className={`h-4 w-4 ${retryingId === r.resume_id ? 'animate-spin' : ''}`}
-                      />
-                      {retryingId === r.resume_id ? 'Processing…' : 'Retry processing'}
-                    </DropdownMenuItem>
+
+                {/* One meta line rather than a badge row. "Ready" on its own line cost
+                    every card a strip of empty space, and it is the least interesting
+                    thing about a resume that is working normally. */}
+                <div className="mt-auto flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-[var(--muted-foreground)]">
+                  <span>{formatShortDate(r.created_at)}</span>
+                  {r.is_master && (
+                    <Badge variant="primary" className="px-1.5 py-0 text-[10px]">
+                      Master
+                    </Badge>
                   )}
-                  <DropdownMenuItem
-                    onClick={() => {
-                      setToRename(r);
-                      setNewTitle(r.title ?? '');
-                    }}
-                  >
-                    <Pencil className="h-4 w-4" /> Rename
-                  </DropdownMenuItem>
-                  <DropdownMenuItem destructive onClick={() => setToDelete(r)}>
-                    <Trash2 className="h-4 w-4" /> Delete
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+                  <ScoreBadge score={r.ats_score} />
+                  {/* Status only when it is NOT the normal case: a grid of green "Ready"
+                      pills is decoration, while a "Failed" pill is information. */}
+                  {(retryingId === r.resume_id || r.processing_status !== 'ready') && (
+                    <StatusBadge
+                      status={retryingId === r.resume_id ? 'processing' : r.processing_status}
+                    />
+                  )}
+                </div>
+              </div>
+
+              {/* Solid background and a border, not a faint glyph over white paper - at
+                  thumbnail scale the previous version was almost invisible. Always
+                  rendered rather than hover-only, because a hover-only control cannot be
+                  reached on a phone. */}
+              <div className="absolute right-1.5 top-1.5">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      aria-label={`Actions for ${r.title || r.filename || 'this resume'}`}
+                      className="h-7 w-7 border-[var(--border)] bg-[var(--card)] shadow-sm"
+                    >
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem asChild>
+                      <Link href={`/builder?id=${r.resume_id}`}>
+                        <PenLine className="h-4 w-4" /> Open in editor
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href={`/tailor?resume=${r.resume_id}`}>
+                        <Sparkles className="h-4 w-4" /> Tailor to a job
+                      </Link>
+                    </DropdownMenuItem>
+                    {r.processing_status === 'failed' && (
+                      <DropdownMenuItem
+                        onClick={() => onRetry(r.resume_id)}
+                        disabled={retryingId !== null}
+                      >
+                        <RefreshCw
+                          className={`h-4 w-4 ${retryingId === r.resume_id ? 'animate-spin' : ''}`}
+                        />
+                        {retryingId === r.resume_id ? 'Processing…' : 'Retry processing'}
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuItem
+                      onClick={() => {
+                        setToRename(r);
+                        setNewTitle(r.title ?? '');
+                      }}
+                    >
+                      <Pencil className="h-4 w-4" /> Rename
+                    </DropdownMenuItem>
+                    <DropdownMenuItem destructive onClick={() => setToDelete(r)}>
+                      <Trash2 className="h-4 w-4" /> Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             </Card>
           ))}
         </div>

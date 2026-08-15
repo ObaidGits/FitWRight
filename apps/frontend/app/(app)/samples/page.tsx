@@ -16,7 +16,7 @@ export const metadata: Metadata = {
 
 export default function SamplesPage() {
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
+    <div className="space-y-6">
       <header>
         <h1 className="text-2xl font-semibold">Resume samples</h1>
         <p className="text-sm text-[var(--muted-foreground)]">

@@ -109,7 +109,7 @@ def extract_dom_scored(html: str, *, max_chars: int = 20000) -> ExtractionResult
 
     # Try the best candidate first
     content = ""
-    for score, elem in candidates[:5]:  # Check top 5
+    for _score, elem in candidates[:5]:  # Check top 5
         text = _normalize(elem.get_text(separator="\n"))
         if len(text) >= 400:
             content = text

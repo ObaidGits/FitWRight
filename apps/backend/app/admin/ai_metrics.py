@@ -53,6 +53,14 @@ from app.admin.metric_registry import (
 )
 from app.admin.schemas import AiAnalytics, ProviderCount, SeriesPoint
 
+# Type-only imports. These modules import one another at runtime - the lazy
+# imports inside the functions below exist to break that cycle - so the names are
+# needed for annotations and for the linter, but must not be imported at load time.
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # pragma: no cover
+    from app.admin.rollup_pipeline import StepResult
+
 logger = logging.getLogger(__name__)
 
 __all__ = [
@@ -335,7 +343,7 @@ class AiMetricsService:
 
         total_calls = await store.sum([AI_CALLS], day_from, day_to) + int(live["calls"])
         successes = await store.sum([AI_SUCCESS], day_from, day_to) + int(live["success"])
-        failures = await store.sum([AI_FAILURE], day_from, day_to) + int(live["failure"])
+        failures = await store.sum([AI_FAILURE], day_from, day_to) + int(live["failure"])  # noqa: F841
         timeouts = await store.sum([AI_TIMEOUTS], day_from, day_to) + int(live["timeouts"])
         retries = await store.sum([AI_RETRIES], day_from, day_to) + int(live["retries"])
         tokens_sum = await store.sum([AI_TOKENS_SUM], day_from, day_to) + int(live["tokens_sum"])

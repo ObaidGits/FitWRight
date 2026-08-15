@@ -32,6 +32,7 @@ import {
   PARSE_MESSAGES,
   ESTIMATE_PARSE,
 } from '@/lib/ai-progress-copy';
+import { PAGE_WIDTH } from '@/lib/layout/page-width';
 
 type Phase = 'idle' | 'uploading' | 'error';
 
@@ -76,7 +77,7 @@ export default function ImportPage() {
         return false;
       }
       toast({ title: 'Resume uploaded', variant: 'success' });
-      router.push(`/resumes/${res.resume_id}`);
+      router.push(`/builder?id=${res.resume_id}`);
       return true;
     },
     [qc, router, toast]
@@ -85,12 +86,18 @@ export default function ImportPage() {
   const handleFile = React.useCallback(
     async (file: File) => {
       if (aiBlocked) {
+        // Each state gets its own sentence. These used to collapse into "Add an
+        // AI provider key", which was wrong for a key that exists and was
+        // refused - and the reachability banner could simultaneously claim the
+        // user was offline, blaming their connection for a credentials problem.
         setError(
           aiAvailability.state === 'loading'
-            ? 'Checking AI availability. Please wait a moment and try again.'
+            ? 'Checking your AI provider before uploading. Try again in a moment.'
             : aiAvailability.state === 'status-error'
               ? 'AI availability could not be verified. Refresh the page before uploading.'
-              : 'Add an AI provider key in Settings before uploading.'
+              : aiAvailability.health === 'unhealthy'
+                ? 'Your AI provider rejected the current key, so parsing would fail. Update the provider key in Settings and use Test connection, then upload again. This is not a connection problem.'
+                : 'No AI provider key is configured, and parsing a resume needs one. Add a key in Settings, then upload again.'
         );
         setPhase('error');
         return;
@@ -145,7 +152,7 @@ export default function ImportPage() {
         setPhase('error');
       }
     },
-    [aiAvailability.state, aiBlocked, finishUpload]
+    [aiAvailability.state, aiAvailability.health, aiBlocked, finishUpload]
   );
 
   function onDrop(e: React.DragEvent) {
@@ -156,7 +163,7 @@ export default function ImportPage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
+    <div className={`${PAGE_WIDTH.NARROW} space-y-6`}>
       <div>
         <h1 className="text-2xl font-semibold">Add a resume</h1>
         <p className="text-sm text-[var(--muted-foreground)]">

@@ -8,7 +8,6 @@ kill-switch.
 
 from __future__ import annotations
 
-import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.config import settings as app_settings

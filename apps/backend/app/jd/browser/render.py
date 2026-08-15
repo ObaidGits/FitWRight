@@ -17,14 +17,11 @@ from app.jd.browser.distributed import (
     edge_render_configured,
     render_via_edge,
 )
-from app.jd.browser.pool import close_browser_pool, create_stealth_context, get_browser_pool
+from app.jd.browser.pool import create_stealth_context, get_browser_pool
 from app.jd.extractors.dom import extract_dom_scored
 from app.jd.extractors.jsonld import extract_jsonld
 from app.jd.models import (
-    ConfidenceResult,
-    ExtractionExplanation,
     ExtractionResult,
-    StageTrace,
 )
 
 logger = logging.getLogger(__name__)

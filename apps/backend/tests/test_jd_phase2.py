@@ -1,9 +1,7 @@
 """Phase 2 tests: cache, SingleFlight, drift detection, circuit breaker."""
 
 import asyncio
-import json
 import time
-from unittest.mock import AsyncMock, patch
 
 import pytest
 

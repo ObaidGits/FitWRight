@@ -20,10 +20,8 @@ from app.main import app
 from app.schemas.auth import SAFE_USER_FIELDS
 
 from tests.integration.test_auth_api import (
-    STRONG_PW,
     _login,
     _seed_active_user,
-    _signup,
 )
 
 pytestmark = pytest.mark.integration

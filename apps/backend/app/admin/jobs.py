@@ -1009,6 +1009,18 @@ async def run_admin_jobs(*, kvstore=None) -> dict:
     audit_retention = await _run_job_with_markers(
         "audit_retention", lambda: run_audit_retention_job(kvstore=kvstore)
     )
+    # Credit maintenance: release expired holds, and top up any account whose
+    # allowance period rolled over while it was dormant. Marker-wrapped like the
+    # others so the Health page shows when it last ran - a silently dead sweep leaves
+    # users with frozen balances and no signal anywhere that it stopped.
+    # Imported here rather than at module scope: app.ai_allowance reaches into
+    # app.database, and this module is imported during app startup where that would
+    # create a cycle.
+    from app.ai_allowance import run_credit_maintenance_job
+
+    credit_maintenance = await _run_job_with_markers(
+        "credit_maintenance", lambda: run_credit_maintenance_job(kvstore=kvstore)
+    )
     # Alerting runs unwrapped (no run marker - see docstring) but still isolated:
     # a failure here must not discard the other jobs' results.
     try:
@@ -1020,5 +1032,6 @@ async def run_admin_jobs(*, kvstore=None) -> dict:
         "rollup": rollup,
         "purge": purge,
         "audit_retention": audit_retention,
+        "credit_maintenance": credit_maintenance,
         "alerting": alerting,
     }

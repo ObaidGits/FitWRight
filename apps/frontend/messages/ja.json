@@ -429,7 +429,9 @@
       "effectiveHeaderFont": "見出しフォント",
       "effectiveBodyFont": "本文フォント",
       "compactHint": "コンパクトモードでは間隔と行間が詰まります。余白と本文フォントサイズは維持されます。",
-      "resetDefaults": "デフォルトに戻す"
+      "resetDefaults": "デフォルトに戻す",
+      "browseAll": "すべてのテンプレートを見る",
+      "browseAllCta": "テンプレート一覧"
     },
     "personalInfoForm": {
       "placeholders": {
@@ -472,6 +474,10 @@
       "draftQuarantined": "保存されたローカル下書きが読み取れなかったため、作業を保護するために隔離しました。現在の内容は安全です。",
       "storageDegraded": "ローカルストレージが利用できないため、このセッションでは変更をメモリ内にのみ保持します。失わないようにサーバーへ保存してください。",
       "openRecoveryCenter": "リカバリーセンターを開く"
+    },
+    "item": {
+      "hide": "この履歴書では非表示",
+      "show": "この履歴書で表示"
     }
   },
   "enrichment": {

@@ -20,6 +20,7 @@ import CircleAlert from 'lucide-react/dist/esm/icons/circle-alert';
 import { ApplicationAnswers } from '@/components/answers/application-answers';
 import { Card } from '@/components/atelier/card';
 import { useAutofillReadiness } from '@/features/application-fields/hooks';
+import { PAGE_WIDTH } from '@/lib/layout/page-width';
 
 /** Plain-language stakes for each group of missing fields. */
 const GROUP_COST: Record<string, string> = {
@@ -123,7 +124,7 @@ function ReadinessCard() {
 
 export default function AnswersPage() {
   return (
-    <div className="mx-auto max-w-4xl space-y-6 p-4 md:p-6">
+    <div className={`${PAGE_WIDTH.CONTENT} space-y-6`}>
       <header>
         <h1 className="text-xl font-semibold">Answers</h1>
         <p className="mt-1 text-sm text-[var(--muted-foreground)]">

@@ -17,11 +17,15 @@ import {
   observabilityApi,
   type AdminUserList,
   type AdminUserRow,
+  type AiChannelInput,
+  type AiChannelPatch,
   type AuditListParams,
+  type CreditPackInput,
   type ErrorReportListParams,
   type MaintenanceAction,
   type MetricName,
   type MetricWindow,
+  type UserCreditsPatch,
   type UserListParams,
 } from '@/lib/api/admin';
 
@@ -45,6 +49,13 @@ export const adminKeys = {
   aiAnalytics: (window: number) => [...adminKeys.all, 'ai-analytics', window] as const,
   errors: (window: number) => [...adminKeys.all, 'errors', window] as const,
   performance: () => [...adminKeys.all, 'performance'] as const,
+  aiChannels: () => [...adminKeys.all, 'ai-channels'] as const,
+  aiSpend: (days: number) => [...adminKeys.all, 'ai-spend', days] as const,
+  aiPerformance: (days: number) => [...adminKeys.all, 'ai-performance', days] as const,
+  aiAlerts: (days: number) => [...adminKeys.all, 'ai-alerts', days] as const,
+  aiReconciliation: () => [...adminKeys.all, 'ai-reconciliation'] as const,
+  creditPacks: () => [...adminKeys.all, 'credit-packs'] as const,
+  userCredits: (userId: string) => [...adminKeys.all, 'user-credits', userId] as const,
   storage: () => [...adminKeys.all, 'storage'] as const,
   security: () => [...adminKeys.all, 'security'] as const,
   kpis: () => [...adminKeys.all, 'kpis'] as const,
@@ -390,5 +401,151 @@ export function useRunMaintenance() {
       qc.invalidateQueries({ queryKey: adminKeys.jobs() });
       qc.invalidateQueries({ queryKey: adminKeys.stats() });
     },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// AI provider channels + per-user credits (spec: ai-provider-admin)
+// ---------------------------------------------------------------------------
+
+/** Channel list, including live health. */
+export function useAiChannels() {
+  return useQuery({
+    queryKey: adminKeys.aiChannels(),
+    queryFn: () => adminApi.listAiChannels(),
+    // Health (cooldowns, failure counts) changes on its own as traffic flows, so
+    // this list is stale the moment it is fetched. Refresh while the page is open.
+    refetchInterval: 15_000,
+  });
+}
+
+export function useCreateAiChannel() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: AiChannelInput) => adminApi.createAiChannel(input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: adminKeys.aiChannels() }),
+  });
+}
+
+/** Pessimistic: a channel change alters where real traffic goes, so wait for the
+ *  server rather than showing an optimistic state that may be rejected (e.g.
+ *  activating a channel with no credential). */
+export function useUpdateAiChannel() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: AiChannelPatch }) =>
+      adminApi.updateAiChannel(id, patch),
+    onSuccess: () => qc.invalidateQueries({ queryKey: adminKeys.aiChannels() }),
+  });
+}
+
+export function useDeleteAiChannel() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => adminApi.deleteAiChannel(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: adminKeys.aiChannels() }),
+  });
+}
+
+export function useUserCredits(userId: string | null) {
+  return useQuery({
+    queryKey: adminKeys.userCredits(userId ?? '-'),
+    queryFn: () => adminApi.getUserCredits(userId as string),
+    enabled: !!userId,
+  });
+}
+
+export function usePatchUserCredits() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, patch }: { userId: string; patch: UserCreditsPatch }) =>
+      adminApi.patchUserCredits(userId, patch),
+    onSuccess: (_data, vars) =>
+      qc.invalidateQueries({ queryKey: adminKeys.userCredits(vars.userId) }),
+  });
+}
+
+export function useGrantUserCredits() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      userId,
+      credits,
+      reason,
+    }: {
+      userId: string;
+      credits: number;
+      reason: string;
+    }) => adminApi.grantUserCredits(userId, credits, reason),
+    onSuccess: (_data, vars) =>
+      qc.invalidateQueries({ queryKey: adminKeys.userCredits(vars.userId) }),
+  });
+}
+
+/** Operator spend over a window. */
+export function useAiSpend(days: number) {
+  return useQuery({
+    queryKey: adminKeys.aiSpend(days),
+    queryFn: () => adminApi.getAiSpend(days),
+    placeholderData: keepPreviousData,
+  });
+}
+
+/** Send one probe through a channel. Spends a few tokens, so it is a mutation. */
+export function useTestAiChannel() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => adminApi.testAiChannel(id),
+    // The probe writes the structured verdict, so the list is now stale.
+    onSuccess: () => qc.invalidateQueries({ queryKey: adminKeys.aiChannels() }),
+  });
+}
+
+export function useChannelPerformance(days: number) {
+  return useQuery({
+    queryKey: adminKeys.aiPerformance(days),
+    queryFn: () => adminApi.getChannelPerformance(days),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useAiAlerts(days: number) {
+  return useQuery({
+    queryKey: adminKeys.aiAlerts(days),
+    queryFn: () => adminApi.getAiAlerts(days),
+    // Alerts are the reason an operator opens this page; stale ones are worse than none.
+    refetchInterval: 60_000,
+  });
+}
+
+export function useReconciliation() {
+  return useQuery({
+    queryKey: adminKeys.aiReconciliation(),
+    queryFn: () => adminApi.getReconciliation(),
+  });
+}
+
+export function useCreditPacks() {
+  return useQuery({
+    queryKey: adminKeys.creditPacks(),
+    queryFn: () => adminApi.listCreditPacks(),
+  });
+}
+
+/** Pessimistic: this changes what a customer is charged, so wait for the server. */
+export function useSaveCreditPack() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, input, isNew }: { id: string; input: CreditPackInput; isNew: boolean }) =>
+      isNew ? adminApi.createCreditPack(id, input) : adminApi.updateCreditPack(id, input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: adminKeys.creditPacks() }),
+  });
+}
+
+export function useDeleteCreditPack() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => adminApi.deleteCreditPack(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: adminKeys.creditPacks() }),
   });
 }

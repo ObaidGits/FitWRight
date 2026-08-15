@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, Suspense, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, Suspense, useCallback, useMemo } from 'react';
 import Image from 'next/image';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { type ResumeData } from '@/components/dashboard/resume-component';
@@ -46,6 +46,8 @@ import {
   generateInterviewPrep,
   fetchJobDescription,
   buildResumeStreamTransport,
+  updateResumeTemplateSettings,
+  normalizeTemplateSettings,
 } from '@/lib/api/resume';
 import { StreamController } from '@/lib/resilience/stream-client';
 import { JDComparisonView } from './jd-comparison-view';
@@ -54,6 +56,9 @@ import { useRegenerateWizard } from '@/hooks/use-regenerate-wizard';
 import { useTranslations } from '@/lib/i18n';
 import { type TemplateSettings, DEFAULT_TEMPLATE_SETTINGS } from '@/lib/types/template-settings';
 import { withLocalizedDefaultSections } from '@/lib/utils/section-helpers';
+import { stripHiddenItems, countHiddenItems } from '@/lib/utils/hidden-items';
+import { appearanceStorageKey } from '@/lib/resume/appearance-storage';
+import { getTabFromSearchParams, type TabId } from '@/components/builder/tab-ids';
 import { useLanguage } from '@/lib/context/language-context';
 import { useSession } from '@/lib/context/session';
 import { useResilienceFlags } from '@/lib/hooks/use-resilience-flags';
@@ -64,21 +69,31 @@ import { ConflictDialog } from '@/components/resilience/conflict-dialog';
 import { RecoveryBanner } from '@/components/resilience/recovery-banner';
 import { RecoveryCenter } from '@/components/resilience/recovery-center';
 import { buildResumeFilename, downloadBlobAsFile, openUrlInNewTab } from '@/lib/utils/download';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from '@/components/atelier/dropdown-menu';
+import MoreHorizontal from 'lucide-react/dist/esm/icons/more-horizontal';
+import EyeOff from 'lucide-react/dist/esm/icons/eye-off';
+import { PaneToggle, paneVisibility, type Pane } from '@/components/layout/pane-toggle';
+import Palette from 'lucide-react/dist/esm/icons/palette';
+import { Card } from '@/components/atelier/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/atelier/dialog';
+import { TemplateGallery } from '@/components/resume/template-gallery';
+import { templateToSettings, type ResumeTemplate } from '@/lib/resume/template-catalog';
+import { VersionHistoryPanel } from '@/components/resume/version-history-panel';
+import { UnsavedChangesGuard } from '@/components/common/unsaved-changes-guard';
+import { ExportButton } from '@/components/resume/export-button';
+import { cn } from '@/lib/utils';
 import type { RegenerateItemInput } from '@/lib/api/enrichment';
 
-type TabId = 'resume' | 'cover-letter' | 'outreach' | 'interview-prep' | 'jd-match';
 type JobContextStatus = 'idle' | 'loading' | 'available' | 'missing';
 
 const STORAGE_KEY = 'resume_builder_draft';
-const SETTINGS_STORAGE_KEY = 'resume_builder_settings';
-const TAB_IDS: TabId[] = ['resume', 'cover-letter', 'outreach', 'interview-prep', 'jd-match'];
 
 type Translate = (key: string, params?: Record<string, string | number>) => string;
-
-const getTabFromSearchParams = (searchParams: Pick<URLSearchParams, 'get'>): TabId => {
-  const tab = searchParams.get('tab');
-  return TAB_IDS.includes(tab as TabId) ? (tab as TabId) : 'resume';
-};
 
 const buildInitialData = (t: Translate): ResumeData => ({
   personalInfo: {
@@ -137,6 +152,15 @@ const ResumeBuilderContent = () => {
   const [, setLoadingState] = useState<'idle' | 'loading' | 'loaded' | 'error'>('idle');
   const [templateSettings, setTemplateSettings] =
     useState<TemplateSettings>(DEFAULT_TEMPLATE_SETTINGS);
+  // Has this resume's server-persisted appearance been adopted yet? Also set by
+  // the first user change, so a late fetch can never overwrite their choice.
+  const settingsAdoptedRef = useRef(false);
+  // Bumped to force the loader to re-run - used after a version restore, which
+  // replaces the resume content on the server underneath the open editor.
+  const [reloadNonce, setReloadNonce] = useState(0);
+  // Full-catalogue template picker (Design mode).
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
+  const [pickedTemplateId, setPickedTemplateId] = useState<string | undefined>(undefined);
   const { improvedData } = useResumePreview();
   const improvedPreview = improvedData?.data?.resume_preview;
   const improvedCoverLetter = improvedData?.data?.cover_letter;
@@ -160,6 +184,9 @@ const ResumeBuilderContent = () => {
 
   // Tab state
   const [activeTab, setActiveTab] = useState<TabId>(() => getTabFromSearchParams(searchParams));
+  // Narrow screens show one pane at a time, switched from the header. Defaults
+  // to the editor: a user opening the editor came to change something.
+  const [mobilePane, setMobilePane] = useState<Pane>('edit');
 
   useEffect(() => {
     setActiveTab(getTabFromSearchParams(searchParams));
@@ -297,34 +324,62 @@ const ResumeBuilderContent = () => {
     return null;
   }, [resumeData.additional?.technicalSkills, t]);
 
+  // Hidden items are stripped here, and again in app/print/resumes/[id] which is
+  // what headless Chromium renders into the PDF - so the preview and the export
+  // agree. Filtering in only one of the two would be the same class of bug as an
+  // export that ignores unsaved edits.
   const localizedResumeDataForPreview = useMemo(
-    () => withLocalizedDefaultSections(resumeData, t),
+    () => stripHiddenItems(withLocalizedDefaultSections(resumeData, t)),
     [resumeData, t]
   );
+  const hiddenItemCount = useMemo(() => countHiddenItems(resumeData), [resumeData]);
 
-  // Load template settings from localStorage on mount
+  // Local appearance cache, read per resume. Only used until the resume's own
+  // persisted settings arrive from the server (adopted in loadResumeData below).
   useEffect(() => {
-    const savedSettings = localStorage.getItem(SETTINGS_STORAGE_KEY);
+    const savedSettings = localStorage.getItem(appearanceStorageKey(resumeId));
     if (savedSettings) {
       try {
-        const parsed = JSON.parse(savedSettings);
-        setTemplateSettings({
-          ...DEFAULT_TEMPLATE_SETTINGS,
-          ...parsed,
-          margins: { ...DEFAULT_TEMPLATE_SETTINGS.margins, ...parsed.margins },
-          spacing: { ...DEFAULT_TEMPLATE_SETTINGS.spacing, ...parsed.spacing },
-          fontSize: { ...DEFAULT_TEMPLATE_SETTINGS.fontSize, ...parsed.fontSize },
-        });
+        setTemplateSettings(normalizeTemplateSettings(JSON.parse(savedSettings)));
       } catch {
         // Use defaults
       }
+    } else {
+      // Switching to a resume with no cached appearance must not inherit the
+      // previous resume's - that was the leak.
+      setTemplateSettings(DEFAULT_TEMPLATE_SETTINGS);
     }
-  }, []);
+    settingsAdoptedRef.current = false;
+  }, [resumeId]);
 
-  // Save template settings to localStorage when they change
-  useEffect(() => {
-    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(templateSettings));
-  }, [templateSettings]);
+  /**
+   * Persist appearance to the resume itself, not just this browser.
+   *
+   * The builder used to write only to a global localStorage key, so a margin or
+   * font change was never attached to the resume: it disappeared on another
+   * device and bled onto every other resume here. Fire-and-forget because
+   * appearance does not bump the content version, so it cannot conflict with an
+   * in-flight content save - the same contract the resume editor relies on.
+   */
+  const persistTemplateSettings = useCallback(
+    (next: TemplateSettings) => {
+      // Once the user changes appearance we own it; a late server adoption must
+      // not overwrite the choice.
+      settingsAdoptedRef.current = true;
+      setTemplateSettings(next);
+      try {
+        localStorage.setItem(appearanceStorageKey(resumeId), JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
+      if (resumeId) {
+        void updateResumeTemplateSettings(resumeId, next).catch(() => {
+          /* best-effort; the local cache keeps this session correct */
+        });
+      }
+    },
+    [resumeId]
+  );
 
   // Warn user before leaving with unsaved changes
   useEffect(() => {
@@ -350,6 +405,21 @@ const ResumeBuilderContent = () => {
           setIsTailoredResume(Boolean(data.parent_id));
           // Store resume title for downloads
           setResumeTitle(data.title ?? null);
+          // Adopt the resume's OWN persisted appearance - the server is the
+          // source of truth, so the resume looks the same here as it does in the
+          // resume editor and on another device. Guarded so it happens once per
+          // resume and can never overwrite an appearance the user has already
+          // changed in this session.
+          if (data.template_settings && !settingsAdoptedRef.current) {
+            settingsAdoptedRef.current = true;
+            const adopted = normalizeTemplateSettings(data.template_settings);
+            setTemplateSettings(adopted);
+            try {
+              localStorage.setItem(appearanceStorageKey(resumeId), JSON.stringify(adopted));
+            } catch {
+              /* ignore */
+            }
+          }
           // Load cover letter and outreach message if available
           if (data.cover_letter) {
             setCoverLetter(data.cover_letter);
@@ -443,6 +513,8 @@ const ResumeBuilderContent = () => {
     improvedOutreach,
     improvedInterviewPrep,
     resumeId,
+    // Bumped by a version restore, which replaces the content under the editor.
+    reloadNonce,
   ]);
 
   // Fetch job description when we have a tailored resume
@@ -493,15 +565,25 @@ const ResumeBuilderContent = () => {
     [autosave]
   );
 
-  const handleSettingsChange = useCallback((newSettings: TemplateSettings) => {
-    setTemplateSettings(newSettings);
-  }, []);
+  const handleSettingsChange = useCallback(
+    (newSettings: TemplateSettings) => {
+      // Goes through persistTemplateSettings so the change is attached to THIS
+      // resume on the server, not just cached in this browser.
+      persistTemplateSettings(newSettings);
+    },
+    [persistTemplateSettings]
+  );
 
-  const handleSave = async () => {
-    if (!resumeId) {
-      showNotification(t('builder.alerts.saveNotAvailable'), 'warning');
-      return;
-    }
+  /**
+   * Persist the current draft and report whether it landed.
+   *
+   * `handleSave` deliberately swallows its error to show a notification, which
+   * left no way for a caller that DEPENDS on the server copy being current -
+   * the PDF export renders server-side - to know it must not continue. This
+   * returns the outcome so the export can refuse to hand over a stale document.
+   */
+  const persistResume = async (): Promise<boolean> => {
+    if (!resumeId) return false;
     try {
       setIsSaving(true);
       const updated = await updateResume(resumeId, resumeData);
@@ -510,11 +592,22 @@ const ResumeBuilderContent = () => {
       setLastSavedData(nextData);
       setHasUnsavedChanges(false);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(nextData));
+      return true;
     } catch (error) {
       console.error('Failed to save resume:', error);
-      showNotification(t('builder.alerts.saveFailed'), 'danger');
+      return false;
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!resumeId) {
+      showNotification(t('builder.alerts.saveNotAvailable'), 'warning');
+      return;
+    }
+    if (!(await persistResume())) {
+      showNotification(t('builder.alerts.saveFailed'), 'danger');
     }
   };
 
@@ -533,6 +626,15 @@ const ResumeBuilderContent = () => {
   const handleDownload = async () => {
     if (!resumeId) {
       showNotification(t('builder.alerts.downloadNotAvailable'), 'warning');
+      return;
+    }
+    // The PDF is rendered server-side from the SAVED resume, so any edit still
+    // sitting in the browser was silently missing from the file - the user got a
+    // document that did not match what the preview beside them showed. Flush
+    // first, and if that fails, do not hand over a stale document pretending to
+    // be current.
+    if (hasUnsavedChanges && !(await persistResume())) {
+      showNotification(t('builder.alerts.saveFailed'), 'danger');
       return;
     }
     try {
@@ -585,6 +687,17 @@ const ResumeBuilderContent = () => {
     }
     if (!coverLetter) {
       showNotification(t('builder.alerts.coverLetterMissing'), 'warning');
+      return;
+    }
+    // Same server-side render as the resume export, and the cover letter editor
+    // has no dirty flag - so an edit could only reach the PDF if the user
+    // happened to press Save first. Persist unconditionally: re-writing
+    // identical text is cheap next to handing back the wrong letter.
+    try {
+      await updateCoverLetter(resumeId, coverLetter);
+    } catch (error) {
+      console.error('Failed to save cover letter before export:', error);
+      showNotification(t('builder.alerts.coverLetterSaveFailed'), 'danger');
       return;
     }
     try {
@@ -821,7 +934,19 @@ const ResumeBuilderContent = () => {
   };
 
   return (
-    <div className="flex h-screen w-full items-center justify-center bg-[var(--background)] p-4 md:p-8">
+    <div className="flex h-full w-full flex-col bg-[var(--background)]">
+      {/*
+        In-app navigation guard. The builder only had a `beforeunload` handler,
+        which catches a reload or a closed tab but NOT a click on the sidebar -
+        and now that the builder lives inside the app shell with a sidebar next to
+        it, that was the likeliest way to lose work. The resume editor always had
+        this; it must not be lost when that route retires.
+      */}
+      <UnsavedChangesGuard
+        when={hasUnsavedChanges}
+        confirmLabel={t('builder.discardChanges')}
+        cancelLabel={t('common.cancel')}
+      />
       {/* P4 R6.5: announce streaming AI progress to screen readers via aria-live. */}
       <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
         {streamingActive ? t('builder.alerts.aiStreaming') : ''}
@@ -844,8 +969,10 @@ const ResumeBuilderContent = () => {
           onDismiss={autosave.resolveTakeLatest}
         />
       )}
-      {/* Main Container */}
-      <div className="flex h-full w-full max-w-[90%] flex-col overflow-hidden rounded-[var(--radius-at-xl)] border border-[var(--border)] bg-[var(--background)] shadow-[var(--shadow-at-e3)] md:max-w-[95%] xl:max-w-[1800px]">
+      {/* Main container. Fills the shell's content area: the editor needs every
+          pixel, and the old floating card (max-w-[90%] inside p-4) surrendered
+          ~10% of the viewport to decorative inset - worst on a phone. */}
+      <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-[var(--background)]">
         {/* P4 Resilience: non-destructive crash/refresh recovery (R5.1). */}
         {autosave.recovery && (
           <RecoveryBanner
@@ -903,152 +1030,211 @@ const ResumeBuilderContent = () => {
             {t('builder.alerts.storageDegraded')}
           </div>
         )}
-        {/* Header Section */}
-        <div className="no-print border-b border-[var(--border)] bg-[var(--background)] p-6 md:p-8">
-          {/* Top Row: Back button and Actions */}
-          <div className="mb-6 flex flex-col items-start justify-between md:flex-row md:items-center">
-            <div>
-              <Button
-                variant="link"
-                onClick={() => router.push('/dashboard')}
-                className="mb-2 -ml-1"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                {t('nav.backToDashboard')}
-              </Button>
-              <h1 className="text-3xl font-semibold leading-tight tracking-tight text-[var(--foreground)] md:text-5xl">
-                {t('nav.builder')}
-              </h1>
-              <div className="mt-3 flex items-center gap-3">
-                <p className="text-sm font-medium text-[var(--primary)]">
-                  {resumeId ? t('builder.editMode') : t('builder.createAndPreview')}
-                </p>
-                {hasUnsavedChanges && (
-                  <span className="flex items-center gap-1 rounded-[var(--radius-at-sm)] border border-[var(--at-warning)]/40 bg-[var(--at-warning)]/12 px-2 py-1 text-xs font-medium text-[var(--at-warning)]">
-                    <AlertTriangle className="w-3 h-3" />
-                    {t('builder.unsavedDraft')}
-                  </span>
+        {/* Header. Deliberately compact: an editor's scarcest resource is
+            vertical space, and this strip previously spent a md:text-5xl
+            heading (48px) restating the name of the page the user had just
+            clicked into. The back link now points at /resumes - it used to
+            push /dashboard, a route this app does not have, which made the
+            editor a dead end. */}
+        <div className="no-print flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-[var(--border)] bg-[var(--background)] px-4 py-3 md:px-6">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => router.push('/resumes')}
+            className="-ml-2 shrink-0"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span className="hidden sm:inline">{t('common.back')}</span>
+          </Button>
+
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold leading-tight text-[var(--foreground)]">
+              {resumeTitle || t('builder.title')}
+            </p>
+            <p className="truncate text-xs text-[var(--muted-foreground)]">
+              {resumeId ? t('builder.editMode') : t('builder.createAndPreview')}
+            </p>
+          </div>
+
+          {/* Which pane a phone shows. Below lg the two panes cannot sit side by
+              side, and stacking them buried the preview under the whole form. */}
+          <PaneToggle
+            value={mobilePane}
+            onChange={setMobilePane}
+            editLabel={t('common.edit')}
+            previewLabel={t('dashboard.preview')}
+            label={t('dashboard.preview')}
+          />
+
+          {hiddenItemCount > 0 && (
+            <span
+              className="flex shrink-0 items-center gap-1 rounded-[var(--radius-at-sm)] bg-[var(--at-warning)]/12 px-2 py-1 text-xs font-medium text-[var(--at-warning)]"
+              title={t('builder.sectionHeader.hiddenFromPdfTag')}
+            >
+              <EyeOff className="h-3 w-3" />
+              {hiddenItemCount}
+              <span className="hidden sm:inline">
+                {t('builder.sectionHeader.hiddenFromPdfTag')}
+              </span>
+            </span>
+          )}
+
+          {hasUnsavedChanges && (
+            <span className="flex shrink-0 items-center gap-1 rounded-[var(--radius-at-sm)] border border-[var(--at-warning)]/40 bg-[var(--at-warning)]/12 px-2 py-1 text-xs font-medium text-[var(--at-warning)]">
+              <AlertTriangle className="h-3 w-3" />
+              <span className="hidden sm:inline">{t('builder.unsavedDraft')}</span>
+            </span>
+          )}
+
+          {/* Actions. One filled primary per tab; everything occasional lives in
+              the overflow menu. Previously this row carried up to six controls
+              in four different colours (outline / amber warning / primary /
+              green success), so nothing read as the main action. */}
+          <div className="flex shrink-0 items-center gap-2">
+            {/* Version history, ported from the resume editor - the builder had no
+                way to see or restore an earlier snapshot. Available in every mode
+                because it restores the resume regardless of what you are editing. */}
+            {resumeId && (
+              <VersionHistoryPanel
+                resumeId={resumeId}
+                onRestored={() => {
+                  // A restore replaces the content under the editor, so reload it
+                  // rather than leaving stale state on screen. The restored copy
+                  // IS the saved copy, so nothing is unsaved afterwards.
+                  setHasUnsavedChanges(false);
+                  setReloadNonce((n) => n + 1);
+                }}
+              />
+            )}
+            {/* Resume + Design actions: both edit the resume itself, so both
+                need Save / Download / Regenerate. */}
+            {(activeTab === 'resume' || activeTab === 'design') && (
+              <>
+                {flags.advanced_autosave && resumeId && (
+                  <SaveStatusChip
+                    status={autosave.status}
+                    lastSavedAt={autosave.lastSavedAt}
+                    isFollower={!autosave.isLeader}
+                  />
                 )}
-              </div>
-            </div>
-
-            <div className="flex gap-3 mt-4 md:mt-0">
-              {/* Resume tab actions */}
-              {activeTab === 'resume' && (
-                <>
+                {streamingActive && (
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => regenerateWizard.startRegenerate()}
-                    disabled={!resumeId}
+                    onClick={cancelActiveStream}
+                    aria-label={t('common.cancel')}
                   >
-                    <Sparkles className="w-4 h-4" />
-                    {t('builder.regenerate.buttonLabel')}
+                    {t('common.cancel')}
                   </Button>
-                  <Button
-                    variant="warning"
-                    size="sm"
-                    onClick={handleReset}
-                    disabled={!hasUnsavedChanges}
-                  >
-                    <RotateCcw className="w-4 h-4" />
-                    {t('common.reset')}
-                  </Button>
-                  {flags.advanced_autosave && resumeId && (
-                    <SaveStatusChip
-                      status={autosave.status}
-                      lastSavedAt={autosave.lastSavedAt}
-                      isFollower={!autosave.isLeader}
-                    />
-                  )}
-                  {streamingActive && (
-                    <Button
-                      variant="warning"
-                      size="sm"
-                      onClick={cancelActiveStream}
-                      aria-label={t('common.cancel')}
-                    >
-                      {t('common.cancel')}
+                )}
+                <Button size="sm" onClick={handleSave} disabled={!resumeId || isSaving}>
+                  <Save className="h-4 w-4" />
+                  {isSaving ? t('common.saving') : t('common.save')}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDownload}
+                  disabled={!resumeId || isDownloading}
+                >
+                  <Download className="h-4 w-4" />
+                  <span className="hidden sm:inline">
+                    {isDownloading ? t('common.generating') : t('common.download')}
+                  </span>
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="iconSm" aria-label={t('dashboard.actions')}>
+                      <MoreHorizontal className="h-4 w-4" />
                     </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      disabled={!resumeId}
+                      onClick={() => regenerateWizard.startRegenerate()}
+                    >
+                      <Sparkles className="h-4 w-4" />
+                      {t('builder.regenerate.buttonLabel')}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem disabled={!hasUnsavedChanges} onClick={handleReset}>
+                      <RotateCcw className="h-4 w-4" />
+                      {t('common.reset')}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </>
+            )}
+
+            {/* Cover letter tab actions */}
+            {activeTab === 'cover-letter' && coverLetter && (
+              <>
+                <Button
+                  size="sm"
+                  onClick={handleDownloadCoverLetter}
+                  disabled={!resumeId || isDownloading}
+                >
+                  <Download className="h-4 w-4" />
+                  <span className="hidden sm:inline">
+                    {isDownloading ? t('common.generating') : t('common.download')}
+                  </span>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleGenerateCoverLetter}
+                  disabled={isGeneratingCoverLetter}
+                >
+                  {isGeneratingCoverLetter ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-4 w-4" />
                   )}
-                  <Button size="sm" onClick={handleSave} disabled={!resumeId || isSaving}>
-                    <Save className="w-4 h-4" />
-                    {isSaving ? t('common.saving') : t('common.save')}
-                  </Button>
-                  <Button
-                    variant="success"
-                    size="sm"
-                    onClick={handleDownload}
-                    disabled={!resumeId || isDownloading}
-                  >
-                    <Download className="w-4 h-4" />
-                    {isDownloading ? t('common.generating') : t('common.download')}
-                  </Button>
-                </>
-              )}
+                  <span className="hidden sm:inline">{t('coverLetter.regenerate')}</span>
+                </Button>
+              </>
+            )}
 
-              {/* Cover letter tab actions */}
-              {activeTab === 'cover-letter' && coverLetter && (
-                <>
-                  <Button
+            {/* Outreach tab actions */}
+            {activeTab === 'outreach' && outreachMessage && (
+              <>
+                <Button size="sm" onClick={handleCopyOutreach}>
+                  {isCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                  <span className="hidden sm:inline">
+                    {isCopied ? t('outreach.copied') : t('outreach.copyToClipboard')}
+                  </span>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleGenerateOutreach}
+                  disabled={isGeneratingOutreach}
+                >
+                  {isGeneratingOutreach ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-4 w-4" />
+                  )}
+                  <span className="hidden sm:inline">{t('outreach.regenerate')}</span>
+                </Button>
+              </>
+            )}
+
+            {/* Interview prep tab actions */}
+            {activeTab === 'interview-prep' && interviewPrep && (
+              <>
+                {/* Prep export existed only on the retiring resume-editor route,
+                    via its ExportButton. Kept so retiring that page loses nothing. */}
+                {resumeId && (
+                  <ExportButton
+                    kind="interview-prep"
+                    resumeId={resumeId}
+                    pageSize={templateSettings.pageSize}
                     variant="outline"
                     size="sm"
-                    onClick={handleGenerateCoverLetter}
-                    disabled={isGeneratingCoverLetter}
-                  >
-                    {isGeneratingCoverLetter ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Sparkles className="w-4 h-4" />
-                    )}
-                    {t('coverLetter.regenerate')}
-                  </Button>
-                  <Button
-                    variant="success"
-                    size="sm"
-                    onClick={handleDownloadCoverLetter}
-                    disabled={!resumeId || isDownloading}
-                  >
-                    <Download className="w-4 h-4" />
-                    {isDownloading ? t('common.generating') : t('common.download')}
-                  </Button>
-                </>
-              )}
-
-              {/* Outreach tab actions */}
-              {activeTab === 'outreach' && outreachMessage && (
-                <>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleGenerateOutreach}
-                    disabled={isGeneratingOutreach}
-                  >
-                    {isGeneratingOutreach ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Sparkles className="w-4 h-4" />
-                    )}
-                    {t('outreach.regenerate')}
-                  </Button>
-                  <Button variant="success" size="sm" onClick={handleCopyOutreach}>
-                    {isCopied ? (
-                      <>
-                        <Check className="w-4 h-4" />
-                        {t('outreach.copied')}
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-4 h-4" />
-                        {t('outreach.copyToClipboard')}
-                      </>
-                    )}
-                  </Button>
-                </>
-              )}
-
-              {/* Interview prep tab actions */}
-              {activeTab === 'interview-prep' && interviewPrep && (
+                    name={resumeData.personalInfo?.name}
+                    role={resumeData.personalInfo?.title}
+                  />
+                )}
                 <Button
                   variant="outline"
                   size="sm"
@@ -1056,26 +1242,74 @@ const ResumeBuilderContent = () => {
                   disabled={!canGenerateInterviewPrep || isGeneratingInterviewPrep}
                 >
                   {isGeneratingInterviewPrep ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
-                    <Sparkles className="w-4 h-4" />
+                    <Sparkles className="h-4 w-4" />
                   )}
-                  {t('interviewPrep.regenerate')}
+                  <span className="hidden sm:inline">{t('interviewPrep.regenerate')}</span>
                 </Button>
-              )}
-            </div>
+              </>
+            )}
           </div>
         </div>
 
-        {/* Content Grid */}
+        {/* Mode strip. Spans the whole workspace because that is what it does:
+            it changes the left pane, the preview AND the header actions
+            together. It used to sit inside the preview pane, which implied it
+            only changed the preview - one control silently reaching into three
+            regions. Content and Design are always available; the document modes
+            need a resume tailored to a job first, and say so rather than
+            presenting a dead tab. */}
+        <div className="no-print shrink-0 border-b border-[var(--border)] bg-[var(--background)] px-4 pb-2 md:px-6">
+          <TabStrip
+            aria-label={t('nav.builder')}
+            tabs={[
+              { id: 'resume', label: t('builder.previewTabs.resume') },
+              { id: 'design', label: t('builder.formatting.options') },
+              {
+                id: 'cover-letter',
+                label: t('builder.previewTabs.coverLetter'),
+                disabled: !coverLetter && !isTailoredResume,
+              },
+              {
+                id: 'outreach',
+                label: t('builder.previewTabs.outreach'),
+                disabled: !outreachMessage && !isTailoredResume,
+              },
+              {
+                id: 'interview-prep',
+                label: t('builder.previewTabs.interviewPrep'),
+                disabled: !isTailoredResume,
+              },
+              {
+                id: 'jd-match',
+                label: t('builder.previewTabs.jdMatch'),
+                disabled: !jobDescription,
+              },
+            ]}
+            activeTab={activeTab}
+            onTabChange={(id) => setActiveTab(id as TabId)}
+            className="flex-wrap"
+          />
+        </div>
+
+        {/* Content grid. Side by side from `lg`; below that only the pane the
+            header's Edit/Preview switch selects is mounted-visible, so the
+            preview is one tap away instead of buried below the whole form. */}
         <div className="grid min-h-0 flex-1 grid-cols-1 gap-px bg-[var(--border)] lg:grid-cols-2">
           {/* Left Panel: Editor */}
-          <div className="no-print overflow-y-auto bg-[var(--background)] p-6 md:p-8">
+          <div
+            className={cn(
+              'no-print overflow-y-auto bg-[var(--background)] p-4 md:p-6 lg:p-8',
+              paneVisibility(mobilePane === 'edit')
+            )}
+          >
             <div className="mx-auto max-w-3xl space-y-6">
               <div className="flex items-center gap-2 border-b border-[var(--border)] pb-2">
                 <div className="h-3 w-3 rounded-full bg-[var(--primary)]"></div>
                 <h2 className="text-lg font-semibold text-[var(--foreground)]">
                   {activeTab === 'resume' && t('builder.leftPanel.editorPanel')}
+                  {activeTab === 'design' && t('builder.formatting.options')}
                   {activeTab === 'cover-letter' && t('builder.leftPanel.coverLetterEditor')}
                   {activeTab === 'outreach' && t('builder.leftPanel.outreachEditor')}
                   {activeTab === 'interview-prep' && t('builder.leftPanel.interviewPrep')}
@@ -1083,9 +1317,33 @@ const ResumeBuilderContent = () => {
                 </h2>
               </div>
 
-              {/* Resume Editor */}
+              {/* Content mode - what the resume SAYS. */}
               {activeTab === 'resume' && (
+                <ResumeForm resumeData={resumeData} onUpdate={handleUpdate} />
+              )}
+
+              {/* Design mode - how it LOOKS. Same preview beside it, so a margin
+                  or font change is visible as it is made. */}
+              {activeTab === 'design' && (
                 <>
+                  {/* Full template catalogue. FormattingControls' own thumbnails
+                      only reach the seven built-in presets; this is the same
+                      gallery the /templates page uses, with the whole catalogue
+                      and real-renderer previews. Ported from the resume editor,
+                      which was the only place it could be reached. */}
+                  <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
+                    <div>
+                      <h3 className="text-sm font-semibold text-[var(--foreground)]">
+                        {t('builder.formatting.template')}
+                      </h3>
+                      <p className="text-xs text-[var(--muted-foreground)]">
+                        {t('builder.formatting.browseAll')}
+                      </p>
+                    </div>
+                    <Button variant="outline" size="sm" onClick={() => setTemplatePickerOpen(true)}>
+                      <Palette className="h-4 w-4" /> {t('builder.formatting.browseAllCta')}
+                    </Button>
+                  </Card>
                   <FormattingControls settings={templateSettings} onChange={handleSettingsChange} />
                   <div className="rounded-[var(--radius-at-lg)] border border-[var(--border)] bg-[var(--card)] p-4">
                     <h3 className="mb-3 text-sm font-semibold text-[var(--foreground)]">Photo</h3>
@@ -1108,7 +1366,6 @@ const ResumeBuilderContent = () => {
                       onError={(message) => showNotification(message, 'danger')}
                     />
                   </div>
-                  <ResumeForm resumeData={resumeData} onUpdate={handleUpdate} />
                 </>
               )}
 
@@ -1214,44 +1471,16 @@ const ResumeBuilderContent = () => {
           </div>
 
           {/* Right Panel: Preview with Tabs */}
-          <div className="no-print flex flex-col overflow-hidden bg-[var(--secondary)]">
-            {/* Tabs Header */}
-            <div className="shrink-0 bg-[var(--secondary)] px-6 pt-3">
-              <TabStrip
-                aria-label={t('builder.leftPanel.jdMatchAnalysis')}
-                tabs={[
-                  { id: 'resume', label: t('builder.previewTabs.resume') },
-                  {
-                    id: 'cover-letter',
-                    label: t('builder.previewTabs.coverLetter'),
-                    disabled: !coverLetter,
-                  },
-                  {
-                    id: 'outreach',
-                    label: t('builder.previewTabs.outreach'),
-                    disabled: !outreachMessage,
-                  },
-                  {
-                    id: 'interview-prep',
-                    label: t('builder.previewTabs.interviewPrep'),
-                    disabled: !isTailoredResume,
-                  },
-                  {
-                    id: 'jd-match',
-                    label: t('builder.previewTabs.jdMatch'),
-                    disabled: !jobDescription,
-                  },
-                ]}
-                activeTab={activeTab}
-                onTabChange={(id) => setActiveTab(id as TabId)}
-                className="flex-wrap"
-              />
-            </div>
-
+          <div
+            className={cn(
+              'no-print flex-col overflow-hidden bg-[var(--secondary)]',
+              paneVisibility(mobilePane === 'preview', 'flex')
+            )}
+          >
             {/* Preview Content */}
             <div className="flex-1 overflow-y-auto">
-              {/* Resume Preview */}
-              {activeTab === 'resume' && (
+              {/* Resume Preview - shared by Content and Design. */}
+              {(activeTab === 'resume' || activeTab === 'design') && (
                 <PaginatedPreview
                   resumeData={localizedResumeDataForPreview}
                   settings={templateSettings}
@@ -1338,6 +1567,28 @@ const ResumeBuilderContent = () => {
           </div>
         </div>
       </div>
+
+      {/* Full template catalogue, ported from the resume editor - the builder
+          previously could only reach the seven built-in presets. Same gallery the
+          /templates page uses, so every preview is the real renderer. */}
+      <Dialog open={templatePickerOpen} onOpenChange={setTemplatePickerOpen}>
+        <DialogContent className="max-w-6xl">
+          <DialogHeader>
+            <DialogTitle>{t('builder.formatting.browseAllCta')}</DialogTitle>
+          </DialogHeader>
+          <div className="max-h-[75vh] overflow-y-auto pr-1">
+            <TemplateGallery
+              selectedId={pickedTemplateId}
+              onSelect={(tpl: ResumeTemplate) => {
+                setPickedTemplateId(tpl.id);
+                persistTemplateSettings(templateToSettings(tpl));
+                setTemplatePickerOpen(false);
+              }}
+              ctaLabel={t('builder.formatting.browseAllCta')}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Regenerate Confirmation Dialog */}
       <ConfirmDialog

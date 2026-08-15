@@ -15,7 +15,7 @@ from __future__ import annotations
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from app.auth.accounts import create_user, get_by_id
+from app.auth.accounts import create_user
 from app.auth.passwords import get_password_service
 from app.config import settings as app_settings
 from app.main import app

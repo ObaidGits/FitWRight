@@ -4,11 +4,12 @@ import copy
 import json
 import logging
 import secrets
+import sys
 import time
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import field_validator, model_validator
+from pydantic import ValidationError, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
@@ -1101,6 +1102,57 @@ class Settings(BaseSettings):
     # shared KVStore so it holds across workers/instances (see app.llm_ratelimit).
     llm_rate_per_min_user: int = 20
 
+    # --- AI credits (spec: ai-provider-admin) ---------------------------------
+    # Master switch. OFF = exactly today's bring-your-own-key behaviour: no
+    # reservations, no charging, no allowance. Every credit code path is inert.
+    ai_credits_enabled: bool = False
+    # Free credits granted once on signup, and the recurring monthly allowance.
+    # A per-user override in `credit_accounts` beats both, absolutely.
+    ai_signup_grant_credits: int = 100
+    ai_monthly_allowance_credits: int = 50
+    # Credits/hour ceiling, independent of balance: credits alone do not stop a
+    # stolen session draining a funded wallet in one minute. 0 disables.
+    ai_velocity_cap_per_hour: int = 200
+    # Operator corrections to the provider rate table used for MARGIN REPORTING only
+    # (app/ai_rates.py). JSON: {"model-substring": [prompt_micros_per_1k,
+    # completion_micros_per_1k]}. Never affects what a user is charged, so a wrong
+    # value here misreports profit and nothing else.
+    ai_rate_overrides: str = ""
+    # How long per-user AI usage rows are kept. Long enough to settle a dispute and
+    # reconcile a 12-month invoice cycle; short enough that the table does not become
+    # an indefinite archive of every user's job search. See app/ai_retention.py for the
+    # full privacy contract.
+    ai_usage_retention_days: int = 400
+    # Phase 4 purchases. OFF by default and intentionally so: prices must come from
+    # observed cost (that is why metering ships first), and a payment integration is not
+    # verified until it has handled a real webhook from a real provider account.
+    ai_purchases_enabled: bool = False
+    # "razorpay" or "fake". An unknown value refuses every purchase rather than
+    # half-taking money through an adapter that does not exist.
+    ai_payment_provider: str = "fake"
+    # Razorpay credentials. The KEY ID is publishable - the browser needs it to open the
+    # checkout modal and it authorises nothing on its own. The KEY SECRET and the WEBHOOK
+    # SECRET must never leave the server.
+    razorpay_key_id: str = ""
+    razorpay_key_secret: str = ""
+    # A SEPARATE secret, set in the Razorpay dashboard when creating the webhook. Using
+    # the key secret here silently rejects every webhook, because webhooks are signed
+    # with this one over the raw request body.
+    razorpay_webhook_secret: str = ""
+    # Pack prices are NOT configured here. They live in the `credit_packs` table and are
+    # edited in Admin > Credit packs, so a price change or a weekend offer needs no
+    # redeploy. Deliberately one source of truth: an env var alongside the table would
+    # eventually disagree with it.
+    # How long a hold survives before the sweep releases it. Must comfortably
+    # exceed the slowest AI call, or a legitimate long request loses its hold
+    # mid-flight; short enough that a crashed worker does not strand a balance for
+    # long.
+    ai_reservation_ttl_seconds: int = 900
+    # Consecutive failures before a channel is benched, and for how long. One bad
+    # request must not remove a provider from rotation.
+    ai_channel_failure_threshold: int = 3
+    ai_channel_cooldown_seconds: int = 120
+
     @field_validator(
         "pdf_max_concurrency",
         "pdf_render_queue_timeout_seconds",
@@ -1708,4 +1760,63 @@ class Settings(BaseSettings):
         return _get_llm_api_key_with_fallback()
 
 
-settings = Settings()
+def _format_settings_error(exc: ValidationError) -> str:
+    """Turn pydantic's validation report into one readable banner.
+
+    A bad ``.env`` value fails HERE, at import time - before logging is
+    configured and before ``main()`` runs - so this is the only place a plain
+    message can be produced. Without it every misconfiguration surfaces as a
+    10-line ``pydantic_core._pydantic_core.ValidationError`` traceback (repr'd
+    dict of every setting, a ``[type=value_error, ...]`` suffix, a docs URL)
+    with the actual reason buried in the middle. This keeps the reason our
+    validators already wrote (e.g. "DATABASE_URL must be a Postgres URL when
+    SINGLE_USER_MODE is off") and discards pydantic's wrapper text around it.
+    """
+    bullets: list[str] = []
+    for error in exc.errors():
+        message = str(error.get("msg", "")).strip()
+        # Our own model_validator raises one ValueError shaped as:
+        #   "Invalid auth configuration:\n  - reason a\n  - reason b"
+        # pydantic then prefixes the whole thing with "Value error, ". Strip
+        # that prefix, drop the "Invalid ... configuration:" header line (it
+        # is a label, not a reason), and keep each already-bulleted line as
+        # its own entry rather than re-wrapping the header as a bullet too.
+        if message.startswith("Value error, "):
+            message = message[len("Value error, ") :]
+        for raw_line in message.splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            line = line.removeprefix("- ").removeprefix("-")
+            line = line.strip()
+            if line.endswith(":") and not bullets:
+                # A bare header like "Invalid auth configuration:" carries no
+                # information beyond what the bullets underneath already say.
+                continue
+            if line:
+                bullets.append(line)
+    if not bullets:
+        bullets.append(str(exc))
+    body = "\n".join(f"  - {line}" for line in bullets)
+    rule = "=" * 70
+    divider = "-" * 70
+    return (
+        f"\n{rule}\n"
+        "FitWright backend refused to start: invalid configuration\n"
+        f"{divider}\n"
+        f"{body}\n"
+        f"{divider}\n"
+        "Fix the value(s) above in your .env file (see .env.example), then "
+        f"restart.\n{rule}"
+    )
+
+
+try:
+    settings = Settings()
+except ValidationError as exc:
+    # Print (not log): the logging system reads settings.log_level from the
+    # very object that failed to construct, so logging is not usable yet.
+    # This is the app's first line of output on a bad config - it must not
+    # depend on anything that could itself be broken.
+    print(_format_settings_error(exc), file=sys.stderr)
+    sys.exit(1)

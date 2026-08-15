@@ -6,7 +6,7 @@ Detection runs in < 1ms (pure string matching, no I/O).
 
 from __future__ import annotations
 
-from urllib.parse import ParseResult, urlparse
+from urllib.parse import urlparse
 
 from app.jd.adapters.ashby import AshbyAdapter
 from app.jd.adapters.base import PlatformAdapter

@@ -40,6 +40,7 @@ import { useToast } from '@/components/atelier/toast';
 import { useSession } from '@/lib/context/session';
 import { LocalTime, RelativeTime } from '@/components/admin/local-time';
 import { DeleteUserDialog } from '@/components/admin/delete-user-dialog';
+import { UserCreditsPanel } from '@/components/admin/user-credits-panel';
 import {
   useAdminUsers,
   useAdminUserDetail,
@@ -593,6 +594,16 @@ function UserDetailDrawer({
                   </Button>
                 </>
               )}
+            </div>
+
+            {/* AI credits + limits. Lives in the drawer rather than a separate
+                page because "how much AI can this person use?" is a fact about the
+                user an operator is already looking at. */}
+            <div className="border-t border-[var(--border)] pt-4">
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                AI credits
+              </h3>
+              <UserCreditsPanel userId={data.id} />
             </div>
 
             {/* Recent audit */}

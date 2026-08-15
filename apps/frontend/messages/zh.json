@@ -429,7 +429,9 @@
       "effectiveHeaderFont": "标题字体",
       "effectiveBodyFont": "正文字体",
       "compactHint": "紧凑模式会收紧间距与行高；页边距与正文字号保持不变。",
-      "resetDefaults": "恢复默认设置"
+      "resetDefaults": "恢复默认设置",
+      "browseAll": "浏览所有模板",
+      "browseAllCta": "浏览模板"
     },
     "personalInfoForm": {
       "placeholders": {
@@ -472,6 +474,10 @@
       "draftQuarantined": "已保存的本地草稿无法读取，已被隔离以保护你的工作。当前内容是安全的。",
       "storageDegraded": "本地存储不可用，本次会话的更改仅保存在内存中。请保存到服务器以免丢失。",
       "openRecoveryCenter": "打开恢复中心"
+    },
+    "item": {
+      "hide": "在此简历中隐藏",
+      "show": "在此简历中显示"
     }
   },
   "enrichment": {

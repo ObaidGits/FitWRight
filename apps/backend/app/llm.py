@@ -16,7 +16,14 @@ from litellm import Router
 from litellm.router import RetryPolicy
 from pydantic import BaseModel, ValidationError
 
+from app.ai_routing import (
+    channels_are_configured,
+    record_channel_outcome,
+    resolve_channel_route,
+)
+from app.ai_usage_meter import current_usage, note_call
 from app.config import load_config_file, save_user_llm_config, settings
+from app.errors import ApiError
 
 LITELLM_LOGGER_NAMES = ("LiteLLM", "LiteLLM Router", "LiteLLM Proxy")
 
@@ -218,9 +225,9 @@ def _extract_text_parts(value: Any, depth: int = 0, max_depth: int = 10) -> list
 
     next_depth = depth + 1
     if hasattr(value, "text"):
-        return _extract_text_parts(getattr(value, "text"), next_depth, max_depth)
+        return _extract_text_parts(value.text, next_depth, max_depth)
     if hasattr(value, "content"):
-        return _extract_text_parts(getattr(value, "content"), next_depth, max_depth)
+        return _extract_text_parts(value.content, next_depth, max_depth)
 
     return []
 
@@ -284,8 +291,8 @@ def _extract_choice_text(choice: Any) -> str | None:
     if content:
         return content
 
-    for field in ("text", "delta"):
-        value = _safe_get(choice, field)
+    for attr in ("text", "delta"):
+        value = _safe_get(choice, attr)
         if value is not None:
             extracted = _join_text_parts(_extract_text_parts(value))
             if extracted:
@@ -391,6 +398,64 @@ def provider_uses_custom_base(provider: str) -> bool:
     default endpoint, so any stored base is ignored for them.
     """
     return provider in _CUSTOM_BASE_PROVIDERS
+
+
+#: Fragments that only ever appear in a template value, never in a real credential.
+#: Provider keys are opaque base62-ish strings; the words below come from the example
+#: env file and from documentation snippets people paste by mistake.
+_PLACEHOLDER_MARKERS = (
+    "your",
+    "here",
+    "changeme",
+    "change-me",
+    "replace",
+    "example",
+    "placeholder",
+    "xxxx",
+    "<",
+    ">",
+    "...",
+)
+
+
+def is_placeholder_key(api_key: str | None) -> bool:
+    """Whether this "key" is obviously a template value rather than a credential.
+
+    Why this exists: ``LLM_API_KEY=sk-your-openai-key-here`` copied from
+    ``.env.example`` is a non-empty string, so every presence check treated the
+    deployment as configured. The UI then showed AI as available, every feature
+    attempted a real call, and the provider answered 401 - so the app reported
+    "unavailable" for something that had simply never been set up. "Add your API key"
+    and "the provider is down" are different instructions to the user, and one of them
+    was unreachable.
+
+    Detects only the unmistakable cases. A wrong-but-plausible key still has to be
+    learned from the provider's refusal (see app/llm_health.py); this catches the value
+    that could never have worked, without a network call.
+    """
+    if not api_key:
+        return False
+    lowered = api_key.strip().lower()
+    if lowered in ("sk-", "sk-...", "none", "null"):
+        return True
+    return any(marker in lowered for marker in _PLACEHOLDER_MARKERS)
+
+
+def has_usable_credential(config: "LLMConfig") -> bool:
+    """Whether this config could actually talk to a provider.
+
+    The single answer to "is AI set up?", so every surface agrees. A placeholder key
+    counts as NOT set up: telling a user to add their key is useful, whereas showing the
+    feature and then reporting the provider unavailable is not.
+
+    Self-hosted providers (Ollama, openai_compatible) need no key and are treated as
+    configured, exactly as before. Requiring a base URL from them was tempting - one
+    cannot work without it - but that is a different problem from this one, and changing
+    it here would quietly alter what "configured" means for local installs.
+    """
+    if config.provider in _PROVIDERS_WITHOUT_ENV_KEY_FALLBACK:
+        return True
+    return bool(config.api_key) and not is_placeholder_key(config.api_key)
 
 
 def resolve_api_key(stored: dict, provider: str) -> str:
@@ -593,6 +658,58 @@ def _build_router(config: LLMConfig) -> Router:
     )
 
 
+#: Shared retry policy. The distinctions matter: retrying an auth failure or a
+#: malformed request is pointless (they fail identically every time and on every
+#: provider), while a timeout or rate limit is exactly what a retry is for.
+_RETRY_POLICY = RetryPolicy(
+    AuthenticationErrorRetries=0,
+    BadRequestErrorRetries=0,
+    TimeoutErrorRetries=2,
+    RateLimitErrorRetries=3,
+    ContentPolicyViolationErrorRetries=0,
+    InternalServerErrorRetries=2,
+)
+
+
+def build_channel_router(deployments: list[dict[str, Any]]) -> Router:
+    """Build a Router over one or more operator-configured channels.
+
+    ``deployments`` is an ordered list of ``{"model": ..., "api_key": ...,
+    "api_base": ...}`` dicts, best first, as produced by
+    :func:`app.ai_channels.select_channels` plus credential lookup.
+
+    All deployments share the model alias ``"primary"``, which is how LiteLLM is
+    told they are interchangeable: it will try the first and fall back through the
+    rest on a retryable error.
+
+    Cooldowns are ENABLED here, unlike the single-deployment router above. That
+    router had to disable them - benching its only deployment would black out the
+    whole backend on a transient blip. With a fallback list, benching a sick
+    provider is the entire point, and its own docstring said to re-enable this once
+    a fallback existed.
+    """
+    if not deployments:
+        raise ValueError("build_channel_router requires at least one deployment")
+
+    model_list = []
+    for dep in deployments:
+        params: dict[str, Any] = {"model": dep["model"]}
+        if dep.get("api_key"):
+            params["api_key"] = dep["api_key"]
+        if dep.get("api_base"):
+            params["api_base"] = dep["api_base"]
+        model_list.append({"model_name": "primary", "litellm_params": params})
+
+    return Router(
+        model_list=model_list,
+        num_retries=3,
+        retry_policy=_RETRY_POLICY,
+        # A single channel is back to the original hazard: benching it leaves
+        # nowhere to go, so only enable cooldowns when there is somewhere to fall.
+        disable_cooldowns=len(model_list) < 2,
+    )
+
+
 def get_router(config: LLMConfig | None = None) -> tuple[Router, LLMConfig]:
     """Get (or build) the LiteLLM Router for ``config``.
 
@@ -619,6 +736,152 @@ def get_router(config: LLMConfig | None = None) -> tuple[Router, LLMConfig]:
             _router_cache.move_to_end(key)
 
     return router, config
+
+
+# ---------------------------------------------------------------------------
+# Operator channels (spec: ai-provider-admin, Phase 1)
+# ---------------------------------------------------------------------------
+
+#: Channel routers are cached like config routers, and for the same reason: building
+#: a Router per request would add real latency to every generation. Keyed on the
+#: deployment set, so a channel edit, a health change, or a reorder produces a
+#: different key and therefore a fresh router - stale routing is worse than a rebuild.
+_channel_router_cache: "OrderedDict[str, Router]" = OrderedDict()
+
+
+class ChannelsUnavailable(ApiError):
+    """Every operator channel is down, and the caller has no key of their own.
+
+    A DISTINCT state, and the reason this class exists rather than reusing the
+    generic completion failure: "we are having trouble" and "you need to configure
+    something" are different instructions, and this codebase has already shipped a
+    bug where an AI credential problem rendered as "You are offline" and sent users
+    to check their wifi.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(
+            503,
+            "ai_unavailable",
+            "AI features are temporarily unavailable while we restore a provider. "
+            "Nothing is wrong with your account - please try again shortly. You can "
+            "also add your own provider key in Settings to continue right away.",
+        )
+
+
+def _channel_deployment_fingerprint(deployments: list[dict[str, Any]]) -> str:
+    parts = [f"{d.get('model')}|{d.get('api_base') or ''}" for d in deployments]
+    return "channels:" + ";".join(parts)
+
+
+def _config_from_channel(route) -> LLMConfig:
+    """An ``LLMConfig`` describing the channel that will be tried FIRST.
+
+    Everything downstream - the model-limit clamp, temperature and reasoning-effort
+    support, the metrics provider label - already speaks LLMConfig. Presenting the
+    channel this way means none of it needs to learn about channels at all.
+    """
+    base = get_llm_config()
+    primary = route.candidates[0]
+    return base.model_copy(
+        update={
+            "provider": primary.provider,
+            "model": primary.model,
+            "api_base": primary.api_base or None,
+            # The channel's own credential is already inside the router's deployment
+            # list. Blanking it here keeps the operator's key out of a config object
+            # that gets logged and fingerprinted.
+            "api_key": "",
+        }
+    )
+
+
+def _get_channel_router(route) -> Router:
+    key = _channel_deployment_fingerprint(route.deployments)
+    with _router_lock:
+        router = _channel_router_cache.get(key)
+        if router is None:
+            router = build_channel_router(route.deployments)
+            _channel_router_cache[key] = router
+            logging.info(
+                "LiteLLM channel router built for %d deployment(s)", len(route.deployments)
+            )
+            while len(_channel_router_cache) > _ROUTER_CACHE_MAX:
+                _channel_router_cache.popitem(last=False)
+        else:
+            _channel_router_cache.move_to_end(key)
+    return router
+
+
+def _config_has_usable_credential(config: LLMConfig) -> bool:
+    """Whether the non-channel fallback could actually serve a call."""
+    if config.provider in _PROVIDERS_WITHOUT_ENV_KEY_FALLBACK:
+        # Self-hosted: a base URL is the credential.
+        return bool(config.api_base)
+    return bool(config.api_key) and not is_placeholder_key(config.api_key)
+
+
+def _guard_input_size(*parts: str | None) -> None:
+    """Refuse an oversized input before spending anything on it (task 6.1).
+
+    Enforced here, at the same choke points as metering, for the same reason: an
+    endpoint-by-endpoint check is one someone eventually forgets, and the omission is
+    invisible because the endpoint still works.
+
+    A no-op when no feature is in context - health probes, the channel test and
+    background jobs have no user-supplied payload to police.
+    """
+    ctx = current_usage()
+    if not ctx or not ctx.feature:
+        return
+    from app.ai_input_limits import check_input_size
+
+    check_input_size(ctx.feature, *parts)
+
+
+async def _resolve_router(config: LLMConfig | None):
+    """Pick the router for this call: operator channels, or the caller's own config.
+
+    Returns ``(router, config, route)`` where ``route`` is None when channels were not
+    used. Precedence, in order:
+
+      1. An EXPLICIT config wins. Health probes and the admin channel test pass one,
+         and they are asking about a specific provider - silently redirecting them
+         through a channel would make them test something other than what they named.
+      2. A user on their OWN key stays on it. They cost the operator nothing, so
+         spending an operator channel on them would be backwards.
+      3. An operator channel, if any is healthy and permitted for this feature.
+      4. The existing single-provider path.
+
+    If channels are configured but none are usable AND step 4 has no credential, this
+    raises :class:`ChannelsUnavailable` rather than letting the call fail as a generic
+    provider error - the user needs to know it is our outage, not their setup.
+    """
+    if config is not None:
+        router, cfg = get_router(config)
+        return router, cfg, None
+
+    ctx = current_usage()
+    feature = ctx.feature if ctx else None
+
+    if feature and not (ctx and ctx.has_own_key):
+        route = await resolve_channel_route(feature)
+        if route:
+            cfg = _config_from_channel(route)
+            return _get_channel_router(route), cfg, route
+
+        # No usable channel. Decide BEFORE building a router: an unusable fallback
+        # config makes the provider client itself throw (a bare model name with no
+        # provider), and that raw transport error would reach the user instead of the
+        # clean outage message. Resolve the config, judge it, then build.
+        fallback = get_llm_config()
+        if not _config_has_usable_credential(fallback) and await channels_are_configured():
+            raise ChannelsUnavailable()
+        router, cfg = get_router(fallback)
+        return router, cfg, None
+
+    router, cfg = get_router(config)
+    return router, cfg, None
 
 
 async def check_llm_health(
@@ -1086,7 +1349,8 @@ async def complete(
 
     Transport retries (429, 500, timeout) are handled by the Router.
     """
-    router, config = get_router(config)
+    _guard_input_size(prompt, system_prompt)
+    router, config, _route = await _resolve_router(config)
     model_name = get_model_name(config)
 
     messages = []
@@ -1186,6 +1450,25 @@ async def complete(
             tokens=_tokens,
             latency_ms=(time.perf_counter() - _start) * 1000,
         )
+        # Billing tally, recorded ALONGSIDE the anonymous metrics above rather
+        # than inside them: that system's contract forbids retaining per-user
+        # detail, this one requires it. Two systems, same choke point.
+        note_call(
+            total_tokens=_tokens,
+            estimated=_ok and _tokens == 0,
+            provider=config.provider,
+            model=model_name,
+            channel_id=_route.primary_channel_id if _route else None,
+            latency_ms=(time.perf_counter() - _start) * 1000,
+        )
+        # Channel health drives failover: consecutive failures bench a channel so the
+        # next request starts lower down the list instead of retrying a dead provider.
+        if _route:
+            await record_channel_outcome(
+                _route.primary_channel_id,
+                ok=_ok,
+                error_class=None if _ok else ("timeout" if _timed_out else "error"),
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -1270,7 +1553,8 @@ async def stream_complete(
     Raises the underlying provider error so the caller can emit a terminal
     ``error`` SSE event and fall back to the non-stream path (R1.3).
     """
-    router, config = get_router(config)
+    _guard_input_size(prompt, system_prompt)
+    router, config, _route = await _resolve_router(config)
     model_name = get_model_name(config)
     # Central clamp (fix 11): cap to a KNOWN model limit; unknown/custom models
     # keep the caller's request.
@@ -1381,6 +1665,30 @@ async def stream_complete(
                 retried=_router_retries,
                 tokens=result.usage.total_tokens,
                 latency_ms=(time.perf_counter() - _start) * 1000,
+            )
+        # Metered even when CANCELLED, unlike the health metrics above. A user who
+        # stops a stream halfway still caused the tokens the provider generated,
+        # and the operator is invoiced for them. Excluding cancellations here would
+        # make abandoning streams a free way to consume the operator's budget.
+        note_call(
+            total_tokens=result.usage.total_tokens,
+            prompt_tokens=result.usage.prompt_tokens,
+            completion_tokens=result.usage.completion_tokens,
+            estimated=result.usage.total_tokens == 0 and bool(result.text),
+            provider=config.provider,
+            model=model_name,
+            channel_id=_route.primary_channel_id if _route else None,
+            latency_ms=(time.perf_counter() - _start) * 1000,
+        )
+        # Guarded by the same cancellation check as the metrics above, and that guard
+        # is load-bearing here for a second reason: awaiting inside an async
+        # generator's teardown during GeneratorExit is not allowed. Skipping the
+        # await on cancellation avoids it entirely.
+        if _route and not _cancelled_for_metrics:
+            await record_channel_outcome(
+                _route.primary_channel_id,
+                ok=_ok,
+                error_class=None if _ok else ("timeout" if _timed_out else "error"),
             )
 
 
@@ -1920,7 +2228,8 @@ async def complete_json(
     the provider request is in flight; cancellation closes the transport task
     and raises :class:`LLMRequestCancelled` without recording a false failure.
     """
-    router, config = get_router(config)
+    _guard_input_size(prompt, system_prompt)
+    router, config, _route = await _resolve_router(config)
     model_name = get_model_name(config)
 
     # Build messages
@@ -2158,5 +2467,26 @@ async def complete_json(
                     tokens=_attempt_tokens,
                     latency_ms=(time.perf_counter() - _attempt_start) * 1000,
                 )
+            # Per ATTEMPT, deliberately. A retried structured call burns tokens on
+            # every attempt and the provider bills for each, so accumulating them
+            # is the honest total. The reserve caps what the user can be charged, so
+            # a pathological retry loop lands on the operator, not the user.
+            if _call_started:
+                note_call(
+                    total_tokens=_attempt_tokens,
+                    estimated=_attempt_ok and _attempt_tokens == 0,
+                    provider=config.provider,
+                    model=model_name,
+                    channel_id=_route.primary_channel_id if _route else None,
+                    latency_ms=(time.perf_counter() - _attempt_start) * 1000,
+                )
+                if _route and not _attempt_cancelled:
+                    await record_channel_outcome(
+                        _route.primary_channel_id,
+                        ok=_attempt_ok,
+                        error_class=None
+                        if _attempt_ok
+                        else ("timeout" if _attempt_timed_out else "error"),
+                    )
 
     raise ValueError(f"Failed after {retries + 1} attempts")

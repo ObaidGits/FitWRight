@@ -87,10 +87,16 @@ function emptyColumns(): ApplicationColumns {
 function ApplicationCard({
   app,
   draggable,
+  showStage = false,
   onMove,
 }: {
   app: Application;
   draggable: boolean;
+  /** Show which stage this application is in. The board conveys stage by which
+   *  column a card sits in, so it is redundant there - but the list view
+   *  flattens every column into one stream, where omitting it threw away the
+   *  single most useful fact on the card. */
+  showStage?: boolean;
   onMove: (s: ApplicationStatus) => void;
 }) {
   const sortable = useSortable({ id: app.application_id, disabled: !draggable });
@@ -142,9 +148,12 @@ function ApplicationCard({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      <div className="mt-2 flex items-center justify-between">
-        <span className="text-[11px] text-[var(--muted-foreground)]">
-          {new Date(app.updated_at).toLocaleDateString()}
+      <div className="mt-2 flex items-center justify-between gap-2">
+        <span className="flex min-w-0 items-center gap-2">
+          {showStage && <Badge variant="outline">{STATUS_LABELS[app.status]}</Badge>}
+          <span className="shrink-0 text-[11px] text-[var(--muted-foreground)]">
+            {new Date(app.updated_at).toLocaleDateString()}
+          </span>
         </span>
         {advance && (
           <button
@@ -476,6 +485,7 @@ export default function ApplicationsPage() {
               key={app.application_id}
               app={app}
               draggable={false}
+              showStage
               onMove={(s) => onMenuMove(app.application_id, s)}
             />
           ))}

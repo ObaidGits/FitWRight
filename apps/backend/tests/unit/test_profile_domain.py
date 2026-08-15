@@ -11,7 +11,7 @@ from __future__ import annotations
 from app.profile.backfill import build_profile_from_resume
 from app.profile.completion import build_suggestions, compute_completeness
 from app.profile.projection import ProjectionEngine
-from app.profile.schemas import ProfileData, Skill
+from app.profile.schemas import ProfileData
 from app.profile.skills import canonicalize, make_skill_dict
 
 

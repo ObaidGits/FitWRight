@@ -772,6 +772,254 @@ export async function runMaintenance(action: MaintenanceAction): Promise<Mainten
 }
 
 /** The typed admin surface consumed by the feature hooks. */
+// ---------------------------------------------------------------------------
+// AI provider channels + per-user credits (spec: ai-provider-admin)
+// ---------------------------------------------------------------------------
+
+export interface AiChannel {
+  id: string;
+  name: string;
+  provider: string;
+  model: string;
+  api_base: string | null;
+  priority: number;
+  state: 'active' | 'disabled' | 'draining';
+  structured_verdict: 'reliable' | 'flaky' | 'unsupported' | 'unknown';
+  monthly_cost_cap_cents: number | null;
+  /** Presence only. The backend never returns the key itself, by design. */
+  has_key: boolean;
+  consecutive_failures: number;
+  cooling_until: string | null;
+  last_ok_at: string | null;
+  last_error_class: string | null;
+}
+
+export interface AiChannelInput {
+  name: string;
+  provider: string;
+  model: string;
+  api_base?: string | null;
+  priority?: number;
+  monthly_cost_cap_cents?: number | null;
+  /** Write-only: sent on create/update, never returned. */
+  api_key?: string;
+}
+
+export interface AiChannelPatch {
+  name?: string;
+  model?: string;
+  api_base?: string | null;
+  priority?: number;
+  state?: 'active' | 'disabled' | 'draining';
+  structured_verdict?: 'reliable' | 'flaky' | 'unsupported' | 'unknown';
+  monthly_cost_cap_cents?: number | null;
+  api_key?: string;
+}
+
+export interface UserCredits {
+  user_id: string;
+  allowance_credits: number;
+  allowance_period_start: string | null;
+  wallet_credits: number;
+  reserved_credits: number;
+  available_credits: number;
+  lifetime_granted: number;
+  lifetime_spent: number;
+  state: 'ok' | 'blocked';
+  monthly_allowance_override: number | null;
+  velocity_cap_override: number | null;
+  ai_disabled: boolean;
+  /** Echoed so the UI can show "inherited: 50" beside an empty override. */
+  global_monthly_allowance: number;
+  global_velocity_cap: number;
+  credits_enabled: boolean;
+}
+
+export interface UserCreditsPatch {
+  monthly_allowance_override?: number;
+  clear_allowance_override?: boolean;
+  velocity_cap_override?: number;
+  clear_velocity_override?: boolean;
+  ai_disabled?: boolean;
+  state?: 'ok' | 'blocked';
+}
+
+async function listAiChannels(): Promise<AiChannel[]> {
+  return json<AiChannel[]>(await apiFetch('/admin/ai/channels'));
+}
+
+async function createAiChannel(input: AiChannelInput): Promise<AiChannel> {
+  return json<AiChannel>(await apiPost('/admin/ai/channels', input));
+}
+
+async function updateAiChannel(id: string, patch: AiChannelPatch): Promise<AiChannel> {
+  return json<AiChannel>(await apiPatch(`/admin/ai/channels/${encodeURIComponent(id)}`, patch));
+}
+
+async function deleteAiChannel(id: string): Promise<void> {
+  const res = await apiDelete(`/admin/ai/channels/${encodeURIComponent(id)}`);
+  if (!res.ok) {
+    // Surface the server's reason - most often "drain this channel first", which
+    // is actionable guidance rather than a generic failure.
+    await json<unknown>(res);
+  }
+}
+
+async function getUserCredits(userId: string): Promise<UserCredits> {
+  return json<UserCredits>(await apiFetch(`/admin/ai/users/${encodeURIComponent(userId)}/credits`));
+}
+
+async function patchUserCredits(userId: string, patch: UserCreditsPatch): Promise<UserCredits> {
+  return json<UserCredits>(
+    await apiPatch(`/admin/ai/users/${encodeURIComponent(userId)}/credits`, patch)
+  );
+}
+
+async function grantUserCredits(
+  userId: string,
+  credits: number,
+  reason: string
+): Promise<UserCredits> {
+  return json<UserCredits>(
+    await apiPost(`/admin/ai/users/${encodeURIComponent(userId)}/credits/grant`, {
+      credits,
+      reason,
+    })
+  );
+}
+
+export interface SpendBucket {
+  day?: string;
+  feature?: string;
+  channel_id?: string | null;
+  user_id?: string;
+  calls: number;
+  credits?: number;
+  cost_micros: number;
+}
+
+export interface AiSpendSummary {
+  days: number;
+  calls: number;
+  total_tokens: number;
+  credits_charged: number;
+  provider_cost_micros: number;
+  /** Calls that used tokens but had no rate entry. The margin figure is only as
+   *  complete as this is small - surfaced, never hidden. */
+  unpriced_calls: number;
+  failed_calls: number;
+  by_day: SpendBucket[];
+  by_feature: SpendBucket[];
+  by_channel: SpendBucket[];
+  top_users: SpendBucket[];
+}
+
+async function getAiSpend(days: number): Promise<AiSpendSummary> {
+  return json<AiSpendSummary>(await apiFetch(`/admin/ai/spend?days=${days}`));
+}
+
+export interface ChannelTestResult {
+  ok: boolean;
+  error_class: string | null;
+  message: string;
+  structured_verdict: 'reliable' | 'flaky' | 'unsupported' | 'unknown';
+  latency_ms: number;
+  sample?: string;
+}
+
+export interface ChannelPerformanceRow {
+  channel_id: string;
+  calls: number;
+  ok: number;
+  success_rate: number | null;
+  p95_latency_ms: number | null;
+}
+
+export interface AiAlert {
+  severity: 'high' | 'medium' | 'low';
+  kind: string;
+  detail: string;
+  channel_id?: string;
+  user_id?: string;
+  note?: string;
+}
+
+export interface ReconciliationReport {
+  status: 'ok' | 'attention' | 'error';
+  findings?: Record<string, number>;
+}
+
+async function testAiChannel(id: string): Promise<ChannelTestResult> {
+  return json<ChannelTestResult>(
+    await apiPost(`/admin/ai/channels/${encodeURIComponent(id)}/test`, {})
+  );
+}
+
+async function getChannelPerformance(days: number): Promise<ChannelPerformanceRow[]> {
+  return json<ChannelPerformanceRow[]>(await apiFetch(`/admin/ai/performance?days=${days}`));
+}
+
+async function getAiAlerts(days: number): Promise<AiAlert[]> {
+  return json<AiAlert[]>(await apiFetch(`/admin/ai/alerts?days=${days}`));
+}
+
+async function getReconciliation(): Promise<ReconciliationReport> {
+  return json<ReconciliationReport>(await apiFetch('/admin/ai/reconciliation'));
+}
+
+export interface CreditPackRow {
+  id: string;
+  label: string;
+  credits: number;
+  amount_minor: number;
+  currency: string;
+  sale_amount_minor: number | null;
+  sale_label: string | null;
+  sale_starts_at: string | null;
+  sale_ends_at: string | null;
+  active: boolean;
+  sort_order: number;
+  description: string | null;
+  /** Resolved by the SAME code the buy screen uses, so the preview cannot drift. */
+  effective_amount_minor: number;
+  on_sale: boolean;
+  percent_off: number;
+}
+
+export interface CreditPackInput {
+  label: string;
+  credits: number;
+  amount_minor: number;
+  currency?: string;
+  description?: string | null;
+  active?: boolean;
+  sort_order?: number;
+  /** Convenience only: the server computes and stores an exact price from this. */
+  discount_percent?: number | null;
+  sale_amount_minor?: number | null;
+  sale_label?: string | null;
+  sale_starts_at?: string | null;
+  sale_ends_at?: string | null;
+  clear_sale?: boolean;
+}
+
+async function listCreditPacks(): Promise<CreditPackRow[]> {
+  return json<CreditPackRow[]>(await apiFetch('/admin/ai/packs'));
+}
+
+async function createCreditPack(id: string, input: CreditPackInput): Promise<CreditPackRow> {
+  return json<CreditPackRow>(await apiPost(`/admin/ai/packs/${encodeURIComponent(id)}`, input));
+}
+
+async function updateCreditPack(id: string, input: CreditPackInput): Promise<CreditPackRow> {
+  return json<CreditPackRow>(await apiPatch(`/admin/ai/packs/${encodeURIComponent(id)}`, input));
+}
+
+async function deleteCreditPack(id: string): Promise<void> {
+  const res = await apiDelete(`/admin/ai/packs/${encodeURIComponent(id)}`);
+  if (!res.ok) await json<unknown>(res);
+}
+
 export const adminApi = {
   getStats,
   getUsageSeries,
@@ -784,6 +1032,23 @@ export const adminApi = {
   deleteUser,
   restoreUser,
   bulkDisable,
+  // AI provider channels + per-user credits (spec: ai-provider-admin)
+  listAiChannels,
+  getAiSpend,
+  testAiChannel,
+  getChannelPerformance,
+  getAiAlerts,
+  getReconciliation,
+  listCreditPacks,
+  createCreditPack,
+  updateCreditPack,
+  deleteCreditPack,
+  createAiChannel,
+  updateAiChannel,
+  deleteAiChannel,
+  getUserCredits,
+  patchUserCredits,
+  grantUserCredits,
 };
 
 export type AdminApi = typeof adminApi;

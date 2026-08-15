@@ -8,6 +8,7 @@ import * as React from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import CheckCircle from 'lucide-react/dist/esm/icons/circle-check';
 import XCircle from 'lucide-react/dist/esm/icons/circle-x';
+import ChevronDown from 'lucide-react/dist/esm/icons/chevron-down';
 
 import { Card } from '@/components/atelier/card';
 import { Button } from '@/components/atelier/button';
@@ -33,6 +34,7 @@ import {
 } from '@/components/atelier/dialog';
 import { LoadingSkeleton } from '@/components/atelier/states';
 import { useToast } from '@/components/atelier/toast';
+import { AiUsagePanel } from '@/components/settings/ai-usage-panel';
 import { useTheme } from '@/components/theme/theme-provider';
 import { useSession } from '@/lib/context/session';
 import {
@@ -52,6 +54,8 @@ import { describeAuthError } from '@/components/auth/error-banner';
 import { ProfileSettings } from '@/components/settings/profile-settings';
 import { NotificationPreferences } from '@/components/settings/notification-preferences';
 import { FeaturePromptsEditor } from '@/components/settings/feature-prompts-editor';
+import { TabStrip } from '@/components/atelier/tab-strip';
+import { getMyCredits, type MyCredits } from '@/lib/api/credits';
 import {
   useLlmConfig,
   useApiKeyStatus,
@@ -59,10 +63,12 @@ import {
   useLanguageConfig,
   useUpdateLlmConfig,
   useUpdateApiKeys,
+  useDeleteApiKey,
   useUpdateFeatureConfig,
   useUpdateLanguageConfig,
   useTestConnection,
 } from '@/features/settings/hooks';
+import { PAGE_WIDTH } from '@/lib/layout/page-width';
 
 const LANGS: { value: SupportedLanguage; label: string }[] = [
   { value: 'en', label: 'English' },
@@ -75,7 +81,7 @@ const LANGS: { value: SupportedLanguage; label: string }[] = [
 
 export default function SettingsPage() {
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className={`${PAGE_WIDTH.CONTENT} space-y-6`}>
       <h1 className="text-2xl font-semibold">Settings</h1>
       <Tabs defaultValue="ai">
         <TabsList>
@@ -192,6 +198,7 @@ function AiSection() {
   const keyStatus = useApiKeyStatus();
   const update = useUpdateLlmConfig();
   const updateKeys = useUpdateApiKeys();
+  const deleteKey = useDeleteApiKey();
   const test = useTestConnection();
   const { toast } = useToast();
 
@@ -204,11 +211,76 @@ function AiSection() {
   const [reasoningEffort, setReasoningEffort] = React.useState<ReasoningEffort | 'default'>(
     'default'
   );
+  // Model / reasoning effort are provider plumbing, not decisions a job seeker
+  // should have to make, so they sit behind a disclosure.
+  const [showAdvanced, setShowAdvanced] = React.useState(false);
+
+  // Which side funds AI calls. This mirrors GET /credits' `mode` field exactly
+  // (see ai_metered.user_has_own_key): "fitwright" means no key is stored for
+  // the active provider (or the provider is self-hosted with none needed), so
+  // the operator's channel/allowance pays; "own" means a key is stored, so the
+  // user's own provider bills them and nothing is metered. There is no separate
+  // preference row for this - it is a read of the same state the key form
+  // writes, which is why switching modes acts on the key itself rather than a
+  // flag that could disagree with it.
+  const [myCredits, setMyCredits] = React.useState<MyCredits | null>(null);
+  const [creditsRefreshKey, setCreditsRefreshKey] = React.useState(0);
+  const [confirmSwitchToFitwright, setConfirmSwitchToFitwright] = React.useState(false);
+  // Clicking "My own provider" must reveal the form immediately, before any
+  // network round trip - nothing is deleted or saved by that click alone, so
+  // there is nothing to wait on. This local override wins until the next
+  // credits read (server truth) supersedes it, e.g. after Save or after
+  // switching to FitWright actually clears the key.
+  const [modeOverride, setModeOverride] = React.useState<'fitwright' | 'own' | null>(null);
+
+  React.useEffect(() => {
+    let alive = true;
+    getMyCredits()
+      .then((d) => {
+        if (!alive) return;
+        setMyCredits(d);
+        setModeOverride(null);
+      })
+      .catch(() => alive && setMyCredits(null));
+    return () => {
+      alive = false;
+    };
+  }, [creditsRefreshKey]);
+
+  // 'own' is the safe default while the credits read is in flight - it just
+  // means the provider/key form starts visible, never hidden behind a state
+  // we have not confirmed yet.
+  const sourceMode: 'fitwright' | 'own' =
+    modeOverride ?? (myCredits?.mode === 'own_key' ? 'own' : 'fitwright');
+  // Once ai_credits_enabled is off, "FitWright" mode has nothing behind it -
+  // no allowance, no channel - so offering it would be a dead end with no
+  // explanation. Fall back to the provider form being the only option.
+  const fitwrightModeAvailable = myCredits ? myCredits.credits_enabled : true;
+
+  /**
+   * Switching provider carries the new provider's default model with it.
+   *
+   * The Model field showed the default as *placeholder* text, which reads as
+   * filled-in. Its own help text had to apologise for that ("the greyed text is
+   * only an example, not a saved value") - a sure sign the control was wrong.
+   * A user who picked a provider and pressed Save sent an empty model. Now the
+   * field always holds a real value, which is also what lets it move out of
+   * sight without becoming a trap.
+   */
+  function onProviderChange(next: LLMProvider) {
+    const previousDefault = PROVIDER_INFO[provider]?.defaultModel;
+    setProvider(next);
+    if (!model.trim() || model === previousDefault) {
+      setModel(PROVIDER_INFO[next]?.defaultModel ?? '');
+    }
+  }
 
   React.useEffect(() => {
     if (cfg.data) {
       setProvider(cfg.data.provider);
-      setModel(cfg.data.model ?? '');
+      // An account saved before the field carried a real value can hold an empty
+      // model. Show the provider's default rather than a blank box.
+      setModel(cfg.data.model || (PROVIDER_INFO[cfg.data.provider]?.defaultModel ?? ''));
       setApiBase(cfg.data.api_base ?? '');
       setReasoningEffort(cfg.data.reasoning_effort ?? 'default');
     }
@@ -251,8 +323,40 @@ function AiSection() {
       }
       setApiKey('');
       toast({ title: 'AI settings saved', variant: 'success' });
+      // Saving here can flip own-key status (a key just got added or replaced).
+      setCreditsRefreshKey((k) => k + 1);
     } catch {
       toast({ title: 'Could not save settings', variant: 'error' });
+    }
+  }
+
+  /**
+   * "Use FitWright" has nothing of its own to turn on - it is the ABSENCE of a
+   * self-funding key, per user_has_own_key(). So switching to it means clearing
+   * whatever currently makes this provider self-funded: the stored key, and -
+   * for a self-hosted provider like Ollama - the base URL too, since a base URL
+   * alone is what exempts those from billing.
+   */
+  async function onSwitchToFitwright() {
+    try {
+      if (savedKey?.configured) {
+        await deleteKey.mutateAsync(keyProvider);
+      }
+      if (needsBase && apiBase.trim()) {
+        setApiBase('');
+        await update.mutateAsync({
+          provider,
+          model,
+          reasoning_effort: reasoningValue,
+          api_base: null,
+        });
+      }
+      setApiKey('');
+      setConfirmSwitchToFitwright(false);
+      toast({ title: "Switched to FitWright's provider", variant: 'success' });
+      setCreditsRefreshKey((k) => k + 1);
+    } catch {
+      toast({ title: 'Could not switch providers', variant: 'error' });
     }
   }
   async function onTest() {
@@ -294,47 +398,99 @@ function AiSection() {
 
   return (
     <Card className="space-y-4 p-6">
+      {/* What the user can still do, before the knobs for changing how it is done.
+          Someone opening AI settings because generation stopped working needs this
+          answer first - the provider fields are the fix, not the diagnosis. */}
+      <AiUsagePanel key={creditsRefreshKey} />
+
+      {/* The actual switch the provider dropdown never offered: who pays for AI
+          calls. "FitWright" is the operator's allowance/credits; "My own
+          provider" is the form below, unchanged. Disabled when the operator
+          hasn't turned credits on - offering a mode with nothing behind it
+          would be a dead end with no way to explain why nothing happens. */}
       <div className="space-y-1.5">
-        <Label>Provider</Label>
-        <Select value={provider} onValueChange={(v) => setProvider(v as LLMProvider)}>
-          <SelectTrigger aria-label="LLM provider">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {(Object.keys(PROVIDER_INFO) as LLMProvider[]).map((p) => (
-              <SelectItem key={p} value={p}>
-                {PROVIDER_INFO[p].name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {provider === 'openai_compatible' && (
+        <Label>AI source</Label>
+        <TabStrip
+          aria-label="AI source"
+          activeTab={sourceMode}
+          tabs={[
+            { id: 'fitwright', label: 'FitWright', disabled: !fitwrightModeAvailable },
+            { id: 'own', label: 'My own provider' },
+          ]}
+          onTabChange={(id) => {
+            if (id === 'fitwright' && sourceMode !== 'fitwright') {
+              // Clearing a saved key is a one-way action from the user's point of
+              // view (they'd have to re-enter it to go back), so it is confirmed
+              // rather than fired straight from the tab click.
+              setConfirmSwitchToFitwright(true);
+            } else if (id === 'own') {
+              // Reveals the form immediately - nothing is deleted or changed
+              // until Save, so there is nothing to confirm or wait on here.
+              setModeOverride('own');
+            }
+          }}
+        />
+        {!fitwrightModeAvailable && (
           <p className="text-xs text-[var(--muted-foreground)]">
-            Use this for any endpoint that speaks the OpenAI API - self-hosted servers or cloud
-            gateways. Set the Base URL below.
+            FitWright&apos;s own provider isn&apos;t turned on for this install - use your own
+            provider key below.
+          </p>
+        )}
+        {sourceMode === 'fitwright' && fitwrightModeAvailable && (
+          <p className="text-xs text-[var(--muted-foreground)]">
+            AI calls are funded by FitWright and count against your credits (see usage above).
+            Switch to &quot;My own provider&quot; to use your own API key instead - your usage then
+            stops counting against it entirely.
           </p>
         )}
       </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="model">Model</Label>
-        <Input
-          id="model"
-          value={model}
-          onChange={(e) => setModel(e.target.value)}
-          placeholder={PROVIDER_INFO[provider]?.defaultModel}
-        />
-        <p className="text-xs text-[var(--muted-foreground)]">
-          Enter the exact model ID from your provider. The greyed text is only an example
-          {PROVIDER_INFO[provider]?.defaultModel ? (
-            <>
-              {' '}
-              (e.g. <code>{PROVIDER_INFO[provider].defaultModel}</code>)
-            </>
-          ) : null}
-          , not a saved value - always confirm the current ID in your provider&apos;s docs.
-        </p>
-      </div>
-      {needsBase && (
+
+      <Dialog open={confirmSwitchToFitwright} onOpenChange={setConfirmSwitchToFitwright}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Switch to FitWright&apos;s provider?</DialogTitle>
+            <DialogDescription>
+              {needsBase
+                ? "This clears the saved API key and Base URL for this provider. AI calls will then run on FitWright's allowance/credits instead."
+                : "This clears the saved API key for this provider. AI calls will then run on FitWright's allowance/credits instead."}{' '}
+              You can switch back to your own provider at any time by entering the key again.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">Cancel</Button>
+            </DialogClose>
+            <Button onClick={onSwitchToFitwright} loading={deleteKey.isPending || update.isPending}>
+              Switch to FitWright
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {sourceMode === 'own' && (
+        <div className="space-y-1.5">
+          <Label>Provider</Label>
+          <Select value={provider} onValueChange={(v) => onProviderChange(v as LLMProvider)}>
+            <SelectTrigger aria-label="LLM provider">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {(Object.keys(PROVIDER_INFO) as LLMProvider[]).map((p) => (
+                <SelectItem key={p} value={p}>
+                  {PROVIDER_INFO[p].name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {provider === 'openai_compatible' && (
+            <p className="text-xs text-[var(--muted-foreground)]">
+              Use this for any endpoint that speaks the OpenAI API - self-hosted servers or cloud
+              gateways. Set the Base URL below.
+            </p>
+          )}
+        </div>
+      )}
+      {sourceMode === 'own' && needsBase && (
         <div className="space-y-1.5">
           <Label htmlFor="apibase">Base URL</Label>
           <Input
@@ -352,64 +508,108 @@ function AiSection() {
           </p>
         </div>
       )}
-      <div className="space-y-1.5">
-        <Label htmlFor="apikey">API key</Label>
-        <Input
-          id="apikey"
-          type="password"
-          value={apiKey}
-          onChange={(e) => setApiKey(e.target.value)}
-          placeholder={
-            savedKey?.configured
-              ? `Saved (${savedKey.masked_key ?? '----'}) - enter to replace`
-              : PROVIDER_INFO[provider]?.requiresKey
-                ? 'Enter API key'
-                : 'Optional for this provider'
-          }
-          autoComplete="off"
-        />
-        {savedKey?.unreadable ? (
-          /* The key was not deleted - it cannot be decrypted, because the
+      {sourceMode === 'own' && (
+        <div className="space-y-1.5">
+          <Label htmlFor="apikey">API key</Label>
+          <Input
+            id="apikey"
+            type="password"
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder={
+              savedKey?.configured
+                ? `Saved (${savedKey.masked_key ?? '----'}) - enter to replace`
+                : PROVIDER_INFO[provider]?.requiresKey
+                  ? 'Enter API key'
+                  : 'Optional for this provider'
+            }
+            autoComplete="off"
+          />
+          {savedKey?.unreadable ? (
+            /* The key was not deleted - it cannot be decrypted, because the
              encryption secret differs from the one that saved it. Saying so is
              the difference between a one-line fix and believing the app loses
              your data. */
-          <p className="text-xs text-[var(--at-warning)]">
-            A key is stored for this provider but cannot be read, because the encryption secret
-            changed since it was saved. This usually means{' '}
-            <code className="rounded bg-[var(--secondary)] px-1">APP_ENCRYPTION_KEY</code> differs
-            between how you ran FitWright then and now. Enter the key again to fix it.
-          </p>
-        ) : (
-          <p className="text-xs text-[var(--muted-foreground)]">
-            {savedKey?.configured
-              ? 'A key is saved for this provider. Leave blank to keep it.'
-              : 'Stored encrypted. Your key is never shown again after saving.'}
-          </p>
-        )}
-      </div>
-      <div className="space-y-1.5">
-        <Label>Reasoning effort</Label>
-        <Select
-          value={reasoningEffort}
-          onValueChange={(v) => setReasoningEffort(v as ReasoningEffort | 'default')}
-        >
-          <SelectTrigger aria-label="Reasoning effort">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="default">Default (let the model decide)</SelectItem>
-            <SelectItem value="minimal">Minimal</SelectItem>
-            <SelectItem value="low">Low</SelectItem>
-            <SelectItem value="medium">Medium</SelectItem>
-            <SelectItem value="high">High</SelectItem>
-          </SelectContent>
-        </Select>
-        <p className="text-xs text-[var(--muted-foreground)]">
-          Only used by reasoning-capable models (e.g. OpenAI gpt-5, DeepSeek R1). It is safely
-          ignored by models that don&apos;t support it. Choose Default to leave it unset.
-        </p>
-      </div>
-      {test.data && (
+            <p className="text-xs text-[var(--at-warning)]">
+              A key is stored for this provider but cannot be read, because the encryption secret
+              changed since it was saved. This usually means{' '}
+              <code className="rounded bg-[var(--secondary)] px-1">APP_ENCRYPTION_KEY</code> differs
+              between how you ran FitWright then and now. Enter the key again to fix it.
+            </p>
+          ) : (
+            <p className="text-xs text-[var(--muted-foreground)]">
+              {savedKey?.configured
+                ? 'A key is saved for this provider. Leave blank to keep it.'
+                : 'Stored encrypted. Your key is never shown again after saving.'}
+            </p>
+          )}
+        </div>
+      )}
+      {/* Advanced. Everything a job seeker should never need to touch: the exact
+          model id and the reasoning-effort knob. Both keep working when left
+          alone, because the model now always carries the provider's default. */}
+      {sourceMode === 'own' && (
+        <div>
+          <button
+            type="button"
+            onClick={() => setShowAdvanced((v) => !v)}
+            aria-expanded={showAdvanced}
+            className="flex items-center gap-1 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+          >
+            <ChevronDown
+              className={`h-4 w-4 transition-transform ${showAdvanced ? 'rotate-180' : ''}`}
+            />
+            Advanced
+          </button>
+          {!showAdvanced && (
+            <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+              Using <code className="rounded bg-[var(--secondary)] px-1">{model || '-'}</code>. Open
+              this only if your provider told you to use a different model.
+            </p>
+          )}
+          {showAdvanced && (
+            <div className="mt-3 space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="model">Model</Label>
+                <Input
+                  id="model"
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                  placeholder={PROVIDER_INFO[provider]?.defaultModel}
+                />
+                <p className="text-xs text-[var(--muted-foreground)]">
+                  Filled with this provider&apos;s default. Change it only to a model id your
+                  provider actually offers - a wrong id fails at the first request, not here.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Reasoning effort</Label>
+                <Select
+                  value={reasoningEffort}
+                  onValueChange={(v) => setReasoningEffort(v as ReasoningEffort | 'default')}
+                >
+                  <SelectTrigger aria-label="Reasoning effort">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="default">Default (let the model decide)</SelectItem>
+                    <SelectItem value="minimal">Minimal</SelectItem>
+                    <SelectItem value="low">Low</SelectItem>
+                    <SelectItem value="medium">Medium</SelectItem>
+                    <SelectItem value="high">High</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-[var(--muted-foreground)]">
+                  Only used by reasoning-capable models (e.g. OpenAI gpt-5, DeepSeek R1). It is
+                  safely ignored by models that don&apos;t support it. Choose Default to leave it
+                  unset.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+      {sourceMode === 'own' && test.data && (
         <div className="space-y-1.5">
           <div
             className={`flex items-start gap-2 text-sm ${test.data.healthy ? 'text-[var(--at-success)]' : 'text-[var(--destructive)]'}`}
@@ -458,14 +658,16 @@ function AiSection() {
           )}
         </div>
       )}
-      <div className="flex gap-2">
-        <Button onClick={onSave} loading={update.isPending || updateKeys.isPending}>
-          Save
-        </Button>
-        <Button variant="outline" onClick={onTest} loading={test.isPending}>
-          Test connection
-        </Button>
-      </div>
+      {sourceMode === 'own' && (
+        <div className="flex gap-2">
+          <Button onClick={onSave} loading={update.isPending || updateKeys.isPending}>
+            Save
+          </Button>
+          <Button variant="outline" onClick={onTest} loading={test.isPending}>
+            Test connection
+          </Button>
+        </div>
+      )}
     </Card>
   );
 }

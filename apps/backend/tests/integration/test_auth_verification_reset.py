@@ -25,7 +25,7 @@ import re
 from urllib.parse import unquote
 
 import pytest
-from httpx import ASGITransport, AsyncClient
+from httpx import AsyncClient
 from sqlalchemy import select
 
 from app.auth import hash_token_value
@@ -33,7 +33,6 @@ from app.auth.accounts import create_user, get_by_id
 from app.auth.email import EmailMessage, EmailSender
 from app.auth.passwords import get_password_service
 from app.config import settings as app_settings
-from app.main import app
 from app.models import EmailVerificationToken
 from app.schemas.auth import SAFE_USER_FIELDS
 

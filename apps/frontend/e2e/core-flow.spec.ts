@@ -43,12 +43,12 @@ test.describe('FitWright - navigation & real-data smoke', () => {
     if (await firstOpen.count()) {
       await firstOpen.click();
     } else {
-      // Fall back to clicking the first resume card title.
-      await page.locator('a[href^="/resumes/"]').first().click();
+      // Fall back to clicking the first resume card title. Links now point at
+      // the unified editor - the old /resumes/<id> route is a redirect.
+      await page.locator('a[href^="/builder?id="]').first().click();
     }
-    await expect(page).toHaveURL(/\/resumes\/.+/);
-    // The editor exposes a Save action and an always-visible Live preview.
-    await expect(page.getByText(/Live preview/i)).toBeVisible();
+    await expect(page).toHaveURL(/\/builder\?id=.+/);
+    // The editor exposes a Save action and an always-visible preview.
     await expect(page.getByRole('button', { name: /^Save$/ })).toBeVisible();
     // Appearance + Export actions are present.
     await expect(page.getByRole('button', { name: /Appearance/i })).toBeVisible();
@@ -78,7 +78,7 @@ test.describe('FitWright - AI-native core (requires quota)', () => {
     await page.getByRole('button', { name: /^Generate$/ }).click();
     // Review surface: a match score ring + change summary appear when done.
     await expect(page.getByText(/Match score/i)).toBeVisible({ timeout: 240_000 });
-    await page.getByRole('button', { name: /Accept & save/i }).click();
+    await page.getByRole('button', { name: /Save resume/i }).click();
     await expect(page).toHaveURL(/\/applications/, { timeout: 60_000 });
   });
 

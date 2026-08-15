@@ -13,7 +13,6 @@ resume as fallback". These tests pin the three rules that matter:
 Plus a contract test that the previously shipped field names all survive, since
 an already-installed extension build reads this response.
 """
-import pytest
 
 from app.routers.extension import AutofillProfile, get_autofill_profile
 

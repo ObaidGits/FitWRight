@@ -35,6 +35,7 @@ import CircleCheck from 'lucide-react/dist/esm/icons/circle-check';
 import Circle from 'lucide-react/dist/esm/icons/circle';
 import ListOrdered from 'lucide-react/dist/esm/icons/list-ordered';
 import MessageSquare from 'lucide-react/dist/esm/icons/message-square-text';
+import { PAGE_WIDTH } from '@/lib/layout/page-width';
 
 /**
  * The two things that actually block progress: a job waiting in the queue, and a
@@ -218,7 +219,7 @@ export default function HomePage() {
   // onboarding. Provider health is also excluded: an outage is not first-time setup.
   if (shouldShowFirstRun(setup)) {
     return (
-      <div className="mx-auto max-w-2xl space-y-6 py-6">
+      <div className={`${PAGE_WIDTH.NARROW} space-y-6 py-6`}>
         <div className="space-y-1 text-center">
           <h1 className="text-2xl font-semibold">Welcome to FitWright</h1>
           <p className="text-[var(--muted-foreground)]">
@@ -318,7 +319,7 @@ export default function HomePage() {
             </p>
           </div>
           <Button asChild variant="outline">
-            <Link href={`/resumes/${mostRecent.resume_id}`}>
+            <Link href={`/builder?id=${mostRecent.resume_id}`}>
               Open <ArrowRight className="h-4 w-4" />
             </Link>
           </Button>
@@ -353,7 +354,7 @@ export default function HomePage() {
                   </p>
                 </div>
                 <Button asChild size="sm" variant="outline">
-                  <Link href={`/resumes/${r.resume_id}`}>Review</Link>
+                  <Link href={`/builder?id=${r.resume_id}`}>Review</Link>
                 </Button>
               </Card>
             ))}
@@ -405,7 +406,7 @@ export default function HomePage() {
             {recent.map((r) => (
               <Link
                 key={r.resume_id}
-                href={`/resumes/${r.resume_id}`}
+                href={`/builder?id=${r.resume_id}`}
                 className="block mb-3 last:mb-0"
               >
                 <Card className="flex items-center justify-between gap-3 p-3.5 transition-shadow hover:shadow-[var(--shadow-at-e2)]">

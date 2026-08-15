@@ -21,6 +21,7 @@ const RichTextEditor = dynamic(
 );
 import { Project } from '@/components/dashboard/resume-component';
 import { Plus, Trash2, Github, Globe } from 'lucide-react';
+import { ItemVisibilityToggle } from '../item-visibility-toggle';
 import { useTranslations } from '@/lib/i18n';
 
 interface ProjectsFormProps {
@@ -51,6 +52,11 @@ export const ProjectsForm: React.FC<ProjectsFormProps> = ({ data, onChange }) =>
 
   const handleRemove = (id: number) => {
     onChange(data.filter((item) => item.id !== id));
+  };
+
+  /** Leave this entry out of the rendered resume without deleting it. */
+  const handleToggleHidden = (id: number) => {
+    onChange(data.map((item) => (item.id === id ? { ...item, hidden: !item.hidden } : item)));
   };
 
   const handleChange = (id: number, field: keyof Project, value: string | string[]) => {
@@ -113,18 +119,28 @@ export const ProjectsForm: React.FC<ProjectsFormProps> = ({ data, onChange }) =>
         {data.map((item) => (
           <div
             key={item.id}
-            className="group relative rounded-[var(--radius-at-lg)] border border-[var(--border)] bg-[var(--card)] p-6"
+            className={`group relative rounded-[var(--radius-at-lg)] border bg-[var(--card)] p-6 ${
+              item.hidden
+                ? 'border-dashed border-[var(--at-warning)]/50 opacity-60'
+                : 'border-[var(--border)]'
+            }`}
           >
-            <Button
-              variant="ghost"
-              size="icon"
-              className="absolute right-2 top-2 text-[var(--destructive)] opacity-0 transition-opacity hover:bg-[var(--destructive)]/10 group-hover:opacity-100"
-              onClick={() => handleRemove(item.id)}
-              aria-label={t('a11y.removeItem')}
-              title={t('a11y.removeItem')}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
+            <div className="absolute right-2 top-2 flex items-center">
+              <ItemVisibilityToggle
+                hidden={item.hidden}
+                onToggle={() => handleToggleHidden(item.id)}
+              />
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-[var(--destructive)] opacity-0 transition-opacity hover:bg-[var(--destructive)]/10 group-hover:opacity-100"
+                onClick={() => handleRemove(item.id)}
+                aria-label={t('a11y.removeItem')}
+                title={t('a11y.removeItem')}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
 
             <div className="mb-4 grid grid-cols-1 gap-4 pr-8 md:grid-cols-2">
               <div className="space-y-2">

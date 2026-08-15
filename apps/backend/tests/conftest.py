@@ -269,6 +269,28 @@ def sample_changes():
 # Isolated database - swap the global TinyDB singleton for a temp-file DB
 # ---------------------------------------------------------------------------
 
+#: Router modules that captured the ``db`` singleton at import time and therefore
+#: must be re-pointed at the isolated database. A module missing from this list does
+#: not fail loudly - it quietly keeps reading the REAL database, and its tests pass
+#: or fail against the developer's own data. ``test_no_unpatched_router_db`` in
+#: tests/architecture exists to make that impossible; keep them in step.
+ISOLATED_DB_ROUTER_MODULES = (
+    "resumes",
+    "jobs",
+    "enrichment",
+    "config",
+    "health",
+    "applications",
+    "resume_wizard",
+    "versions",
+    "notifications",
+    # Added when the guard in tests/architecture/test_router_db_isolation.py was
+    # written and found them already unpatched.
+    "error_reports",
+    "admin_ai",
+)
+
+
 @pytest.fixture
 async def isolated_db(tmp_path, monkeypatch):
     """Replace the global ``db`` singleton with a disposable temp-file SQLite DB
@@ -286,17 +308,7 @@ async def isolated_db(tmp_path, monkeypatch):
 
     test_db = Database(db_path=tmp_path / "isolated_db.db")
     monkeypatch.setattr(database_module, "db", test_db)
-    for router_name in (
-        "resumes",
-        "jobs",
-        "enrichment",
-        "config",
-        "health",
-        "applications",
-        "resume_wizard",
-        "versions",
-        "notifications",
-    ):
+    for router_name in ISOLATED_DB_ROUTER_MODULES:
         try:
             module = importlib.import_module(f"app.routers.{router_name}")
         except ModuleNotFoundError:

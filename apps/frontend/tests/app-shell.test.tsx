@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from '@testing-library/react';
 
 /**
@@ -11,6 +11,12 @@ import { render } from '@testing-library/react';
 
 vi.mock('@/components/command/command-palette', () => ({
   useCommandPalette: () => ({ open: vi.fn() }),
+}));
+// The shell reads the pathname to decide whether a route is an editor (full
+// bleed) or a content page (reading-width column).
+const mockPathname = vi.hoisted(() => ({ value: '/home' }));
+vi.mock('next/navigation', () => ({
+  usePathname: () => mockPathname.value,
 }));
 vi.mock('@/components/layout/sidebar', () => ({
   Sidebar: () => <aside data-testid="sidebar">nav</aside>,
@@ -30,6 +36,10 @@ vi.mock('@/components/dev/mode-mismatch-banner', () => ({ ModeMismatchBanner: ()
 import { AppShell } from '@/components/layout/app-shell';
 
 describe('AppShell layout architecture', () => {
+  beforeEach(() => {
+    mockPathname.value = '/home';
+  });
+
   it('makes the shell viewport-height and non-scrolling', () => {
     const { container } = render(<AppShell>content</AppShell>);
     const root = container.firstElementChild as HTMLElement;
@@ -52,5 +62,35 @@ describe('AppShell layout architecture', () => {
     const sidebar = getByTestId('sidebar');
     const main = document.getElementById('main-content')!;
     expect(main.contains(sidebar)).toBe(false);
+  });
+
+  it('wraps a content page in the reading-width column', () => {
+    render(<AppShell>content</AppShell>);
+    const main = document.getElementById('main-content')!;
+    expect(main.firstElementChild?.className).toContain('max-w-6xl');
+  });
+
+  it('gives an editor route the full width and lets it own its own scrolling', () => {
+    // The builder is a two-pane editor: constraining it to the reading-width
+    // column squeezed it into half the screen, and a shell scrollbar around a
+    // pane that already scrolls produced two nested scroll regions.
+    mockPathname.value = '/builder';
+    render(<AppShell>content</AppShell>);
+    const main = document.getElementById('main-content')!;
+    expect(main.className).toContain('overflow-hidden');
+    expect(main.className).not.toContain('overflow-y-auto');
+    expect(main.innerHTML).not.toContain('max-w-6xl');
+  });
+
+  it('gives the tailor route a wider column than a reading-width page', () => {
+    // Tailor is two panes plus an A4 preview. It used to ask for this itself
+    // with `max-w-[1500px]`, which did nothing: the shell's own `max-w-6xl`
+    // (1152px) was already the binding constraint, so the request was dead and
+    // the layout was narrower than intended.
+    mockPathname.value = '/tailor';
+    render(<AppShell>content</AppShell>);
+    const wrapper = document.getElementById('main-content')!.firstElementChild!;
+    expect(wrapper.className).toContain('max-w-[1500px]');
+    expect(wrapper.className).not.toContain('max-w-6xl');
   });
 });

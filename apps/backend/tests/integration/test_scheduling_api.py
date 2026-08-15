@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.auth.kvstore.local import LocalKVStore

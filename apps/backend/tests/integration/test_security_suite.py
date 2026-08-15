@@ -186,7 +186,6 @@ class TestSessionFixation:
 
     async def test_password_reset_rotates_and_revokes_all(self, auth_env):
         """A reset revokes every prior session and issues a fresh one (Property 3)."""
-        from app.auth.sessions import get_session_service
         from app.auth.tokens import get_token_service
 
         record = await _seed_active_user(auth_env, "fix-reset@example.com")

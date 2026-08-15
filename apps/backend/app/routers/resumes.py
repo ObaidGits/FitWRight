@@ -24,6 +24,7 @@ from app.config_cache import get_content_language, load_config as _load_config
 from app.database import db
 from app.errors import ApiError
 from app.pdf import render_resume_pdf, PDFRenderError
+from app.ai_metered import ai_metered
 from app.llm_ratelimit import llm_rate_limit_dep
 from app.config import settings
 from app.resilience import get_idempotency_cache, get_stream_registry
@@ -86,10 +87,13 @@ from app.services.improver import (
     extract_requested_additions,
     merge_user_additions,
     generate_improvements,
-    generate_skill_target_plan,
+    # Imported for indirection, not called directly here: tests patch
+    # `app.routers.resumes.generate_skill_target_plan`, which only works if the name
+    # is bound in this module. Removing them as "unused" broke five tests.
+    generate_skill_target_plan,  # noqa: F401
+    verify_skill_target_plan,  # noqa: F401
     generate_resume_diffs,
     improve_resume,
-    verify_skill_target_plan,
     verify_diff_result,
 )
 from app.services.refiner import refine_resume, calculate_keyword_match
@@ -708,7 +712,7 @@ def _build_ats_score(
             injectable_keywords=ats_raw["injectable_keywords"],
             recommendations=ats_raw["recommendations"],
         )
-    except Exception as e:
+    except Exception:
         logger.warning("ATS score computation failed", exc_info=True)
         return None
 
@@ -856,7 +860,7 @@ async def _generate_auxiliary_messages(
         task_labels.append("interview_prep")
 
     results = await asyncio.gather(*generation_tasks, return_exceptions=True)
-    for label, result in zip(task_labels, results):
+    for label, result in zip(task_labels, results, strict=False):
         if isinstance(result, Exception):
             logger.warning(
                 "%s generation failed: %s",
@@ -946,6 +950,16 @@ async def _structure_uploaded_resume(
             api_error.code,
             exc_info=True,
         )
+        if api_error.code == "llm_authentication_failed":
+            # Remember the refusal so the next upload is refused up front rather
+            # than after the user has waited through another extraction. Without
+            # this, `llm_configured` stays true - the deployment-level
+            # LLM_API_KEY satisfies it - and every attempt repeats the trip.
+            from app.llm_health import mark_credentials_rejected
+
+            mark_credentials_rejected(
+                user_id, get_llm_config(user_id).provider, "resume_parse"
+            )
         await db.update_resume(
             user_id, resume["resume_id"], {"processing_status": "failed"}
         )
@@ -1014,7 +1028,7 @@ def _is_allowed_upload(content_type: str | None, filename: str | None) -> bool:
 @router.post(
     "/upload",
     response_model=ResumeUploadResponse,
-    dependencies=[Depends(llm_rate_limit_dep)],
+    dependencies=[Depends(llm_rate_limit_dep), Depends(ai_metered("resume_parse"))],
 )
 async def upload_resume(
     request: Request,
@@ -1138,7 +1152,10 @@ def _validate_upload_bytes(request: Request, file: UploadFile, content: bytes) -
         raise HTTPException(status_code=400, detail="Empty file")
 
 
-@router.post("/upload/stream", dependencies=[Depends(llm_rate_limit_dep)])
+@router.post(
+    "/upload/stream",
+    dependencies=[Depends(llm_rate_limit_dep), Depends(ai_metered("resume_parse"))],
+)
 async def upload_resume_stream(
     request: Request,
     file: UploadFile = File(...),
@@ -1479,7 +1496,7 @@ async def list_resumes(
 @router.post(
     "/improve/preview",
     response_model=ImproveResumeResponse,
-    dependencies=[Depends(llm_rate_limit_dep)],
+    dependencies=[Depends(llm_rate_limit_dep), Depends(ai_metered("resume_tailor"))],
 )
 async def improve_resume_preview_endpoint(
     request: ImproveResumeRequest,
@@ -2117,7 +2134,7 @@ async def _improve_preview_flow(
 @router.post(
     "/improve/confirm",
     response_model=ImproveResumeResponse,
-    dependencies=[Depends(llm_rate_limit_dep)],
+    dependencies=[Depends(llm_rate_limit_dep), Depends(ai_metered("cover_letter", blocking=False))],
 )
 async def improve_resume_confirm_endpoint(
     request: ImproveResumeConfirmRequest,
@@ -2193,6 +2210,20 @@ async def improve_resume_confirm_endpoint(
         response_warnings.extend(aux_warnings)
 
         improvements_payload = [imp.model_dump() for imp in request.improvements]
+
+        # Score this resume against the job it was tailored for, and keep it.
+        # Until now the score was computed during preview, shown once, and
+        # discarded - so the library could not tell the user which of a dozen
+        # variants actually matched best. This is pure computation (keyword
+        # overlap and structure checks), so it costs no LLM call; the refinement
+        # analysis from preview is not available here, and _build_ats_score
+        # falls back to a direct keyword match in that case. A failure returns
+        # None rather than raising, because a missing score must never cost the
+        # user a resume they already accepted.
+        stage = "score_tailored_resume"
+        ats = _build_ats_score(improved_data, job.get("job_keywords") or {}, None, False)
+        ats_score = ats.overall_score if ats is not None else None
+
         stage = "commit_confirmation"
         status, committed = await db.confirm_tailor_preview(
             user_id,
@@ -2207,6 +2238,7 @@ async def improve_resume_confirm_endpoint(
             outreach_message=outreach_message,
             interview_prep=_serialize_interview_prep(interview_prep),
             title=title,
+            ats_score=ats_score,
         )
         if status == "not_found":
             raise HTTPException(status_code=404, detail="Resume or job description not found")
@@ -2271,7 +2303,7 @@ async def improve_resume_confirm_endpoint(
 @router.post(
     "/improve",
     response_model=ImproveResumeResponse,
-    dependencies=[Depends(llm_rate_limit_dep)],
+    dependencies=[Depends(llm_rate_limit_dep), Depends(ai_metered("resume_tailor"))],
 )
 async def improve_resume_endpoint(
     request: ImproveResumeRequest,
@@ -2955,7 +2987,7 @@ async def delete_resume(
 @router.post(
     "/{resume_id}/retry-processing",
     response_model=ResumeUploadResponse,
-    dependencies=[Depends(llm_rate_limit_dep)],
+    dependencies=[Depends(llm_rate_limit_dep), Depends(ai_metered("resume_parse"))],
 )
 async def retry_processing(
     resume_id: str,
@@ -3147,7 +3179,7 @@ async def create_resume_from_data(
 @router.post(
     "/{resume_id}/generate-cover-letter",
     response_model=GenerateContentResponse,
-    dependencies=[Depends(llm_rate_limit_dep)],
+    dependencies=[Depends(llm_rate_limit_dep), Depends(ai_metered("cover_letter"))],
 )
 async def generate_cover_letter_endpoint(
     resume_id: str,
@@ -3244,7 +3276,7 @@ async def generate_cover_letter_endpoint(
 @router.post(
     "/{resume_id}/generate-outreach",
     response_model=GenerateContentResponse,
-    dependencies=[Depends(llm_rate_limit_dep)],
+    dependencies=[Depends(llm_rate_limit_dep), Depends(ai_metered("outreach"))],
 )
 async def generate_outreach_endpoint(
     resume_id: str,
@@ -3331,7 +3363,7 @@ async def generate_outreach_endpoint(
 @router.post(
     "/{resume_id}/generate-interview-prep",
     response_model=GenerateInterviewPrepResponse,
-    dependencies=[Depends(llm_rate_limit_dep)],
+    dependencies=[Depends(llm_rate_limit_dep), Depends(ai_metered("interview_prep"))],
 )
 async def generate_interview_prep_endpoint(
     resume_id: str,

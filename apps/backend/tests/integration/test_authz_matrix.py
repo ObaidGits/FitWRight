@@ -30,7 +30,7 @@ import pytest
 from fastapi import Depends
 from httpx import ASGITransport, AsyncClient
 
-from app.auth import Capabilities, Principal, get_principal, require_capability
+from app.auth import Capabilities, Principal, require_capability
 from app.auth.accounts import create_user
 from app.auth.passwords import get_password_service
 from app.auth.sessions import get_session_service, hash_token
@@ -40,7 +40,6 @@ from app.models import User
 
 from tests.integration.test_auth_api import (
     STRONG_PW,
-    _cookie_str,
     _login,
     _seed_active_user,
 )
@@ -191,6 +190,9 @@ OWNED_ENDPOINTS: list[tuple[str, str]] = [
     ("PATCH", "/api/v1/discovery/feed/schedule"),
     ("POST", "/api/v1/discovery/feed/schedule/toggle"),
     ("POST", "/api/v1/discovery/search"),
+    # Background search: start returns immediately, progress is polled.
+    ("POST", "/api/v1/discovery/search/start"),
+    ("GET", "/api/v1/discovery/search/progress/sid"),
     # browser extension (apps/extension) - same kill-switch as discovery
     ("GET", "/api/v1/extension/ping"),
     ("GET", "/api/v1/extension/profile"),
@@ -223,6 +225,15 @@ OWNED_ENDPOINTS: list[tuple[str, str]] = [
     ("PATCH", "/api/v1/discovery/feed/bulk-status"),
     ("GET", "/api/v1/discovery/board-health"),
     ("DELETE", "/api/v1/discovery/data"),
+    # a user's own AI allowance and their own usage history
+    ("GET", "/api/v1/credits"),
+    ("GET", "/api/v1/credits/usage"),
+    ("GET", "/api/v1/credits/packs"),
+    # The purchase webhook is deliberately NOT here: Razorpay cannot hold a session, so
+    # its authentication is the HMAC signature over the raw body. That is pinned by
+    # tests/integration/test_ai_razorpay.py instead.
+    ("POST", "/api/v1/credits/purchase"),
+    ("POST", "/api/v1/credits/purchase/confirm"),
 ]
 
 # Provider-cost actions gated behind email verification (R5.6). These must 403
@@ -322,6 +333,7 @@ class TestAnonymousRejected:
                 ("{job_id}", "jid"),
                 ("{application_id}", "aid"),
                 ("{field_id}", "fid"),
+                ("{search_id}", "sid"),
                 ("{provider}", "prov"),
                 ("{session_id}", "sid"),
                 ("{slug}", "sl"),

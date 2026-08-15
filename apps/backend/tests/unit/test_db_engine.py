@@ -10,7 +10,6 @@ audit finding C-1 - ``Database`` actually consumes ``effective_database_url``.
 import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
 
 import pytest
 from sqlalchemy import event

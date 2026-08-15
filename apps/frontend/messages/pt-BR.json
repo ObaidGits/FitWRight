@@ -429,7 +429,9 @@
       "effectiveHeaderFont": "Fonte do Cabeçalho",
       "effectiveBodyFont": "Fonte do Corpo",
       "compactHint": "O modo compacto reduz espaçamento e altura da linha. Margens e tamanho de fonte base permanecem literais.",
-      "resetDefaults": "Restaurar Padrões"
+      "resetDefaults": "Restaurar Padrões",
+      "browseAll": "Explore todos os modelos",
+      "browseAllCta": "Ver modelos"
     },
     "personalInfoForm": {
       "placeholders": {
@@ -472,6 +474,10 @@
       "draftQuarantined": "Um rascunho local salvo estava ilegível e foi isolado para proteger seu trabalho. Seu conteúdo atual está seguro.",
       "storageDegraded": "O armazenamento local está indisponível, então as alterações ficam apenas na memória nesta sessão. Salve no servidor para não perdê-las.",
       "openRecoveryCenter": "Abrir central de recuperação"
+    },
+    "item": {
+      "hide": "Ocultar neste curriculo",
+      "show": "Mostrar neste curriculo"
     }
   },
   "enrichment": {

@@ -31,6 +31,7 @@ import CircleCheck from 'lucide-react/dist/esm/icons/circle-check';
 import Copy from 'lucide-react/dist/esm/icons/copy';
 import Check from 'lucide-react/dist/esm/icons/check';
 import Loader2 from 'lucide-react/dist/esm/icons/loader-2';
+import Pencil from 'lucide-react/dist/esm/icons/pencil';
 
 import { Button } from '@/components/atelier/button';
 import { Card } from '@/components/atelier/card';
@@ -39,6 +40,13 @@ import { Input, Textarea } from '@/components/atelier/input';
 import { Label } from '@/components/atelier/label';
 import { Switch } from '@/components/atelier/misc';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/atelier/tabs';
+import { PaneToggle, paneVisibility } from '@/components/layout/pane-toggle';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from '@/components/atelier/dropdown-menu';
 import { ExportButton } from '@/components/resume/export-button';
 import {
   Select,
@@ -705,6 +713,18 @@ export default function TailorPage() {
 
   const [showOptions, setShowOptions] = React.useState(false);
   const [phase, setPhase] = React.useState<Phase>('input');
+  // Below `lg` the inputs and the preview cannot sit side by side, and stacking
+  // them put the tailored result about two screens below the Generate button
+  // with nothing saying to scroll. A switch decides which one a phone shows.
+  const [mobilePane, setMobilePane] = React.useState<'edit' | 'preview'>('edit');
+  // When a result lands, reveal it. On desktop both panes are always visible so
+  // this is inert; on a phone it is the difference between seeing the tailored
+  // resume and believing nothing happened. Must sit with the other hooks -
+  // this component has early returns below.
+  React.useEffect(() => {
+    if (phase === 'review') setMobilePane('preview');
+    if (phase === 'input') setMobilePane('edit');
+  }, [phase]);
   const [result, setResult] = React.useState<ImprovedResult['data'] | null>(null);
   const [jobId, setJobId] = React.useState('');
   // Collapsed by default to keep the review step compact - the change count
@@ -1255,7 +1275,7 @@ export default function TailorPage() {
         // off in the background so it's already in progress once we land there.
         void runSelectedExtras(newId);
       }
-      router.push(`/resumes/${newId}`);
+      router.push(`/builder?id=${newId}`);
     } catch (e) {
       toast({
         title: toMessage(e, 'Could not save your tailored resume. Please try again.'),
@@ -1425,58 +1445,61 @@ export default function TailorPage() {
       </div>
     );
 
+  /* One primary action. This row previously offered four buttons - "Save &
+     download PDF", "Accept & save", "Save & edit" and "Discard" - three of which
+     contained the word "save" and none of which explained how they differed. The
+     variants now live behind a menu, so the common path is a single unambiguous
+     button. Shared by the desktop preview header and the mobile action bar, so
+     the two can never drift apart. */
+  const reviewActions = (
+    <>
+      <Button size="sm" onClick={onAccept} loading={saving} disabled={downloading || editing}>
+        Save resume
+      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            size="sm"
+            variant="outline"
+            aria-label="More save options"
+            disabled={saving || downloading || editing}
+          >
+            <ChevronDown className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={onAcceptAndDownload} disabled={downloading}>
+            <Download className="h-4 w-4" /> Save and download PDF
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={onAcceptAndEdit} disabled={editing}>
+            <Pencil className="h-4 w-4" /> Save and keep editing
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {/* Stays outside the menu: it is not a save variant, and its two-step
+          confirm cannot work inside a menu that closes on the first click. */}
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={onDiscard}
+        disabled={saving || downloading || editing}
+        className={confirmingDiscard ? 'text-[var(--destructive)]' : undefined}
+      >
+        {confirmingDiscard ? 'Click again to discard' : 'Discard'}
+      </Button>
+    </>
+  );
+
   const previewPane = (
-    <div className="lg:sticky lg:top-6">
+    <div className={`lg:sticky lg:top-6 ${paneVisibility(mobilePane === 'preview')}`}>
       <Card className="flex flex-col overflow-hidden p-0">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] px-4 py-3">
           <p className="flex items-center gap-1.5 text-sm font-medium">
             <Eye className="h-4 w-4" /> {previewTitle}
           </p>
-          {phase === 'review' && result ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                size="sm"
-                onClick={onAcceptAndDownload}
-                loading={downloading}
-                disabled={saving || editing}
-              >
-                <Download className="h-4 w-4" /> Save &amp; download PDF
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={onAccept}
-                loading={saving}
-                disabled={downloading || editing}
-              >
-                Accept &amp; save
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={onAcceptAndEdit}
-                loading={editing}
-                disabled={saving || downloading}
-              >
-                Save &amp; edit
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={onDiscard}
-                disabled={saving || downloading || editing}
-                title={
-                  confirmingDiscard ? 'Click again to discard this tailored resume' : undefined
-                }
-              >
-                {confirmingDiscard ? 'Click again to discard' : 'Discard'}
-              </Button>
-            </div>
-          ) : (
-            <span className="rounded-full bg-[var(--at-surface-2)] px-2 py-0.5 text-xs text-[var(--muted-foreground)]">
-              {selectedTemplateName}
-            </span>
-          )}
+          <span className="rounded-full bg-[var(--at-surface-2)] px-2 py-0.5 text-xs text-[var(--muted-foreground)]">
+            {selectedTemplateName}
+          </span>
         </div>
         {previewBody}
       </Card>
@@ -1484,20 +1507,43 @@ export default function TailorPage() {
   );
 
   return (
-    <div className="mx-auto max-w-[1500px] space-y-6">
+    <div
+      className={`space-y-6 ${
+        // Clear the fixed mobile action bar so it cannot cover the last card.
+        phase === 'review' && result ? 'pb-28 lg:pb-0' : ''
+      }`}
+    >
       <div role="status" aria-live="polite" className="sr-only">
         {announcement}
       </div>
-      <div>
-        <h1 className="text-2xl font-semibold">Tailor to a job</h1>
-        <p className="text-sm text-[var(--muted-foreground)]">
-          Paste a job description and get a tailored resume - grounded in your real experience.
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold">Tailor to a job</h1>
+          <p className="text-sm text-[var(--muted-foreground)]">
+            Paste a job description and get a tailored resume - grounded in your real experience.
+          </p>
+        </div>
+
+        {/* Which pane a narrow screen shows. Hidden from `lg` up, where both are
+            on screen together and the control would be meaningless. */}
+        <PaneToggle value={mobilePane} onChange={setMobilePane} />
       </div>
+
+      {/* Actions for a finished result. Rendered exactly once: an inline
+          right-aligned row on desktop, and a fixed bar above the bottom nav on a
+          phone - where the preview is one of two switchable panes, so anything
+          living inside it would be unreachable from the Edit pane. Duplicating
+          the row per breakpoint would put two identical buttons in the
+          accessibility tree, so this is one node that moves. */}
+      {phase === 'review' && result && (
+        <div className="fixed inset-x-0 bottom-16 z-30 flex flex-wrap items-center justify-end gap-2 border-t border-[var(--border)] bg-[var(--card)] px-4 py-3 shadow-[var(--shadow-at-e2)] lg:static lg:inset-auto lg:z-auto lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
+          {reviewActions}
+        </div>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:items-start">
         {/* LEFT: inputs, controls, fit analysis + result metrics/changes. */}
-        <div className="space-y-6">
+        <div className={`space-y-6 ${paneVisibility(mobilePane === 'edit')}`}>
           {aiUnconfigured && (
             <Card className="flex items-start gap-3 border-[var(--at-warning)]/40 bg-[var(--at-warning)]/8 p-4">
               <Key className="mt-0.5 h-5 w-5 shrink-0 text-[var(--at-warning)]" />
@@ -2372,7 +2418,7 @@ function CompanionDocuments({
   return (
     <Card className="p-4">
       <Tabs value={tab} onValueChange={(v) => onTabChange(v as ExtraKind)}>
-        <TabsList className="w-full flex-wrap justify-start">
+        <TabsList className="w-full justify-start">
           {enabledKinds.map((kind) => {
             const meta = EXTRA_META[kind];
             return (
@@ -2508,7 +2554,7 @@ function CompanionDocuments({
 }
 
 /** Inline keyword-match stats for the tailor review step - the same
- *  client-side comparison the resume page's JdMatchCard does, computed here
+ *  client-side comparison the builder's JD Match mode does, computed here
  *  against the freshly tailored preview so the user sees it without leaving
  *  the tailor flow. No LLM call. */
 function KeywordMatchSummary({ jd, resumeData }: { jd: string; resumeData: ResumeData }) {

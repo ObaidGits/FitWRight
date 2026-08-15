@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Any, AsyncIterator
 from uuid import uuid4
 
-from sqlalchemy import and_, delete, func, select, text, update as sa_update
+from sqlalchemy import and_, case, delete, func, or_, select, text, update as sa_update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import Session, sessionmaker
@@ -44,6 +44,15 @@ from app.models import (
     AnalysisArtifact,
     ApiKey,
     Application,
+    AiChannel,
+    AiChannelHealth,
+    AiUsageLedger,
+    AuditLog,
+    CreditAccount,
+    CreditPack,
+    CreditPurchase,
+    CreditReservation,
+    CreditTransaction,
     DiscoveryCache,
     DiscoveryResult,
     DiscoveryRun,
@@ -287,6 +296,11 @@ class Database:
             "interview_prep": row.interview_prep,
             "title": row.title,
             "template_settings": getattr(row, "template_settings", None),
+            # Match score for the job this resume was tailored against (0-100),
+            # or None for a master resume, which has no job to be measured
+            # against. ``getattr`` keeps the facade safe for a row read before
+            # migration 0032 lands.
+            "ats_score": getattr(row, "ats_score", None),
             # Optimistic-concurrency token (P4 R3.1). Older rows created before
             # migration 0014 read back via the server_default (1); ``getattr``
             # keeps the facade safe if a detached/legacy row lacks the attribute.
@@ -709,6 +723,10 @@ class Database:
                 Resume.created_at,
                 Resume.updated_at,
                 Resume.title,
+                # Lets the library rank and badge variants by how well each
+                # matched its job, instead of showing a dozen indistinguishable
+                # rows. NULL for a master resume (no job to score against).
+                Resume.ats_score,
             ),
             Resume,
             user_id,
@@ -1260,7 +1278,7 @@ class Database:
         """Known fields. Unanswered first, then by how often they come up."""
         from sqlalchemy import case, select
 
-        from app.models import ApplicationField, _utcnow_iso
+        from app.models import ApplicationField
 
         stmt = select(ApplicationField).where(ApplicationField.user_id == user_id)
         if status:
@@ -1337,7 +1355,7 @@ class Database:
     async def delete_application_field(self, user_id: str, field_id: str) -> bool:
         from sqlalchemy import delete
 
-        from app.models import ApplicationField, _utcnow_iso
+        from app.models import ApplicationField
 
         async with self._session() as session:
             async with session.begin():
@@ -1999,6 +2017,7 @@ class Database:
         outreach_message: str | None,
         interview_prep: str | None,
         title: str | None,
+        ats_score: float | None = None,
     ) -> tuple[str, dict[str, Any] | None]:
         """Consume one matching preview and persist all confirmation rows atomically.
 
@@ -2052,6 +2071,11 @@ class Database:
                         interview_prep=interview_prep,
                         title=title,
                         template_settings=source.template_settings,
+                        # Written in the SAME transaction as the resume it
+                        # describes: a score that could land separately could
+                        # also fail separately, leaving a resume whose score
+                        # silently belongs to nothing.
+                        ats_score=ats_score,
                         created_at=now,
                         updated_at=now,
                     )
@@ -3748,6 +3772,1679 @@ class Database:
             "partial": row.partial, "status": row.status, "seen": row.seen,
             "job_id": row.job_id,
             "group_fingerprint": row.group_fingerprint,
+            "created_at": row.created_at,
+        }
+
+    # ------------------------------------------------------------------
+    # AI provider channels (spec: ai-provider-admin, migration 0033)
+    # ------------------------------------------------------------------
+
+    async def list_ai_channels(self, *, only_active: bool = False) -> list[dict[str, Any]]:
+        """Channels in routing order: best priority first, then oldest.
+
+        Ties break on ``created_at`` so ordering is deterministic - two channels
+        sharing a priority must not swap places between requests, or failover
+        behaviour becomes unreproducible.
+
+        Not user-scoped: channels are operator configuration, not user data.
+        """
+        stmt = select(AiChannel).order_by(AiChannel.priority, AiChannel.created_at)
+        if only_active:
+            stmt = stmt.where(AiChannel.state == "active")
+        async with self._session() as session:
+            rows = (await session.execute(stmt)).scalars().all()
+            return [self._ai_channel_to_dict(r) for r in rows]
+
+    async def get_ai_channel(self, channel_id: str) -> dict[str, Any] | None:
+        async with self._session() as session:
+            row = (
+                await session.execute(select(AiChannel).where(AiChannel.id == channel_id))
+            ).scalars().first()
+            return self._ai_channel_to_dict(row) if row else None
+
+    async def create_ai_channel(
+        self,
+        *,
+        name: str,
+        provider: str,
+        model: str,
+        api_base: str | None = None,
+        priority: int = 100,
+        monthly_cost_cap_cents: int | None = None,
+    ) -> dict[str, Any]:
+        """Create a channel. Starts ``disabled`` so it cannot take traffic before
+        the operator has tested it."""
+        now = _now()
+        channel_id = str(uuid4())
+        async with self._session() as session:
+            async with session.begin():
+                session.add(
+                    AiChannel(
+                        id=channel_id,
+                        name=name,
+                        provider=provider,
+                        model=model,
+                        api_base=api_base,
+                        priority=priority,
+                        state="disabled",
+                        structured_verdict="unknown",
+                        monthly_cost_cap_cents=monthly_cost_cap_cents,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                )
+                session.add(AiChannelHealth(channel_id=channel_id, updated_at=now))
+        created = await self.get_ai_channel(channel_id)
+        assert created is not None
+        return created
+
+    async def update_ai_channel(self, channel_id: str, **fields: Any) -> dict[str, Any] | None:
+        """Patch a channel's configuration. Unknown keys are ignored rather than
+        raising, so a future field cannot break an older caller."""
+        allowed = {
+            "name",
+            "provider",
+            "model",
+            "api_base",
+            "priority",
+            "state",
+            "structured_verdict",
+            "monthly_cost_cap_cents",
+        }
+        clean = {k: v for k, v in fields.items() if k in allowed}
+        if not clean:
+            return await self.get_ai_channel(channel_id)
+        async with self._session() as session:
+            async with session.begin():
+                await session.execute(
+                    sa_update(AiChannel)
+                    .where(AiChannel.id == channel_id)
+                    .values(updated_at=_now(), **clean)
+                )
+        return await self.get_ai_channel(channel_id)
+
+    async def delete_ai_channel(self, channel_id: str) -> bool:
+        """Delete a channel and its health row.
+
+        Callers must ensure the channel is drained first - this method does not
+        know about in-flight requests.
+        """
+        async with self._session() as session:
+            async with session.begin():
+                await session.execute(
+                    delete(AiChannelHealth).where(AiChannelHealth.channel_id == channel_id)
+                )
+                result = await session.execute(delete(AiChannel).where(AiChannel.id == channel_id))
+                return bool(result.rowcount)
+
+    async def get_ai_channel_health(self) -> dict[str, dict[str, Any]]:
+        """All health rows, keyed by channel id."""
+        async with self._session() as session:
+            rows = (await session.execute(select(AiChannelHealth))).scalars().all()
+            return {
+                r.channel_id: {
+                    "channel_id": r.channel_id,
+                    "consecutive_failures": r.consecutive_failures,
+                    "cooling_until": r.cooling_until,
+                    "last_ok_at": r.last_ok_at,
+                    "last_error_at": r.last_error_at,
+                    "last_error_class": r.last_error_class,
+                }
+                for r in rows
+            }
+
+    async def record_ai_channel_result(
+        self,
+        channel_id: str,
+        *,
+        ok: bool,
+        error_class: str | None = None,
+        cooldown_seconds: int = 0,
+        failure_threshold: int = 3,
+    ) -> None:
+        """Record one call outcome against a channel's health.
+
+        Success resets the failure counter AND clears any cooldown - a channel that
+        just served a request is by definition healthy, so leaving it benched would
+        strand capacity.
+
+        Failure increments, and only benches the channel once it has failed
+        ``failure_threshold`` times in a row. One bad request must not remove a
+        provider from rotation.
+        """
+        now = _now()
+        async with self._session() as session:
+            async with session.begin():
+                row = (
+                    await session.execute(
+                        select(AiChannelHealth).where(AiChannelHealth.channel_id == channel_id)
+                    )
+                ).scalars().first()
+                if row is None:
+                    row = AiChannelHealth(channel_id=channel_id, updated_at=now)
+                    session.add(row)
+                if ok:
+                    row.consecutive_failures = 0
+                    row.cooling_until = None
+                    row.last_ok_at = now
+                else:
+                    row.consecutive_failures = (row.consecutive_failures or 0) + 1
+                    row.last_error_at = now
+                    row.last_error_class = error_class
+                    if cooldown_seconds > 0 and row.consecutive_failures >= failure_threshold:
+                        row.cooling_until = (
+                            datetime.now(timezone.utc) + timedelta(seconds=cooldown_seconds)
+                        ).isoformat()
+                row.updated_at = now
+
+    @staticmethod
+    def _ai_channel_to_dict(row: AiChannel) -> dict[str, Any]:
+        return {
+            "id": row.id,
+            "name": row.name,
+            "provider": row.provider,
+            "model": row.model,
+            "api_base": row.api_base,
+            "priority": row.priority,
+            "state": row.state,
+            "structured_verdict": row.structured_verdict,
+            "monthly_cost_cap_cents": row.monthly_cost_cap_cents,
+            "created_at": row.created_at,
+            "updated_at": row.updated_at,
+        }
+
+    # ------------------------------------------------------------------
+    # Credits: accounts, reservations, transactions (migration 0035)
+    # ------------------------------------------------------------------
+
+    async def get_or_create_credit_account(self, user_id: str) -> dict[str, Any]:
+        """Fetch a user's account, creating an empty one on first touch.
+
+        Created empty rather than pre-granted: granting is a transaction with its
+        own idempotency key, and doing it here would make "did this user get their
+        signup grant?" unanswerable.
+        """
+        now = _now()
+        async with self._session() as session:
+            async with session.begin():
+                row = (
+                    await session.execute(
+                        select(CreditAccount).where(CreditAccount.user_id == user_id)
+                    )
+                ).scalars().first()
+                if row is None:
+                    row = CreditAccount(user_id=user_id, created_at=now, updated_at=now)
+                    session.add(row)
+                    await session.flush()
+                return self._credit_account_to_dict(row)
+
+    async def reserve_credits(
+        self,
+        user_id: str,
+        *,
+        feature: str,
+        credits: int,
+        idempotency_key: str,
+        ttl_seconds: int = 900,
+    ) -> tuple[str, dict[str, Any] | None]:
+        """Place a hold on ``credits``. Returns ``(status, reservation)``.
+
+        Wraps the real work so a lost idempotency race reports ``replayed`` instead of
+        raising. The up-front duplicate SELECT inside handles the common case; two
+        genuinely simultaneous requests with the SAME key both pass it and one loses
+        the UNIQUE constraint. That is not an error - it is a retry arriving twice,
+        which clients do routinely - and the whole transaction rolls back, so the loser
+        took no hold. Found by the concurrency load test; before this it surfaced as a
+        500 on an ordinary retry.
+        """
+        try:
+            return await self._reserve_credits_once(
+                user_id,
+                feature=feature,
+                credits=credits,
+                idempotency_key=idempotency_key,
+                ttl_seconds=ttl_seconds,
+            )
+        except IntegrityError:
+            existing = await self.get_reservation_by_key(idempotency_key)
+            return "replayed", existing
+
+    async def get_reservation_by_key(self, idempotency_key: str) -> dict[str, Any] | None:
+        """The reservation for an idempotency key, if one exists."""
+        async with self._session() as session:
+            row = (
+                await session.execute(
+                    select(CreditReservation).where(
+                        CreditReservation.idempotency_key == idempotency_key
+                    )
+                )
+            ).scalars().first()
+            return self._reservation_to_dict(row) if row is not None else None
+
+    async def _reserve_credits_once(
+        self,
+        user_id: str,
+        *,
+        feature: str,
+        credits: int,
+        idempotency_key: str,
+        ttl_seconds: int = 900,
+    ) -> tuple[str, dict[str, Any] | None]:
+        """Place a hold on ``credits``. Returns ``(status, reservation)``.
+
+        Status is one of ``created`` / ``replayed`` / ``insufficient`` /
+        ``blocked`` / ``no_account``.
+
+        THE CRITICAL PROPERTY: the balance check and the hold are ONE conditional
+        UPDATE. Reading the balance and then writing it would let N concurrent
+        requests all pass the same check before any of them wrote - the classic
+        overdraft. Here the database evaluates availability at write time, so
+        exactly one of N racing callers can win.
+
+        A replayed idempotency key returns the existing hold instead of taking a
+        second one, so a retried HTTP request cannot double-charge.
+        """
+        now = _now()
+        expires = (datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds)).isoformat()
+        async with self._session() as session:
+            async with session.begin():
+                existing = (
+                    await session.execute(
+                        select(CreditReservation).where(
+                            CreditReservation.idempotency_key == idempotency_key
+                        )
+                    )
+                ).scalars().first()
+                if existing is not None:
+                    return "replayed", self._reservation_to_dict(existing)
+
+                account = (
+                    await session.execute(
+                        select(CreditAccount).where(CreditAccount.user_id == user_id)
+                    )
+                ).scalars().first()
+                if account is None:
+                    return "no_account", None
+                if account.state != "ok" or account.ai_disabled:
+                    return "blocked", None
+
+                # The atomic gate. `rowcount == 0` means insufficient funds - the
+                # database refused, not the application.
+                result = await session.execute(
+                    sa_update(CreditAccount)
+                    .where(
+                        CreditAccount.user_id == user_id,
+                        CreditAccount.state == "ok",
+                        CreditAccount.ai_disabled.is_(False),
+                        (
+                            CreditAccount.allowance_credits
+                            + CreditAccount.wallet_credits
+                            - CreditAccount.reserved_credits
+                        )
+                        >= credits,
+                    )
+                    .values(
+                        reserved_credits=CreditAccount.reserved_credits + credits,
+                        version=CreditAccount.version + 1,
+                        updated_at=now,
+                    )
+                )
+                if not result.rowcount:
+                    return "insufficient", None
+
+                reservation = CreditReservation(
+                    id=str(uuid4()),
+                    user_id=user_id,
+                    feature=feature,
+                    credits_reserved=credits,
+                    state="held",
+                    idempotency_key=idempotency_key,
+                    expires_at=expires,
+                    created_at=now,
+                )
+                session.add(reservation)
+                await session.flush()
+                return "created", self._reservation_to_dict(reservation)
+
+    async def settle_reservation(
+        self,
+        reservation_id: str,
+        *,
+        actual_credits: int,
+        ledger: dict[str, Any] | None = None,
+    ) -> str:
+        """Convert a hold into a real charge. Returns ``settled`` / ``not_held``.
+
+        The balance movement, the ledger row and the transaction row are written in
+        ONE database transaction. Splitting them would eventually produce a charge
+        with no audit trail, or an audit trail for a charge that never happened.
+
+        Spend order is allowance first, then wallet: the free grant expires, so
+        burning it first is strictly better for the user.
+        """
+        now = _now()
+        async with self._session() as session:
+            async with session.begin():
+                res = (
+                    await session.execute(
+                        select(CreditReservation).where(CreditReservation.id == reservation_id)
+                    )
+                ).scalars().first()
+                if res is None or res.state != "held":
+                    return "not_held"
+
+                account = (
+                    await session.execute(
+                        select(CreditAccount).where(CreditAccount.user_id == res.user_id)
+                    )
+                ).scalars().first()
+                if account is None:
+                    return "not_held"
+
+                charge = max(0, int(actual_credits))
+                # Never charge more than was held: the hold is the user's guarantee
+                # of the worst case. Overrun is the operator's to absorb.
+                charge = min(charge, res.credits_reserved)
+
+                # ATOMIC, RELATIVE arithmetic - not read-modify-write.
+                #
+                # The reserve path was always careful about this; settle and release
+                # were not, and mutated the ORM object after reading it. Under
+                # concurrency two settles would both read the same reserved_credits and
+                # one would overwrite the other's decrement, so holds leaked and
+                # lifetime_spent under-counted. Thirty concurrent cycles left 14 credits
+                # frozen and 5 of 15 charges recorded - all thirty reporting success.
+                # Found by the concurrency load test.
+                #
+                # Spend order (allowance first, then wallet) is expressed as a CASE so
+                # it stays one statement. `case` rather than `func.min`, which renders
+                # as SQLite's scalar min() but Postgres's AGGREGATE min().
+                from_allowance = case(
+                    (CreditAccount.allowance_credits >= charge, charge),
+                    else_=func.max(CreditAccount.allowance_credits, 0),
+                )
+                await session.execute(
+                    sa_update(CreditAccount)
+                    .where(CreditAccount.user_id == res.user_id)
+                    .values(
+                        allowance_credits=CreditAccount.allowance_credits - from_allowance,
+                        wallet_credits=CreditAccount.wallet_credits - (charge - from_allowance),
+                        reserved_credits=CreditAccount.reserved_credits - res.credits_reserved,
+                        lifetime_spent=CreditAccount.lifetime_spent + charge,
+                        velocity_spent=func.coalesce(CreditAccount.velocity_spent, 0) + charge,
+                        version=CreditAccount.version + 1,
+                        updated_at=now,
+                    )
+                )
+
+                res.state = "settled"
+                res.settled_at = now
+
+                # Re-read for the ledger's balance_after: the value must be what the
+                # database now holds, not what this process computed before the update.
+                await session.refresh(account)
+                balance_after = account.allowance_credits + account.wallet_credits
+                if charge:
+                    session.add(
+                        CreditTransaction(
+                            id=str(uuid4()),
+                            user_id=res.user_id,
+                            kind="spend",
+                            credits_delta=-charge,
+                            balance_after=balance_after,
+                            external_ref=reservation_id,
+                            idempotency_key=f"spend:{reservation_id}",
+                            created_at=now,
+                        )
+                    )
+                if ledger is not None:
+                    session.add(
+                        AiUsageLedger(
+                            id=str(uuid4()),
+                            user_id=res.user_id,
+                            feature=res.feature,
+                            reservation_id=reservation_id,
+                            credits_charged=charge,
+                            created_at=now,
+                            **ledger,
+                        )
+                    )
+                return "settled"
+
+    async def release_reservation(self, reservation_id: str, *, reason: str = "failed") -> str:
+        """Give a hold back without charging. Returns ``released`` / ``not_held``.
+
+        Used when the call failed for a reason that is not the user's fault -
+        provider 5xx, timeout, our bug. Billing for our own outage is the fastest
+        way to lose trust, so this path must be as reliable as settling.
+        """
+        now = _now()
+        async with self._session() as session:
+            async with session.begin():
+                res = (
+                    await session.execute(
+                        select(CreditReservation).where(CreditReservation.id == reservation_id)
+                    )
+                ).scalars().first()
+                if res is None or res.state != "held":
+                    return "not_held"
+                # Atomic and relative, for the same reason as settle: concurrent
+                # releases that each read-then-wrote would lose one another's
+                # decrements and permanently freeze part of the balance.
+                await session.execute(
+                    sa_update(CreditAccount)
+                    .where(CreditAccount.user_id == res.user_id)
+                    .values(
+                        reserved_credits=CreditAccount.reserved_credits - res.credits_reserved,
+                        version=CreditAccount.version + 1,
+                        updated_at=now,
+                    )
+                )
+                res.state = "released" if reason != "expired" else "expired"
+                res.settled_at = now
+                return "released"
+
+    # ------------------------------------------------------------------
+    # Credit packs (admin-priced, migration 0039)
+    # ------------------------------------------------------------------
+
+    async def list_credit_packs(self, *, only_active: bool = False) -> list[dict[str, Any]]:
+        """Every pack, cheapest-first within the operator's chosen order.
+
+        ``only_active`` is what the customer-facing surface uses. The admin sees
+        inactive ones too, because a pack being withdrawn is a state to manage rather
+        than a row to lose.
+        """
+        async with self._session() as session:
+            stmt = select(CreditPack).order_by(
+                CreditPack.sort_order, CreditPack.amount_minor
+            )
+            if only_active:
+                stmt = stmt.where(CreditPack.active.is_(True))
+            rows = (await session.execute(stmt)).scalars().all()
+            return [self._pack_to_dict(r) for r in rows]
+
+    async def get_credit_pack(self, pack_id: str) -> dict[str, Any] | None:
+        async with self._session() as session:
+            row = (
+                await session.execute(select(CreditPack).where(CreditPack.id == pack_id))
+            ).scalars().first()
+            return self._pack_to_dict(row) if row is not None else None
+
+    async def upsert_credit_pack(self, pack_id: str, **fields: Any) -> dict[str, Any]:
+        """Create or update one pack. Returns the stored row.
+
+        Validation lives here rather than in the router because this is the last point
+        before money is written, and a bad price is the one mistake in this system that
+        reaches a customer's card:
+
+        * A sale must be CHEAPER than the regular price. An operator who fat-fingers a
+          "discount" that raises the price would otherwise be charging more under a
+          banner that says less.
+        * Prices and credits cannot be negative.
+        * A pack with zero credits cannot be sold - it would take money for nothing.
+        """
+        now = _now()
+
+        amount = fields.get("amount_minor")
+        sale = fields.get("sale_amount_minor")
+        credits = fields.get("credits")
+
+        if credits is not None and int(credits) <= 0:
+            raise ValueError("A pack must include at least one credit.")
+        if amount is not None and int(amount) < 0:
+            raise ValueError("A price cannot be negative.")
+        if sale is not None and int(sale) < 0:
+            raise ValueError("A sale price cannot be negative.")
+
+        async with self._session() as session:
+            async with session.begin():
+                row = (
+                    await session.execute(
+                        select(CreditPack).where(CreditPack.id == pack_id)
+                    )
+                ).scalars().first()
+
+                if row is None:
+                    row = CreditPack(
+                        id=pack_id,
+                        label=str(fields.get("label") or pack_id),
+                        credits=int(fields.get("credits") or 0),
+                        amount_minor=int(fields.get("amount_minor") or 0),
+                        currency=str(fields.get("currency") or "INR"),
+                        created_at=now,
+                        updated_at=now,
+                    )
+                    session.add(row)
+
+                for key in (
+                    "label",
+                    "credits",
+                    "amount_minor",
+                    "currency",
+                    "sale_amount_minor",
+                    "sale_label",
+                    "sale_starts_at",
+                    "sale_ends_at",
+                    "active",
+                    "sort_order",
+                    "description",
+                ):
+                    if key in fields:
+                        setattr(row, key, fields[key])
+
+                # Checked AFTER the merge so it judges the resulting row, not the patch:
+                # lowering the regular price alone could otherwise leave a stale sale
+                # sitting above it.
+                if row.sale_amount_minor is not None and row.sale_amount_minor >= row.amount_minor:
+                    raise ValueError(
+                        "The offer price must be lower than the regular price."
+                    )
+                if row.credits <= 0:
+                    raise ValueError("A pack must include at least one credit.")
+
+                row.updated_at = now
+                await session.flush()
+                return self._pack_to_dict(row)
+
+    async def delete_credit_pack(self, pack_id: str) -> bool:
+        """Remove a pack. Existing purchases are unaffected.
+
+        Purchases record the pack id, the credits and the price they were charged, so a
+        deleted pack leaves its history intact and readable - which is why there is no
+        foreign key here.
+        """
+        async with self._session() as session:
+            async with session.begin():
+                result = await session.execute(
+                    delete(CreditPack).where(CreditPack.id == pack_id)
+                )
+                return bool(result.rowcount)
+
+    @staticmethod
+    def _pack_to_dict(row: CreditPack) -> dict[str, Any]:
+        return {
+            "id": row.id,
+            "label": row.label,
+            "credits": row.credits,
+            "amount_minor": row.amount_minor,
+            "currency": row.currency,
+            "sale_amount_minor": row.sale_amount_minor,
+            "sale_label": row.sale_label,
+            "sale_starts_at": row.sale_starts_at,
+            "sale_ends_at": row.sale_ends_at,
+            "active": bool(row.active),
+            "sort_order": row.sort_order,
+            "description": row.description,
+            "created_at": row.created_at,
+            "updated_at": row.updated_at,
+        }
+
+    # ------------------------------------------------------------------
+    # Credit purchases (spec Phase 4). Grants happen ONLY here, from a verified
+    # webhook - never from a client callback.
+    # ------------------------------------------------------------------
+
+    #: Forward-only ordering. A webhook that would move a purchase backwards is
+    #: ignored, because providers deliver out of order and a late `created` must not
+    #: undo a completed `granted`.
+    _PURCHASE_STATE_ORDER = {
+        "created": 0,
+        "failed": 1,
+        "paid": 2,
+        "granted": 3,
+        "refunded": 4,
+    }
+
+    async def create_credit_purchase(
+        self,
+        *,
+        user_id: str,
+        pack_id: str,
+        credits: int,
+        amount_minor: int,
+        currency: str,
+        provider: str,
+    ) -> dict[str, Any]:
+        now = _now()
+        purchase = CreditPurchase(
+            id=str(uuid4()),
+            user_id=user_id,
+            pack_id=pack_id,
+            credits=credits,
+            amount_minor=amount_minor,
+            currency=currency,
+            provider=provider,
+            state="created",
+            created_at=now,
+            updated_at=now,
+        )
+        async with self._session() as session:
+            async with session.begin():
+                session.add(purchase)
+                await session.flush()
+                return self._purchase_to_dict(purchase)
+
+    async def attach_purchase_order(self, purchase_id: str, *, order_id: str) -> None:
+        async with self._session() as session:
+            async with session.begin():
+                await session.execute(
+                    sa_update(CreditPurchase)
+                    .where(CreditPurchase.id == purchase_id)
+                    .values(provider_order_id=order_id, updated_at=_now())
+                )
+
+    async def purchase_event_seen(self, event_id: str) -> bool:
+        """Whether this provider event has already been processed.
+
+        The cheap check. The UNIQUE index is the one that actually holds under
+        concurrent redelivery.
+        """
+        async with self._session() as session:
+            return (
+                await session.execute(
+                    select(CreditPurchase.id).where(
+                        CreditPurchase.provider_event_id == event_id
+                    )
+                )
+            ).scalars().first() is not None
+
+    async def get_purchase_by_order(self, order_id: str) -> dict[str, Any] | None:
+        if not order_id:
+            return None
+        async with self._session() as session:
+            row = (
+                await session.execute(
+                    select(CreditPurchase).where(
+                        CreditPurchase.provider_order_id == order_id
+                    )
+                )
+            ).scalars().first()
+            return self._purchase_to_dict(row) if row is not None else None
+
+    async def grant_purchase(self, purchase_id: str, *, event_id: str) -> str:
+        """Move money into credits. Returns ``granted`` / ``replayed`` / ``not_payable``.
+
+        The credit grant and the purchase state change are ONE transaction. Splitting
+        them would eventually produce a paid purchase with no credits, or credits with
+        no purchase to explain them - and the customer only notices the first.
+        """
+        now = _now()
+        try:
+            async with self._session() as session:
+                async with session.begin():
+                    row = (
+                        await session.execute(
+                            select(CreditPurchase).where(CreditPurchase.id == purchase_id)
+                        )
+                    ).scalars().first()
+                    if row is None:
+                        return "not_payable"
+                    if self._PURCHASE_STATE_ORDER.get(row.state, 0) >= self._PURCHASE_STATE_ORDER[
+                        "granted"
+                    ]:
+                        return "replayed"
+
+                    account = (
+                        await session.execute(
+                            select(CreditAccount).where(CreditAccount.user_id == row.user_id)
+                        )
+                    ).scalars().first()
+                    if account is None:
+                        account = CreditAccount(
+                            user_id=row.user_id, created_at=now, updated_at=now
+                        )
+                        session.add(account)
+                        await session.flush()
+
+                    # Purchased credits go to the WALLET, which never expires - unlike
+                    # the monthly allowance. Someone who paid must not lose it at the
+                    # month boundary.
+                    await session.execute(
+                        sa_update(CreditAccount)
+                        .where(CreditAccount.user_id == row.user_id)
+                        .values(
+                            wallet_credits=CreditAccount.wallet_credits + row.credits,
+                            lifetime_granted=CreditAccount.lifetime_granted + row.credits,
+                            version=CreditAccount.version + 1,
+                            updated_at=now,
+                        )
+                    )
+
+                    session.add(
+                        CreditTransaction(
+                            id=str(uuid4()),
+                            user_id=row.user_id,
+                            kind="purchase",
+                            credits_delta=row.credits,
+                            balance_after=0,  # recomputed below
+                            reason=f"Purchase {row.pack_id}",
+                            external_ref=row.provider_payment_id or row.provider_order_id,
+                            idempotency_key=f"purchase:{row.id}",
+                            created_at=now,
+                        )
+                    )
+
+                    row.state = "granted"
+                    row.provider_event_id = event_id
+                    row.granted_at = now
+                    row.updated_at = now
+                    # Invoice number assigned at grant time, when the sale is real.
+                    row.invoice_number = row.invoice_number or f"INV-{now[:10]}-{row.id[:8]}"
+                    return "granted"
+        except IntegrityError:
+            # Concurrent redelivery lost the UNIQUE race on the event id, or the
+            # purchase transaction key already existed. Either way the other caller
+            # granted it.
+            return "replayed"
+
+    async def fail_purchase(
+        self, purchase_id: str, *, reason: str, event_id: str | None = None
+    ) -> None:
+        now = _now()
+        async with self._session() as session:
+            async with session.begin():
+                row = (
+                    await session.execute(
+                        select(CreditPurchase).where(CreditPurchase.id == purchase_id)
+                    )
+                ).scalars().first()
+                if row is None:
+                    return
+                # Never overwrite a completed purchase with a failure.
+                if self._PURCHASE_STATE_ORDER.get(row.state, 0) >= self._PURCHASE_STATE_ORDER[
+                    "paid"
+                ]:
+                    return
+                row.state = "failed"
+                row.failure_reason = reason
+                row.provider_event_id = event_id or row.provider_event_id
+                row.updated_at = now
+
+    async def refund_purchase(self, purchase_id: str, *, event_id: str) -> str:
+        """Claw back a refunded purchase's credits.
+
+        The balance MAY go negative and the account is blocked when it does. Refusing to
+        go negative would let someone buy, spend, refund, and keep the value - and a
+        blocked account with a negative balance is a conversation, whereas silently
+        absorbing the loss is not.
+        """
+        now = _now()
+        async with self._session() as session:
+            async with session.begin():
+                row = (
+                    await session.execute(
+                        select(CreditPurchase).where(CreditPurchase.id == purchase_id)
+                    )
+                ).scalars().first()
+                if row is None or row.state == "refunded":
+                    return "replayed"
+
+                if row.state == "granted":
+                    await session.execute(
+                        sa_update(CreditAccount)
+                        .where(CreditAccount.user_id == row.user_id)
+                        .values(
+                            wallet_credits=CreditAccount.wallet_credits - row.credits,
+                            version=CreditAccount.version + 1,
+                            updated_at=now,
+                        )
+                    )
+                    account = (
+                        await session.execute(
+                            select(CreditAccount).where(CreditAccount.user_id == row.user_id)
+                        )
+                    ).scalars().first()
+                    if account is not None and (
+                        account.wallet_credits + account.allowance_credits < 0
+                    ):
+                        account.state = "blocked"
+
+                    session.add(
+                        CreditTransaction(
+                            id=str(uuid4()),
+                            user_id=row.user_id,
+                            kind="refund",
+                            credits_delta=-row.credits,
+                            balance_after=0,
+                            reason=f"Refund of purchase {row.id}",
+                            idempotency_key=f"refund:{row.id}",
+                            created_at=now,
+                        )
+                    )
+
+                row.state = "refunded"
+                row.provider_event_id = event_id
+                row.refunded_at = now
+                row.updated_at = now
+                return "refunded"
+
+    async def list_purchases(self, user_id: str, *, limit: int = 20) -> list[dict[str, Any]]:
+        async with self._session() as session:
+            rows = (
+                await session.execute(
+                    Repo.scoped(select(CreditPurchase), CreditPurchase, user_id)
+                    .order_by(CreditPurchase.created_at.desc())
+                    .limit(limit)
+                )
+            ).scalars().all()
+            return [self._purchase_to_dict(r) for r in rows]
+
+    async def purchase_reconciliation(self) -> dict[str, Any]:
+        """Paid-but-not-granted and granted-but-not-paid (task 4.6).
+
+        Both directions matter and they fail differently: the first is a customer who
+        paid and got nothing (they will tell you), the second is credits given away
+        (nobody will).
+        """
+        async with self._session() as session:
+            paid_not_granted = (
+                await session.execute(
+                    select(func.count(CreditPurchase.id)).where(
+                        CreditPurchase.state == "paid"
+                    )
+                )
+            ).scalar() or 0
+            granted_without_payment = (
+                await session.execute(
+                    select(func.count(CreditPurchase.id)).where(
+                        CreditPurchase.state == "granted",
+                        CreditPurchase.provider_event_id.is_(None),
+                    )
+                )
+            ).scalar() or 0
+        findings = {
+            "paid_not_granted": int(paid_not_granted),
+            "granted_without_verified_payment": int(granted_without_payment),
+        }
+        return {
+            "status": "ok" if not any(findings.values()) else "attention",
+            "findings": findings,
+        }
+
+    @staticmethod
+    def _purchase_to_dict(row: CreditPurchase) -> dict[str, Any]:
+        return {
+            "id": row.id,
+            "user_id": row.user_id,
+            "pack_id": row.pack_id,
+            "credits": row.credits,
+            "amount_minor": row.amount_minor,
+            "currency": row.currency,
+            "tax_minor": row.tax_minor,
+            "state": row.state,
+            "provider": row.provider,
+            "provider_order_id": row.provider_order_id,
+            "invoice_number": row.invoice_number,
+            "failure_reason": row.failure_reason,
+            "created_at": row.created_at,
+            "granted_at": row.granted_at,
+            "refunded_at": row.refunded_at,
+        }
+
+    async def channel_performance(self, *, days: int = 7) -> list[dict[str, Any]]:
+        """Success rate and p95 latency per channel (task 5.1).
+
+        P95 rather than an average, because an average hides the failure mode that
+        matters: a channel that is usually quick and occasionally terrible looks
+        healthy on the mean, and users only ever remember the terrible calls.
+
+        The percentile is computed in Python over the window's rows for this table's
+        expected size. SQLite has no percentile function, and a portable SQL
+        approximation would be harder to read than it is worth at this scale - the
+        honest tradeoff is written here rather than discovered later.
+        """
+        cutoff = (
+            datetime.now(timezone.utc) - timedelta(days=max(1, int(days or 7)))
+        ).isoformat()
+
+        async with self._session() as session:
+            rows = (
+                await session.execute(
+                    select(
+                        AiUsageLedger.channel_id,
+                        AiUsageLedger.outcome,
+                        AiUsageLedger.latency_ms,
+                    ).where(
+                        AiUsageLedger.created_at >= cutoff,
+                        AiUsageLedger.channel_id.is_not(None),
+                    )
+                )
+            ).all()
+
+        grouped: dict[str, dict[str, Any]] = {}
+        for channel_id, outcome, latency in rows:
+            entry = grouped.setdefault(
+                str(channel_id), {"calls": 0, "ok": 0, "latencies": []}
+            )
+            entry["calls"] += 1
+            if outcome == "ok":
+                entry["ok"] += 1
+            if latency is not None:
+                entry["latencies"].append(int(latency))
+
+        out: list[dict[str, Any]] = []
+        for channel_id, entry in grouped.items():
+            latencies = sorted(entry["latencies"])
+            p95 = None
+            if latencies:
+                # Nearest-rank: index of the first value at or above the 95th
+                # percentile. Clamped so a single sample reports itself rather than
+                # indexing past the end.
+                idx = min(len(latencies) - 1, int(len(latencies) * 0.95))
+                p95 = latencies[idx]
+            out.append(
+                {
+                    "channel_id": channel_id,
+                    "calls": entry["calls"],
+                    "ok": entry["ok"],
+                    "success_rate": round(entry["ok"] / entry["calls"], 4)
+                    if entry["calls"]
+                    else None,
+                    "p95_latency_ms": p95,
+                }
+            )
+        out.sort(key=lambda r: (r["success_rate"] is None, r["success_rate"]))
+        return out
+
+    async def trim_ai_usage_ledger(self, *, older_than_days: int = 400) -> int:
+        """Delete usage rows older than the horizon. Returns the count removed.
+
+        Bounded by nothing on purpose: this runs on a schedule, and leaving a partial
+        backlog would mean the table never actually converges on the retention window.
+        It is a single DELETE with an indexed predicate.
+        """
+        cutoff = (
+            datetime.now(timezone.utc)
+            - timedelta(days=max(1, int(older_than_days or 400)))
+        ).isoformat()
+
+        async with self._session() as session:
+            async with session.begin():
+                result = await session.execute(
+                    delete(AiUsageLedger).where(AiUsageLedger.created_at < cutoff)
+                )
+                return int(result.rowcount or 0)
+
+    async def credit_reconciliation(self) -> dict[str, Any]:
+        """Counts that should all be zero. Anything else means an invariant broke.
+
+        Reported, never auto-repaired: each of these is evidence of HOW something went
+        wrong, and a silent fix would delete that evidence while leaving the cause in
+        place.
+        """
+        async with self._session() as session:
+            negative_available = (
+                await session.execute(
+                    select(func.count(CreditAccount.user_id)).where(
+                        (
+                            CreditAccount.allowance_credits
+                            + CreditAccount.wallet_credits
+                            - CreditAccount.reserved_credits
+                        )
+                        < 0
+                    )
+                )
+            ).scalar() or 0
+
+            negative_balances = (
+                await session.execute(
+                    select(func.count(CreditAccount.user_id)).where(
+                        or_(
+                            CreditAccount.allowance_credits < 0,
+                            CreditAccount.wallet_credits < 0,
+                            CreditAccount.reserved_credits < 0,
+                        )
+                    )
+                )
+            ).scalar() or 0
+
+            # A hold that outlived its expiry means the sweep is not running - the
+            # failure that silently freezes user balances.
+            now = _now()
+            stuck_reservations = (
+                await session.execute(
+                    select(func.count(CreditReservation.id)).where(
+                        CreditReservation.state == "held",
+                        CreditReservation.expires_at < now,
+                    )
+                )
+            ).scalar() or 0
+
+            # Charged more than was ever held. The settle caps the charge at the hold,
+            # so this should be arithmetically impossible - which is exactly why it is
+            # worth counting. Joined through the ledger, because the charge is recorded
+            # there and the hold on the reservation.
+            overcharged = (
+                await session.execute(
+                    select(func.count(AiUsageLedger.id))
+                    .join(
+                        CreditReservation,
+                        CreditReservation.id == AiUsageLedger.reservation_id,
+                    )
+                    .where(
+                        AiUsageLedger.credits_charged
+                        > CreditReservation.credits_reserved
+                    )
+                )
+            ).scalar() or 0
+
+            spent_more_than_granted = (
+                await session.execute(
+                    select(func.count(CreditAccount.user_id)).where(
+                        CreditAccount.lifetime_spent > CreditAccount.lifetime_granted
+                    )
+                )
+            ).scalar() or 0
+
+        findings = {
+            "negative_available": int(negative_available),
+            "negative_component_balances": int(negative_balances),
+            "expired_holds_not_swept": int(stuck_reservations),
+            "settled_above_reserved": int(overcharged),
+            "spent_more_than_granted": int(spent_more_than_granted),
+        }
+        return {
+            "status": "ok" if not any(findings.values()) else "attention",
+            "findings": findings,
+        }
+
+    async def accounts_sharing_ip_hash(
+        self, *, days: int = 7, min_accounts: int = 3
+    ) -> list[dict[str, Any]]:
+        """Groups of accounts seen from the same hashed IP.
+
+        Reads the audit trail's EXISTING hashed IPs. Nothing new is collected and no
+        raw address is stored or returned - the hash is all this needs, and all it can
+        get.
+        """
+        cutoff = (
+            datetime.now(timezone.utc) - timedelta(days=max(1, int(days or 7)))
+        ).isoformat()
+
+        async with self._session() as session:
+            rows = (
+                await session.execute(
+                    select(AuditLog.ip_hash, AuditLog.actor_user_id)
+                    .where(
+                        AuditLog.ts >= cutoff,
+                        AuditLog.ip_hash.is_not(None),
+                        AuditLog.actor_user_id.is_not(None),
+                    )
+                    .distinct()
+                )
+            ).all()
+
+        grouped: dict[str, set[str]] = {}
+        for ip_hash, user_id in rows:
+            grouped.setdefault(str(ip_hash), set()).add(str(user_id))
+
+        return [
+            {"ip_hash": ip_hash, "user_ids": sorted(users)}
+            for ip_hash, users in grouped.items()
+            if len(users) >= min_accounts
+        ]
+
+    async def accounts_spending_allowance_immediately(
+        self, *, days: int = 7, limit: int = 20
+    ) -> list[dict[str, Any]]:
+        """Accounts that consumed their whole allowance very soon after creation.
+
+        Computed from the account's own created_at and its usage rows, so it needs no
+        extra tracking. Reported in MINUTES because that is the unit that makes the
+        signal legible - "spent it in four minutes" reads differently from a rate.
+        """
+        cutoff = (
+            datetime.now(timezone.utc) - timedelta(days=max(1, int(days or 7)))
+        ).isoformat()
+
+        async with self._session() as session:
+            accounts = (
+                await session.execute(
+                    select(CreditAccount.user_id, CreditAccount.created_at).where(
+                        CreditAccount.created_at >= cutoff,
+                        CreditAccount.allowance_credits == 0,
+                        CreditAccount.lifetime_spent > 0,
+                    )
+                )
+            ).all()
+
+            out: list[dict[str, Any]] = []
+            for user_id, created_at in accounts:
+                last = (
+                    await session.execute(
+                        select(func.max(AiUsageLedger.created_at)).where(
+                            AiUsageLedger.user_id == user_id
+                        )
+                    )
+                ).scalar()
+                if not last or not created_at:
+                    continue
+                try:
+                    minutes = int(
+                        (
+                            datetime.fromisoformat(str(last))
+                            - datetime.fromisoformat(str(created_at))
+                        ).total_seconds()
+                        // 60
+                    )
+                except (TypeError, ValueError):
+                    continue
+                # An hour is the threshold for "immediately" - long enough that a
+                # genuinely fast user is not flagged for being efficient.
+                if 0 <= minutes <= 60:
+                    out.append({"user_id": str(user_id), "minutes": minutes})
+
+            out.sort(key=lambda r: r["minutes"])
+            return out[:limit]
+
+    async def set_ai_channel_key(self, channel_id: str, ciphertext: str | None) -> bool:
+        """Store (or clear) a channel's encrypted credential. True if the row existed.
+
+        Separate from ``update_ai_channel`` on purpose: every other channel field is
+        safe to echo back in an API response, and this one must never be. Keeping the
+        write on its own method means a future ``update_ai_channel(**payload)`` cannot
+        accidentally accept a ciphertext from a request body.
+        """
+        async with self._session() as session:
+            async with session.begin():
+                row = (
+                    await session.execute(
+                        select(AiChannel).where(AiChannel.id == channel_id)
+                    )
+                ).scalars().first()
+                if row is None:
+                    return False
+                row.api_key_ciphertext = ciphertext
+                row.updated_at = _now()
+                return True
+
+    async def get_ai_channel_key(self, channel_id: str) -> str | None:
+        """The stored ciphertext for one channel, or None."""
+        async with self._session() as session:
+            return (
+                await session.execute(
+                    select(AiChannel.api_key_ciphertext).where(AiChannel.id == channel_id)
+                )
+            ).scalars().first()
+
+    async def get_ai_channel_keys(self) -> dict[str, str]:
+        """Ciphertexts for every channel that has one, keyed by channel id.
+
+        One query rather than N: route resolution needs all of them on every request
+        that uses channels, and a per-channel round trip would put the database on the
+        latency path of every generation.
+        """
+        async with self._session() as session:
+            rows = (
+                await session.execute(
+                    select(AiChannel.id, AiChannel.api_key_ciphertext).where(
+                        AiChannel.api_key_ciphertext.is_not(None)
+                    )
+                )
+            ).all()
+        return {str(r[0]): str(r[1]) for r in rows}
+
+    async def channel_spend_micros_this_month(self) -> dict[str, int]:
+        """Month-to-date provider cost per channel, in micros.
+
+        Anchored to the first of the UTC month rather than a rolling 30 days,
+        because that is what an operator means by "monthly cap" and what provider
+        invoices align to. A rolling window would let a cap be exceeded within a
+        calendar month and then silently reopen mid-month.
+        """
+        now = datetime.now(timezone.utc)
+        start = now.replace(
+            day=1, hour=0, minute=0, second=0, microsecond=0
+        ).isoformat()
+
+        async with self._session() as session:
+            rows = (
+                await session.execute(
+                    select(
+                        AiUsageLedger.channel_id,
+                        func.coalesce(func.sum(AiUsageLedger.provider_cost_micros), 0),
+                    )
+                    .where(
+                        AiUsageLedger.created_at >= start,
+                        AiUsageLedger.channel_id.is_not(None),
+                    )
+                    .group_by(AiUsageLedger.channel_id)
+                )
+            ).all()
+        return {str(r[0]): int(r[1] or 0) for r in rows}
+
+    async def ai_spend_summary(self, *, days: int = 30, top: int = 10) -> dict[str, Any]:
+        """Aggregate the usage ledger for the operator's spend view.
+
+        Aggregated in SQL rather than in Python because this table grows by one row
+        per AI call: pulling it into the process to sum it would work in month one and
+        fall over later, which is the worst possible time to find out.
+
+        ``unpriced_calls`` is reported alongside the totals on purpose. Cost is zero
+        for a model with no rate entry, so without that count a margin figure computed
+        from an incomplete rate table looks authoritative while being wrong.
+        """
+        cutoff = (
+            datetime.now(timezone.utc) - timedelta(days=max(1, min(int(days or 30), 365)))
+        ).isoformat()
+
+        async with self._session() as session:
+            totals = (
+                await session.execute(
+                    select(
+                        func.count(AiUsageLedger.id),
+                        func.coalesce(func.sum(AiUsageLedger.total_tokens), 0),
+                        func.coalesce(func.sum(AiUsageLedger.credits_charged), 0),
+                        func.coalesce(func.sum(AiUsageLedger.provider_cost_micros), 0),
+                    ).where(AiUsageLedger.created_at >= cutoff)
+                )
+            ).one()
+
+            unpriced = (
+                await session.execute(
+                    select(func.count(AiUsageLedger.id)).where(
+                        AiUsageLedger.created_at >= cutoff,
+                        AiUsageLedger.total_tokens > 0,
+                        AiUsageLedger.provider_cost_micros == 0,
+                    )
+                )
+            ).scalar() or 0
+
+            failed = (
+                await session.execute(
+                    select(func.count(AiUsageLedger.id)).where(
+                        AiUsageLedger.created_at >= cutoff,
+                        AiUsageLedger.outcome != "ok",
+                    )
+                )
+            ).scalar() or 0
+
+            by_day = (
+                await session.execute(
+                    select(
+                        func.substr(AiUsageLedger.created_at, 1, 10).label("day"),
+                        func.count(AiUsageLedger.id),
+                        func.coalesce(func.sum(AiUsageLedger.credits_charged), 0),
+                        func.coalesce(func.sum(AiUsageLedger.provider_cost_micros), 0),
+                    )
+                    .where(AiUsageLedger.created_at >= cutoff)
+                    .group_by("day")
+                    .order_by("day")
+                )
+            ).all()
+
+            by_feature = (
+                await session.execute(
+                    select(
+                        AiUsageLedger.feature,
+                        func.count(AiUsageLedger.id),
+                        func.coalesce(func.sum(AiUsageLedger.credits_charged), 0),
+                        func.coalesce(func.sum(AiUsageLedger.provider_cost_micros), 0),
+                    )
+                    .where(AiUsageLedger.created_at >= cutoff)
+                    .group_by(AiUsageLedger.feature)
+                    .order_by(func.sum(AiUsageLedger.provider_cost_micros).desc())
+                )
+            ).all()
+
+            by_channel = (
+                await session.execute(
+                    select(
+                        AiUsageLedger.channel_id,
+                        func.count(AiUsageLedger.id),
+                        func.coalesce(func.sum(AiUsageLedger.provider_cost_micros), 0),
+                    )
+                    .where(AiUsageLedger.created_at >= cutoff)
+                    .group_by(AiUsageLedger.channel_id)
+                    .order_by(func.sum(AiUsageLedger.provider_cost_micros).desc())
+                )
+            ).all()
+
+            top_users = (
+                await session.execute(
+                    select(
+                        AiUsageLedger.user_id,
+                        func.count(AiUsageLedger.id),
+                        func.coalesce(func.sum(AiUsageLedger.credits_charged), 0),
+                        func.coalesce(func.sum(AiUsageLedger.provider_cost_micros), 0),
+                    )
+                    .where(AiUsageLedger.created_at >= cutoff)
+                    .group_by(AiUsageLedger.user_id)
+                    .order_by(func.sum(AiUsageLedger.provider_cost_micros).desc())
+                    .limit(max(1, min(int(top or 10), 100)))
+                )
+            ).all()
+
+        return {
+            "days": days,
+            "calls": int(totals[0] or 0),
+            "total_tokens": int(totals[1] or 0),
+            "credits_charged": int(totals[2] or 0),
+            "provider_cost_micros": int(totals[3] or 0),
+            "unpriced_calls": int(unpriced),
+            "failed_calls": int(failed),
+            "by_day": [
+                {
+                    "day": r[0],
+                    "calls": int(r[1]),
+                    "credits": int(r[2]),
+                    "cost_micros": int(r[3]),
+                }
+                for r in by_day
+            ],
+            "by_feature": [
+                {
+                    "feature": r[0],
+                    "calls": int(r[1]),
+                    "credits": int(r[2]),
+                    "cost_micros": int(r[3]),
+                }
+                for r in by_feature
+            ],
+            "by_channel": [
+                {"channel_id": r[0], "calls": int(r[1]), "cost_micros": int(r[2])}
+                for r in by_channel
+            ],
+            "top_users": [
+                {
+                    "user_id": r[0],
+                    "calls": int(r[1]),
+                    "credits": int(r[2]),
+                    "cost_micros": int(r[3]),
+                }
+                for r in top_users
+            ],
+        }
+
+    async def list_accounts_needing_refill(
+        self, *, period: str, limit: int = 500
+    ) -> list[str]:
+        """User ids whose allowance period is missing or older than ``period``.
+
+        Compares on the stored ISO timestamp's ``YYYY-MM`` prefix, which is why the
+        stamp is written in UTC: a lexical prefix match is only equivalent to a
+        calendar comparison when every row uses the same zone.
+
+        Bounded by ``limit`` - a refill sweep that grew with the user table would
+        eventually time out the job that calls it, and a partial sweep followed by
+        another tick is harmless because each grant is idempotent per period.
+        """
+        async with self._session() as session:
+            rows = (
+                await session.execute(
+                    select(CreditAccount.user_id)
+                    .where(
+                        or_(
+                            CreditAccount.allowance_period_start.is_(None),
+                            CreditAccount.allowance_period_start < period,
+                        )
+                    )
+                    .limit(limit)
+                )
+            ).scalars().all()
+            return [str(r) for r in rows]
+
+    async def sweep_expired_reservations(self, *, limit: int = 500) -> int:
+        """Release holds past their expiry. Returns how many were released.
+
+        Without this a crashed worker freezes part of a balance permanently, and
+        the user sees "insufficient credits" while their dashboard shows plenty.
+        Bounded by ``limit`` so one sweep cannot become a long transaction.
+        """
+        now_iso = _now()
+        async with self._session() as session:
+            stale = (
+                await session.execute(
+                    select(CreditReservation.id)
+                    .where(
+                        CreditReservation.state == "held",
+                        CreditReservation.expires_at < now_iso,
+                    )
+                    .limit(limit)
+                )
+            ).scalars().all()
+        released = 0
+        for rid in stale:
+            if await self.release_reservation(rid, reason="expired") == "released":
+                released += 1
+        return released
+
+    async def grant_credits(
+        self,
+        user_id: str,
+        *,
+        credits: int,
+        kind: str,
+        idempotency_key: str,
+        reason: str | None = None,
+        actor_user_id: str | None = None,
+        to_wallet: bool = True,
+        period_start: str | None = None,
+    ) -> str:
+        """Add credits. Returns ``granted`` / ``replayed`` / ``no_account``.
+
+        Idempotent by key, which is what makes a double-run refill job or a
+        redelivered payment webhook harmless. ``to_wallet=False`` targets the
+        expiring allowance instead (monthly refill).
+
+        The duplicate check is done TWICE, deliberately. The up-front SELECT is the
+        common, cheap path. The UNIQUE constraint is the one that actually holds
+        under concurrency, because two callers can both pass the SELECT before
+        either inserts - so a constraint violation here is not an error, it is the
+        other caller having won, and it reports ``replayed`` like any other repeat.
+        Without this the loser of that race raised a 500, which for the monthly
+        allowance meant a user's first-ever generation could fail at random.
+        """
+        try:
+            return await self._grant_credits_once(
+                user_id,
+                credits=credits,
+                kind=kind,
+                idempotency_key=idempotency_key,
+                reason=reason,
+                actor_user_id=actor_user_id,
+                to_wallet=to_wallet,
+                period_start=period_start,
+            )
+        except IntegrityError:
+            return "replayed"
+
+    async def _grant_credits_once(
+        self,
+        user_id: str,
+        *,
+        credits: int,
+        kind: str,
+        idempotency_key: str,
+        reason: str | None = None,
+        actor_user_id: str | None = None,
+        to_wallet: bool = True,
+        period_start: str | None = None,
+    ) -> str:
+
+        now = _now()
+        async with self._session() as session:
+            async with session.begin():
+                dup = (
+                    await session.execute(
+                        select(CreditTransaction.id).where(
+                            CreditTransaction.idempotency_key == idempotency_key
+                        )
+                    )
+                ).scalars().first()
+                if dup is not None:
+                    return "replayed"
+
+                account = (
+                    await session.execute(
+                        select(CreditAccount).where(CreditAccount.user_id == user_id)
+                    )
+                ).scalars().first()
+                if account is None:
+                    return "no_account"
+
+                if to_wallet:
+                    account.wallet_credits += credits
+                else:
+                    # Refill REPLACES the allowance rather than adding to it:
+                    # unused free credits do not accumulate (stated in the UI).
+                    account.allowance_credits = credits
+                    account.allowance_period_start = period_start or now
+                account.lifetime_granted += max(0, credits)
+                account.version += 1
+                account.updated_at = now
+
+                session.add(
+                    CreditTransaction(
+                        id=str(uuid4()),
+                        user_id=user_id,
+                        kind=kind,
+                        credits_delta=credits,
+                        balance_after=account.allowance_credits + account.wallet_credits,
+                        reason=reason,
+                        actor_user_id=actor_user_id,
+                        idempotency_key=idempotency_key,
+                        created_at=now,
+                    )
+                )
+                return "granted"
+
+    async def set_credit_policy(
+        self,
+        user_id: str,
+        *,
+        monthly_allowance_override: int | None = ...,  # type: ignore[assignment]
+        velocity_cap_override: int | None = ...,  # type: ignore[assignment]
+        ai_disabled: bool | None = None,
+        state: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Set per-user policy. Sentinel ``...`` means "leave unchanged", so an
+        override can be explicitly cleared back to ``None`` (inherit global)."""
+        now = _now()
+        async with self._session() as session:
+            async with session.begin():
+                account = (
+                    await session.execute(
+                        select(CreditAccount).where(CreditAccount.user_id == user_id)
+                    )
+                ).scalars().first()
+                if account is None:
+                    return None
+                if monthly_allowance_override is not ...:
+                    account.monthly_allowance_override = monthly_allowance_override
+                if velocity_cap_override is not ...:
+                    account.velocity_cap_override = velocity_cap_override
+                if ai_disabled is not None:
+                    account.ai_disabled = ai_disabled
+                if state is not None:
+                    account.state = state
+                account.version += 1
+                account.updated_at = now
+                return self._credit_account_to_dict(account)
+
+    async def record_usage_only(self, user_id: str, **ledger: Any) -> None:
+        """Write a ledger row with no charge.
+
+        Two callers: a user on their own API key (metered for observability,
+        charged zero) and a failed call (so a zero charge is provable rather than
+        merely absent).
+        """
+        async with self._session() as session:
+            async with session.begin():
+                session.add(
+                    AiUsageLedger(
+                        id=str(uuid4()), user_id=user_id, created_at=_now(), **ledger
+                    )
+                )
+
+    async def list_usage(
+        self, user_id: str, *, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        """A user's own AI history, newest first."""
+        async with self._session() as session:
+            rows = (
+                await session.execute(
+                    Repo.scoped(select(AiUsageLedger), AiUsageLedger, user_id)
+                    .order_by(AiUsageLedger.created_at.desc())
+                    .limit(limit)
+                )
+            ).scalars().all()
+            return [
+                {
+                    "id": r.id,
+                    "feature": r.feature,
+                    "model": r.model,
+                    "total_tokens": r.total_tokens,
+                    "tokens_estimated": r.tokens_estimated,
+                    "credits_charged": r.credits_charged,
+                    "outcome": r.outcome,
+                    "created_at": r.created_at,
+                }
+                for r in rows
+            ]
+
+    async def feature_usage_percentile(
+        self, feature: str, *, percentile: float = 0.95, sample: int = 200
+    ) -> int | None:
+        """Observed token usage at ``percentile`` for ``feature``, or None.
+
+        This is what makes a pre-flight estimate honest instead of a hardcoded
+        guess: the reservation is sized from what this feature actually costs in
+        practice. Returns None until there is enough data, so the caller can fall
+        back to a conservative default rather than a fabricated one.
+        """
+        async with self._session() as session:
+            rows = (
+                await session.execute(
+                    select(AiUsageLedger.total_tokens)
+                    .where(
+                        AiUsageLedger.feature == feature,
+                        AiUsageLedger.outcome == "ok",
+                        AiUsageLedger.total_tokens > 0,
+                    )
+                    .order_by(AiUsageLedger.created_at.desc())
+                    .limit(sample)
+                )
+            ).scalars().all()
+        if len(rows) < 10:
+            return None
+        ordered = sorted(int(v) for v in rows)
+        idx = min(len(ordered) - 1, max(0, int(round(percentile * (len(ordered) - 1)))))
+        return ordered[idx]
+
+    @staticmethod
+    def _credit_account_to_dict(row: CreditAccount) -> dict[str, Any]:
+        allowance = row.allowance_credits or 0
+        wallet = row.wallet_credits or 0
+        reserved = row.reserved_credits or 0
+        return {
+            "user_id": row.user_id,
+            "allowance_credits": allowance,
+            "allowance_period_start": row.allowance_period_start,
+            "wallet_credits": wallet,
+            "reserved_credits": reserved,
+            # Derived, never stored - a maintained "available" column would
+            # eventually disagree with its own components.
+            "available_credits": allowance + wallet - reserved,
+            "lifetime_granted": row.lifetime_granted or 0,
+            "lifetime_spent": row.lifetime_spent or 0,
+            "state": row.state,
+            "monthly_allowance_override": row.monthly_allowance_override,
+            "velocity_cap_override": row.velocity_cap_override,
+            "ai_disabled": bool(row.ai_disabled),
+            "version": row.version,
+        }
+
+    @staticmethod
+    def _reservation_to_dict(row: CreditReservation) -> dict[str, Any]:
+        return {
+            "id": row.id,
+            "user_id": row.user_id,
+            "feature": row.feature,
+            "credits_reserved": row.credits_reserved,
+            "state": row.state,
+            "expires_at": row.expires_at,
             "created_at": row.created_at,
         }
 

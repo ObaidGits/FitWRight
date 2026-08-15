@@ -5,7 +5,6 @@ Covers §20 (PDF), §21 (i18n), §22 (fingerprinting), §25 (cost), §26 (robots
 adapters and their orchestrator integration.
 """
 
-import io
 
 import pytest
 

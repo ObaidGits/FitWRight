@@ -7,6 +7,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.auth import get_effective_user_id, require_verified_user_id
+from app.ai_metered import ai_metered
 from app.llm_ratelimit import enforce_llm_rate_limit, llm_rate_limit_dep
 from app.database import db
 from app.llm import llm_api_error
@@ -190,7 +191,7 @@ async def resume_wizard_assist(
 @router.post(
     "/finalize",
     response_model=ResumeWizardFinalizeResponse,
-    dependencies=[Depends(llm_rate_limit_dep)],
+    dependencies=[Depends(llm_rate_limit_dep), Depends(ai_metered("resume_wizard"))],
 )
 async def finalize_resume_wizard(
     request: ResumeWizardFinalizeRequest,

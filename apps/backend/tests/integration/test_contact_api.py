@@ -5,7 +5,6 @@ default, so we deterministically exercise validation, spam heuristics, de-dup,
 delivery wiring, and rate limiting without any network.
 """
 
-from unittest.mock import AsyncMock
 
 import pytest
 from httpx import ASGITransport, AsyncClient

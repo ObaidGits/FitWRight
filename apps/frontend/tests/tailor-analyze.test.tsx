@@ -195,7 +195,7 @@ describe('Tailor - Analyze fit', () => {
     expect(jid).toBe('job-1');
     expect(promptId).toBeUndefined();
     // Falls through to the review state once the stream resolves.
-    await waitFor(() => expect(screen.getByText(/Accept & save/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/Save resume/i)).toBeInTheDocument());
     expect(previewImproveResumeMock).not.toHaveBeenCalled();
   });
 
@@ -241,7 +241,7 @@ describe('Tailor - Analyze fit', () => {
       await waitFor(() =>
         expect(previewImproveResumeMock).toHaveBeenCalledWith('r1', 'job-1', undefined, undefined)
       );
-      await waitFor(() => expect(screen.getByText(/Accept & save/i)).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByText(/Save resume/i)).toBeInTheDocument());
     }
   );
 
@@ -296,11 +296,11 @@ describe('Tailor - Analyze fit', () => {
     fireEvent.click(screen.getByRole('button', { name: /^generate$/i }));
 
     await waitFor(() => expect(recoverTailorPreviewMock).toHaveBeenCalledOnce());
-    await waitFor(() => expect(screen.getByText(/Accept & save/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/Save resume/i)).toBeInTheDocument());
     expect(previewImproveResumeMock).not.toHaveBeenCalled();
   });
 
-  it('passes preview_id through Accept & save', async () => {
+  it('passes preview_id through Save resume', async () => {
     uploadJobDescriptionsMock.mockResolvedValue('job-1');
     streamImproveResumeMock.mockResolvedValue(RESULT);
     confirmImproveResumeMock.mockResolvedValue({
@@ -310,8 +310,8 @@ describe('Tailor - Analyze fit', () => {
     renderPage();
     fireEvent.change(screen.getByLabelText('Job description'), { target: { value: LONG_JD } });
     fireEvent.click(screen.getByRole('button', { name: /^generate$/i }));
-    await waitFor(() => expect(screen.getByText(/Accept & save/i)).toBeInTheDocument());
-    fireEvent.click(screen.getByText(/Accept & save/i));
+    await waitFor(() => expect(screen.getByText(/Save resume/i)).toBeInTheDocument());
+    fireEvent.click(screen.getByText(/Save resume/i));
 
     await waitFor(() => expect(confirmImproveResumeMock).toHaveBeenCalled());
     expect(confirmImproveResumeMock.mock.calls[0][0]).toMatchObject({
@@ -338,10 +338,20 @@ describe('Tailor - Analyze fit', () => {
       renderPage();
       fireEvent.change(screen.getByLabelText('Job description'), { target: { value: LONG_JD } });
       fireEvent.click(screen.getByRole('button', { name: /^generate$/i }));
+      // "Save and download PDF" is now a menu item rather than a fourth
+      // top-level button, so the overflow menu has to be opened first. Radix
+      // opens on pointerdown, not click.
       await waitFor(() =>
-        expect(screen.getByRole('button', { name: /save & download pdf/i })).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: /more save options/i })).toBeInTheDocument()
       );
-      fireEvent.click(screen.getByRole('button', { name: /save & download pdf/i }));
+      fireEvent.pointerDown(screen.getByRole('button', { name: /more save options/i }), {
+        button: 0,
+        ctrlKey: false,
+      });
+      await waitFor(() =>
+        expect(screen.getByRole('menuitem', { name: /save and download pdf/i })).toBeInTheDocument()
+      );
+      fireEvent.click(screen.getByRole('menuitem', { name: /save and download pdf/i }));
 
       // Confirms the preview (persisting the resume) then exports the new id
       // WITH the chosen template settings, and persists that template.
@@ -431,11 +441,11 @@ describe('Tailor - Analyze fit', () => {
     // First click arms the confirmation (still in review).
     fireEvent.click(screen.getByRole('button', { name: /^discard$/i }));
     expect(screen.getByRole('button', { name: /click again to discard/i })).toBeInTheDocument();
-    expect(screen.getByText(/Accept & save/i)).toBeInTheDocument();
+    expect(screen.getByText(/Save resume/i)).toBeInTheDocument();
 
     // Second click actually discards -> back to input (no review actions).
     fireEvent.click(screen.getByRole('button', { name: /click again to discard/i }));
-    await waitFor(() => expect(screen.queryByText(/Accept & save/i)).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText(/Save resume/i)).not.toBeInTheDocument());
   });
 
   it('lets the user restore the previous attempt after a regenerate', async () => {
@@ -451,7 +461,7 @@ describe('Tailor - Analyze fit', () => {
     renderPage();
     fireEvent.change(screen.getByLabelText('Job description'), { target: { value: LONG_JD } });
     fireEvent.click(screen.getByRole('button', { name: /^generate$/i }));
-    await waitFor(() => expect(screen.getByText(/Accept & save/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/Save resume/i)).toBeInTheDocument());
 
     // Regenerate -> a second attempt; the first becomes the restorable "previous".
     fireEvent.click(screen.getByRole('button', { name: /^regenerate$/i }));
@@ -501,7 +511,7 @@ describe('Tailor - Analyze fit', () => {
     fireEvent.click(screen.getByRole('button', { name: /restore tailored resume/i }));
 
     await waitFor(() => expect(recoverTailorPreviewMock).toHaveBeenCalledWith('req-xyz'));
-    await waitFor(() => expect(screen.getByText(/Accept & save/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/Save resume/i)).toBeInTheDocument());
   });
 
   it('forwards custom instructions to the stream tailoring call', async () => {

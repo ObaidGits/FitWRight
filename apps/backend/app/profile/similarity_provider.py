@@ -139,7 +139,7 @@ class EmbeddingSimilarityProvider:
     def _cosine(u: list[float], v: list[float]) -> float:
         if not u or not v or len(u) != len(v):
             return 0.0
-        dot = sum(a * b for a, b in zip(u, v))
+        dot = sum(a * b for a, b in zip(u, v, strict=False))
         nu = sum(a * a for a in u) ** 0.5
         nv = sum(b * b for b in v) ** 0.5
         return dot / (nu * nv) if nu and nv else 0.0

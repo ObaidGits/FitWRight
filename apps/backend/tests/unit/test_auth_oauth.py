@@ -9,7 +9,6 @@ and the Google id_token verification path driven by a mock JWKS + a fixed clock
 from __future__ import annotations
 
 import base64
-import json
 
 import pytest
 

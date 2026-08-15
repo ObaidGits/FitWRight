@@ -25,6 +25,9 @@ from app.pdf import close_pdf_renderer, init_pdf_renderer
 from app.errors import error_envelope, install_error_handlers
 from app.routers import (
     admin_router,
+    admin_ai_router,
+    credits_router,
+    purchases_router,
     agenda_router,
     applications_router,
     auth_router,
@@ -64,6 +67,39 @@ def _configure_application_logging() -> None:
 _configure_application_logging()
 
 
+# Substring -> plain-language cause, checked in order against str(exc). Startup
+# DB failures (migration connect, or the app's own engine) otherwise surface as
+# whatever asyncpg/psycopg/SQLAlchemy raised: correct, but 15+ internal frames
+# with the actual cause buried in one clause of one line. This does not replace
+# that traceback (still printed) - it adds one line naming the likely cause and
+# the setting to check, so a missing/wrong DB doesn't require reading a driver's
+# source to diagnose.
+_DB_CONNECT_ERROR_HINTS: tuple[tuple[str, str], ...] = (
+    ("password authentication failed", "DATABASE_URL has the wrong username/password"),
+    ("does not exist", "the database/role in DATABASE_URL has not been created yet"),
+    ("could not translate host name", "DATABASE_URL's host is wrong or unreachable"),
+    ("name or service not known", "DATABASE_URL's host is wrong or unreachable"),
+    ("connection refused", "nothing is listening on DATABASE_URL's host:port "
+        "(is Postgres running? is the port right?)"),
+    ("timeout", "DATABASE_URL's host is unreachable (network/firewall, or a "
+        "paused hosted database)"),
+    ("ssl", "DATABASE_URL's SSL mode doesn't match what the server requires"),
+)
+
+
+def _format_db_connect_error(exc: Exception) -> str:
+    """One plain-language line naming the likely cause of a DB-connect failure."""
+    text = str(exc).lower()
+    for needle, cause in _DB_CONNECT_ERROR_HINTS:
+        if needle in text:
+            return (
+                f"Database connection/migration failed - likely cause: {cause}. "
+                f"Check DATABASE_URL (and MIGRATION_DATABASE_URL if set) in your "
+                f".env. Raw error: {exc}"
+            )
+    return f"Database connection/migration failed: {exc}"
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager."""
@@ -92,7 +128,18 @@ async def lifespan(app: FastAPI):
     # migration/connection failure must abort startup, never serve a broken DB.
     from app.migrations_runtime import apply_migrations_if_configured
 
-    migration_result = await apply_migrations_if_configured()
+    try:
+        migration_result = await apply_migrations_if_configured()
+    except Exception as exc:
+        # Alembic/the driver raise their own exception type unmodified (by
+        # design - see migrations_runtime's docstring). That is a raw
+        # "OperationalError: connection to server ... failed: ..." wrapped in
+        # 15+ frames of asyncpg/SQLAlchemy internals - the actual cause (wrong
+        # host, wrong port, DB not running, bad credentials, DB doesn't exist)
+        # is one substring inside it. Surface that plainly, once, before the
+        # traceback still prints for anyone who needs the full chain.
+        logger.error(_format_db_connect_error(exc))
+        raise
     if migration_result.get("status") not in ("skipped_sqlite",):
         logger.info("Startup schema check: %s", migration_result)
     # Secret-free provider report so operators can confirm which adapters
@@ -164,6 +211,19 @@ async def lifespan(app: FastAPI):
                 logger.info("PDF renderer pre-warm skipped: %s", exc)
 
         prewarm_task = asyncio.create_task(_prewarm_pdf())
+
+    # One-time import of LLM_API_KEY as a (disabled) AI channel, so the operator's
+    # credential stops living in two conceptual places. No-ops unless credits are
+    # enabled and no channel exists yet - see app/ai_channel_import.py for why it is
+    # deliberately conservative. Awaited rather than fired-and-forgotten: it is a
+    # single cheap query in the common case, and a race with the first request
+    # resolving a route would be confusing to debug for no benefit.
+    try:
+        from app.ai_channel_import import adopt_env_key_as_channel
+
+        await adopt_env_key_as_channel()
+    except Exception as exc:  # pragma: no cover - never block boot
+        logger.info("AI channel import skipped: %s", exc)
     # Session reaper (ADR-15). In ``internal`` (premium) mode a background loop
     # runs the single-flighted reaper on an interval; ``external_cron`` (free
     # tier default) instead relies on POST /api/v1/internal/run-jobs, so nothing
@@ -348,6 +408,9 @@ app.include_router(users_router, prefix="/api/v1")
 app.include_router(health_router, prefix="/api/v1")
 app.include_router(internal_router, prefix="/api/v1")
 app.include_router(admin_router, prefix="/api/v1")
+app.include_router(admin_ai_router, prefix="/api/v1")
+app.include_router(credits_router, prefix="/api/v1")
+app.include_router(purchases_router, prefix="/api/v1")
 app.include_router(config_router, prefix="/api/v1")
 app.include_router(resumes_router, prefix="/api/v1")
 app.include_router(versions_router, prefix="/api/v1")
