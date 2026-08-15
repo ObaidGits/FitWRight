@@ -147,12 +147,40 @@ describe('ApplicationAnswers', () => {
     await renderSection();
 
     expect(await screen.findByText('From your Profile')).toBeInTheDocument();
-    expect(screen.getByText('Edit this on your Profile page')).toBeInTheDocument();
+    expect(
+      screen.getByText(/Comes from your Profile - edit it there to change it everywhere/)
+    ).toBeInTheDocument();
     // Shown as text, not an input: a disabled <select> displayed the placeholder
     // whenever the Profile value was not one of the form's options, which read as
     // "unanswered" when an answer existed.
     expect(screen.getByText('Indian citizen')).toBeInTheDocument();
+    // No Save while the Profile is the source - but there IS a way through, which
+    // display-only used to lack entirely.
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Answer here instead' })).toBeInTheDocument();
+  });
+
+  it('lets the user answer a Profile-backed question here instead', async () => {
+    // The dead end this fixes: the mismatch warning told people to "answer it here
+    // instead", and the field was disabled so they could not. A Profile with no
+    // matching input left them with nowhere to answer at all.
+    listMock.mockResolvedValue([
+      field({
+        label: 'Work Authorization',
+        label_normalized: 'work authorization',
+        status: 'answered',
+        from_profile: true,
+        profile_path: 'identity.workAuthorization',
+        value: 'Indian citizen',
+      }),
+    ]);
+    await renderSection();
+
+    (await screen.findByRole('button', { name: 'Answer here instead' })).click();
+
+    // Now a real editor and a Save, plus a note that the Profile is untouched.
+    expect(await screen.findByRole('button', { name: 'Save' })).toBeInTheDocument();
+    expect(screen.getByText(/answers this question on job forms only/i)).toBeInTheDocument();
   });
 
   it('warns when a Profile answer cannot satisfy the form’s choices', async () => {

@@ -10,9 +10,25 @@
  * `extractList` is the important method here: it feeds bulk scraping.
  */
 import { blockText, clean, pick, pickText } from '@/lib/dom';
+import { findApplicationForm } from '@/lib/application-form';
 import type { CapturedJob, PageKind } from '@/lib/types';
 import { toJob } from './types';
 import type { SiteAdapter } from './types';
+
+/**
+ * Scope autofill to a real application form, or return null when there isn't one.
+ *
+ * Every board adapter uses this, and none of them used to have a `formRoot` at
+ * all - which meant autofill fell back to the whole document and read the site's
+ * own search boxes as if they were application fields. On an Indeed listing page
+ * that produced "could not read this form's 2 fields" about the "What" and
+ * "Where" search inputs, and saved them into the user's Answers page.
+ *
+ * Boards are listing sites: most of their pages genuinely have no application
+ * form, and `null` is the correct, useful answer for those. The ATS adapters keep
+ * their own hand-written selectors, which are more precise where they apply.
+ */
+const boardFormRoot = () => findApplicationForm();
 
 /**
  * Walk repeated card elements and map each to a job.
@@ -744,4 +760,7 @@ export const boardAdapters: SiteAdapter[] = [
   zipRecruiterAdapter,
   glassdoorAdapter,
   googleJobsAdapter,
-];
+  // Every board gets the evidence-based form detector. Attached here rather than
+  // repeated in each adapter so a new board cannot be added without it - the
+  // omission is exactly what broke autofill on all ten of them.
+].map((adapter) => (adapter.formRoot ? adapter : { ...adapter, formRoot: boardFormRoot }));

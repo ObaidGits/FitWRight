@@ -12,6 +12,7 @@
  * career page still works.
  */
 import { blockText, clean, pick, pickText, readJsonLd } from '@/lib/dom';
+import { findApplicationForm } from '@/lib/application-form';
 import type { CapturedJob, PageKind } from '@/lib/types';
 import { toJob } from './types';
 import type { SiteAdapter } from './types';
@@ -110,6 +111,12 @@ export const genericAdapter: SiteAdapter = {
 
   // Matched explicitly by the registry as the last resort, never by URL.
   matches: () => false,
+
+  // On an unknown site there are no hand-written selectors to trust, so autofill
+  // is scoped by evidence: a resume upload, or several identity fields together.
+  // Without this the generic path filled whatever inputs the page happened to
+  // have, including its search box.
+  formRoot: () => findApplicationForm(),
 
   classify(): PageKind {
     if (looksLikeJobPage()) return 'job-posting';

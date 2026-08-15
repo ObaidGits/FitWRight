@@ -127,7 +127,17 @@ function render(tabId: number, context: PageContext, health: { hasResume: boolea
           setStatus(reply.error, 'err');
           return;
         }
-        const { plan } = reply.data;
+        const { plan, reason } = reply.data;
+        // These two cases produce the same empty plan and mean opposite things.
+        // Reporting both as "every field already has a value" is what made the
+        // preview contradict the autofill button on the very same page.
+        if (reason === 'no-application-form') {
+          setStatus(
+            'No application form on this page yet. Click Apply on the job first, then preview.',
+            '',
+          );
+          return;
+        }
         if (!plan.length) {
           setStatus('Nothing to fill here - every field we recognise already has a value.', '');
           return;
@@ -152,6 +162,16 @@ function render(tabId: number, context: PageContext, health: { hasResume: boolea
           // The most common cause of "it did nothing", and the one the user can
           // fix in one click on a tab they already have open.
           setStatus('You appear signed out of this site. Sign in, then autofill.', 'err');
+          return;
+        }
+        if (reason === 'no-application-form') {
+          // The single most common case on a job board, and previously reported as
+          // an unreadable form - which sent the user hunting for a bug that was
+          // really just "you are on the listing page, not the form yet".
+          setStatus(
+            'This page has no application form yet. Click Apply on the job, then run autofill on the form that opens.',
+            '',
+          );
           return;
         }
         if (unrecognised) {

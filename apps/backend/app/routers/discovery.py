@@ -678,6 +678,11 @@ class ManualSearchRequest(BaseModel):
     """Direct job search without resume — accepts raw query terms."""
 
     query: str  # e.g. "Backend Engineer Python"
+    #: Additional titles to search in the SAME run, e.g. ["Backend Engineer", "SDE"].
+    #: Each is scraped separately because boards take one search term per request -
+    #: joining them into one string returns worse results than either alone. Capped
+    #: when executed, since every extra title is another round of real board traffic.
+    queries: list[str] | None = None
     location: str | None = None
     is_remote: bool | None = None
     hours_old: int | None = None  # 24, 168 (week), 720 (month)
@@ -782,15 +787,22 @@ async def _execute_manual_search(
     from app.job_discovery.models import SearchFilters, SearchQuery
     from app.job_discovery.normalize import normalize as normalize_listings
 
-    # Build query from manual input
-    query = SearchQuery(
-        titles=[payload.query],
-        search_string=payload.query,
-        seniority=None,
-        location=payload.location,
-        country_indeed=payload.country_indeed,
-        degraded=False,
-    )
+    # Every title the caller asked for, in the same run. Boards accept one search
+    # term per request, so each title is its own scrape and the results are merged -
+    # joining them into "a b c" returns worse matches than any single one.
+    #
+    # Capped deliberately: each extra title is another round of real traffic to
+    # every selected board, and this app's whole anti-abuse posture is about not
+    # hammering them. Duplicates and blanks are dropped first so "python, Python, "
+    # costs one scrape, not three.
+    _MAX_TITLES = 5
+    requested = [payload.query, *(payload.queries or [])]
+    titles: list[str] = []
+    for raw_title in requested:
+        cleaned = (raw_title or "").strip()
+        if cleaned and not any(cleaned.lower() == t.lower() for t in titles):
+            titles.append(cleaned)
+    titles = titles[:_MAX_TITLES] or [payload.query]
 
     filters = SearchFilters(
         location=payload.location,
@@ -814,26 +826,36 @@ async def _execute_manual_search(
     report = FailureReport()
     raw: list = []
 
-    # JobSpy connector (Indeed, LinkedIn, Glassdoor, Google, Naukri, ZipRecruiter)
-    if jobspy_sites:
-        connector = JobSpyConnector(sites=jobspy_sites)
-        found = await run_connector(connector, query, filters, report)
-        raw.extend(found)
-        if job is not None:
-            # Attributed to the group: JobSpy scrapes its boards as one call, so
-            # per-board counts are not separable here without lying about them.
-            for site in jobspy_sites:
-                job.site_finished(site)
-            job.found = len(raw)
+    for title in titles:
+        query = SearchQuery(
+            titles=[title],
+            search_string=title,
+            seniority=None,
+            location=payload.location,
+            country_indeed=payload.country_indeed,
+            degraded=False,
+        )
 
-    # Extra platforms connector (Remotive, WWR, SimplyHired, Hirist, Foundit, etc.)
-    if extra_sites:
-        extra_connector = ExtraPlatformConnector(sites=extra_sites)
-        raw.extend(await extra_connector.search(query, filters, report.failures))
-        if job is not None:
-            for site in extra_sites:
-                job.site_finished(site)
-            job.found = len(raw)
+        # JobSpy connector (Indeed, LinkedIn, Glassdoor, Google, Naukri, ZipRecruiter)
+        if jobspy_sites:
+            connector = JobSpyConnector(sites=jobspy_sites)
+            found = await run_connector(connector, query, filters, report)
+            raw.extend(found)
+            if job is not None:
+                # Attributed to the group: JobSpy scrapes its boards as one call, so
+                # per-board counts are not separable here without lying about them.
+                for site in jobspy_sites:
+                    job.site_finished(site)
+                job.found = len(raw)
+
+        # Extra platforms connector (Remotive, WWR, SimplyHired, Hirist, Foundit, etc.)
+        if extra_sites:
+            extra_connector = ExtraPlatformConnector(sites=extra_sites)
+            raw.extend(await extra_connector.search(query, filters, report.failures))
+            if job is not None:
+                for site in extra_sites:
+                    job.site_finished(site)
+                job.found = len(raw)
 
     if job is not None:
         for failure in report.failures:

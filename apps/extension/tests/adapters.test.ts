@@ -120,7 +120,12 @@ describe('fill scoping', () => {
     for (const href of applyUrls) {
       const url = at(href);
       const adapter = resolveAdapter(url);
-      if (adapter.classify(url) !== 'application-form') continue;
+      // NOT skipped on classification any more. The previous version bailed with
+      // `if (classify(url) !== 'application-form') continue`, which quietly
+      // excluded every job-board listing URL - i.e. exactly the ten adapters that
+      // had no formRoot at all. The check claimed to cover "every adapter" while
+      // only ever reaching the ATS ones. Scoping is required unconditionally:
+      // an adapter with no form root fills the page's search box.
       expect(typeof adapter.formRoot, `${adapter.id} claims ${href}`).toBe('function');
     }
   });

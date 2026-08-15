@@ -23,6 +23,7 @@ import ThumbsDown from 'lucide-react/dist/esm/icons/thumbs-down';
 import CheckCircle from 'lucide-react/dist/esm/icons/check-circle-2';
 import Upload from 'lucide-react/dist/esm/icons/upload';
 import Puzzle from 'lucide-react/dist/esm/icons/puzzle';
+import Info from 'lucide-react/dist/esm/icons/info';
 import Link from 'next/link';
 
 import { Button } from '@/components/atelier/button';
@@ -86,7 +87,6 @@ export default function DiscoveryPage() {
   const { data: resumes, isLoading: resumesLoading } = useTailorResumes();
 
   // Mode & search
-  const [useResume, setUseResume] = useState(false);
   const [queryText, setQueryText] = useState('');
   const [location, setLocation] = useState('');
   const [isRemote, setIsRemote] = useState(false);
@@ -218,11 +218,18 @@ export default function DiscoveryPage() {
   }
 
   function handleSearch() {
-    if (useResume && resumeId) {
+    const titles = queryText
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean);
+
+    // Resume selected with no titles: this is resume-driven discovery, which is a
+    // different backend path (it derives the titles from the resume itself).
+    if (!titles.length && resumeId) {
       recommendations.refetch();
       return;
     }
-    if (!queryText.trim()) return;
+    if (!titles.length) return;
 
     // Searching is also a statement of intent about what to look at, so the list
     // filters follow the search: run "designer" and the list stops showing the
@@ -238,8 +245,11 @@ export default function DiscoveryPage() {
     if (extensionSites.length && extension.installed) {
       void extension
         .scrape({
+          // The extension lane takes one term per run; the first title is the one
+          // the user led with, so it is the honest choice rather than a join that
+          // matches nothing on these boards.
           sites: extensionSites,
-          query: queryText.trim(),
+          query: titles[0],
           location: location || undefined,
         })
         .then((result) => {
@@ -251,7 +261,9 @@ export default function DiscoveryPage() {
 
     if (serverSites.length || !extensionSites.length) {
       search.startSearch({
-        query: queryText.trim(),
+        query: titles[0],
+        // Extra titles are scraped in the same run, each as its own search term.
+        queries: titles.slice(1),
         location: location || null,
         is_remote: isRemote || null,
         hours_old: hoursOld ? parseInt(hoursOld) : null,
@@ -259,7 +271,9 @@ export default function DiscoveryPage() {
         sites: serverSites.length > 0 ? serverSites : null,
         job_type: jobType || null,
         country_indeed: countryIndeed || null,
-        resume_id: useResume ? resumeId : null,
+        // Always passed when chosen: the backend uses it to score results, which
+        // is orthogonal to whether titles were given.
+        resume_id: resumeId,
       });
     }
   }
@@ -359,7 +373,9 @@ export default function DiscoveryPage() {
     if (selectedResult?.id === id) setSelectedResult({ ...selectedResult, status });
   }
 
-  const canSearch = useResume ? Boolean(resumeId) : Boolean(queryText.trim());
+  // Either a title or a resume is enough now that the two combine, instead of the
+  // old switch which required whichever one the active mode demanded.
+  const canSearch = Boolean(queryText.trim()) || Boolean(resumeId);
 
   return (
     <div>
@@ -409,59 +425,32 @@ export default function DiscoveryPage() {
               first-time user needs it, and everyone else came to read results. */}
           {searchOpen && (
             <div className="space-y-3 rounded-[var(--radius-at-lg)] border border-[var(--border)] bg-[var(--card)] p-4">
-              {/* Mode switch */}
-              <div className="flex gap-1 rounded-[var(--radius-at-md)] bg-[var(--muted)] p-0.5">
-                <button
-                  onClick={() => setUseResume(false)}
-                  className={`flex-1 rounded-[var(--radius-at-sm)] px-3 py-1.5 text-xs font-medium transition-all ${
-                    !useResume
-                      ? 'bg-[var(--card)] text-[var(--foreground)] shadow-sm'
-                      : 'text-[var(--muted-foreground)]'
-                  }`}
-                >
-                  Search by Role
-                </button>
-                <button
-                  onClick={() => setUseResume(true)}
-                  className={`flex-1 rounded-[var(--radius-at-sm)] px-3 py-1.5 text-xs font-medium transition-all ${
-                    useResume
-                      ? 'bg-[var(--card)] text-[var(--foreground)] shadow-sm'
-                      : 'text-[var(--muted-foreground)]'
-                  }`}
-                >
-                  Match Resume
-                </button>
-              </div>
-
-              {/* Search input */}
-              {!useResume ? (
+              {/* One search, not two modes.
+                  This used to be a "Search by Role" / "Match Resume" switch, which
+                  forced a false either/or: the backend has always accepted a query
+                  AND a resume_id together (the resume is used for scoring), so the
+                  split was a frontend restriction that stopped people from filtering
+                  a resume-matched search or scoring a title search. */}
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Input
+                  placeholder="Job titles, comma separated - e.g. Backend Engineer, SDE, Python Developer"
+                  value={queryText}
+                  onChange={(e) => setQueryText(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && canSearch && handleSearch()}
+                  className="flex-1"
+                />
                 <div className="flex gap-2">
-                  <Input
-                    placeholder="Job title, e.g. Backend Engineer"
-                    value={queryText}
-                    onChange={(e) => setQueryText(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && canSearch && handleSearch()}
-                    className="flex-1"
-                  />
-                  <Button onClick={handleSearch} disabled={!canSearch || isSearching}>
-                    {isSearching ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Search className="h-4 w-4" />
-                    )}
-                  </Button>
-                </div>
-              ) : (
-                <div className="flex gap-2">
+                  {/* Resume is optional and combines with everything else. */}
                   {resumesLoading ? (
-                    <div className="h-9 flex-1 animate-pulse rounded-[var(--radius-at-md)] bg-[var(--muted)]" />
+                    <div className="h-9 w-44 animate-pulse rounded-[var(--radius-at-md)] bg-[var(--muted)]" />
                   ) : resumes?.length ? (
                     <select
-                      className="flex-1 rounded-[var(--radius-at-md)] border border-[var(--input)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)]"
+                      aria-label="Match against resume"
+                      className="w-44 rounded-[var(--radius-at-md)] border border-[var(--input)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)]"
                       value={resumeId ?? ''}
                       onChange={(e) => setResumeId(e.target.value || null)}
                     >
-                      <option value="">Select resume…</option>
+                      <option value="">No resume match</option>
                       {resumes.map((r) => (
                         <option key={r.resume_id} value={r.resume_id}>
                           {r.title || r.filename || 'Untitled'}
@@ -469,12 +458,12 @@ export default function DiscoveryPage() {
                       ))}
                     </select>
                   ) : (
-                    <div className="flex flex-1 items-center gap-2 rounded-[var(--radius-at-md)] border border-dashed border-[var(--border)] p-3 text-sm text-[var(--muted-foreground)]">
-                      <Upload className="h-4 w-4" />
-                      <Link href="/resumes" className="text-[var(--primary)] hover:underline">
-                        Upload a resume first
-                      </Link>
-                    </div>
+                    <Link
+                      href="/resumes"
+                      className="flex items-center gap-1.5 rounded-[var(--radius-at-md)] border border-dashed border-[var(--border)] px-3 py-2 text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                    >
+                      <Upload className="h-3.5 w-3.5" /> Add a resume
+                    </Link>
                   )}
                   <Button onClick={handleSearch} disabled={!canSearch || isSearching}>
                     {isSearching ? (
@@ -483,18 +472,33 @@ export default function DiscoveryPage() {
                       <Search className="h-4 w-4" />
                     )}
                   </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      const rid = resumeId || resumes?.[0]?.resume_id;
-                      if (rid) enableSchedule.mutate({ resumeId: rid });
-                    }}
-                    disabled={!resumeId && !resumes?.[0]}
-                    title="Auto-discover daily"
-                  >
-                    <Bell className="h-4 w-4" />
-                  </Button>
+                  {resumeId && (
+                    <Button
+                      variant="outline"
+                      onClick={() => enableSchedule.mutate({ resumeId })}
+                      title="Auto-discover daily using this resume"
+                    >
+                      <Bell className="h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
+              </div>
+
+              {/* Says what the resume is actually doing, since selecting one changes
+                  the meaning of the results rather than just filtering them. */}
+              {resumeId && (
+                <p className="flex items-start gap-1.5 text-[11px] text-[var(--muted-foreground)]">
+                  <Info className="mt-0.5 h-3 w-3 shrink-0" />
+                  {queryText.trim()
+                    ? 'Searching those titles and scoring each result against this resume.'
+                    : 'Finding jobs that match this resume. Add titles above to narrow it down.'}
+                </p>
+              )}
+              {!resumeId && queryText.includes(',') && (
+                <p className="flex items-start gap-1.5 text-[11px] text-[var(--muted-foreground)]">
+                  <Info className="mt-0.5 h-3 w-3 shrink-0" />
+                  Each title is searched separately, up to 5.
+                </p>
               )}
 
               {/* Filters — always visible, no toggle needed */}
@@ -591,104 +595,122 @@ export default function DiscoveryPage() {
                 )}
               </div>
 
-              {/* Platforms — always visible */}
-              {!useResume && (
-                <div className="space-y-2">
-                  <div className="flex flex-wrap gap-1.5">
-                    {PLATFORMS.map((p) => {
-                      const selected = selectedPlatforms.includes(p.id);
-                      const viaExtension = p.lane === 'extension';
-                      return (
-                        <button
-                          key={p.id}
-                          onClick={() => togglePlatform(p.id)}
-                          aria-pressed={selected}
-                          title={
-                            viaExtension
-                              ? extension.installed || extension.detecting
-                                ? `${p.label} is searched by the FitWright browser extension`
-                                : `${p.label} blocks servers, so it needs the browser extension. Selecting it will return nothing until the extension is installed.`
-                              : undefined
-                          }
-                          className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium transition-all ${
-                            selected
-                              ? 'bg-[var(--primary)] text-[var(--primary-foreground)]'
-                              : 'bg-[var(--muted)] text-[var(--muted-foreground)] hover:bg-[var(--accent)]'
-                          } ${
-                            /* Dimmed, not disabled: the user may be about to install
+              {/* Platforms — always visible.
+                  Previously hidden in resume mode, which meant a resume-matched
+                  search silently used the default board set with no way to change
+                  it. Boards and resume matching are independent choices. */}
+              <div className="space-y-2">
+                <div className="flex flex-wrap gap-1.5">
+                  {PLATFORMS.map((p) => {
+                    const selected = selectedPlatforms.includes(p.id);
+                    const viaExtension = p.lane === 'extension';
+                    return (
+                      <button
+                        key={p.id}
+                        onClick={() => togglePlatform(p.id)}
+                        aria-pressed={selected}
+                        title={
+                          viaExtension
+                            ? extension.installed || extension.detecting
+                              ? `${p.label} is searched by the FitWright browser extension`
+                              : `${p.label} blocks servers, so it needs the browser extension. Selecting it will return nothing until the extension is installed.`
+                            : undefined
+                        }
+                        className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium transition-all ${
+                          selected
+                            ? 'bg-[var(--primary)] text-[var(--primary-foreground)]'
+                            : 'bg-[var(--muted)] text-[var(--muted-foreground)] hover:bg-[var(--accent)]'
+                        } ${
+                          /* Dimmed, not disabled: the user may be about to install
                              the extension, and a board they cannot even select is
                              harder to understand than one that explains itself. */
-                            viaExtension && !extension.installed && !extension.detecting
-                              ? 'opacity-50'
-                              : ''
-                          }`}
-                        >
-                          {p.label}
-                          {viaExtension && (
-                            <Puzzle
-                              className={`h-2.5 w-2.5 ${
-                                extension.installed ? 'opacity-70' : 'opacity-40'
-                              }`}
-                              aria-hidden="true"
-                            />
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {/* Extension lane status. Only shown once it is relevant. */}
-                  {selectedExtensionSites.length > 0 && (
-                    <p className="flex items-start gap-1.5 text-[11px] text-[var(--muted-foreground)]">
-                      <Puzzle className="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
-                      {extension.detecting ? (
-                        <span>Checking for the FitWright extension…</span>
-                      ) : extension.installed ? (
-                        <span>
-                          {selectedExtensionSites.length} board
-                          {selectedExtensionSites.length === 1 ? '' : 's'} will be searched by the
-                          extension (v{extension.capabilities?.version}) in background tabs —
-                          results land in your feed.
-                        </span>
-                      ) : (
-                        <span>
-                          <strong className="font-medium text-[var(--foreground)]">
-                            Extension required.
-                          </strong>{' '}
-                          Hirist, Foundit, YC and Instahyre block server-side scraping, so they are
-                          searched from your own browser.{' '}
-                          <Link
-                            href="/setup/extension"
-                            className="font-medium text-[var(--primary)] hover:underline"
-                          >
-                            Set up the extension
-                          </Link>{' '}
-                          — it takes a minute, and this page notices on its own when it is ready.
-                        </span>
-                      )}
-                    </p>
-                  )}
-
-                  {extension.error && (
-                    <p className="text-[11px] text-[var(--at-danger)]">{extension.error}</p>
-                  )}
-
-                  {extension.lastResult && !extension.scraping && (
-                    <p className="text-[11px] text-[var(--muted-foreground)]">
-                      Extension searched{' '}
-                      {extension.lastResult.perSite
-                        .map(
-                          (s) =>
-                            `${s.source} (${s.found} found${s.saved ? `, ${s.saved} new` : ''})`
-                        )
-                        .join(' · ')}
-                      {extension.lastResult.total > 0 && extension.lastResult.saved === 0 && (
-                        <> — all already in your feed.</>
-                      )}
-                    </p>
-                  )}
+                          viaExtension && !extension.installed && !extension.detecting
+                            ? 'opacity-50'
+                            : ''
+                        }`}
+                      >
+                        {p.label}
+                        {viaExtension && (
+                          <Puzzle
+                            className={`h-2.5 w-2.5 ${
+                              extension.installed ? 'opacity-70' : 'opacity-40'
+                            }`}
+                            aria-hidden="true"
+                          />
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
-              )}
+
+                {/* Extension lane status. Only shown once it is relevant. */}
+                {selectedExtensionSites.length > 0 && (
+                  <p className="flex items-start gap-1.5 text-[11px] text-[var(--muted-foreground)]">
+                    <Puzzle className="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
+                    {extension.detecting ? (
+                      <span>Checking for the FitWright extension…</span>
+                    ) : extension.installed ? (
+                      <span>
+                        {selectedExtensionSites.length} board
+                        {selectedExtensionSites.length === 1 ? '' : 's'} will be searched by the
+                        extension (v{extension.capabilities?.version}) in background tabs — results
+                        land in your feed.
+                      </span>
+                    ) : (
+                      <span>
+                        <strong className="font-medium text-[var(--foreground)]">
+                          Extension required.
+                        </strong>{' '}
+                        Hirist, Foundit, YC and Instahyre block server-side scraping, so they are
+                        searched from your own browser.{' '}
+                        <Link
+                          href="/setup/extension"
+                          className="font-medium text-[var(--primary)] hover:underline"
+                        >
+                          Set up the extension
+                        </Link>{' '}
+                        — it takes a minute, and this page notices on its own when it is ready.
+                      </span>
+                    )}
+                  </p>
+                )}
+
+                {extension.error && (
+                  <p className="text-[11px] text-[var(--at-danger)]">{extension.error}</p>
+                )}
+
+                {extension.lastResult && !extension.scraping && (
+                  <p className="text-[11px] text-[var(--muted-foreground)]">
+                    Extension searched{' '}
+                    {extension.lastResult.perSite
+                      .map(
+                        (s) => `${s.source} (${s.found} found${s.saved ? `, ${s.saved} new` : ''})`
+                      )
+                      .join(' · ')}
+                    {extension.lastResult.total > 0 && extension.lastResult.saved === 0 && (
+                      <> — all already in your feed.</>
+                    )}
+                  </p>
+                )}
+              </div>
+
+              {/* Auto Apply / extension setup, on the page where job hunting starts.
+                  Setup previously had no entry point from Discover at all - it was
+                  only reachable if a user happened to select an extension-only board
+                  and read the fine print. */}
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border)] pt-3">
+                <p className="text-[11px] text-[var(--muted-foreground)]">
+                  {extension.installed
+                    ? 'Browser extension connected — autofill and extension-only boards are available.'
+                    : 'Install the browser extension to autofill applications and search boards that block servers.'}
+                </p>
+                <Button variant="outline" size="sm" asChild>
+                  <Link href="/setup/extension">
+                    <Puzzle className="h-3.5 w-3.5" />
+                    {extension.installed ? 'Extension settings' : 'Auto Apply setup'}
+                  </Link>
+                </Button>
+              </div>
             </div>
           )}
 

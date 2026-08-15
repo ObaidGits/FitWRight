@@ -150,8 +150,15 @@ export interface ReplyMap {
     filled: number;
     skipped: number;
     questions: string[];
-    /** Set when the form filled nothing and we can say why. */
-    reason?: 'signed-out' | 'empty';
+    /**
+     * Set when the form filled nothing and we can say why.
+     *
+     * ``no-application-form`` is the common, non-error case on a job board: the
+     * page is a listing, and the form appears only after clicking Apply. It is
+     * distinct from ``unrecognised`` below, which means we ARE on a form and
+     * genuinely could not read it.
+     */
+    reason?: 'signed-out' | 'empty' | 'no-application-form';
     /**
      * Fields present but unreadable - a stale adapter rather than a complete
      * form. See content/autofill.ts.
@@ -160,7 +167,15 @@ export interface ReplyMap {
   };
   'capture-current': CaptureResponse;
   'scrape-list': { found: number; saved: number; reason?: 'signed-out' | 'empty' };
-  'preview-fill': { plan: { label: string; value: string }[] };
+  'preview-fill': {
+    plan: { label: string; value: string }[];
+    /**
+     * Why the plan is empty, when it is. An empty plan means two opposite things -
+     * "already complete" or "no form here" - and reporting both the same way is
+     * what made the preview contradict the autofill button on one page.
+     */
+    reason?: 'no-application-form' | null;
+  };
   'get-queue': { items: { company?: string; role?: string }[]; total: number };
   'read-jd': {
     description: string;

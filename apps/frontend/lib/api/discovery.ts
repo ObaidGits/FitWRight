@@ -346,6 +346,12 @@ export async function toggleSchedule(
 
 export interface ManualSearchRequest {
   query: string;
+  /**
+   * Extra titles searched in the SAME run, each as its own board query. Boards take
+   * one search term per request, so joining titles into one string matches worse
+   * than either alone. Capped server-side to bound real board traffic.
+   */
+  queries?: string[];
   location?: string | null;
   is_remote?: boolean | null;
   hours_old?: number | null;

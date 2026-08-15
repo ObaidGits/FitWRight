@@ -14,6 +14,7 @@
  */
 import { genericAdapter, resolveAdapter } from '@/adapters/registry';
 import type { SiteAdapter } from '@/adapters/types';
+import { resolveFormRoot } from '@/lib/application-form';
 import { waitFor } from '@/lib/dom';
 import { collectFields } from '@/lib/fields';
 import { t } from '@/lib/i18n';
@@ -235,7 +236,7 @@ async function handleMessage(message: ToContent): Promise<Reply<unknown>> {
     }
 
     case 'autofill': {
-      const root = adapter.formRoot?.() ?? document;
+      const scope = resolveFormRoot(adapter.formRoot?.());
       // Sites that gate applying behind an account (Indeed, LinkedIn, Naukri)
       // swap the form for a sign-in when the session lapses. Filling "0 fields"
       // there is technically true and completely useless, so name the cause and
@@ -245,6 +246,26 @@ async function handleMessage(message: ToContent): Promise<Reply<unknown>> {
         return ok({ filled: 0, skipped: 0, questions: [], reason: 'signed-out' });
       }
 
+      // THE most common case on a job board, and the one that used to look like a
+      // bug: this is a listing page, not an application form. Saying so - and
+      // where the form actually is - is the whole fix. Filling nothing here is
+      // correct behaviour, so it must not be reported as a failure, and nothing
+      // on the page may be saved to Answers.
+      if (!scope.isApplicationForm) {
+        toast(
+          `No application form on this page. Click "Apply" on ${adapter.label} first, ` +
+            `then run autofill on the form that opens.`,
+          'err',
+        );
+        return ok({
+          filled: 0,
+          skipped: 0,
+          questions: [],
+          reason: 'no-application-form',
+        });
+      }
+
+      const root = scope.root;
       // Name the job so the resume tailored for it is the one attached.
       const formJob = currentJob ?? extractJob();
       const report = await autofill(root, {
@@ -263,7 +284,9 @@ async function handleMessage(message: ToContent): Promise<Reply<unknown>> {
         );
       }
       if (report.unrecognised) {
-        // Not a silent zero: this form's fields exist and we could not read them.
+        // Reached only when we ARE on a real application form and still could not
+        // read it - which is a genuine adapter gap worth reporting, unlike the
+        // listing-page case handled above.
         toast(
           `Could not read this form's ${report.unrecognised} field${
             report.unrecognised === 1 ? '' : 's'
@@ -300,8 +323,17 @@ async function handleMessage(message: ToContent): Promise<Reply<unknown>> {
     case 'preview-fill': {
       // Reads the page and writes nothing, so the user can see what autofill
       // would put in an employer's form before it goes there.
-      const root = adapter.formRoot?.() ?? document;
-      return ok({ plan: await planFill(root) });
+      //
+      // Reports whether a form was even found, because an empty plan means two
+      // opposite things: "this form is already complete" or "there is no form
+      // here". Returning a bare empty list is what made the preview say "no
+      // fields require autofill" about a listing page while the fill path called
+      // the same page unreadable.
+      const scope = resolveFormRoot(adapter.formRoot?.());
+      if (!scope.isApplicationForm) {
+        return ok({ plan: [], reason: 'no-application-form' });
+      }
+      return ok({ plan: await planFill(scope.root), reason: null });
     }
 
     case 'scrape-list': {
@@ -503,7 +535,12 @@ function fieldSignature(root: ParentNode): string {
 }
 
 async function fillCurrentStep(): Promise<void> {
-  const root = adapter.formRoot?.() ?? document;
+  const scope = resolveFormRoot(adapter.formRoot?.());
+  // The step watcher observes the whole body so it notices a form appearing, which
+  // means it also fires on pages that have none. Writing nothing here is correct -
+  // and silent, because this path is automatic rather than user-invoked.
+  if (!scope.isApplicationForm) return;
+  const root = scope.root;
   filling = true;
   try {
     const stepJob = currentJob ?? extractJob();

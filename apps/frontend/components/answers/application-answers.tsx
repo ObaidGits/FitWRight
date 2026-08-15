@@ -188,6 +188,8 @@ function FieldRow({ field, emphasise }: { field: ApplicationField; emphasise?: b
 
   const dirty = draft !== initial;
   const readOnly = field.from_profile;
+  // Set when the user chooses to answer a Profile-backed question here instead.
+  const [overriding, setOverriding] = React.useState(false);
 
   function save() {
     update.mutate(
@@ -224,19 +226,44 @@ function FieldRow({ field, emphasise }: { field: ApplicationField; emphasise?: b
 
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <div className="min-w-[12rem] flex-1">
-          <AnswerEditor field={field} value={draft} onChange={setDraft} disabled={readOnly} />
+          {/* Profile-backed answers stay DISPLAYED rather than edited by default -
+              a disabled <select> showed its placeholder whenever the Profile value
+              was not one of the form's options, which reads as "unanswered" when an
+              answer exists. But display-only was a dead end: the mismatch warning
+              already told users to "answer it here instead" and there was no way to,
+              and a Profile with no matching input left them nowhere to go at all.
+              The override makes that promise true while keeping the Profile as the
+              default source, so the two cannot drift silently. */}
+          <AnswerEditor
+            field={field}
+            value={draft}
+            onChange={setDraft}
+            disabled={readOnly && !overriding}
+          />
         </div>
 
-        {readOnly ? (
-          <p className="text-[11px] text-[var(--muted-foreground)]">
-            Edit this on your Profile page
-          </p>
+        {readOnly && !overriding ? (
+          <Button size="sm" variant="outline" onClick={() => setOverriding(true)}>
+            Answer here instead
+          </Button>
         ) : (
           <>
             <Button size="sm" onClick={save} disabled={!dirty || update.isPending}>
               Save
             </Button>
-            {emphasise && (
+            {overriding && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setOverriding(false);
+                  setDraft(initial);
+                }}
+              >
+                Cancel
+              </Button>
+            )}
+            {emphasise && !overriding && (
               <Button
                 size="sm"
                 variant="outline"
@@ -246,7 +273,7 @@ function FieldRow({ field, emphasise }: { field: ApplicationField; emphasise?: b
                 Never ask
               </Button>
             )}
-            {!emphasise && (
+            {!emphasise && !overriding && (
               <button
                 onClick={() => remove.mutate(field.id)}
                 className="text-[11px] text-[var(--muted-foreground)] hover:text-[var(--at-danger)] hover:underline"
@@ -257,6 +284,14 @@ function FieldRow({ field, emphasise }: { field: ApplicationField; emphasise?: b
           </>
         )}
       </div>
+
+      {readOnly && (
+        <p className="mt-1.5 text-[11px] text-[var(--muted-foreground)]">
+          {overriding
+            ? 'Saving here answers this question on job forms only. Your Profile is left unchanged.'
+            : 'Comes from your Profile - edit it there to change it everywhere.'}
+        </p>
+      )}
     </div>
   );
 }
