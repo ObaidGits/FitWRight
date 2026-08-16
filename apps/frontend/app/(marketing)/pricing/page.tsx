@@ -18,7 +18,7 @@ import Link from 'next/link';
 
 import { buildMetadata } from '@/lib/seo/metadata';
 import { PricingTables } from '@/components/marketing/pricing-tables';
-import { PRICING_REVALIDATE_SECONDS, fetchPublicPricing } from '@/lib/api/public-pricing';
+import { fetchPublicPricing } from '@/lib/api/public-pricing';
 
 export const metadata: Metadata = buildMetadata({
   title: 'Pricing',
@@ -27,7 +27,8 @@ export const metadata: Metadata = buildMetadata({
   path: '/pricing',
 });
 
-export const revalidate = PRICING_REVALIDATE_SECONDS;
+// Next segment config must be statically analyzable in this file.
+export const revalidate = 300;
 
 export default async function PricingPage() {
   const pricing = await fetchPublicPricing();

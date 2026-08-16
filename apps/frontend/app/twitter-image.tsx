@@ -3,12 +3,12 @@
  * for `twitter:image`, so this route renders the same branded card to keep the
  * OG and Twitter previews identical.
  */
-import { renderOgImage, OG_SIZE, OG_ALT, OG_CONTENT_TYPE } from '@/lib/seo/og-image';
+import { renderOgImage } from '@/lib/seo/og-image';
 
 export const runtime = 'edge';
-export const alt = OG_ALT;
-export const size = OG_SIZE;
-export const contentType = OG_CONTENT_TYPE;
+export const alt = 'FitWright - Built to fit.';
+export const size = { width: 1200, height: 630 };
+export const contentType = 'image/png';
 
 export default function TwitterImage() {
   return renderOgImage();

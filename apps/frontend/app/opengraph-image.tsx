@@ -3,12 +3,12 @@
  * with `next/og`. Applies site-wide unless a route provides its own
  * `opengraph-image`. The branded card itself lives in `lib/seo/og-image`.
  */
-import { renderOgImage, OG_SIZE, OG_ALT, OG_CONTENT_TYPE } from '@/lib/seo/og-image';
+import { renderOgImage } from '@/lib/seo/og-image';
 
 export const runtime = 'edge';
-export const alt = OG_ALT;
-export const size = OG_SIZE;
-export const contentType = OG_CONTENT_TYPE;
+export const alt = 'FitWright - Built to fit.';
+export const size = { width: 1200, height: 630 };
+export const contentType = 'image/png';
 
 export default function OpengraphImage() {
   return renderOgImage();
