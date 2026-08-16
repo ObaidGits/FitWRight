@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { JsonLd } from '@/lib/seo/json-ld';
+import { SUPPORT_EMAIL } from '@/lib/seo/config';
 import { buildMetadata } from '@/lib/seo/metadata';
 import { KEYWORDS } from '@/lib/seo/page-keywords';
 import { breadcrumbSchema } from '@/lib/seo/structured-data';
@@ -126,7 +127,7 @@ const SECTIONS: Section[] = [
   {
     heading: '13. Grievance redressal and contact',
     paragraphs: [
-      'If you have any questions, requests, or complaints about your personal data or this Policy, you can contact us through the Contact page on this website. We will acknowledge and address grievances within the timelines required under applicable Indian law.',
+      `If you have any questions, requests, complaints, or discrepancies about your personal data or this Policy, you can contact us through the Contact page on this website or email ${SUPPORT_EMAIL}. We will acknowledge and address grievances within the timelines required under applicable Indian law.`,
       'For self-hosted instances operated by others, please contact the operator of that instance.',
     ],
   },

@@ -14,23 +14,23 @@ import Link from 'next/link';
 import ArrowRight from 'lucide-react/dist/esm/icons/arrow-right';
 import Check from 'lucide-react/dist/esm/icons/check';
 import MessageSquare from 'lucide-react/dist/esm/icons/message-square';
-import Github from 'lucide-react/dist/esm/icons/github';
+import Mail from 'lucide-react/dist/esm/icons/mail';
 import Linkedin from 'lucide-react/dist/esm/icons/linkedin';
 import Globe from 'lucide-react/dist/esm/icons/globe';
 
 import { Button } from '@/components/atelier/button';
 import { Reveal } from '@/components/marketing/reveal';
+import { SUPPORT_EMAIL } from '@/lib/seo/config';
 
 const TRUST = [
   'Usually replies within a day',
   'Open to collaborations & roles',
   'AI & full-stack engineering',
-  'Open-source contributor',
+  'Fast, thoughtful replies',
 ];
 
 const SOCIALS = [
   { icon: Linkedin, label: 'LinkedIn', href: 'https://www.linkedin.com/in/obaidullah-zeeshan/' },
-  { icon: Github, label: 'GitHub', href: 'https://github.com/ObaidGits' },
   { icon: Globe, label: 'Portfolio', href: 'https://obaidullah-zeeshan.dev' },
 ];
 
@@ -75,7 +75,7 @@ export function ContactCta() {
                 FitWright is built by{' '}
                 <span className="font-medium text-[var(--foreground)]">Obaidullah Zeeshan</span>, a
                 full-stack &amp; backend-focused software engineer. Hiring, exploring a
-                collaboration, or just want to talk shop about AI and software? My inbox is open -
+                collaboration, or spotting a bug, discrepancy, or product gap? My inbox is open -
                 and I actually reply.
               </p>
 
@@ -109,7 +109,7 @@ export function ContactCta() {
                 typically within a day.
               </p>
 
-              <div className="mt-5 flex flex-col gap-2.5 sm:flex-row">
+              <div className="mt-5 grid gap-2.5 sm:grid-cols-2">
                 <Button asChild size="lg" className="sm:flex-1">
                   <Link href="/contact">
                     <MessageSquare className="h-4 w-4" /> Contact me
@@ -117,8 +117,8 @@ export function ContactCta() {
                   </Link>
                 </Button>
                 <Button asChild size="lg" variant="outline" className="sm:flex-1">
-                  <a href="https://github.com/ObaidGits" target="_blank" rel="noopener noreferrer">
-                    <Github className="h-4 w-4" /> View GitHub
+                  <a href={`mailto:${SUPPORT_EMAIL}`}>
+                    <Mail className="h-4 w-4" /> Email direct
                   </a>
                 </Button>
               </div>

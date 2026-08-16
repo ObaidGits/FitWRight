@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "1.0.0",
+  "task": "fix discover page green box colors to match theme",
+  "detectedStack": [],
+  "selectedFiles": [],
+  "warnings": [
+    "no-match"
+  ],
+  "tokenBudget": {
+    "pointEstimate": 0,
+    "range": {
+      "low": 0,
+      "high": 0
+    },
+    "reductionPercent": 100
+  }
+}

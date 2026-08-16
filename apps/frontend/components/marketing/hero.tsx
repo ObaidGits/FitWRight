@@ -1,18 +1,15 @@
 'use client';
 
 /**
- * Landing hero (homepage enhancement). The strongest section: value prop +
- * CTAs on the left, a live-looking product mockup with floating AI cards and
- * soft animated gradient blobs on the right. Decorative layers are
- * aria-hidden; motion collapses under prefers-reduced-motion.
+ * Landing hero (homepage enhancement). Value prop left, product mockups right.
+ * Kept free of screenshot image assets; all visuals are native mockups.
  */
-import * as React from 'react';
 import Link from 'next/link';
 import Sparkles from 'lucide-react/dist/esm/icons/sparkles';
 import ArrowRight from 'lucide-react/dist/esm/icons/arrow-right';
 import ShieldCheck from 'lucide-react/dist/esm/icons/shield-check';
-import GitBranch from 'lucide-react/dist/esm/icons/git-branch';
 import KeyRound from 'lucide-react/dist/esm/icons/key-round';
+
 import { Button } from '@/components/atelier/button';
 import { TailorMock, AiSuggestionCard, CoverLetterMock } from '@/components/marketing/mockups';
 import { APP_ENTRY_HREF } from '@/lib/config/auth';
@@ -20,7 +17,6 @@ import { APP_ENTRY_HREF } from '@/lib/config/auth';
 export function Hero() {
   return (
     <section className="relative overflow-hidden">
-      {/* Decorative backdrop */}
       <div aria-hidden className="pointer-events-none absolute inset-0">
         <div className="absolute inset-0 at-grid-bg opacity-60" />
         <div
@@ -33,9 +29,8 @@ export function Hero() {
         />
       </div>
 
-      <div className="relative mx-auto grid w-full max-w-6xl items-center gap-12 px-4 py-20 md:px-8 md:py-28 lg:grid-cols-2">
-        {/* Copy */}
-        <div className="text-center lg:text-left">
+      <div className="relative mx-auto grid w-full max-w-6xl items-center gap-10 px-4 py-16 md:px-8 md:py-24 lg:grid-cols-2 lg:gap-12">
+        <div className="mx-auto max-w-xl text-center lg:mx-0 lg:text-left">
           <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--at-ai-surface)] px-3 py-1 text-xs font-medium text-[var(--at-ai)]">
             <Sparkles className="h-3.5 w-3.5" /> AI-native resume tailoring
           </span>
@@ -58,16 +53,11 @@ export function Hero() {
               </Link>
             </Button>
             <Button asChild size="lg" variant="outline">
-              <a
-                href="https://github.com/ObaidGits/FitWRight"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <GitBranch className="h-4 w-4" /> Star on GitHub
+              <a href="#proof">
+                <ArrowRight className="h-4 w-4" /> See the proof
               </a>
             </Button>
           </div>
-          {/* Honest trust signals - capabilities, not fabricated social proof. */}
           <div className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-[var(--muted-foreground)] lg:justify-start">
             <span className="inline-flex items-center gap-1.5">
               <ShieldCheck className="h-3.5 w-3.5 text-[var(--at-success)]" /> Never fabricates
@@ -77,13 +67,22 @@ export function Hero() {
               <KeyRound className="h-3.5 w-3.5 text-[var(--primary)]" /> Bring your own API key
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <GitBranch className="h-3.5 w-3.5 text-[var(--at-ai)]" /> Open source
+              <Sparkles className="h-3.5 w-3.5 text-[var(--at-ai)]" /> Review before export
             </span>
+          </div>
+          <div className="mt-8 grid gap-3 sm:grid-cols-4">
+            {['14 job boards', '6 languages', 'Live preview', 'Application tracker'].map((item) => (
+              <div
+                key={item}
+                className="rounded-[var(--radius-at-md)] border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-center text-xs font-medium text-[var(--foreground)] shadow-[var(--shadow-at-e1)]"
+              >
+                {item}
+              </div>
+            ))}
           </div>
         </div>
 
-        {/* Product mockup */}
-        <div className="relative mx-auto flex w-full max-w-md items-center justify-center lg:max-w-none">
+        <div className="relative mx-auto flex w-full max-w-lg items-center justify-center lg:max-w-none">
           <div className="at-float w-full">
             <TailorMock />
           </div>

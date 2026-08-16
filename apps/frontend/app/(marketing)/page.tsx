@@ -1,7 +1,8 @@
 /**
  * Landing page (Task 4 / Req 4) - premium, AI-native, story-driven.
- * Hero -> problem -> how it works -> AI analysis -> capabilities -> tracking ->
- * bring-your-own-key + providers -> privacy + open source -> FAQ -> final CTA.
+ * Hero -> proof -> problem -> how it works -> AI analysis -> capabilities ->
+ * tracking -> bring-your-own-key + providers -> privacy + control -> FAQ ->
+ * final CTA.
  * Truthful by design: product demonstrations and real capabilities only -
  * no testimonials, fake stats, or manufactured social proof.
  */
@@ -20,7 +21,6 @@ import PenLine from 'lucide-react/dist/esm/icons/pen-line';
 import ArrowRight from 'lucide-react/dist/esm/icons/arrow-right';
 import ShieldCheck from 'lucide-react/dist/esm/icons/shield-check';
 import KeyRound from 'lucide-react/dist/esm/icons/key-round';
-import GitBranch from 'lucide-react/dist/esm/icons/git-branch';
 import Lock from 'lucide-react/dist/esm/icons/lock';
 import BadgeCheck from 'lucide-react/dist/esm/icons/badge-check';
 import Brain from 'lucide-react/dist/esm/icons/brain';
@@ -36,12 +36,14 @@ import { Card } from '@/components/atelier/card';
 import { Reveal } from '@/components/marketing/reveal';
 import { ContactCta } from '@/components/marketing/contact-cta';
 import { Hero } from '@/components/marketing/hero';
+import { HomepageProof } from '@/components/marketing/homepage-proof';
 import { Faq } from '@/components/marketing/faq';
 import { HomePricing } from '@/components/marketing/home-pricing';
 import { LANDING_FAQS } from '@/components/marketing/faq-data';
 import { AnalysisMock, KanbanMock, ResumeDocMock } from '@/components/marketing/mockups';
 import { CAPABILITY_NAV } from '@/components/marketing/capabilities-data';
 import { JsonLd } from '@/lib/seo/json-ld';
+import { SUPPORT_EMAIL } from '@/lib/seo/config';
 import { SINGLE_USER_MODE, APP_ENTRY_HREF } from '@/lib/config/auth';
 import { KEYWORDS } from '@/lib/seo/page-keywords';
 import { OG_IMAGE, TWITTER_IMAGE } from '@/lib/seo/config';
@@ -58,13 +60,13 @@ export const metadata: Metadata = {
   // the "- FitWright" template suffix (which would duplicate the brand name).
   title: { absolute: 'FitWright - AI Resume Builder & Tailor' },
   description:
-    'Tailor your resume to every job with AI. Honest ATS scoring, cover letters, interview prep, and an application tracker. Bring your own API key. Free and open source.',
+    'Tailor your resume to every job with AI. Honest ATS scoring, cover letters, interview prep, and an application tracker. Bring your own API key.',
   keywords: [...KEYWORDS.landing],
   alternates: { canonical: '/' },
   openGraph: {
     title: 'FitWright - AI Resume Builder & Tailor',
     description:
-      'Tailor your resume to every job with AI. Honest ATS scoring, cover letters, interview prep, and application tracking. Bring your own API key. Free and open source.',
+      'Tailor your resume to every job with AI. Honest ATS scoring, cover letters, interview prep, and application tracking. Bring your own API key.',
     url: '/',
     type: 'website',
     images: [OG_IMAGE],
@@ -232,6 +234,7 @@ export default function LandingPage() {
       </noscript>
 
       <Hero />
+      <HomepageProof />
 
       {/* The problem */}
       <section className="border-t border-[var(--border)] bg-[var(--at-surface-2)]">
@@ -312,16 +315,15 @@ export default function LandingPage() {
               See the fit before you apply
             </h2>
             <p className="mt-3 text-[var(--muted-foreground)]">
-              FitWright reads the job description, detects the role, and extracts the skills and
-              keywords that matter. You get a transparent breakdown of what your resume already
-              covers - and what it&apos;s missing - so nothing is a black box.
+              FitWright reads the job, extracts the important bits, and shows what your resume
+              already covers - and what is still missing.
             </p>
             <ul className="mt-6 space-y-3">
               {[
-                { icon: Brain, t: 'Role detection & keyword extraction' },
-                { icon: ListChecks, t: 'Matched vs. missing skills, at a glance' },
-                { icon: Gauge, t: 'Keyword, skills & section sub-scores' },
-                { icon: Eye, t: 'Explainable - every change is reviewable' },
+                { icon: Brain, t: 'Role detection + keyword extraction' },
+                { icon: ListChecks, t: 'Matched vs. missing skills' },
+                { icon: Gauge, t: 'Clear sub-scores' },
+                { icon: Eye, t: 'Every change stays reviewable' },
               ].map((f) => {
                 const Icon = f.icon;
                 return (
@@ -347,7 +349,7 @@ export default function LandingPage() {
           <SectionHeading
             eyebrow="Capabilities"
             title="Everything to land the interview"
-            sub="A complete, AI-native toolkit - not a form with a button."
+            sub="A complete toolkit, not a form with a button."
           />
         </Reveal>
         <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -382,9 +384,8 @@ export default function LandingPage() {
               Run your whole search from one board
             </h2>
             <p className="mt-3 text-[var(--muted-foreground)]">
-              Every time you tailor a resume, an application is created automatically. Move it
-              across stages - applied, interviewing, offer - with drag-and-drop, and keep the
-              tailored resume, cover letter, interview prep, and notes together for each role.
+              Each tailored resume becomes an application. Move roles across stages, keep notes
+              together, and stay on top of the search without extra tabs.
             </p>
             <div className="mt-6">
               <Button asChild variant="outline">
@@ -408,9 +409,8 @@ export default function LandingPage() {
               Bring your own API key
             </h2>
             <p className="mt-3 text-[var(--muted-foreground)]">
-              Connect the AI provider you already use. You control the model, the cost, and the data
-              - your key is encrypted at rest on your own instance. Prefer zero cost and full
-              privacy? Run local models with Ollama.
+              Connect the model you already use. You control the cost, the data, and the output.
+              Prefer local runs? Ollama works too.
             </p>
             <div className="mt-6 grid gap-3 sm:grid-cols-3">
               {[
@@ -452,7 +452,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Privacy + Open source */}
+      {/* Privacy + control */}
       <section className="border-y border-[var(--border)] bg-[var(--at-surface-2)]">
         <div className="mx-auto grid w-full max-w-6xl gap-4 px-4 py-20 md:grid-cols-2 md:px-8">
           <Reveal>
@@ -460,14 +460,13 @@ export default function LandingPage() {
               <span className="flex h-11 w-11 items-center justify-center rounded-[var(--radius-at-lg)] bg-[var(--at-success)]/15 text-[var(--at-success)]">
                 <Lock className="h-5 w-5" />
               </span>
-              <h3 className="mt-4 text-xl font-semibold">Privacy first</h3>
+              <h3 className="mt-4 text-xl font-semibold">Private by default</h3>
               <p className="mt-2 text-sm text-[var(--muted-foreground)]">
-                Your resume content stays in your own database. Your API key is encrypted at rest.
-                Nothing is sent anywhere except the AI provider you explicitly choose - no hidden
-                processing, no data resale.
+                Your resume content stays in your own database. Nothing is sent anywhere except the
+                AI provider you choose.
               </p>
               <ul className="mt-4 space-y-2 text-sm">
-                {['You own your data', 'Encrypted key storage', 'Transparent AI calls'].map((t) => (
+                {['You own your data', 'Encrypted key storage', 'No hidden processing'].map((t) => (
                   <li key={t} className="flex items-center gap-2">
                     <ShieldCheck className="h-4 w-4 text-[var(--at-success)]" /> {t}
                   </li>
@@ -478,25 +477,13 @@ export default function LandingPage() {
           <Reveal delay={100}>
             <Card className="h-full p-8">
               <span className="flex h-11 w-11 items-center justify-center rounded-[var(--radius-at-lg)] bg-[var(--at-ai-surface)] text-[var(--at-ai)]">
-                <GitBranch className="h-5 w-5" />
+                <ShieldCheck className="h-5 w-5" />
               </span>
-              <h3 className="mt-4 text-xl font-semibold">Open source</h3>
+              <h3 className="mt-4 text-xl font-semibold">Simple to trust</h3>
               <p className="mt-2 text-sm text-[var(--muted-foreground)]">
-                FitWright is fully open source. Read exactly how it works, self-host it on your own
-                machine, and shape it with the community. Transparency you can verify - not just a
-                promise.
+                The interface stays clear, the flows stay direct, and the output stays easy to
+                review.
               </p>
-              <div className="mt-5">
-                <Button asChild variant="outline">
-                  <a
-                    href="https://github.com/ObaidGits/FitWRight"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <GitBranch className="h-4 w-4" /> View source on GitHub
-                  </a>
-                </Button>
-              </div>
             </Card>
           </Reveal>
         </div>
@@ -511,7 +498,7 @@ export default function LandingPage() {
             <SectionHeading
               eyebrow="Pricing"
               title="Pay for the writing, not the searching"
-              sub="Start free. Searching job boards never costs a credit - you're only charged when AI writes something for you, and never when it fails."
+              sub="Start free. Searching never costs credits - only writing does."
             />
           </Reveal>
           <Reveal delay={80}>
@@ -553,7 +540,7 @@ export default function LandingPage() {
                 Tailor your next application in seconds
               </h2>
               <p className="mx-auto mt-3 max-w-md text-[var(--muted-foreground)]">
-                Free, open source, and private. Bring your key and start now.
+                Private, focused, and built for faster applications. Bring your key and start now.
               </p>
               <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
                 <Button asChild size="lg">
@@ -563,12 +550,8 @@ export default function LandingPage() {
                   </Link>
                 </Button>
                 <Button asChild size="lg" variant="outline">
-                  <a
-                    href="https://github.com/ObaidGits/FitWRight"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <GitBranch className="h-4 w-4" /> GitHub
+                  <a href="#contact-cta-heading">
+                    <ArrowRight className="h-4 w-4" /> Contact
                   </a>
                 </Button>
               </div>
@@ -601,26 +584,18 @@ export default function LandingPage() {
                 {cap.label}
               </Link>
             ))}
-            <Link href="/connect" className="hover:text-[var(--foreground)]">
-              Connect
-            </Link>
             <Link href="/contact" className="hover:text-[var(--foreground)]">
               Contact
             </Link>
+            <a href={`mailto:${SUPPORT_EMAIL}`} className="hover:text-[var(--foreground)]">
+              Email
+            </a>
             <Link href="/privacy" className="hover:text-[var(--foreground)]">
               Privacy
             </Link>
             <Link href="/terms" className="hover:text-[var(--foreground)]">
               Terms
             </Link>
-            <a
-              href="https://github.com/ObaidGits/FitWRight"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:text-[var(--foreground)]"
-            >
-              GitHub
-            </a>
           </nav>
         </div>
       </footer>

@@ -97,21 +97,19 @@ export function Sidebar() {
           Profile
         </Link>
 
-        {/* Connect with the developer - a distinct destination below the core
-            workflow nav (kept out of PRIMARY_NAV so the mobile bottom nav, which
-            reads that list by index, is unaffected). */}
+        {/* Contact the developer - distinct destination below core workflow nav. */}
         <Link
-          href="/connect"
-          aria-current={isActive('/connect') ? 'page' : undefined}
+          href="/contact"
+          aria-current={isActive('/contact') ? 'page' : undefined}
           className={cn(
             'flex items-center gap-3 rounded-[var(--radius-at-md)] px-3 py-2 text-sm font-medium transition-colors',
-            isActive('/connect')
+            isActive('/contact')
               ? 'bg-[var(--accent)] text-[var(--foreground)]'
               : 'text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]'
           )}
         >
           <Heart className="h-[18px] w-[18px]" />
-          Connect
+          Contact
         </Link>
       </nav>
 

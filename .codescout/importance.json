@@ -1,0 +1,7208 @@
+{
+  "schemaVersion": "1.0.0",
+  "scores": {
+    "HEROKU_DEPLOY_INSTRUCTIONS.md": {
+      "score": 0,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 0,
+      "routeUsage": 0
+    },
+    "INSTRUCTIONS_TAILOR_RESUME.md": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "README.md": {
+      "score": 21,
+      "dependents": 1,
+      "imports": 2,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "SETUP.md": {
+      "score": 24,
+      "dependents": 3,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/alembic/env.py": {
+      "score": 11,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/alembic/versions/0001_baseline_current_implicit_schema.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/alembic/versions/0002_auth_tables_and_kv.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/alembic/versions/0003_add_user_id_to_owned_tables.py": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/alembic/versions/0004_backfill_bootstrap_owner.py": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/alembic/versions/0005_enforce_user_scoping_constraints.py": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/alembic/versions/0006_email_change_tokens.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/alembic/versions/0007_admin_soft_delete_counters_metrics.py": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/alembic/versions/0008_admin_search_and_active_indexes.py": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/alembic/versions/0009_resume_versions.py": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/alembic/versions/0010_platform_notifications.py": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/alembic/versions/0011_search_documents.py": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/alembic/versions/0012_reminders_interviews.py": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/alembic/versions/0013_profile_avatar_fields.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/alembic/versions/0014_resume_version_cas.py": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/alembic/versions/0015_profile_system.py": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/alembic/versions/0016_profile_public_sharing.py": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/alembic/versions/0017_profile_public_theme.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/alembic/versions/0018_profile_image_metadata.py": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/alembic/versions/0019_analysis_artifacts.py": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/alembic/versions/0020_resume_template_settings.py": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/alembic/versions/0021_resume_version_template_settings.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/alembic/versions/0022_tailor_previews.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/alembic/versions/0023_admin_invites.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/alembic/versions/0024_admin_observability_accuracy.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/alembic/versions/0025_user_llm_configs.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/alembic/versions/0026_user_error_reports.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/alembic/versions/0027_job_discovery_tables.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/alembic/versions/0028_discovery_feed_tables.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/alembic/versions/0029_application_fields_and_submissions.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/alembic/versions/0030_discovery_queue_link_and_grouping.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/alembic/versions/0031_board_health.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/alembic/versions/0032_resume_ats_score.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/alembic/versions/0033_ai_channels.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/alembic/versions/0034_ai_usage_ledger.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/alembic/versions/0035_credit_accounts.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/alembic/versions/0036_channel_credential_on_row.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/alembic/versions/0037_usage_latency.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/alembic/versions/0038_credit_purchases.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/alembic/versions/0039_credit_packs.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/__init__.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/admin/__init__.py": {
+      "score": 8,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/admin/ai_metrics.py": {
+      "score": 31,
+      "dependents": 3,
+      "imports": 2,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/backend/app/admin/config_diag.py": {
+      "score": 23,
+      "dependents": 2,
+      "imports": 2,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/app/admin/cursor.py": {
+      "score": 26,
+      "dependents": 4,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/admin/deps.py": {
+      "score": 38,
+      "dependents": 3,
+      "imports": 7,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/app/admin/error_reports_service.py": {
+      "score": 10,
+      "dependents": 1,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/admin/errors_metrics.py": {
+      "score": 25,
+      "dependents": 2,
+      "imports": 3,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/app/admin/health_service.py": {
+      "score": 31,
+      "dependents": 2,
+      "imports": 3,
+      "gitCommits": 5,
+      "routeUsage": 0
+    },
+    "apps/backend/app/admin/job_markers.py": {
+      "score": 31,
+      "dependents": 5,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/admin/jobs.py": {
+      "score": 66,
+      "dependents": 8,
+      "imports": 7,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/backend/app/admin/jobs_panel.py": {
+      "score": 29,
+      "dependents": 2,
+      "imports": 5,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/app/admin/lifecycle.py": {
+      "score": 19,
+      "dependents": 1,
+      "imports": 4,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/admin/maintenance.py": {
+      "score": 20,
+      "dependents": 2,
+      "imports": 2,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/admin/metric_registry.py": {
+      "score": 109,
+      "dependents": 20,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/app/admin/metric_store.py": {
+      "score": 43,
+      "dependents": 7,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/admin/metrics.py": {
+      "score": 49,
+      "dependents": 8,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/app/admin/metrics_service.py": {
+      "score": 40,
+      "dependents": 5,
+      "imports": 3,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/app/admin/overview.py": {
+      "score": 24,
+      "dependents": 2,
+      "imports": 1,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/backend/app/admin/perf_metrics.py": {
+      "score": 25,
+      "dependents": 2,
+      "imports": 3,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/app/admin/repo.py": {
+      "score": 60,
+      "dependents": 8,
+      "imports": 4,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/backend/app/admin/resume_rollup.py": {
+      "score": 14,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/app/admin/rollup_pipeline.py": {
+      "score": 21,
+      "dependents": 1,
+      "imports": 5,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/admin/schemas.py": {
+      "score": 187,
+      "dependents": 35,
+      "imports": 0,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/backend/app/admin/security_metrics.py": {
+      "score": 29,
+      "dependents": 3,
+      "imports": 1,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/backend/app/admin/storage_metrics.py": {
+      "score": 29,
+      "dependents": 3,
+      "imports": 1,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/backend/app/ai_abuse_signals.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/ai_alerts.py": {
+      "score": 5,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/ai_allowance.py": {
+      "score": 18,
+      "dependents": 1,
+      "imports": 2,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/app/ai_channel_import.py": {
+      "score": 5,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/ai_channel_test.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/ai_channels.py": {
+      "score": 26,
+      "dependents": 4,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/ai_credits.py": {
+      "score": 26,
+      "dependents": 4,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/ai_input_limits.py": {
+      "score": 10,
+      "dependents": 1,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/ai_metered.py": {
+      "score": 55,
+      "dependents": 8,
+      "imports": 3,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/app/ai_pack_pricing.py": {
+      "score": 13,
+      "dependents": 2,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/ai_purchases.py": {
+      "score": 17,
+      "dependents": 1,
+      "imports": 3,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/ai_rates.py": {
+      "score": 10,
+      "dependents": 1,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/ai_razorpay.py": {
+      "score": 12,
+      "dependents": 1,
+      "imports": 2,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/ai_retention.py": {
+      "score": 5,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/ai_routing.py": {
+      "score": 28,
+      "dependents": 3,
+      "imports": 2,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/app/ai_spend.py": {
+      "score": 25,
+      "dependents": 2,
+      "imports": 3,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/app/ai_usage_meter.py": {
+      "score": 34,
+      "dependents": 5,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/app/analysis_cache.py": {
+      "score": 18,
+      "dependents": 2,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/analytics/__init__.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/analytics/feature_usage.py": {
+      "score": 20,
+      "dependents": 2,
+      "imports": 2,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/analytics/resume_metrics.py": {
+      "score": 14,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/app/applications/__init__.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/applications/resume_choice.py": {
+      "score": 15,
+      "dependents": 1,
+      "imports": 2,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/applications/submissions.py": {
+      "score": 34,
+      "dependents": 4,
+      "imports": 1,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/backend/app/auth/__init__.py": {
+      "score": 28,
+      "dependents": 0,
+      "imports": 11,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/auth/accounts.py": {
+      "score": 128,
+      "dependents": 23,
+      "imports": 2,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/app/auth/admin_invites.py": {
+      "score": 12,
+      "dependents": 1,
+      "imports": 2,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/auth/audit.py": {
+      "score": 83,
+      "dependents": 12,
+      "imports": 1,
+      "gitCommits": 7,
+      "routeUsage": 0
+    },
+    "apps/backend/app/auth/breach.py": {
+      "score": 41,
+      "dependents": 7,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/auth/captcha.py": {
+      "score": 41,
+      "dependents": 7,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/auth/context.py": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/auth/csrf.py": {
+      "score": 31,
+      "dependents": 5,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/auth/email.py": {
+      "score": 64,
+      "dependents": 11,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/app/auth/identity.py": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/auth/kvstore/__init__.py": {
+      "score": 13,
+      "dependents": 0,
+      "imports": 5,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/auth/kvstore/base.py": {
+      "score": 33,
+      "dependents": 5,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/auth/kvstore/db.py": {
+      "score": 18,
+      "dependents": 2,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/auth/kvstore/factory.py": {
+      "score": 19,
+      "dependents": 1,
+      "imports": 4,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/auth/kvstore/local.py": {
+      "score": 73,
+      "dependents": 13,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/auth/kvstore/redis_store.py": {
+      "score": 21,
+      "dependents": 2,
+      "imports": 1,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/app/auth/metrics.py": {
+      "score": 26,
+      "dependents": 4,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/auth/oauth/__init__.py": {
+      "score": 16,
+      "dependents": 0,
+      "imports": 5,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/auth/oauth/base.py": {
+      "score": 31,
+      "dependents": 5,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/auth/oauth/google.py": {
+      "score": 18,
+      "dependents": 2,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/auth/oauth/linking.py": {
+      "score": 30,
+      "dependents": 3,
+      "imports": 3,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/app/auth/oauth/registry.py": {
+      "score": 33,
+      "dependents": 5,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/auth/oauth/state.py": {
+      "score": 18,
+      "dependents": 2,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/auth/owner.py": {
+      "score": 41,
+      "dependents": 5,
+      "imports": 2,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/backend/app/auth/passwords.py": {
+      "score": 110,
+      "dependents": 20,
+      "imports": 2,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/auth/principal.py": {
+      "score": 63,
+      "dependents": 9,
+      "imports": 3,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/backend/app/auth/ratelimit.py": {
+      "score": 58,
+      "dependents": 10,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/auth/runtime.py": {
+      "score": 32,
+      "dependents": 3,
+      "imports": 4,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/app/auth/sessions.py": {
+      "score": 91,
+      "dependents": 15,
+      "imports": 2,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/backend/app/auth/tokens.py": {
+      "score": 20,
+      "dependents": 2,
+      "imports": 2,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/config.py": {
+      "score": 625,
+      "dependents": 116,
+      "imports": 0,
+      "gitCommits": 15,
+      "routeUsage": 0
+    },
+    "apps/backend/app/config_cache.py": {
+      "score": 28,
+      "dependents": 4,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/crypto.py": {
+      "score": 21,
+      "dependents": 2,
+      "imports": 1,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/app/database.py": {
+      "score": 240,
+      "dependents": 35,
+      "imports": 4,
+      "gitCommits": 19,
+      "routeUsage": 0
+    },
+    "apps/backend/app/db_engine.py": {
+      "score": 56,
+      "dependents": 8,
+      "imports": 2,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/backend/app/diagnostics.py": {
+      "score": 14,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/app/error_reports/__init__.py": {
+      "score": 5,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/error_reports/schemas.py": {
+      "score": 13,
+      "dependents": 2,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/errors.py": {
+      "score": 124,
+      "dependents": 23,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/app/events/__init__.py": {
+      "score": 7,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/events/jobs.py": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/events/outbox.py": {
+      "score": 18,
+      "dependents": 2,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/events/types.py": {
+      "score": 106,
+      "dependents": 20,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/jd/__init__.py": {
+      "score": 8,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/jd/adapters/__init__.py": {
+      "score": 5,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/jd/adapters/ashby.py": {
+      "score": 21,
+      "dependents": 2,
+      "imports": 1,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/app/jd/adapters/base.py": {
+      "score": 10,
+      "dependents": 1,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/jd/adapters/enterprise.py": {
+      "score": 13,
+      "dependents": 1,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/jd/adapters/greenhouse.py": {
+      "score": 18,
+      "dependents": 2,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/jd/adapters/icims.py": {
+      "score": 13,
+      "dependents": 1,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/jd/adapters/indeed.py": {
+      "score": 13,
+      "dependents": 1,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/jd/adapters/lever.py": {
+      "score": 18,
+      "dependents": 2,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/jd/adapters/linkedin.py": {
+      "score": 13,
+      "dependents": 1,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/jd/adapters/registry.py": {
+      "score": 44,
+      "dependents": 3,
+      "imports": 10,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/app/jd/adapters/smartrecruiters.py": {
+      "score": 10,
+      "dependents": 1,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/jd/adapters/workday.py": {
+      "score": 13,
+      "dependents": 1,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/jd/browser/__init__.py": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 3,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/jd/browser/decision.py": {
+      "score": 16,
+      "dependents": 2,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/jd/browser/distributed.py": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/jd/browser/pool.py": {
+      "score": 13,
+      "dependents": 2,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/jd/browser/render.py": {
+      "score": 29,
+      "dependents": 2,
+      "imports": 5,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/app/jd/cache.py": {
+      "score": 13,
+      "dependents": 1,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/jd/canonicalize.py": {
+      "score": 26,
+      "dependents": 4,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/jd/classify.py": {
+      "score": 22,
+      "dependents": 2,
+      "imports": 0,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/backend/app/jd/concurrency.py": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/jd/drift.py": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/jd/extract.py": {
+      "score": 16,
+      "dependents": 2,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/jd/extractors/__init__.py": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 3,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/jd/extractors/dom.py": {
+      "score": 33,
+      "dependents": 5,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/jd/extractors/hydration.py": {
+      "score": 26,
+      "dependents": 3,
+      "imports": 1,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/app/jd/extractors/jsonld.py": {
+      "score": 33,
+      "dependents": 5,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/jd/extractors/pdf.py": {
+      "score": 13,
+      "dependents": 1,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/jd/fingerprint.py": {
+      "score": 21,
+      "dependents": 3,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/jd/health.py": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/jd/i18n.py": {
+      "score": 16,
+      "dependents": 2,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/jd/ml_scorer.py": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/app/jd/models.py": {
+      "score": 103,
+      "dependents": 20,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/jd/monitoring/__init__.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/jd/monitoring/cost.py": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/jd/orchestrator.py": {
+      "score": 43,
+      "dependents": 0,
+      "imports": 17,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/app/jd/rendered.py": {
+      "score": 18,
+      "dependents": 0,
+      "imports": 6,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/jd/robots.py": {
+      "score": 13,
+      "dependents": 1,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/jd/service.py": {
+      "score": 15,
+      "dependents": 1,
+      "imports": 2,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/jd/ssrf.py": {
+      "score": 49,
+      "dependents": 8,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/app/jd/webhook.py": {
+      "score": 14,
+      "dependents": 0,
+      "imports": 4,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/job_discovery/__init__.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/job_discovery/board_health.py": {
+      "score": 8,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/job_discovery/cache.py": {
+      "score": 27,
+      "dependents": 3,
+      "imports": 3,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/job_discovery/connectors/__init__.py": {
+      "score": 5,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/job_discovery/connectors/base.py": {
+      "score": 65,
+      "dependents": 12,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/job_discovery/connectors/browser_fetch.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/job_discovery/connectors/extra_platforms.py": {
+      "score": 10,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/job_discovery/connectors/jd_adapter.py": {
+      "score": 14,
+      "dependents": 1,
+      "imports": 3,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/job_discovery/connectors/jobspy.py": {
+      "score": 14,
+      "dependents": 1,
+      "imports": 3,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/job_discovery/connectors/site_recipe.py": {
+      "score": 23,
+      "dependents": 2,
+      "imports": 5,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/job_discovery/fetch.py": {
+      "score": 32,
+      "dependents": 5,
+      "imports": 2,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/job_discovery/models.py": {
+      "score": 143,
+      "dependents": 28,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/job_discovery/normalize.py": {
+      "score": 27,
+      "dependents": 3,
+      "imports": 3,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/job_discovery/query.py": {
+      "score": 17,
+      "dependents": 2,
+      "imports": 2,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/job_discovery/queueing.py": {
+      "score": 13,
+      "dependents": 1,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/job_discovery/ranker.py": {
+      "score": 15,
+      "dependents": 2,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/job_discovery/recipes.py": {
+      "score": 29,
+      "dependents": 4,
+      "imports": 3,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/job_discovery/retention.py": {
+      "score": 8,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/job_discovery/scoring.py": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/job_discovery/search_jobs.py": {
+      "score": 8,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/job_discovery/service.py": {
+      "score": 36,
+      "dependents": 3,
+      "imports": 9,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/job_discovery/tailor.py": {
+      "score": 10,
+      "dependents": 1,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/job_discovery/worker.py": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/llm.py": {
+      "score": 166,
+      "dependents": 25,
+      "imports": 4,
+      "gitCommits": 11,
+      "routeUsage": 0
+    },
+    "apps/backend/app/llm_health.py": {
+      "score": 18,
+      "dependents": 3,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/llm_ratelimit.py": {
+      "score": 44,
+      "dependents": 6,
+      "imports": 4,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/main.py": {
+      "score": 307,
+      "dependents": 51,
+      "imports": 5,
+      "gitCommits": 14,
+      "routeUsage": 0
+    },
+    "apps/backend/app/migrations_runtime.py": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/models.py": {
+      "score": 275,
+      "dependents": 46,
+      "imports": 0,
+      "gitCommits": 15,
+      "routeUsage": 0
+    },
+    "apps/backend/app/notifications/__init__.py": {
+      "score": 8,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/notifications/consumer.py": {
+      "score": 8,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/notifications/repo.py": {
+      "score": 18,
+      "dependents": 2,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/notifications/service.py": {
+      "score": 28,
+      "dependents": 4,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/observability.py": {
+      "score": 16,
+      "dependents": 2,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/pdf.py": {
+      "score": 34,
+      "dependents": 5,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/app/pdf_cache.py": {
+      "score": 8,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/pdf_token.py": {
+      "score": 13,
+      "dependents": 1,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/platform/__init__.py": {
+      "score": 15,
+      "dependents": 0,
+      "imports": 3,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/app/platform/capabilities.py": {
+      "score": 26,
+      "dependents": 3,
+      "imports": 1,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/app/platform/composition.py": {
+      "score": 21,
+      "dependents": 3,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/platform/ports/__init__.py": {
+      "score": 14,
+      "dependents": 0,
+      "imports": 4,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/platform/profiles.py": {
+      "score": 31,
+      "dependents": 5,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/productivity/RUNBOOKS.md": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/productivity/__init__.py": {
+      "score": 8,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/productivity/metrics.py": {
+      "score": 16,
+      "dependents": 2,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/profile/__init__.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/profile/ai.py": {
+      "score": 30,
+      "dependents": 2,
+      "imports": 4,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/backend/app/profile/analytics.py": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/profile/analytics_consumer.py": {
+      "score": 8,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/profile/backfill.py": {
+      "score": 25,
+      "dependents": 3,
+      "imports": 2,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/profile/completion.py": {
+      "score": 23,
+      "dependents": 3,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/profile/import_adapters.py": {
+      "score": 27,
+      "dependents": 3,
+      "imports": 3,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/profile/merge.py": {
+      "score": 15,
+      "dependents": 1,
+      "imports": 2,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/profile/photo.py": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/profile/projection.py": {
+      "score": 30,
+      "dependents": 4,
+      "imports": 2,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/profile/public.py": {
+      "score": 13,
+      "dependents": 1,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/profile/schemas.py": {
+      "score": 96,
+      "dependents": 17,
+      "imports": 1,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/app/profile/search.py": {
+      "score": 13,
+      "dependents": 1,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/profile/service.py": {
+      "score": 31,
+      "dependents": 3,
+      "imports": 5,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/profile/similarity.py": {
+      "score": 21,
+      "dependents": 3,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/profile/similarity_provider.py": {
+      "score": 16,
+      "dependents": 1,
+      "imports": 1,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/app/profile/skills.py": {
+      "score": 31,
+      "dependents": 5,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/profile/sync.py": {
+      "score": 12,
+      "dependents": 0,
+      "imports": 3,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/profile/versions.py": {
+      "score": 18,
+      "dependents": 2,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/prompts/__init__.py": {
+      "score": 11,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/app/prompts/discovery.py": {
+      "score": 8,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/prompts/enrichment.py": {
+      "score": 13,
+      "dependents": 2,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/prompts/refinement.py": {
+      "score": 16,
+      "dependents": 2,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/prompts/resume_wizard.py": {
+      "score": 14,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/app/prompts/templates.py": {
+      "score": 60,
+      "dependents": 9,
+      "imports": 0,
+      "gitCommits": 5,
+      "routeUsage": 0
+    },
+    "apps/backend/app/repository.py": {
+      "score": 25,
+      "dependents": 1,
+      "imports": 1,
+      "gitCommits": 6,
+      "routeUsage": 0
+    },
+    "apps/backend/app/resilience/__init__.py": {
+      "score": 10,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/resilience/idempotency.py": {
+      "score": 16,
+      "dependents": 2,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/resilience/metrics.py": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/resilience/registry.py": {
+      "score": 21,
+      "dependents": 3,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/retention/__init__.py": {
+      "score": 8,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/retention/jobs.py": {
+      "score": 14,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/app/routers/__init__.py": {
+      "score": 84,
+      "dependents": 0,
+      "imports": 30,
+      "gitCommits": 8,
+      "routeUsage": 0
+    },
+    "apps/backend/app/routers/_auth_deps.py": {
+      "score": 42,
+      "dependents": 7,
+      "imports": 2,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/routers/admin.py": {
+      "score": 66,
+      "dependents": 1,
+      "imports": 23,
+      "gitCommits": 5,
+      "routeUsage": 0
+    },
+    "apps/backend/app/routers/admin_ai.py": {
+      "score": 27,
+      "dependents": 1,
+      "imports": 5,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/backend/app/routers/agenda.py": {
+      "score": 15,
+      "dependents": 1,
+      "imports": 2,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/routers/application_fields.py": {
+      "score": 34,
+      "dependents": 4,
+      "imports": 1,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/backend/app/routers/applications.py": {
+      "score": 34,
+      "dependents": 2,
+      "imports": 3,
+      "gitCommits": 6,
+      "routeUsage": 0
+    },
+    "apps/backend/app/routers/auth.py": {
+      "score": 42,
+      "dependents": 1,
+      "imports": 11,
+      "gitCommits": 5,
+      "routeUsage": 0
+    },
+    "apps/backend/app/routers/config.py": {
+      "score": 39,
+      "dependents": 1,
+      "imports": 5,
+      "gitCommits": 8,
+      "routeUsage": 0
+    },
+    "apps/backend/app/routers/contact.py": {
+      "score": 26,
+      "dependents": 2,
+      "imports": 5,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/routers/credits.py": {
+      "score": 22,
+      "dependents": 1,
+      "imports": 4,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/app/routers/discovery.py": {
+      "score": 58,
+      "dependents": 3,
+      "imports": 8,
+      "gitCommits": 9,
+      "routeUsage": 0
+    },
+    "apps/backend/app/routers/enrichment.py": {
+      "score": 51,
+      "dependents": 3,
+      "imports": 9,
+      "gitCommits": 6,
+      "routeUsage": 0
+    },
+    "apps/backend/app/routers/error_reports.py": {
+      "score": 31,
+      "dependents": 1,
+      "imports": 10,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/routers/extension.py": {
+      "score": 55,
+      "dependents": 4,
+      "imports": 4,
+      "gitCommits": 9,
+      "routeUsage": 0
+    },
+    "apps/backend/app/routers/health.py": {
+      "score": 32,
+      "dependents": 1,
+      "imports": 3,
+      "gitCommits": 7,
+      "routeUsage": 0
+    },
+    "apps/backend/app/routers/internal.py": {
+      "score": 22,
+      "dependents": 1,
+      "imports": 4,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/app/routers/interviews.py": {
+      "score": 17,
+      "dependents": 1,
+      "imports": 3,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/routers/jd.py": {
+      "score": 25,
+      "dependents": 1,
+      "imports": 4,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/backend/app/routers/jobs.py": {
+      "score": 25,
+      "dependents": 1,
+      "imports": 4,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/backend/app/routers/media.py": {
+      "score": 13,
+      "dependents": 1,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/routers/notifications.py": {
+      "score": 19,
+      "dependents": 1,
+      "imports": 4,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/routers/profile.py": {
+      "score": 26,
+      "dependents": 1,
+      "imports": 6,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/app/routers/public_profile.py": {
+      "score": 19,
+      "dependents": 1,
+      "imports": 4,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/routers/purchases.py": {
+      "score": 14,
+      "dependents": 1,
+      "imports": 3,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/routers/reminders.py": {
+      "score": 17,
+      "dependents": 1,
+      "imports": 3,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/routers/resume_wizard.py": {
+      "score": 36,
+      "dependents": 1,
+      "imports": 8,
+      "gitCommits": 5,
+      "routeUsage": 0
+    },
+    "apps/backend/app/routers/resumes.py": {
+      "score": 131,
+      "dependents": 12,
+      "imports": 19,
+      "gitCommits": 11,
+      "routeUsage": 0
+    },
+    "apps/backend/app/routers/reviews.py": {
+      "score": 26,
+      "dependents": 2,
+      "imports": 5,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/routers/search.py": {
+      "score": 15,
+      "dependents": 1,
+      "imports": 2,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/routers/users.py": {
+      "score": 30,
+      "dependents": 1,
+      "imports": 8,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/app/routers/versions.py": {
+      "score": 17,
+      "dependents": 1,
+      "imports": 3,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/scheduler.py": {
+      "score": 16,
+      "dependents": 1,
+      "imports": 1,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/app/scheduling/__init__.py": {
+      "score": 10,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/scheduling/ics.py": {
+      "score": 8,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/scheduling/recurrence.py": {
+      "score": 21,
+      "dependents": 3,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/scheduling/repo.py": {
+      "score": 18,
+      "dependents": 2,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/scheduling/scheduler.py": {
+      "score": 16,
+      "dependents": 2,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/scheduling/service.py": {
+      "score": 20,
+      "dependents": 2,
+      "imports": 2,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/schemas/__init__.py": {
+      "score": 23,
+      "dependents": 0,
+      "imports": 4,
+      "gitCommits": 5,
+      "routeUsage": 0
+    },
+    "apps/backend/app/schemas/applications.py": {
+      "score": 21,
+      "dependents": 3,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/schemas/auth.py": {
+      "score": 39,
+      "dependents": 6,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/app/schemas/contact.py": {
+      "score": 8,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/schemas/discovery.py": {
+      "score": 15,
+      "dependents": 2,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/schemas/enrichment.py": {
+      "score": 13,
+      "dependents": 2,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/schemas/jd.py": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/schemas/llm_outputs.py": {
+      "score": 32,
+      "dependents": 5,
+      "imports": 2,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/schemas/models.py": {
+      "score": 108,
+      "dependents": 17,
+      "imports": 1,
+      "gitCommits": 7,
+      "routeUsage": 0
+    },
+    "apps/backend/app/schemas/notifications.py": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/schemas/profile.py": {
+      "score": 8,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/schemas/refinement.py": {
+      "score": 18,
+      "dependents": 3,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/schemas/resume_wizard.py": {
+      "score": 41,
+      "dependents": 6,
+      "imports": 1,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/app/schemas/reviews.py": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/schemas/scheduling.py": {
+      "score": 21,
+      "dependents": 3,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/schemas/search.py": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/schemas/versions.py": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/scripts/__init__.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/scripts/check_scoping.py": {
+      "score": 17,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/backend/app/scripts/migrate_tinydb_to_sqlite.py": {
+      "score": 12,
+      "dependents": 0,
+      "imports": 3,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/search/__init__.py": {
+      "score": 10,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/search/indexer.py": {
+      "score": 21,
+      "dependents": 2,
+      "imports": 1,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/app/search/repo.py": {
+      "score": 23,
+      "dependents": 3,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/services/__init__.py": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 3,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/app/services/ats.py": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/services/cover_letter.py": {
+      "score": 31,
+      "dependents": 2,
+      "imports": 3,
+      "gitCommits": 5,
+      "routeUsage": 0
+    },
+    "apps/backend/app/services/improver.py": {
+      "score": 76,
+      "dependents": 10,
+      "imports": 4,
+      "gitCommits": 6,
+      "routeUsage": 0
+    },
+    "apps/backend/app/services/intake.py": {
+      "score": 22,
+      "dependents": 2,
+      "imports": 3,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/services/interview_prep.py": {
+      "score": 18,
+      "dependents": 2,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/services/parser.py": {
+      "score": 28,
+      "dependents": 3,
+      "imports": 2,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/app/services/refiner.py": {
+      "score": 32,
+      "dependents": 4,
+      "imports": 3,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/services/resume_score.py": {
+      "score": 15,
+      "dependents": 1,
+      "imports": 2,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/services/resume_wizard.py": {
+      "score": 43,
+      "dependents": 3,
+      "imports": 8,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/backend/app/storage/__init__.py": {
+      "score": 10,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/storage/image.py": {
+      "score": 16,
+      "dependents": 2,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/storage/provider.py": {
+      "score": 29,
+      "dependents": 4,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/app/versions/__init__.py": {
+      "score": 8,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/app/versions/service.py": {
+      "score": 46,
+      "dependents": 8,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/e2e_monitor/AGENT_PLAYBOOK.md": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/e2e_monitor/README.md": {
+      "score": 11,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/e2e_monitor/__init__.py": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/e2e_monitor/__main__.py": {
+      "score": 24,
+      "dependents": 0,
+      "imports": 9,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/e2e_monitor/baseline.py": {
+      "score": 16,
+      "dependents": 2,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/e2e_monitor/bundle.py": {
+      "score": 18,
+      "dependents": 3,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/e2e_monitor/collect.py": {
+      "score": 13,
+      "dependents": 2,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/e2e_monitor/flow.py": {
+      "score": 18,
+      "dependents": 2,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/e2e_monitor/gate.py": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/e2e_monitor/judge.py": {
+      "score": 16,
+      "dependents": 2,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/e2e_monitor/manifest.py": {
+      "score": 15,
+      "dependents": 2,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/e2e_monitor/render.py": {
+      "score": 16,
+      "dependents": 2,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/e2e_monitor/scrub.py": {
+      "score": 13,
+      "dependents": 2,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/e2e_monitor/servers.py": {
+      "score": 13,
+      "dependents": 1,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/scripts/check_model_migration_parity.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/scripts/razorpay_webhook.py": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/scripts/seed_credit_packs.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/scripts/verify_postgres.py": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/__init__.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/architecture/__init__.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/architecture/test_admin_import_graph.py": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/architecture/test_ai_metering_ratchet.py": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/architecture/test_composition_ownership.py": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/architecture/test_domain_purity.py": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/architecture/test_module_ownership.py": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/architecture/test_non_goals_guard.py": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/architecture/test_ports_registry.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/architecture/test_profile_boot.py": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 3,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/architecture/test_profile_containment.py": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/architecture/test_router_db_isolation.py": {
+      "score": 5,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/conftest.py": {
+      "score": 20,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 5,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/contract/__init__.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/contract/test_kvstore_contract.py": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/evals/README.md": {
+      "score": 16,
+      "dependents": 0,
+      "imports": 5,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/evals/__init__.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/evals/golden/__init__.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/evals/golden/cases.py": {
+      "score": 21,
+      "dependents": 3,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/evals/scorers.py": {
+      "score": 21,
+      "dependents": 3,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/evals/test_scorers.py": {
+      "score": 15,
+      "dependents": 1,
+      "imports": 2,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/evals/test_tailoring_eval.py": {
+      "score": 18,
+      "dependents": 1,
+      "imports": 2,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/__init__.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/conftest.py": {
+      "score": 8,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_admin_ai_analytics_api.py": {
+      "score": 17,
+      "dependents": 0,
+      "imports": 4,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_admin_api.py": {
+      "score": 76,
+      "dependents": 10,
+      "imports": 7,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_admin_authz_matrix.py": {
+      "score": 27,
+      "dependents": 0,
+      "imports": 6,
+      "gitCommits": 5,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_admin_concurrency.py": {
+      "score": 18,
+      "dependents": 0,
+      "imports": 6,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_admin_config_maintenance_api.py": {
+      "score": 18,
+      "dependents": 0,
+      "imports": 6,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_admin_errors_api.py": {
+      "score": 15,
+      "dependents": 0,
+      "imports": 3,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_admin_health_api.py": {
+      "score": 12,
+      "dependents": 0,
+      "imports": 3,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_admin_invites_api.py": {
+      "score": 14,
+      "dependents": 0,
+      "imports": 4,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_admin_job_cycle_e2e.py": {
+      "score": 16,
+      "dependents": 0,
+      "imports": 5,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_admin_jobs_api.py": {
+      "score": 12,
+      "dependents": 0,
+      "imports": 3,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_admin_kpis_api.py": {
+      "score": 12,
+      "dependents": 0,
+      "imports": 3,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_admin_performance_api.py": {
+      "score": 12,
+      "dependents": 0,
+      "imports": 3,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_admin_scale.py": {
+      "score": 16,
+      "dependents": 0,
+      "imports": 5,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_admin_security.py": {
+      "score": 16,
+      "dependents": 0,
+      "imports": 5,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_admin_security_api.py": {
+      "score": 15,
+      "dependents": 0,
+      "imports": 3,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_admin_storage_api.py": {
+      "score": 12,
+      "dependents": 0,
+      "imports": 3,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_ai_allowance.py": {
+      "score": 10,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_ai_caps_and_probe.py": {
+      "score": 5,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_ai_channel_credentials.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_ai_credits_load.py": {
+      "score": 5,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_ai_hardening.py": {
+      "score": 5,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_ai_metered_endpoint.py": {
+      "score": 16,
+      "dependents": 0,
+      "imports": 5,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_ai_pack_pricing.py": {
+      "score": 5,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_ai_purchases.py": {
+      "score": 10,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_ai_rates_and_spend.py": {
+      "score": 5,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_ai_razorpay.py": {
+      "score": 7,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_ai_spend.py": {
+      "score": 15,
+      "dependents": 0,
+      "imports": 3,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_ai_untested_paths.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_analysis_cache.py": {
+      "score": 13,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_app_boot.py": {
+      "score": 10,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_applications_api.py": {
+      "score": 16,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_audit_retention.py": {
+      "score": 19,
+      "dependents": 0,
+      "imports": 5,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_auth_abuse_observability.py": {
+      "score": 22,
+      "dependents": 0,
+      "imports": 8,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_auth_api.py": {
+      "score": 134,
+      "dependents": 23,
+      "imports": 5,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_auth_failure_recovery.py": {
+      "score": 28,
+      "dependents": 0,
+      "imports": 8,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_auth_migrations.py": {
+      "score": 8,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_auth_oauth_api.py": {
+      "score": 26,
+      "dependents": 1,
+      "imports": 6,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_auth_oauth_linking.py": {
+      "score": 12,
+      "dependents": 0,
+      "imports": 3,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_auth_perf.py": {
+      "score": 16,
+      "dependents": 0,
+      "imports": 5,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_auth_step_up.py": {
+      "score": 19,
+      "dependents": 1,
+      "imports": 4,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_auth_verification_reset.py": {
+      "score": 31,
+      "dependents": 1,
+      "imports": 7,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_authz_matrix.py": {
+      "score": 55,
+      "dependents": 1,
+      "imports": 7,
+      "gitCommits": 12,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_config_api.py": {
+      "score": 11,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_contact_api.py": {
+      "score": 10,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_credit_accounting.py": {
+      "score": 5,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_email_change.py": {
+      "score": 23,
+      "dependents": 0,
+      "imports": 7,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_feature_usage_api.py": {
+      "score": 18,
+      "dependents": 0,
+      "imports": 6,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_health_api.py": {
+      "score": 17,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 5,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_internal_jobs.py": {
+      "score": 21,
+      "dependents": 0,
+      "imports": 6,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_jd_api.py": {
+      "score": 15,
+      "dependents": 0,
+      "imports": 3,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_jd_phase4_api.py": {
+      "score": 7,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_jobs_api.py": {
+      "score": 14,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_llm_contract.py": {
+      "score": 11,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_llm_ratelimit.py": {
+      "score": 10,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_my_credits.py": {
+      "score": 8,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_notifications_api.py": {
+      "score": 12,
+      "dependents": 0,
+      "imports": 3,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_p3_verification.py": {
+      "score": 18,
+      "dependents": 0,
+      "imports": 3,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_pdf_print_token.py": {
+      "score": 10,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_pdf_render.py": {
+      "score": 11,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_pipeline_e2e.py": {
+      "score": 25,
+      "dependents": 1,
+      "imports": 4,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_postgres_backend.py": {
+      "score": 11,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_profile_api.py": {
+      "score": 13,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_profile_avatar_api.py": {
+      "score": 12,
+      "dependents": 0,
+      "imports": 3,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_profile_p3_p6_api.py": {
+      "score": 11,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_redis_kvstore.py": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_regenerate_endpoints.py": {
+      "score": 10,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_resume_analytics_api.py": {
+      "score": 21,
+      "dependents": 0,
+      "imports": 6,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_resume_api.py": {
+      "score": 11,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_resume_ats_score.py": {
+      "score": 5,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_resume_version_cas.py": {
+      "score": 8,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_resume_wizard_api.py": {
+      "score": 15,
+      "dependents": 0,
+      "imports": 3,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_reviews_api.py": {
+      "score": 7,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_scheduling_api.py": {
+      "score": 19,
+      "dependents": 0,
+      "imports": 5,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_search_api.py": {
+      "score": 21,
+      "dependents": 0,
+      "imports": 6,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_security_suite.py": {
+      "score": 23,
+      "dependents": 0,
+      "imports": 7,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_status_llm_health.py": {
+      "score": 7,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_streaming_api.py": {
+      "score": 22,
+      "dependents": 0,
+      "imports": 5,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_tailor_preview_durability.py": {
+      "score": 5,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_template_settings.py": {
+      "score": 11,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_tracker_autocreate.py": {
+      "score": 20,
+      "dependents": 0,
+      "imports": 4,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_upload_api.py": {
+      "score": 10,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_upload_csrf.py": {
+      "score": 13,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_user_scoping.py": {
+      "score": 10,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_users_api.py": {
+      "score": 26,
+      "dependents": 1,
+      "imports": 6,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/integration/test_versions_api.py": {
+      "score": 15,
+      "dependents": 0,
+      "imports": 3,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/live/test_live_llm_features.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/service/__init__.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/service/test_improver.py": {
+      "score": 11,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/test_application_fields.py": {
+      "score": 8,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/test_application_outcomes.py": {
+      "score": 5,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/test_application_submissions.py": {
+      "score": 5,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/test_autofill_readiness.py": {
+      "score": 5,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/test_background_search.py": {
+      "score": 5,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/test_config_job_discovery.py": {
+      "score": 5,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/test_cover_letter_greeting.py": {
+      "score": 5,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/test_database_discovery.py": {
+      "score": 7,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/test_discovery_connector_base.py": {
+      "score": 7,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/test_discovery_feed_filters.py": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/test_discovery_queueing.py": {
+      "score": 7,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/test_discovery_router.py": {
+      "score": 11,
+      "dependents": 0,
+      "imports": 4,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/test_discovery_schemas_smoke.py": {
+      "score": 5,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/test_discovery_service.py": {
+      "score": 15,
+      "dependents": 0,
+      "imports": 6,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/test_discovery_trust.py": {
+      "score": 7,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/test_e2e_discovery_smoke.py": {
+      "score": 19,
+      "dependents": 0,
+      "imports": 8,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/test_extension_autofill_profile.py": {
+      "score": 8,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/test_extension_hardening.py": {
+      "score": 7,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/test_extension_origins.py": {
+      "score": 5,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/test_extension_router.py": {
+      "score": 11,
+      "dependents": 0,
+      "imports": 4,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/test_fetch_dispatch.py": {
+      "score": 5,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/test_jd_adapter_connector.py": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 3,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/test_jd_golden.py": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/test_jd_performance.py": {
+      "score": 11,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/test_jd_phase2.py": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/test_jd_phase3.py": {
+      "score": 14,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/test_jd_phase3_activation.py": {
+      "score": 11,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/test_jd_phase4.py": {
+      "score": 8,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/test_jd_v2.py": {
+      "score": 29,
+      "dependents": 0,
+      "imports": 7,
+      "gitCommits": 5,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/test_jobspy_connector.py": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 3,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/test_llm_credential_health.py": {
+      "score": 5,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/test_normalize_discovery.py": {
+      "score": 7,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/test_query_generation.py": {
+      "score": 7,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/test_ranker.py": {
+      "score": 7,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/test_recipes.py": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 3,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/test_resume_choice.py": {
+      "score": 5,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/test_search_cache.py": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 3,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/test_site_recipe_connector.py": {
+      "score": 11,
+      "dependents": 0,
+      "imports": 4,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/test_tailor_handoff.py": {
+      "score": 7,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/__init__.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_admin_config_maintenance.py": {
+      "score": 16,
+      "dependents": 0,
+      "imports": 5,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_admin_foundations.py": {
+      "score": 13,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_admin_invites.py": {
+      "score": 5,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_admin_schemas_observability.py": {
+      "score": 11,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_admin_units.py": {
+      "score": 13,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_ai_channels.py": {
+      "score": 5,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_ai_credits_policy.py": {
+      "score": 5,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_ai_metrics.py": {
+      "score": 17,
+      "dependents": 0,
+      "imports": 4,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_ai_routing.py": {
+      "score": 10,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_ai_usage_meter.py": {
+      "score": 7,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_alerting.py": {
+      "score": 13,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_apply_diffs.py": {
+      "score": 10,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_auth_api_schemas.py": {
+      "score": 7,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_auth_audit.py": {
+      "score": 12,
+      "dependents": 0,
+      "imports": 3,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_auth_config.py": {
+      "score": 11,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_auth_csrf.py": {
+      "score": 5,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_auth_identity.py": {
+      "score": 12,
+      "dependents": 0,
+      "imports": 3,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_auth_interfaces.py": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_auth_models.py": {
+      "score": 10,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_auth_oauth.py": {
+      "score": 11,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_auth_observability.py": {
+      "score": 10,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_auth_owner.py": {
+      "score": 11,
+      "dependents": 0,
+      "imports": 4,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_auth_passwords.py": {
+      "score": 10,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_auth_principal.py": {
+      "score": 25,
+      "dependents": 0,
+      "imports": 5,
+      "gitCommits": 5,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_auth_providers.py": {
+      "score": 12,
+      "dependents": 0,
+      "imports": 3,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_auth_ratelimit.py": {
+      "score": 7,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_auth_runtime.py": {
+      "score": 15,
+      "dependents": 0,
+      "imports": 3,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_auth_secret_rotation.py": {
+      "score": 12,
+      "dependents": 0,
+      "imports": 3,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_auth_sessions.py": {
+      "score": 20,
+      "dependents": 0,
+      "imports": 4,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_auth_tokens.py": {
+      "score": 12,
+      "dependents": 0,
+      "imports": 3,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_check_locale_parity.py": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_crypto.py": {
+      "score": 10,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_database.py": {
+      "score": 15,
+      "dependents": 0,
+      "imports": 3,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_db_engine.py": {
+      "score": 21,
+      "dependents": 0,
+      "imports": 3,
+      "gitCommits": 5,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_db_ssl.py": {
+      "score": 10,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_diagnostics.py": {
+      "score": 7,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_e2e_monitor_baseline.py": {
+      "score": 5,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_e2e_monitor_collect.py": {
+      "score": 5,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_e2e_monitor_judge.py": {
+      "score": 5,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_e2e_monitor_manifest.py": {
+      "score": 7,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_e2e_monitor_render.py": {
+      "score": 5,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_e2e_monitor_scores.py": {
+      "score": 5,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_e2e_monitor_scrub.py": {
+      "score": 5,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_email_builders.py": {
+      "score": 8,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_email_retry.py": {
+      "score": 8,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_errors_metrics.py": {
+      "score": 17,
+      "dependents": 0,
+      "imports": 4,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_feature_usage.py": {
+      "score": 14,
+      "dependents": 0,
+      "imports": 4,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_health_service.py": {
+      "score": 20,
+      "dependents": 0,
+      "imports": 4,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_improve_confirm_hash.py": {
+      "score": 11,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_improve_error_message.py": {
+      "score": 5,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_interview_prep_service.py": {
+      "score": 5,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_jd_ssrf.py": {
+      "score": 13,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_jobs_panel.py": {
+      "score": 23,
+      "dependents": 0,
+      "imports": 7,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_kvstore.py": {
+      "score": 8,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_llm.py": {
+      "score": 13,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_llm_channel_routing.py": {
+      "score": 11,
+      "dependents": 0,
+      "imports": 4,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_llm_metrics.py": {
+      "score": 7,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_llm_output_schemas.py": {
+      "score": 5,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_llm_per_user_keys.py": {
+      "score": 18,
+      "dependents": 0,
+      "imports": 6,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_llm_placeholder_key.py": {
+      "score": 5,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_llm_providers.py": {
+      "score": 8,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_metrics_flush.py": {
+      "score": 17,
+      "dependents": 0,
+      "imports": 4,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_outbox.py": {
+      "score": 10,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_overview.py": {
+      "score": 15,
+      "dependents": 0,
+      "imports": 3,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_parser.py": {
+      "score": 8,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_pdf_cache.py": {
+      "score": 10,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_pdf_concurrency.py": {
+      "score": 10,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_pdf_settings_resolver.py": {
+      "score": 11,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_perf_metrics.py": {
+      "score": 15,
+      "dependents": 0,
+      "imports": 3,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_photo_flows.py": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_platform_capabilities.py": {
+      "score": 15,
+      "dependents": 0,
+      "imports": 3,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_platform_composition.py": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 3,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_platform_profiles.py": {
+      "score": 10,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_productivity_metrics.py": {
+      "score": 5,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_profile_adapters_contract.py": {
+      "score": 10,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_profile_domain.py": {
+      "score": 19,
+      "dependents": 0,
+      "imports": 5,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_profile_final_verticals.py": {
+      "score": 11,
+      "dependents": 0,
+      "imports": 4,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_profile_image.py": {
+      "score": 11,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_profile_merge.py": {
+      "score": 11,
+      "dependents": 0,
+      "imports": 4,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_profile_platform.py": {
+      "score": 23,
+      "dependents": 0,
+      "imports": 7,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_prompt_guardrails.py": {
+      "score": 10,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_recurrence.py": {
+      "score": 10,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_refiner.py": {
+      "score": 13,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_resilience_registry.py": {
+      "score": 12,
+      "dependents": 0,
+      "imports": 3,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_resume_diff.py": {
+      "score": 5,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_resume_metrics.py": {
+      "score": 15,
+      "dependents": 0,
+      "imports": 3,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_resume_models_p2_fields.py": {
+      "score": 5,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_resume_score.py": {
+      "score": 7,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_resume_wizard_service.py": {
+      "score": 15,
+      "dependents": 0,
+      "imports": 3,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_rollup_pipeline.py": {
+      "score": 12,
+      "dependents": 0,
+      "imports": 3,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_scheduler.py": {
+      "score": 8,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_scoping_guard.py": {
+      "score": 8,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_security_metrics.py": {
+      "score": 17,
+      "dependents": 0,
+      "imports": 4,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_settings_timeout.py": {
+      "score": 8,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_storage_cloudinary.py": {
+      "score": 11,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_storage_metrics.py": {
+      "score": 17,
+      "dependents": 0,
+      "imports": 4,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_token_optimizations.py": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 3,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_verify_diffs.py": {
+      "score": 16,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/backend/tests/unit/test_version_service.py": {
+      "score": 8,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/extension/README.md": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/extension/build.mjs": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/extension/src/adapters/ats.ts": {
+      "score": 16,
+      "dependents": 1,
+      "imports": 1,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/extension/src/adapters/boards.ts": {
+      "score": 10,
+      "dependents": 1,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/extension/src/adapters/enterprise-ats.ts": {
+      "score": 10,
+      "dependents": 1,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/extension/src/adapters/generic.ts": {
+      "score": 10,
+      "dependents": 1,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/extension/src/adapters/registry.ts": {
+      "score": 16,
+      "dependents": 0,
+      "imports": 5,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/extension/src/adapters/types.ts": {
+      "score": 28,
+      "dependents": 5,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/extension/src/background/service-worker.ts": {
+      "score": 27,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 9,
+      "routeUsage": 0
+    },
+    "apps/extension/src/content/autofill.ts": {
+      "score": 20,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 5,
+      "routeUsage": 0
+    },
+    "apps/extension/src/content/bridge.ts": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/extension/src/content/index.ts": {
+      "score": 27,
+      "dependents": 0,
+      "imports": 3,
+      "gitCommits": 7,
+      "routeUsage": 0
+    },
+    "apps/extension/src/content/overlay.ts": {
+      "score": 23,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 6,
+      "routeUsage": 0
+    },
+    "apps/extension/src/content/tracking.ts": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/extension/src/lib/api.ts": {
+      "score": 25,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 7,
+      "routeUsage": 0
+    },
+    "apps/extension/src/lib/bridge-registration.ts": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/extension/src/lib/diagnostics.ts": {
+      "score": 8,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/extension/src/lib/dom.ts": {
+      "score": 8,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/extension/src/lib/fields.ts": {
+      "score": 10,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/extension/src/lib/i18n.ts": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/extension/src/lib/login-wall.ts": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/extension/src/lib/messages.ts": {
+      "score": 23,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 7,
+      "routeUsage": 0
+    },
+    "apps/extension/src/lib/pacing.ts": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/extension/src/lib/site-prefs.ts": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/extension/src/lib/storage.ts": {
+      "score": 18,
+      "dependents": 1,
+      "imports": 2,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/extension/src/lib/types.ts": {
+      "score": 35,
+      "dependents": 4,
+      "imports": 0,
+      "gitCommits": 5,
+      "routeUsage": 0
+    },
+    "apps/extension/src/options/options.ts": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/extension/src/popup/popup.ts": {
+      "score": 18,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 6,
+      "routeUsage": 0
+    },
+    "apps/extension/vitest.config.ts": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/(app)/agenda/page.tsx": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/(app)/answers/page.tsx": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/(app)/applications/[id]/page.tsx": {
+      "score": 15,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 5,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/(app)/applications/page.tsx": {
+      "score": 21,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 7,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/(app)/builder/page.tsx": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/(app)/discovery/page.tsx": {
+      "score": 21,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 7,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/(app)/error.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/(app)/home/page.tsx": {
+      "score": 21,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 7,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/(app)/import/page.tsx": {
+      "score": 24,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 8,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/(app)/layout.tsx": {
+      "score": 12,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/(app)/loading.tsx": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/(app)/profile/page.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/(app)/resumes/[id]/page.tsx": {
+      "score": 21,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 7,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/(app)/resumes/page.tsx": {
+      "score": 30,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 10,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/(app)/samples/[slug]/page.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/(app)/samples/page.tsx": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/(app)/settings/page.tsx": {
+      "score": 36,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 12,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/(app)/setup/extension/page.tsx": {
+      "score": 12,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/(app)/tailor/page.tsx": {
+      "score": 42,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 14,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/(app)/templates/[slug]/page.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/(app)/templates/page.tsx": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/(app)/wizard/page.tsx": {
+      "score": 23,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 7,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/(app)/wizard/structured-sections.tsx": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/(auth)/forgot/page.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/(auth)/layout.tsx": {
+      "score": 12,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/(auth)/login/page.tsx": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/(auth)/reset/page.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/(auth)/signup/page.tsx": {
+      "score": 12,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/(auth)/verify-email/page.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/(auth)/verify/page.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/(marketing)/ats-resume-checker/page.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/(marketing)/connect/page.tsx": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/(marketing)/contact/page.tsx": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/(marketing)/cover-letter-generator/page.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/(marketing)/interview-preparation/page.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/(marketing)/layout.tsx": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/(marketing)/page.tsx": {
+      "score": 12,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/(marketing)/privacy/page.tsx": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/(marketing)/resume-tailoring/page.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/(marketing)/terms/page.tsx": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/admin/ai-ops/page.tsx": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/admin/ai/page.tsx": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/admin/audit/page.tsx": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/admin/channels/page.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/admin/errors/page.tsx": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/admin/health/page.tsx": {
+      "score": 12,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/admin/invites/page.tsx": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/admin/layout.tsx": {
+      "score": 12,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/admin/packs/page.tsx": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/admin/page.tsx": {
+      "score": 12,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/admin/spend/page.tsx": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/admin/storage/page.tsx": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/admin/users/page.tsx": {
+      "score": 18,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 6,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/error.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/global-error.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/layout.tsx": {
+      "score": 14,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/manifest.ts": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/not-found.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/opengraph-image.tsx": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/p/[slug]/page.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/p/[slug]/portfolio/page.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/print/cover-letter/[id]/page.tsx": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/print/interview-prep/[id]/page.tsx": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/print/resumes/[id]/page.tsx": {
+      "score": 12,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/robots.ts": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/sitemap.ts": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/app/twitter-image.tsx": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/admin/admin-shell.tsx": {
+      "score": 27,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 9,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/admin/delete-user-dialog.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/admin/local-time.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/admin/mini-chart.tsx": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/admin/user-credits-panel.tsx": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/ai/ai-progress.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/ai/explain.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/answers/application-answers.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/applications/apply-queue.tsx": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/applications/outcomes.tsx": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/atelier/badge.tsx": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/atelier/button.tsx": {
+      "score": 14,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/atelier/card.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/atelier/confirm-dialog.tsx": {
+      "score": 10,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/atelier/dialog.tsx": {
+      "score": 14,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/atelier/dropdown-menu.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/atelier/input.tsx": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/atelier/label.tsx": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/atelier/link-dialog.tsx": {
+      "score": 8,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/atelier/misc.tsx": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/atelier/rich-text-editor.tsx": {
+      "score": 7,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/atelier/rich-text-toolbar.tsx": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/atelier/select.tsx": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/atelier/sheet.tsx": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/atelier/skeleton.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/atelier/states.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/atelier/tab-strip.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/atelier/table.tsx": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/atelier/tabs.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/atelier/toast.tsx": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/auth/auth-card.tsx": {
+      "score": 15,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 5,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/auth/email-change-confirm-card.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/auth/error-banner.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/auth/forgot-card.tsx": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/auth/password-field.tsx": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/auth/reset-card.tsx": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/auth/step-up-modal.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/auth/verify-email-banner.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/auth/verify-email-card.tsx": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/builder/add-section-dialog.tsx": {
+      "score": 16,
+      "dependents": 2,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/builder/cover-letter-editor.tsx": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/builder/cover-letter-preview.tsx": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/builder/draggable-list-item.tsx": {
+      "score": 16,
+      "dependents": 2,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/builder/draggable-section-wrapper.tsx": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/builder/formatting-controls.tsx": {
+      "score": 18,
+      "dependents": 2,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/builder/forms/additional-form.tsx": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/builder/forms/education-form.tsx": {
+      "score": 18,
+      "dependents": 1,
+      "imports": 2,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/builder/forms/experience-form.tsx": {
+      "score": 21,
+      "dependents": 1,
+      "imports": 2,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/builder/forms/generic-item-form.tsx": {
+      "score": 14,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/builder/forms/generic-list-form.tsx": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/builder/forms/generic-text-form.tsx": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/builder/forms/personal-info-form.tsx": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/builder/forms/projects-form.tsx": {
+      "score": 19,
+      "dependents": 1,
+      "imports": 1,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/builder/forms/summary-form.tsx": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/builder/generate-prompt.tsx": {
+      "score": 16,
+      "dependents": 2,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/builder/highlighted-resume-view.tsx": {
+      "score": 16,
+      "dependents": 2,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/builder/interview-prep-view.tsx": {
+      "score": 13,
+      "dependents": 1,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/builder/item-visibility-toggle.tsx": {
+      "score": 18,
+      "dependents": 3,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/builder/jd-comparison-view.tsx": {
+      "score": 20,
+      "dependents": 2,
+      "imports": 2,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/builder/jd-display.tsx": {
+      "score": 16,
+      "dependents": 2,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/builder/outreach-editor.tsx": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/builder/outreach-preview.tsx": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/builder/photo-controls.tsx": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/builder/regenerate-dialog.tsx": {
+      "score": 14,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/builder/regenerate-diff-preview.tsx": {
+      "score": 14,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/builder/regenerate-instruction-dialog.tsx": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/builder/regenerate-wizard.tsx": {
+      "score": 14,
+      "dependents": 1,
+      "imports": 3,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/builder/resume-builder.tsx": {
+      "score": 46,
+      "dependents": 0,
+      "imports": 11,
+      "gitCommits": 8,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/builder/resume-form.tsx": {
+      "score": 40,
+      "dependents": 2,
+      "imports": 12,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/builder/section-header.tsx": {
+      "score": 16,
+      "dependents": 2,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/builder/tab-ids.ts": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/builder/template-selector.tsx": {
+      "score": 14,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/command/command-palette.tsx": {
+      "score": 12,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/common/error-boundary.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/common/profile-avatar.tsx": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/common/resume_previewer_context.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/common/unsaved-changes-guard.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/connect/review-form.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/contact/contact-form.tsx": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/dashboard/resume-component.tsx": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/dev/mode-mismatch-banner.tsx": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/discovery/feed-health-panel.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/discovery/search-progress-bar.tsx": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/enrichment/enrichment-modal.tsx": {
+      "score": 12,
+      "dependents": 0,
+      "imports": 3,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/enrichment/loading-steps.tsx": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/enrichment/preview-step.tsx": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/enrichment/question-step.tsx": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/layout/account-menu.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/layout/app-shell.tsx": {
+      "score": 18,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 6,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/layout/bottom-nav.tsx": {
+      "score": 12,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/layout/nav-items.ts": {
+      "score": 15,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 5,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/layout/pane-toggle.tsx": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/layout/public-top-bar.tsx": {
+      "score": 12,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/layout/sidebar.tsx": {
+      "score": 18,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 6,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/marketing/capabilities-data.ts": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/marketing/capability-landing.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/marketing/contact-cta.tsx": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/marketing/faq-data.ts": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/marketing/faq.tsx": {
+      "score": 8,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/marketing/hero.tsx": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/marketing/mockups.tsx": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/marketing/reveal.tsx": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/notifications/notification-center.tsx": {
+      "score": 15,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 5,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/preview/index.ts": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 3,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/preview/page-container.tsx": {
+      "score": 16,
+      "dependents": 2,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/preview/paginated-preview.tsx": {
+      "score": 15,
+      "dependents": 1,
+      "imports": 2,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/preview/use-pagination.ts": {
+      "score": 13,
+      "dependents": 2,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/profile/analytics-card.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/profile/avatar-uploader.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/profile/completeness-card.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/profile/export-menu.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/profile/import-dialog.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/profile/profile-search.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/profile/profile-workspace.tsx": {
+      "score": 15,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 5,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/profile/share-dialog.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/profile/skill-tag-input.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/profile/sync-dialog.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/profile/version-history.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/providers/app-providers.tsx": {
+      "score": 12,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/providers/rate-limit-listener.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/public/public-profile-view.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/resilience/conflict-dialog.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/resilience/degradation-banner.tsx": {
+      "score": 8,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/resilience/offline-indicator.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/resilience/recovery-banner.tsx": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/resilience/recovery-center.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/resilience/resilience-provider.tsx": {
+      "score": 8,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/resilience/save-status-chip.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/resume/dynamic-resume-section.tsx": {
+      "score": 30,
+      "dependents": 4,
+      "imports": 2,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/resume/export-button.tsx": {
+      "score": 15,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 5,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/resume/index.ts": {
+      "score": 17,
+      "dependents": 0,
+      "imports": 7,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/resume/photo-frame.tsx": {
+      "score": 36,
+      "dependents": 6,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/resume/render-template.tsx": {
+      "score": 11,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/resume/resume-clean.tsx": {
+      "score": 22,
+      "dependents": 1,
+      "imports": 4,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/resume/resume-cta-buttons.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/resume/resume-document.tsx": {
+      "score": 13,
+      "dependents": 1,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/resume/resume-latex.tsx": {
+      "score": 17,
+      "dependents": 1,
+      "imports": 3,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/resume/resume-modern-two-column.tsx": {
+      "score": 29,
+      "dependents": 2,
+      "imports": 5,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/resume/resume-modern.tsx": {
+      "score": 27,
+      "dependents": 2,
+      "imports": 4,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/resume/resume-single-column.tsx": {
+      "score": 29,
+      "dependents": 2,
+      "imports": 5,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/resume/resume-thumbnail.tsx": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/resume/resume-two-column.tsx": {
+      "score": 29,
+      "dependents": 2,
+      "imports": 5,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/resume/resume-vivid.tsx": {
+      "score": 22,
+      "dependents": 1,
+      "imports": 4,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/resume/safe-html.tsx": {
+      "score": 49,
+      "dependents": 8,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/resume/sample-gallery.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/resume/template-gallery.tsx": {
+      "score": 12,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/resume/version-history-panel.tsx": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/scheduling/scheduling-panel.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/settings/account-security.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/settings/ai-usage-panel.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/settings/buy-credits.tsx": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/settings/feature-prompts-editor.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/settings/notification-preferences.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/settings/profile-settings.tsx": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/tailor/ats-score-card.tsx": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/theme/theme-provider.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/theme/theme-toggle.tsx": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/components/tracker/reorder.ts": {
+      "score": 8,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/e2e/auth.setup.ts": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/eslint.config.mjs": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/features/admin/hooks.ts": {
+      "score": 27,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 9,
+      "routeUsage": 0
+    },
+    "apps/frontend/features/agenda/hooks.ts": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/features/application-fields/hooks.ts": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/features/applications/hooks.ts": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/features/applications/queue-hooks.ts": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/features/discovery/extension-bridge.ts": {
+      "score": 14,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/features/discovery/hooks.ts": {
+      "score": 18,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 6,
+      "routeUsage": 0
+    },
+    "apps/frontend/features/discovery/use-extension.ts": {
+      "score": 8,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/features/home/hooks.ts": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/features/profile/hooks.ts": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/features/resumes/hooks.ts": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/features/resumes/upload.ts": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/features/scheduling/hooks.ts": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/features/settings/hooks.ts": {
+      "score": 12,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/frontend/features/tailor/hooks.ts": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/hooks/use-enrichment-wizard.ts": {
+      "score": 8,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/hooks/use-file-upload.ts": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/hooks/use-regenerate-wizard.ts": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/i18n/config.ts": {
+      "score": 8,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/ai-availability.ts": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/ai-progress-copy.ts": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/api/admin.ts": {
+      "score": 31,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 9,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/api/application-fields.ts": {
+      "score": 11,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/api/apply-queue.ts": {
+      "score": 11,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/api/auth.ts": {
+      "score": 21,
+      "dependents": 2,
+      "imports": 1,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/api/client.ts": {
+      "score": 119,
+      "dependents": 22,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/api/config.ts": {
+      "score": 27,
+      "dependents": 1,
+      "imports": 2,
+      "gitCommits": 6,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/api/contact.ts": {
+      "score": 8,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/api/credits.ts": {
+      "score": 5,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/api/discovery.ts": {
+      "score": 20,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 6,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/api/enrichment.ts": {
+      "score": 5,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/api/error-reports.ts": {
+      "score": 8,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/api/errors.ts": {
+      "score": 27,
+      "dependents": 3,
+      "imports": 0,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/api/history.ts": {
+      "score": 11,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/api/index.ts": {
+      "score": 14,
+      "dependents": 0,
+      "imports": 4,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/api/jd.ts": {
+      "score": 11,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/api/notifications.ts": {
+      "score": 11,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/api/professional-profile.ts": {
+      "score": 5,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/api/profile.ts": {
+      "score": 8,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/api/resume-wizard.ts": {
+      "score": 18,
+      "dependents": 1,
+      "imports": 2,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/api/resume.ts": {
+      "score": 33,
+      "dependents": 1,
+      "imports": 2,
+      "gitCommits": 8,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/api/reviews.ts": {
+      "score": 8,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/api/scheduling.ts": {
+      "score": 8,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/api/search.ts": {
+      "score": 11,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/api/session-owner.ts": {
+      "score": 10,
+      "dependents": 1,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/api/session-server.ts": {
+      "score": 12,
+      "dependents": 0,
+      "imports": 3,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/api/tracker.ts": {
+      "score": 16,
+      "dependents": 1,
+      "imports": 1,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/cloudinary.ts": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/config/auth.ts": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/config/version.ts": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/constants/page-dimensions.ts": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/context/language-context.tsx": {
+      "score": 14,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/context/session.tsx": {
+      "score": 12,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/hooks/use-ai-progress.ts": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/hooks/use-autosave.ts": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/hooks/use-draft.ts": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/hooks/use-recovery.ts": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/hooks/use-resilience-flags.ts": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/hooks/use-stream.ts": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/i18n/index.ts": {
+      "score": 5,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/i18n/locale.ts": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/i18n/messages.ts": {
+      "score": 18,
+      "dependents": 3,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/i18n/server.ts": {
+      "score": 7,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/i18n/translations.ts": {
+      "score": 17,
+      "dependents": 2,
+      "imports": 2,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/i18n/utils.ts": {
+      "score": 13,
+      "dependents": 2,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/layout/page-width.ts": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/query/client.tsx": {
+      "score": 15,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 5,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/resilience/backoff.ts": {
+      "score": 16,
+      "dependents": 2,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/resilience/crypto.ts": {
+      "score": 8,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/resilience/degradation.ts": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/resilience/diff.ts": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/resilience/integrity.ts": {
+      "score": 8,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/resilience/local-store.ts": {
+      "score": 17,
+      "dependents": 1,
+      "imports": 3,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/resilience/reachability.ts": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/resilience/save-controller.ts": {
+      "score": 13,
+      "dependents": 1,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/resilience/store-engine.ts": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/resilience/stream-client.ts": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/resilience/sw-register.ts": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/resilience/sync-controller.ts": {
+      "score": 12,
+      "dependents": 0,
+      "imports": 3,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/resilience/tab-coordinator.ts": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/resume/appearance-storage.ts": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/resume/filename.ts": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/resume/pagination.ts": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/resume/preferred-template.ts": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/resume/sample-catalog.ts": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/resume/sample-resume.ts": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/resume/template-catalog.ts": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/resume/template-recommend.ts": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/seo/config.ts": {
+      "score": 24,
+      "dependents": 3,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/seo/json-ld.tsx": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/seo/metadata.ts": {
+      "score": 8,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/seo/og-image.tsx": {
+      "score": 8,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/seo/page-keywords.ts": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/seo/structured-data.ts": {
+      "score": 8,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/types/domain.ts": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/types/lucide.d.ts": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/types/photo.ts": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/types/template-capabilities.ts": {
+      "score": 7,
+      "dependents": 0,
+      "imports": 2,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/types/template-settings.ts": {
+      "score": 13,
+      "dependents": 2,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/utils.ts": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/utils/download.ts": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/utils/hidden-items.ts": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/utils/html-sanitizer.browser.ts": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/utils/html-sanitizer.server.ts": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/utils/html-sanitizer.ts": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/utils/keyword-matcher.ts": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/utils/resume-sort.ts": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/lib/utils/section-helpers.ts": {
+      "score": 8,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/middleware.ts": {
+      "score": 12,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 4,
+      "routeUsage": 0
+    },
+    "apps/frontend/next-env.d.ts": {
+      "score": 2,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 0,
+      "routeUsage": 0
+    },
+    "apps/frontend/next.config.ts": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/playwright.config.ts": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "apps/frontend/postcss.config.mjs": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/public/sw.js": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "apps/frontend/vitest.config.ts": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "apps/frontend/vitest.setup.ts": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "deploy/supabase/RUNBOOK.md": {
+      "score": 9,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "docs/README.md": {
+      "score": 32,
+      "dependents": 0,
+      "imports": 13,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "docs/agent/README.md": {
+      "score": 90,
+      "dependents": 3,
+      "imports": 33,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "docs/agent/apis/api-flow-maps.md": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "docs/agent/apis/backend-requirements.md": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "docs/agent/apis/front-end-apis.md": {
+      "score": 16,
+      "dependents": 2,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "docs/agent/architecture/backend-architecture.md": {
+      "score": 16,
+      "dependents": 2,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "docs/agent/architecture/backend-guide.md": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "docs/agent/architecture/frontend-architecture.md": {
+      "score": 16,
+      "dependents": 2,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "docs/agent/architecture/frontend-workflow.md": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "docs/agent/coding-standards.md": {
+      "score": 16,
+      "dependents": 1,
+      "imports": 4,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "docs/agent/design/pdf-template-guide.md": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "docs/agent/design/print-pdf-design-spec.md": {
+      "score": 8,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "docs/agent/design/resume-template-design-spec.md": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "docs/agent/design/template-system.md": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "docs/agent/design/templates/swiss-single-spec.md": {
+      "score": 8,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "docs/agent/design/templates/swiss-two-column-spec.md": {
+      "score": 8,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "docs/agent/features/adding-resume-templates.md": {
+      "score": 8,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "docs/agent/features/application-tracker.md": {
+      "score": 22,
+      "dependents": 0,
+      "imports": 8,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "docs/agent/features/custom-sections.md": {
+      "score": 23,
+      "dependents": 1,
+      "imports": 6,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "docs/agent/features/enrichment.md": {
+      "score": 14,
+      "dependents": 1,
+      "imports": 3,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "docs/agent/features/i18n.md": {
+      "score": 21,
+      "dependents": 1,
+      "imports": 5,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "docs/agent/features/jd-match.md": {
+      "score": 18,
+      "dependents": 1,
+      "imports": 5,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "docs/agent/features/job-discovery.md": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "docs/agent/features/resume-templates.md": {
+      "score": 25,
+      "dependents": 1,
+      "imports": 7,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "docs/agent/llm-integration.md": {
+      "score": 15,
+      "dependents": 2,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "docs/agent/quickstart.md": {
+      "score": 23,
+      "dependents": 3,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "docs/agent/scope-and-principles.md": {
+      "score": 23,
+      "dependents": 2,
+      "imports": 5,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "docs/agent/testing-strategy.md": {
+      "score": 16,
+      "dependents": 1,
+      "imports": 1,
+      "gitCommits": 3,
+      "routeUsage": 0
+    },
+    "docs/agent/workflow.md": {
+      "score": 20,
+      "dependents": 3,
+      "imports": 1,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "docs/architecture/ARCHITECTURE.md": {
+      "score": 21,
+      "dependents": 3,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "docs/architecture/IMPLEMENTATION_PLAN.md": {
+      "score": 8,
+      "dependents": 0,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "docs/architecture/PERSISTENT_ANALYSIS_CACHE.md": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "docs/architecture/PHOTO_SYSTEM.md": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "docs/architecture/PROFILE_SYSTEM_PLAN.md": {
+      "score": 11,
+      "dependents": 1,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "docs/architecture/TEMPLATE_LIBRARY.md": {
+      "score": 13,
+      "dependents": 1,
+      "imports": 1,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "docs/architecture/WYSIWYG_RENDERING.md": {
+      "score": 20,
+      "dependents": 2,
+      "imports": 2,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "docs/portable/README.md": {
+      "score": 15,
+      "dependents": 1,
+      "imports": 2,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "docs/portable/nextjs-performance/01-waterfalls.md": {
+      "score": 41,
+      "dependents": 5,
+      "imports": 5,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "docs/portable/nextjs-performance/02-bundle-size.md": {
+      "score": 41,
+      "dependents": 5,
+      "imports": 5,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "docs/portable/nextjs-performance/03-server-actions-security.md": {
+      "score": 39,
+      "dependents": 5,
+      "imports": 4,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "docs/portable/nextjs-performance/04-server-side-perf.md": {
+      "score": 39,
+      "dependents": 5,
+      "imports": 4,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "docs/portable/nextjs-performance/README.md": {
+      "score": 41,
+      "dependents": 5,
+      "imports": 5,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "docs/portable/nextjs-performance/checklist.md": {
+      "score": 39,
+      "dependents": 5,
+      "imports": 4,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "docs/portable/swiss-design-system/README.md": {
+      "score": 46,
+      "dependents": 6,
+      "imports": 5,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "docs/portable/swiss-design-system/ai-prompt.md": {
+      "score": 24,
+      "dependents": 2,
+      "imports": 4,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "docs/portable/swiss-design-system/anti-patterns.md": {
+      "score": 44,
+      "dependents": 6,
+      "imports": 4,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "docs/portable/swiss-design-system/components.md": {
+      "score": 47,
+      "dependents": 7,
+      "imports": 3,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "docs/portable/swiss-design-system/layouts.md": {
+      "score": 37,
+      "dependents": 5,
+      "imports": 3,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "docs/portable/swiss-design-system/tokens.md": {
+      "score": 47,
+      "dependents": 7,
+      "imports": 3,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "docs/runbooks/ai-credits.md": {
+      "score": 6,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 2,
+      "routeUsage": 0
+    },
+    "scripts/check_locale_parity.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "scripts/db_region_move.py": {
+      "score": 3,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 1,
+      "routeUsage": 0
+    },
+    "AGENTS.md": {
+      "score": 0,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 0,
+      "routeUsage": 0
+    },
+    "CLAUDE.md": {
+      "score": 0,
+      "dependents": 0,
+      "imports": 0,
+      "gitCommits": 0,
+      "routeUsage": 0
+    }
+  }
+}

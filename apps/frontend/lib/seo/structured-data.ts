@@ -14,6 +14,7 @@ import {
   SITE_NAME,
   SITE_DESCRIPTION,
   AUTHOR,
+  SUPPORT_EMAIL,
   GITHUB_REPO,
   SOCIAL_LINKS,
   absoluteUrl,
@@ -50,8 +51,18 @@ export function organizationSchema(): JsonLdObject {
     url: `${SITE_URL}/`,
     logo: absoluteUrl('/logo.svg'),
     description: SITE_DESCRIPTION,
+    email: SUPPORT_EMAIL,
     founder: { '@id': PERSON_ID },
     sameAs: [...SOCIAL_LINKS, GITHUB_REPO],
+    contactPoint: [
+      {
+        '@type': 'ContactPoint',
+        contactType: 'customer support',
+        email: SUPPORT_EMAIL,
+        areaServed: 'IN',
+        availableLanguage: ['en'],
+      },
+    ],
   };
 }
 
@@ -166,8 +177,7 @@ export function contactPageSchema(path = '/contact'): JsonLdObject {
     '@type': 'ContactPage',
     name: `Contact ${SITE_NAME}`,
     url: absoluteUrl(path),
-    description:
-      'Reach out about AI engineering, full-stack development, collaboration, or FitWright.',
+    description: `Reach out about AI engineering, full-stack development, collaboration, feedback, or discrepancies. Email ${SUPPORT_EMAIL} or use the contact form.`,
     isPartOf: { '@id': SITE_ID },
     mainEntity: { '@id': PERSON_ID },
   };
@@ -224,12 +234,12 @@ export function collectionPageSchema(input: {
   };
 }
 
-/** ProfilePage exposing the developer Person (used on /connect). */
-export function profilePageSchema(path = '/connect'): JsonLdObject {
+/** ProfilePage exposing the developer Person (used on the contact page). */
+export function profilePageSchema(path = '/contact'): JsonLdObject {
   return {
     '@context': 'https://schema.org',
     '@type': 'ProfilePage',
-    name: `Connect with the developer - ${SITE_NAME}`,
+    name: `Contact with the developer - ${SITE_NAME}`,
     url: absoluteUrl(path),
     isPartOf: { '@id': SITE_ID },
     mainEntity: personSchema(),

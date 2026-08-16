@@ -88,7 +88,7 @@ function Bar({ label, pct }: { label: string; pct: number }) {
 /* ------------------------------- Hero centerpiece -------------------------- */
 export function TailorMock() {
   return (
-    <div className="w-full max-w-md rounded-[var(--radius-at-xl)] border border-[var(--border)] bg-[var(--card)] p-5 shadow-[var(--shadow-at-e3)]">
+    <div className="w-full rounded-[var(--radius-at-xl)] border border-[var(--border)] bg-[var(--card)] p-5 shadow-[var(--shadow-at-e3)]">
       <div className="mb-4 flex items-center justify-between">
         <div>
           <p className="text-sm font-semibold text-[var(--foreground)]">Senior Backend Engineer</p>

@@ -250,7 +250,7 @@ describe('robots.txt', () => {
   });
 
   it('does not disallow public marketing routes', () => {
-    for (const p of ['/connect', '/contact', '/privacy', '/terms']) {
+    for (const p of ['/contact', '/privacy', '/terms']) {
       expect(disallow).not.toContain(p);
     }
   });
@@ -268,7 +268,6 @@ describe('sitemap.xml', () => {
   it('includes the canonical public routes only', () => {
     expect(urls).toContain(absoluteUrl('/'));
     expect(urls).toContain(absoluteUrl('/resume-tailoring'));
-    expect(urls).toContain(absoluteUrl('/connect'));
     expect(urls).toContain(absoluteUrl('/contact'));
     expect(urls).toContain(absoluteUrl('/privacy'));
     expect(urls).toContain(absoluteUrl('/terms'));

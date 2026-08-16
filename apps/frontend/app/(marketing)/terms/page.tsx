@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { JsonLd } from '@/lib/seo/json-ld';
+import { SUPPORT_EMAIL } from '@/lib/seo/config';
 import { buildMetadata } from '@/lib/seo/metadata';
 import { KEYWORDS } from '@/lib/seo/page-keywords';
 import { breadcrumbSchema } from '@/lib/seo/structured-data';
@@ -117,7 +118,7 @@ const SECTIONS: Section[] = [
   {
     heading: '15. Grievance redressal',
     paragraphs: [
-      'In accordance with the Information Technology Act, 2000 and the rules made under it, any grievance regarding content or your use of the Service may be raised through the Contact page on this website. We will acknowledge your grievance and endeavour to resolve it within the timelines prescribed under applicable law.',
+      `In accordance with the Information Technology Act, 2000 and the rules made under it, any grievance regarding content or your use of the Service may be raised through the Contact page on this website or by emailing ${SUPPORT_EMAIL}. We will acknowledge your grievance and endeavour to resolve it within the timelines prescribed under applicable law.`,
     ],
   },
   {

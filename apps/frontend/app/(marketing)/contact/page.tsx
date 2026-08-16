@@ -1,63 +1,140 @@
 /**
- * Contact page (marketing). A premium, trust-building surface - not a bare form.
- * Left: an invitation, live availability, response SLA, what I work on, and
- * direct channels. Right: the production-wired contact form. SEO + JSON-LD +
- * OpenGraph/Twitter are set here (server component); the form is a client island.
+ * Contact with the developer (marketing). A premium, human-centered hub to
+ * reach out, give feedback, report bugs, request features, review the product,
+ * or explore collaboration. Server component (SEO + JSON-LD + static markup);
+ * the two forms are client islands. Reuses the atelier design system and the
+ * production contact/review backends.
  */
 import type { Metadata } from 'next';
-import Sparkles from 'lucide-react/dist/esm/icons/sparkles';
+import Link from 'next/link';
+import Github from 'lucide-react/dist/esm/icons/github';
+import Mail from 'lucide-react/dist/esm/icons/mail';
+import Linkedin from 'lucide-react/dist/esm/icons/linkedin';
+import MessageSquare from 'lucide-react/dist/esm/icons/message-square';
 import Clock from 'lucide-react/dist/esm/icons/clock';
-import Globe from 'lucide-react/dist/esm/icons/globe';
-import ShieldCheck from 'lucide-react/dist/esm/icons/shield-check';
+import MapPin from 'lucide-react/dist/esm/icons/map-pin';
 import Brain from 'lucide-react/dist/esm/icons/brain';
 import Layers from 'lucide-react/dist/esm/icons/layers';
 import GitBranch from 'lucide-react/dist/esm/icons/git-branch';
-import Linkedin from 'lucide-react/dist/esm/icons/linkedin';
-import Github from 'lucide-react/dist/esm/icons/github';
-import ExternalLink from 'lucide-react/dist/esm/icons/external-link';
+import ArrowRight from 'lucide-react/dist/esm/icons/arrow-right';
+import Handshake from 'lucide-react/dist/esm/icons/handshake';
+import Compass from 'lucide-react/dist/esm/icons/compass';
+import ShieldCheck from 'lucide-react/dist/esm/icons/shield-check';
 
+import { Card } from '@/components/atelier/card';
 import { Reveal } from '@/components/marketing/reveal';
 import { ContactForm } from '@/components/contact/contact-form';
+import { ReviewForm } from '@/components/connect/review-form';
 import { JsonLd } from '@/lib/seo/json-ld';
+import { SUPPORT_EMAIL } from '@/lib/seo/config';
 import { buildMetadata } from '@/lib/seo/metadata';
 import { KEYWORDS } from '@/lib/seo/page-keywords';
 import { contactPageSchema, breadcrumbSchema } from '@/lib/seo/structured-data';
 
 export const metadata: Metadata = buildMetadata({
-  title: "Contact - Let's build something great",
-  description:
-    'Have an idea, a role, or a collaboration in mind? Reach out about AI engineering, full-stack development, or FitWright. Every message reaches my inbox directly.',
+  title: 'Contact - Ideas, feedback & collaboration',
+  description: `Contact the developer behind FitWright. Share feedback, report a bug, request a feature, leave a review, or start a collaboration. Email ${SUPPORT_EMAIL} for issues or discrepancies. I read and reply to every message.`,
   path: '/contact',
   keywords: KEYWORDS.contact,
-  socialTitle: "Contact - Let's build something great - FitWright",
+  socialTitle: 'Contact with the developer - FitWright',
 });
-
-const FOCUS = [
-  { icon: Brain, label: 'AI & LLM engineering' },
-  { icon: Layers, label: 'Full-stack product development' },
-  { icon: GitBranch, label: 'Open-source & systems' },
-];
 
 const CHANNELS = [
   {
+    icon: Mail,
+    label: 'Email',
+    desc: 'Best for issues, feedback, discrepancies, and anything sensitive.',
+    href: `mailto:${SUPPORT_EMAIL}`,
+    external: true,
+  },
+  {
     icon: Linkedin,
     label: 'LinkedIn',
-    detail: 'in/obaidullah-zeeshan',
+    desc: 'Professional network - roles, intros, and opportunities.',
     href: 'https://www.linkedin.com/in/obaidullah-zeeshan/',
+    external: true,
   },
-  { icon: Github, label: 'GitHub', detail: 'ObaidGits', href: 'https://github.com/ObaidGits' },
   {
-    icon: Globe,
-    label: 'Portfolio',
-    detail: 'obaidullah-zeeshan.dev',
-    href: 'https://obaidullah-zeeshan.dev',
+    icon: Github,
+    label: 'GitHub',
+    desc: "Code, open source, and this project's source.",
+    href: 'https://github.com/ObaidGits',
+    external: true,
+  },
+  {
+    icon: MessageSquare,
+    label: 'Send a message',
+    desc: 'The fastest in-app route to reach my inbox directly.',
+    href: '#feedback-center',
+    external: false,
   },
 ];
+
+const COLLAB = [
+  {
+    icon: Brain,
+    title: 'AI & LLM work',
+    body: 'Applied AI features, evals, and pragmatic LLM systems.',
+  },
+  {
+    icon: Layers,
+    title: 'Full-stack builds',
+    body: 'End-to-end product engineering, from schema to UI.',
+  },
+  {
+    icon: GitBranch,
+    title: 'Open source',
+    body: 'Contributions, reviews, and building in the open.',
+  },
+  {
+    icon: Compass,
+    title: 'Advisory & mentorship',
+    body: 'Architecture reviews and thoughtful technical guidance.',
+  },
+];
+
+const FAQ = [
+  {
+    q: "What's the best reason to reach out?",
+    a: 'Roles and collaborations, product feedback, bug reports, and feature ideas are all welcome - and genuinely read.',
+  },
+  {
+    q: 'How fast will I hear back?',
+    a: "Usually within 1-2 business days. If it's time-sensitive, say so in the message and I'll prioritize it.",
+  },
+  {
+    q: 'Which channel should I use?',
+    a: `For anything substantive, the message form here reaches me directly. Email ${SUPPORT_EMAIL} for issues, feedback, or discrepancies. LinkedIn is great for professional intros; GitHub for code and issues.`,
+  },
+];
+
+function SectionHeading({
+  id,
+  eyebrow,
+  title,
+  sub,
+}: {
+  id?: string;
+  eyebrow: string;
+  title: string;
+  sub?: string;
+}) {
+  return (
+    <div className="max-w-2xl">
+      <span className="text-xs font-semibold uppercase tracking-wider text-[var(--at-ai)]">
+        {eyebrow}
+      </span>
+      <h2 id={id} className="mt-2 text-2xl font-semibold tracking-tight md:text-3xl">
+        {title}
+      </h2>
+      {sub && <p className="mt-2 text-[var(--muted-foreground)]">{sub}</p>}
+    </div>
+  );
+}
 
 export default function ContactPage() {
   return (
     <main className="relative overflow-hidden">
-      {/* Decorative backdrop (aria-hidden; motion collapses under reduced-motion). */}
       <div aria-hidden className="pointer-events-none absolute inset-0">
         <div className="absolute inset-0 at-grid-bg opacity-50" />
         <div
@@ -65,7 +142,7 @@ export default function ContactPage() {
           style={{ background: 'var(--at-ai)' }}
         />
         <div
-          className="at-blob right-[-5rem] top-[10rem] h-64 w-64"
+          className="at-blob right-[-5rem] top-[8rem] h-64 w-64"
           style={{ background: 'var(--primary)', animationDelay: '-7s' }}
         />
       </div>
@@ -80,115 +157,212 @@ export default function ContactPage() {
         ]}
       />
 
-      <div className="relative mx-auto grid w-full max-w-6xl gap-10 px-4 py-16 md:px-8 md:py-24 lg:grid-cols-[1fr_1.1fr] lg:gap-16">
-        {/* Left - invitation + trust */}
-        <Reveal className="lg:sticky lg:top-24 lg:self-start">
+      <div className="relative mx-auto w-full max-w-6xl px-4 md:px-8">
+        <Reveal className="pt-16 md:pt-24">
           <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--at-success)]/40 bg-[var(--at-success)]/10 px-3 py-1 text-xs font-medium text-[var(--at-success)]">
             <span className="relative flex h-2 w-2">
               <span className="absolute inline-flex h-full w-full rounded-full bg-[var(--at-success)] opacity-70 motion-safe:animate-ping" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-[var(--at-success)]" />
             </span>
-            Available for new work &amp; collaboration
+            Open to collaboration &amp; new work
           </span>
-
-          <h1 className="mt-6 text-4xl font-semibold leading-[1.05] tracking-tight md:text-5xl">
-            Have an idea?
-            <br />
+          <h1 className="mt-6 max-w-3xl text-4xl font-semibold leading-[1.05] tracking-tight md:text-5xl">
+            Every great product starts with a{' '}
             <span className="bg-gradient-to-r from-[var(--primary)] to-[var(--at-ai)] bg-clip-text text-transparent">
-              Let&apos;s talk.
+              conversation.
             </span>
           </h1>
-          <p className="mt-5 max-w-md text-lg text-[var(--muted-foreground)]">
-            I&apos;m always up for a good conversation about software, AI, engineering, or a role
-            worth exploring. Tell me what you&apos;re working on - thoughtful messages get
-            thoughtful replies.
-          </p>
-
-          {/* SLA + reach */}
-          <div className="mt-8 grid gap-3 sm:grid-cols-2">
-            <div className="rounded-[var(--radius-at-lg)] border border-[var(--border)] bg-[var(--card)] p-4">
-              <Clock className="h-5 w-5 text-[var(--primary)]" />
-              <p className="mt-2 text-sm font-medium">Fast, real replies</p>
-              <p className="text-xs text-[var(--muted-foreground)]">
-                Usually within 1-2 business days.
-              </p>
-            </div>
-            <div className="rounded-[var(--radius-at-lg)] border border-[var(--border)] bg-[var(--card)] p-4">
-              <Globe className="h-5 w-5 text-[var(--at-ai)]" />
-              <p className="mt-2 text-sm font-medium">Remote-friendly</p>
-              <p className="text-xs text-[var(--muted-foreground)]">
-                I work comfortably across timezones.
-              </p>
-            </div>
-          </div>
-
-          {/* Focus areas */}
-          <div className="mt-6">
-            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
-              What I love to talk about
-            </p>
-            <ul className="mt-3 space-y-2">
-              {FOCUS.map((f) => {
-                const Icon = f.icon;
-                return (
-                  <li key={f.label} className="flex items-center gap-2.5 text-sm">
-                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--at-ai-surface)] text-[var(--at-ai)]">
-                      <Icon className="h-4 w-4" />
-                    </span>
-                    {f.label}
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-
-          {/* Direct channels */}
-          <div className="mt-8">
-            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
-              Prefer another channel?
-            </p>
-            <div className="mt-3 flex flex-col gap-2">
-              {CHANNELS.map((c) => {
-                const Icon = c.icon;
-                return (
-                  <a
-                    key={c.label}
-                    href={c.href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="group flex items-center gap-3 rounded-[var(--radius-at-md)] border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 transition-colors hover:bg-[var(--accent)]"
-                  >
-                    <span className="flex h-8 w-8 items-center justify-center rounded-[var(--radius-at-md)] bg-[var(--secondary)] text-[var(--foreground)]">
-                      <Icon className="h-4 w-4" />
-                    </span>
-                    <span className="flex-1">
-                      <span className="block text-sm font-medium">{c.label}</span>
-                      <span className="block text-xs text-[var(--muted-foreground)]">
-                        {c.detail}
-                      </span>
-                    </span>
-                    <ExternalLink className="h-4 w-4 text-[var(--muted-foreground)] transition-transform group-hover:translate-x-0.5" />
-                  </a>
-                );
-              })}
-            </div>
-          </div>
-
-          <p className="mt-6 inline-flex items-center gap-1.5 text-xs text-[var(--muted-foreground)]">
-            <ShieldCheck className="h-3.5 w-3.5 text-[var(--at-success)]" /> Your details stay
-            private - used only to reply.
+          <p className="mt-5 max-w-xl text-lg text-[var(--muted-foreground)]">
+            I&apos;m Obaidullah - the engineer behind FitWright. Ideas, feedback, bug reports, or a
+            role worth exploring are welcome. I read every message and reply thoughtfully. For
+            issues, feedback, or discrepancies, email{' '}
+            <a className="text-[var(--primary)] hover:underline" href={`mailto:${SUPPORT_EMAIL}`}>
+              {SUPPORT_EMAIL}
+            </a>
+            . Your feedback genuinely shapes where this product goes next.
           </p>
         </Reveal>
 
-        {/* Right - the form */}
-        <Reveal delay={120}>
-          <div className="mb-4 flex items-center gap-2 lg:hidden">
-            <Sparkles className="h-4 w-4 text-[var(--at-ai)]" />
-            <span className="text-sm font-medium">Send a message</span>
-          </div>
-          <ContactForm />
+        <Reveal className="mt-10" delay={80}>
+          <Card className="grid gap-6 p-6 md:grid-cols-[auto_1fr] md:p-7">
+            <div className="flex items-center gap-4">
+              <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[var(--radius-at-xl)] bg-gradient-to-br from-[var(--primary)] to-[var(--at-ai)] text-xl font-bold text-white">
+                OZ
+              </span>
+              <div>
+                <p className="text-lg font-semibold">Obaidullah Zeeshan</p>
+                <p className="text-sm text-[var(--muted-foreground)]">
+                  AI &amp; Full-Stack Software Engineer
+                </p>
+              </div>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3 md:border-l md:border-[var(--border)] md:pl-6">
+              <Stat icon={Clock} label="Response time" value="~1-2 days" />
+              <Stat icon={MapPin} label="Working style" value="Remote - any TZ" />
+              <Stat icon={Brain} label="Current focus" value="AI-native products" />
+            </div>
+          </Card>
         </Reveal>
+
+        <section className="mt-14" aria-labelledby="connect-ways">
+          <Reveal>
+            <SectionHeading
+              eyebrow="Ways to connect"
+              title="Pick whatever's easiest"
+              sub="Every channel reaches me - choose the one that fits."
+            />
+          </Reveal>
+          <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {CHANNELS.map((c, i) => {
+              const Icon = c.icon;
+              const isMail = c.href.startsWith('mailto:');
+              const inner = (
+                <Card className="group h-full p-5 transition-all hover:-translate-y-0.5 hover:shadow-[var(--shadow-at-e2)]">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-[var(--radius-at-md)] bg-[var(--at-ai-surface)] text-[var(--at-ai)]">
+                    <Icon className="h-5 w-5" />
+                  </span>
+                  <p className="mt-4 flex items-center gap-1.5 text-base font-semibold">
+                    {c.label}
+                    <ArrowRight className="h-4 w-4 text-[var(--muted-foreground)] transition-transform group-hover:translate-x-0.5" />
+                  </p>
+                  <p className="mt-1 text-sm text-[var(--muted-foreground)]">{c.desc}</p>
+                </Card>
+              );
+              return (
+                <Reveal key={c.label} delay={(i % 4) * 70}>
+                  {c.external ? (
+                    <a
+                      href={c.href}
+                      target={isMail ? undefined : '_blank'}
+                      rel={isMail ? undefined : 'noopener noreferrer'}
+                      className="block h-full"
+                    >
+                      {inner}
+                    </a>
+                  ) : (
+                    <Link href={c.href} className="block h-full">
+                      {inner}
+                    </Link>
+                  )}
+                </Reveal>
+              );
+            })}
+          </div>
+        </section>
+
+        <section id="feedback-center" className="mt-16" aria-labelledby="feedback-center-title">
+          <Reveal>
+            <SectionHeading
+              id="feedback-center-title"
+              eyebrow="Feedback center"
+              title="Tell me what you think"
+              sub="Send a message for anything - a bug, a feature idea, or a hello - or leave a quick review."
+            />
+          </Reveal>
+          <div className="mt-6 grid gap-6 lg:grid-cols-2 lg:items-start">
+            <Reveal>
+              <ContactForm defaultPurpose="feedback" />
+            </Reveal>
+            <Reveal delay={100}>
+              <ReviewForm />
+            </Reveal>
+          </div>
+        </section>
+
+        <section className="mt-16" aria-labelledby="collab">
+          <Reveal>
+            <SectionHeading
+              eyebrow="Let's build together"
+              title="Where I can help"
+              sub="Open to freelance, full-time, research, and open-source collaboration."
+            />
+          </Reveal>
+          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {COLLAB.map((c, i) => {
+              const Icon = c.icon;
+              return (
+                <Reveal key={c.title} delay={(i % 4) * 70}>
+                  <Card className="h-full p-5">
+                    <span className="flex h-10 w-10 items-center justify-center rounded-[var(--radius-at-md)] bg-[var(--primary)]/10 text-[var(--primary)]">
+                      <Icon className="h-5 w-5" />
+                    </span>
+                    <p className="mt-4 text-base font-semibold">{c.title}</p>
+                    <p className="mt-1 text-sm text-[var(--muted-foreground)]">{c.body}</p>
+                  </Card>
+                </Reveal>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="mt-16" aria-labelledby="story">
+          <Reveal>
+            <Card className="relative overflow-hidden p-8 md:p-10">
+              <span className="flex h-11 w-11 items-center justify-center rounded-[var(--radius-at-lg)] bg-[var(--at-ai-surface)] text-[var(--at-ai)]">
+                <Handshake className="h-5 w-5" />
+              </span>
+              <h2 id="story" className="mt-4 text-2xl font-semibold tracking-tight">
+                Why I built FitWright
+              </h2>
+              <p className="mt-3 max-w-2xl text-[var(--muted-foreground)]">
+                Job hunting shouldn&apos;t mean rewriting your resume by hand for every role. I
+                wanted a tool that reshapes your real experience to fit each job - honestly,
+                transparently, and without inventing things. FitWright is my take on an AI-native
+                product that respects your data and your intelligence: bring your own key, see every
+                change, own your work.
+              </p>
+              <p className="mt-3 max-w-2xl text-[var(--muted-foreground)]">
+                It&apos;s built in the open and improved continuously. If something feels off or
+                could be better, that feedback is a gift - tell me, and it shapes the roadmap.
+              </p>
+              <p className="mt-5 inline-flex items-center gap-1.5 text-xs text-[var(--muted-foreground)]">
+                <ShieldCheck className="h-3.5 w-3.5 text-[var(--at-success)]" /> Privacy-first -
+                open source - always improving
+              </p>
+            </Card>
+          </Reveal>
+        </section>
+
+        <section className="mt-16 pb-24" aria-labelledby="faq">
+          <Reveal>
+            <SectionHeading eyebrow="Good to know" title="Contact preferences" />
+          </Reveal>
+          <div className="mt-6 grid gap-4 md:grid-cols-3">
+            {FAQ.map((f, i) => (
+              <Reveal key={f.q} delay={(i % 3) * 70}>
+                <Card className="h-full p-5">
+                  <p className="text-sm font-semibold">{f.q}</p>
+                  <p className="mt-1.5 text-sm text-[var(--muted-foreground)]">{f.a}</p>
+                </Card>
+              </Reveal>
+            ))}
+          </div>
+        </section>
       </div>
     </main>
+  );
+}
+
+function Stat({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex items-start gap-2.5">
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-at-md)] bg-[var(--secondary)] text-[var(--foreground)]">
+        <Icon className="h-4 w-4" />
+      </span>
+      <div>
+        <p className="text-[11px] uppercase tracking-wide text-[var(--muted-foreground)]">
+          {label}
+        </p>
+        <p className="text-sm font-medium">{value}</p>
+      </div>
+    </div>
   );
 }

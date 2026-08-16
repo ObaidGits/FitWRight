@@ -240,12 +240,6 @@ export function CapabilityLanding({ capability: c }: { capability: Capability })
                   </Link>
                 ))}
                 <Link
-                  href="/connect"
-                  className="text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
-                >
-                  Connect
-                </Link>
-                <Link
                   href="/contact"
                   className="text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
                 >

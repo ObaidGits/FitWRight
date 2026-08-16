@@ -148,3 +148,4 @@ config.json
 
 # Kiro spec/workflow files (local only, not tracked)
 .kiro/
+.codescout/credentials.json

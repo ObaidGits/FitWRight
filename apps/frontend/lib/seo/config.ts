@@ -33,6 +33,9 @@ export const AUTHOR = {
   github: 'https://github.com/ObaidGits',
 } as const;
 
+/** Public contact address shown on site and in structured data. */
+export const SUPPORT_EMAIL = 'admin@fitwright.tech';
+
 /** Canonical project repository. */
 export const GITHUB_REPO = 'https://github.com/ObaidGits/FitWRight';
 

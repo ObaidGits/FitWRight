@@ -17,12 +17,9 @@ import { SINGLE_USER_MODE } from '@/lib/config/auth';
  * marketing pages (e.g. /privacy, /terms), not just the landing page.
  */
 const NAV_LINKS: { href: string; label: string }[] = [
-  { href: '/#how', label: 'How it works' },
   { href: '/#features', label: 'Features' },
   { href: '/resume-tailoring', label: 'Tailoring' },
   { href: '/pricing', label: 'Pricing' },
-  { href: '/#faq', label: 'FAQ' },
-  { href: '/connect', label: 'Connect' },
   { href: '/contact', label: 'Contact' },
 ];
 
@@ -63,14 +60,6 @@ export function PublicTopBar() {
               {l.label}
             </Link>
           ))}
-          <a
-            href="https://github.com/ObaidGits/FitWRight"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="hover:text-[var(--foreground)]"
-          >
-            GitHub
-          </a>
         </nav>
 
         <div className="flex items-center gap-2">
@@ -125,15 +114,6 @@ export function PublicTopBar() {
                 {l.label}
               </Link>
             ))}
-            <a
-              href="https://github.com/ObaidGits/FitWRight"
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={() => setOpen(false)}
-              className="rounded-[var(--radius-at-md)] px-2 py-2.5 text-sm text-[var(--foreground)] hover:bg-[var(--accent)]"
-            >
-              GitHub
-            </a>
             {authed ? (
               <div className="mt-2 flex flex-col gap-2">
                 <Button asChild>
