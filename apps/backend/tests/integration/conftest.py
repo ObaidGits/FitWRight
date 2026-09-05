@@ -59,3 +59,67 @@ async def auth_env(isolated_db, monkeypatch):
     _reset()
     yield isolated_db
     _reset()
+
+
+# ---------------------------------------------------------------------------
+# MCP mount fixtures (Task 4)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def mcp_app(monkeypatch):
+    """Factory: rebuild ``app.main`` under a forced MCP_ENABLED setting.
+
+    ``app.main`` reads ``settings.mcp_enabled`` once at import time (both the
+    mount and the combined lifespan are import-time decisions), and pytest
+    imports the module once per session - so a test that flips the flag and
+    then does ``from app.main import app`` gets whichever app was built first,
+    with or without the mount, regardless of the current setting. Flipping the
+    flag and reloading here makes each test independent of import order.
+
+    Teardown reloads once more under the original setting so any later test
+    that imports ``app.main`` inside its body sees the default (mount absent);
+    tests that imported it at module level keep their own reference either way.
+    """
+    import importlib
+
+    import app.main as main_module
+
+    original = app_settings.mcp_enabled
+    built = False
+
+    def _build(enabled: bool):
+        nonlocal built
+        built = True
+        monkeypatch.setattr(app_settings, "mcp_enabled", enabled)
+        importlib.reload(main_module)
+        return main_module.app
+
+    try:
+        yield _build
+    finally:
+        if built:
+            monkeypatch.setattr(app_settings, "mcp_enabled", original)
+            importlib.reload(main_module)
+
+
+@pytest.fixture
+async def mcp_token(auth_env, owner_id):
+    """Mint an MCP bearer token for the test's primary user (bootstrap owner).
+
+    ``reset_mcp_token_service`` pins the process-wide service to THIS test's
+    isolated DB (the FK on ``mcp_tokens.user_id`` needs a real user row -
+    ``owner_id`` ensures one exists) and drops it again so the next test
+    rebinds cleanly instead of inheriting a service pointing at a closed DB.
+    """
+    from app.auth.mcp_tokens import (
+        get_mcp_token_service,
+        reset_mcp_token_service,
+    )
+
+    reset_mcp_token_service()
+    try:
+        rec, raw = await get_mcp_token_service().issue(owner_id, "test-client")
+        yield {"raw": raw, "id": rec["id"], "user_id": owner_id}
+    finally:
+        reset_mcp_token_service()
