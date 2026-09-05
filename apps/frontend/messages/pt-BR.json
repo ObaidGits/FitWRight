@@ -753,6 +753,33 @@
       "deleteAria": "Excluir a chave de {provider}",
       "deleteConfirmTitle": "Excluir chave de API?",
       "deleteConfirmDescription": "Remover a chave de API de {provider} salva? Você pode adicioná-la novamente depois."
+    },
+    "mcp": {
+      "title": "Acesso MCP / API",
+      "description": "Crie tokens de acesso para que clientes de IA como o Claude Desktop possam usar seus dados do FitWright por meio do servidor MCP do FitWright.",
+      "create": "Criar token",
+      "createDescription": "Dê um nome ao cliente. O valor do token é exibido uma única vez, logo após a criação.",
+      "createSubmit": "Criar",
+      "nameLabel": "Nome do token",
+      "namePlaceholder": "ex.: Claude Desktop",
+      "createdTitle": "Token criado",
+      "createdWarning": "Copie este token agora. Por segurança, ele nunca será exibido novamente.",
+      "copy": "Copiar",
+      "copied": "Copiado",
+      "done": "Concluído",
+      "empty": "Nenhum token de acesso ainda.",
+      "created": "Criado",
+      "lastUsed": "Último uso",
+      "never": "Nunca",
+      "revoked": "Revogado",
+      "revoke": "Revogar",
+      "revokeTitle": "Revogar token?",
+      "revokeDescription": "Os clientes que usam \"{label}\" perderão o acesso imediatamente. Esta ação não pode ser desfeita.",
+      "revokeConfirm": "Revogar token",
+      "cancel": "Cancelar",
+      "createFailed": "Não foi possível criar o token",
+      "revokeFailed": "Não foi possível revogar o token",
+      "revokedToast": "Token revogado"
     }
   },
   "resumeViewer": {

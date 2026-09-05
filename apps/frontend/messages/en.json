@@ -753,6 +753,33 @@
       "deleteAria": "Delete {provider} key",
       "deleteConfirmTitle": "Delete API key?",
       "deleteConfirmDescription": "Remove the saved {provider} API key? You can add it again later."
+    },
+    "mcp": {
+      "title": "MCP / API access",
+      "description": "Create access tokens so AI clients like Claude Desktop can use your FitWright data through the FitWright MCP server.",
+      "create": "Create token",
+      "createDescription": "Give the client a name. The token value is shown once, right after it is created.",
+      "createSubmit": "Create",
+      "nameLabel": "Token name",
+      "namePlaceholder": "e.g. Claude Desktop",
+      "createdTitle": "Token created",
+      "createdWarning": "Copy this token now. For security, it will never be shown again.",
+      "copy": "Copy",
+      "copied": "Copied",
+      "done": "Done",
+      "empty": "No access tokens yet.",
+      "created": "Created",
+      "lastUsed": "Last used",
+      "never": "Never",
+      "revoked": "Revoked",
+      "revoke": "Revoke",
+      "revokeTitle": "Revoke token?",
+      "revokeDescription": "Clients using \"{label}\" will immediately lose access. This cannot be undone.",
+      "revokeConfirm": "Revoke token",
+      "cancel": "Cancel",
+      "createFailed": "Could not create token",
+      "revokeFailed": "Could not revoke token",
+      "revokedToast": "Token revoked"
     }
   },
   "resumeViewer": {

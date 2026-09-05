@@ -753,6 +753,33 @@
       "deleteAria": "{provider} のキーを削除",
       "deleteConfirmTitle": "API キーを削除しますか？",
       "deleteConfirmDescription": "保存された {provider} の API キーを削除しますか？後で再度追加できます。"
+    },
+    "mcp": {
+      "title": "MCP / API アクセス",
+      "description": "Claude Desktop などの AI クライアントが FitWright の MCP サーバー経由であなたのデータを利用できるよう、アクセストークンを作成します。",
+      "create": "トークンを作成",
+      "createDescription": "クライアントに名前を付けます。トークンの値は作成直後に一度だけ表示されます。",
+      "createSubmit": "作成",
+      "nameLabel": "トークン名",
+      "namePlaceholder": "例：Claude Desktop",
+      "createdTitle": "トークンを作成しました",
+      "createdWarning": "今すぐこのトークンをコピーしてください。セキュリティのため、二度と表示されません。",
+      "copy": "コピー",
+      "copied": "コピーしました",
+      "done": "完了",
+      "empty": "アクセストークンはまだありません。",
+      "created": "作成日",
+      "lastUsed": "最終使用日",
+      "never": "未使用",
+      "revoked": "失効済み",
+      "revoke": "失効させる",
+      "revokeTitle": "トークンを失効させますか？",
+      "revokeDescription": "「{label}」を使用しているクライアントは直ちにアクセスできなくなります。この操作は元に戻せません。",
+      "revokeConfirm": "トークンを失効させる",
+      "cancel": "キャンセル",
+      "createFailed": "トークンを作成できませんでした",
+      "revokeFailed": "トークンを失効させられませんでした",
+      "revokedToast": "トークンを失効させました"
     }
   },
   "resumeViewer": {

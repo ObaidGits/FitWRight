@@ -3,6 +3,8 @@
 /** Settings data hooks (Task 13) - wrap the existing config API via Query. */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/query/client';
+import { ApiError } from '@/lib/api/errors';
+import { createMcpToken, fetchMcpTokens, revokeMcpToken, type McpTokenRecord } from '@/lib/api/mcp';
 import {
   fetchLlmConfig,
   updateLlmConfig,
@@ -94,6 +96,63 @@ export function useDeleteApiKey() {
       qc.invalidateQueries({ queryKey: ['config'] });
       qc.invalidateQueries({ queryKey: queryKeys.status });
       qc.invalidateQueries({ queryKey: queryKeys.setup });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// MCP access tokens (Settings > Account > MCP / API access)
+// ---------------------------------------------------------------------------
+
+/**
+ * The MCP section's view of the token list, including whether MCP exists at
+ * all. There is no separate feature-flag endpoint: when the deployment has
+ * MCP_ENABLED off the backend 404s the whole /mcp/tokens router, and that 404
+ * is turned into `enabled: false` here rather than an error, so react-query
+ * does not treat a perfectly normal "not installed" state as a failure.
+ */
+export interface McpTokensView {
+  enabled: boolean;
+  items: McpTokenRecord[];
+}
+
+export function useMcpTokens() {
+  return useQuery({
+    queryKey: ['mcp', 'tokens'],
+    queryFn: async (): Promise<McpTokensView> => {
+      try {
+        const res = await fetchMcpTokens();
+        return { enabled: true, items: res.items };
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 404) {
+          return { enabled: false, items: [] };
+        }
+        throw err;
+      }
+    },
+  });
+}
+
+/**
+ * Create an MCP token. The raw token travels ONLY in the mutation result -
+ * it is the caller's (one-time reveal) responsibility, never cache state.
+ */
+export function useCreateMcpToken() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (label: string) => createMcpToken(label),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['mcp', 'tokens'] });
+    },
+  });
+}
+
+export function useRevokeMcpToken() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (tokenId: string) => revokeMcpToken(tokenId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['mcp', 'tokens'] });
     },
   });
 }

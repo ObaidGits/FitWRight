@@ -49,6 +49,7 @@ import { resetDatabase } from '@/lib/api/config';
 import { invalidateApplicationLists, invalidateResumeLists, queryKeys } from '@/lib/query/client';
 import { SINGLE_USER_MODE } from '@/lib/config/auth';
 import { AccountSecurity } from '@/components/settings/account-security';
+import { McpTokensSection } from '@/components/settings/mcp-tokens';
 import { updateProfile } from '@/lib/api/auth';
 import { describeAuthError } from '@/components/auth/error-banner';
 import { ProfileSettings } from '@/components/settings/profile-settings';
@@ -783,6 +784,9 @@ function AccountSection() {
   return (
     <div className="space-y-4">
       {!SINGLE_USER_MODE && <AccountSecurity />}
+
+      {/* MCP / API access: self-hides (404) when the MCP server is disabled. */}
+      <McpTokensSection />
 
       <Card className="space-y-4 p-6">
         <div>

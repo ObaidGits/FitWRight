@@ -753,6 +753,33 @@
       "deleteAria": "删除 {provider} 密钥",
       "deleteConfirmTitle": "删除 API 密钥？",
       "deleteConfirmDescription": "删除已保存的 {provider} API 密钥？你之后可以重新添加。"
+    },
+    "mcp": {
+      "title": "MCP / API 访问",
+      "description": "创建访问令牌，让 Claude Desktop 等 AI 客户端通过 FitWright 的 MCP 服务器使用你的 FitWright 数据。",
+      "create": "创建令牌",
+      "createDescription": "为客户端起个名字。令牌值只在创建后显示一次。",
+      "createSubmit": "创建",
+      "nameLabel": "令牌名称",
+      "namePlaceholder": "例如：Claude Desktop",
+      "createdTitle": "令牌已创建",
+      "createdWarning": "请立即复制此令牌。出于安全考虑，它不会再次显示。",
+      "copy": "复制",
+      "copied": "已复制",
+      "done": "完成",
+      "empty": "还没有访问令牌。",
+      "created": "创建于",
+      "lastUsed": "上次使用",
+      "never": "从未使用",
+      "revoked": "已吊销",
+      "revoke": "吊销",
+      "revokeTitle": "吊销令牌？",
+      "revokeDescription": "使用“{label}”的客户端将立即失去访问权限。此操作无法撤销。",
+      "revokeConfirm": "吊销令牌",
+      "cancel": "取消",
+      "createFailed": "无法创建令牌",
+      "revokeFailed": "无法吊销令牌",
+      "revokedToast": "令牌已吊销"
     }
   },
   "resumeViewer": {

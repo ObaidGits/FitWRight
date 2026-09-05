@@ -753,6 +753,33 @@
       "deleteAria": "Supprimer la clé {provider}",
       "deleteConfirmTitle": "Supprimer la clé API ?",
       "deleteConfirmDescription": "Supprimer la clé API {provider} enregistrée ? Vous pourrez la rajouter ultérieurement."
+    },
+    "mcp": {
+      "title": "Accès MCP / API",
+      "description": "Créez des jetons d'accès pour que des clients IA comme Claude Desktop puissent utiliser vos données FitWright via le serveur MCP de FitWright.",
+      "create": "Créer un jeton",
+      "createDescription": "Donnez un nom au client. La valeur du jeton n'est affichée qu'une seule fois, juste après sa création.",
+      "createSubmit": "Créer",
+      "nameLabel": "Nom du jeton",
+      "namePlaceholder": "p. ex. Claude Desktop",
+      "createdTitle": "Jeton créé",
+      "createdWarning": "Copiez ce jeton maintenant. Pour des raisons de sécurité, il ne sera plus jamais affiché.",
+      "copy": "Copier",
+      "copied": "Copié",
+      "done": "Terminé",
+      "empty": "Aucun jeton d'accès pour le moment.",
+      "created": "Créé le",
+      "lastUsed": "Dernière utilisation",
+      "never": "Jamais",
+      "revoked": "Révoqué",
+      "revoke": "Révoquer",
+      "revokeTitle": "Révoquer le jeton ?",
+      "revokeDescription": "Les clients utilisant « {label} » perdront immédiatement l'accès. Cette action est irréversible.",
+      "revokeConfirm": "Révoquer le jeton",
+      "cancel": "Annuler",
+      "createFailed": "Impossible de créer le jeton",
+      "revokeFailed": "Impossible de révoquer le jeton",
+      "revokedToast": "Jeton révoqué"
     }
   },
   "resumeViewer": {
