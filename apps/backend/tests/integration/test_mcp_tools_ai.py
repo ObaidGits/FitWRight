@@ -18,7 +18,7 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 
-from app.models import CreditAccount
+from app.models import CreditAccount, User
 
 pytestmark = pytest.mark.integration
 
@@ -307,7 +307,6 @@ class TestGenerateCoverLetter:
         assert llm_mocked["cover_letter"].await_count == 1
         rows = await isolated_db.list_usage(owner_id)
         assert len(rows) == 1, "the rate-limited call must not appear in the ledger"
-
     async def test_own_key_user_is_metered_but_charged_nothing(
         self, mcp_client, isolated_db, owner_id, credits_on, llm_mocked, monkeypatch
     ):
@@ -431,6 +430,31 @@ class TestGenerateInterviewPrep:
         assert rows[0]["feature"] == "interview_prep"
         assert rows[0]["credits_charged"] == 0
 
+    async def test_rate_limited_user_gets_rate_limited_error(
+        self, mcp_client, isolated_db, owner_id, credits_on, llm_mocked, monkeypatch
+    ):
+        """M2: interview prep is guarded by the same per-user rate limit, before
+        any billing or work - mirroring its REST route dependency."""
+        from app.config import settings
+
+        monkeypatch.setattr(settings, "llm_rate_per_min_user", 1)
+        client, token = mcp_client
+        await _fund(isolated_db, owner_id, wallet=200)
+        resume = await _seed_tailored_resume(isolated_db, owner_id)
+
+        first = _ok(
+            _call(client, token, "generate_interview_prep", {"resume_id": resume["resume_id"]})
+        )
+        assert first["interview_prep"]
+
+        second = _error_text(
+            _call(client, token, "generate_interview_prep", {"resume_id": resume["resume_id"]})
+        )
+        assert "rate_limited" in second
+        assert llm_mocked["interview_prep"].await_count == 1
+        rows = await isolated_db.list_usage(owner_id)
+        assert len(rows) == 1, "the rate-limited call must not appear in the ledger"
+
     async def test_regenerate_true_overrides_saved_copy(
         self, mcp_client, isolated_db, owner_id, credits_on, llm_mocked
     ):
@@ -462,7 +486,90 @@ class TestGenerateInterviewPrep:
 
 
 # ---------------------------------------------------------------------------
-# 3. Tool schemas
+# 3. Credential resolution (C1 regression)
+# ---------------------------------------------------------------------------
+
+
+class _ProviderSentinel(Exception):
+    """Raised by the get_llm_config spy after recording the resolved caller."""
+
+
+class TestCredentialResolution:
+    async def test_own_key_user_call_resolves_their_key_not_the_operators(
+        self, mcp_client, isolated_db, owner_id, credits_on, monkeypatch
+    ):
+        """C1 regression: an own-key user's MCP call must resolve THEIR provider
+        key.
+
+        On REST, the ``get_effective_user_id`` dependency publishes the caller
+        on the request-scoped ContextVar, and ``get_llm_config`` reads it to
+        decide whose encrypted key store to open (R10.6). The MCP tools call
+        the handlers outside any request scope, so the tool itself must publish
+        the token's user id - otherwise the resolution falls through to the
+        bootstrap owner's (the operator's) key while ``metered_ai_call``
+        charges nothing: operator-funded free generation.
+
+        The assertion sits at the credential-resolution boundary itself
+        (``get_llm_config``), one frame below the service mocks used elsewhere
+        in this file. A second user (NOT the bootstrap owner) makes the
+        fallback detectable: without the fix the recorded id is the owner's.
+        """
+        from app.auth.mcp_tokens import get_mcp_token_service
+
+        user_b = str(uuid4())
+        async with isolated_db.session_factory() as session:
+            session.add(User(id=user_b, email="ownkey@example.com", name="B", role="user", status="active"))
+            await session.commit()
+        _, raw_b = await get_mcp_token_service().issue(user_b, "b-client")
+        resume_b = await _seed_tailored_resume(isolated_db, user_b)
+
+        # user_b is on their own key (the C1 scenario); the owner is not.
+        monkeypatch.setattr(
+            "app.ai_metered.user_has_own_key", lambda uid: uid == user_b
+        )
+
+        from app.services import interview_prep as interview_prep_service
+
+        seen: list[str | None] = []
+
+        def spy(*args, **kwargs):
+            from app.auth.context import get_current_user_id
+
+            seen.append(get_current_user_id())
+            raise _ProviderSentinel(f"resolved caller: {seen[-1]}")
+
+        # Both entry points the handlers reach: app.llm.get_llm_config (used
+        # by complete()/complete_json()) and the copy interview_prep imports.
+        monkeypatch.setattr("app.llm.get_llm_config", spy)
+        monkeypatch.setattr(interview_prep_service, "get_llm_config", spy)
+
+        client, _ = mcp_client
+        expected_rows = 1
+        for tool, feature in (
+            ("generate_cover_letter", "cover_letter"),
+            ("generate_interview_prep", "interview_prep"),
+        ):
+            seen.clear()
+            # The provider "fails" (sentinel); the handler wraps it as a 502
+            # ApiError, which the tool renders as an actionable error. What
+            # matters is WHICH user the credential resolution saw.
+            text = _error_text(_call(client, raw_b, tool, {"resume_id": resume_b["resume_id"]}))
+            assert seen == [user_b], (
+                f"{tool} resolved credentials for {seen}; expected the token "
+                f"owner {user_b} (R10.6: one user's key never serves another's calls)"
+            )
+            assert "Traceback" not in text
+            # The zero-charge own-key ledger row was still written (one per
+            # tool iteration - the newest row is the one just recorded).
+            rows = await isolated_db.list_usage(user_b)
+            assert len(rows) == expected_rows
+            assert rows[0]["feature"] == feature
+            assert rows[0]["credits_charged"] == 0
+            expected_rows += 1
+
+
+# ---------------------------------------------------------------------------
+# 4. Tool schemas
 # ---------------------------------------------------------------------------
 
 
