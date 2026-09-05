@@ -16,6 +16,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.models import User
+from app.schemas import APPLICATION_STATUS_ORDER
 
 pytestmark = pytest.mark.integration
 
@@ -197,11 +198,17 @@ class TestListApplications:
         assert [c["company"] for c in columns["applied"]] == ["Acme"]
         assert [c["role"] for c in columns["saved"]] == ["Dev"]
         assert payload["total"] == 2
+        # Every status column is present even with no rows in it (stable
+        # shape, mirroring the REST board) - `rejected` was never seeded.
+        assert columns["rejected"] == []
 
-    async def test_new_user_has_empty_board(self, mcp_client):
+    async def test_empty_board_still_has_all_seven_columns(self, mcp_client):
         client, token = mcp_client
         payload = _ok(_call(client, token, "list_applications", {}))
-        assert payload == {"columns": {}, "total": 0}
+        assert payload["columns"] == {
+            status: [] for status in APPLICATION_STATUS_ORDER
+        }
+        assert payload["total"] == 0
 
 
 # ---------------------------------------------------------------------------

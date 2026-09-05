@@ -17,19 +17,28 @@ mcp = get_mcp_instance()
 
 @mcp.tool
 async def list_applications(token: AccessToken = CurrentAccessToken()) -> dict:
-    """List all the user's job applications, grouped into columns by status
-    (saved, applied, no_response, response, interview, accepted, rejected).
+    """List all the user's job applications, grouped into the seven status
+    columns: saved, applied, no_response, response, interview, accepted,
+    rejected.
 
-    Each card carries company, role, status, and position. Use
-    get_application with an application_id for a single application's detail.
+    Every column is ALWAYS present (an empty list when that status has no
+    cards), so the shape is stable regardless of the data. Each card carries
+    company, role, status, and position. Use get_application with an
+    application_id for a single application's detail.
     """
     user_id = current_user_id(token)
     from app.database import db
+    from app.schemas import APPLICATION_STATUS_ORDER
 
     apps = await db.list_applications(user_id)
-    columns: dict[str, list] = {}
+    # Same grouping as the REST board (app/routers/applications.py
+    # _group_by_status): all seven columns always present; a row with an
+    # unknown status cannot be placed in a column and is skipped.
+    columns: dict[str, list] = {status: [] for status in APPLICATION_STATUS_ORDER}
     for app in apps:
-        columns.setdefault(app.get("status") or "unknown", []).append(app)
+        status = app.get("status")
+        if status in columns:
+            columns[status].append(app)
     return {"columns": columns, "total": len(apps)}
 
 
