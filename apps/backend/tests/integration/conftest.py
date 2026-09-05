@@ -8,6 +8,8 @@ name), so the other integration suites are unaffected.
 
 from __future__ import annotations
 
+import importlib
+
 import pytest
 
 from app.config import settings as app_settings
@@ -66,41 +68,65 @@ async def auth_env(isolated_db, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture
-def mcp_app(monkeypatch):
-    """Factory: rebuild ``app.main`` under a forced MCP_ENABLED setting.
+class _McpAppFactory:
+    """Rebuilds ``app.main`` under a forced MCP_ENABLED setting.
 
     ``app.main`` reads ``settings.mcp_enabled`` once at import time (both the
     mount and the combined lifespan are import-time decisions), and pytest
     imports the module once per session - so a test that flips the flag and
     then does ``from app.main import app`` gets whichever app was built first,
-    with or without the mount, regardless of the current setting. Flipping the
-    flag and reloading here makes each test independent of import order.
+    with or without the mount, regardless of the current setting. Calling the
+    factory (``app = factory(True)``) patches the flag and reloads the module
+    so each test is independent of import order.
 
-    Teardown reloads once more under the original setting so any later test
-    that imports ``app.main`` inside its body sees the default (mount absent);
-    tests that imported it at module level keep their own reference either way.
+    ``close()`` restores the module for whoever imports it next: the teardown
+    reload happens while the isolated test DB is still swapped in (fixture
+    teardown order), so the reload's ``from app.database import db`` would
+    leave ``app.main.db`` pointing at a temp DB that closes moments later -
+    unusable (dead engine) for any later test that imports ``app.main``. The
+    pre-fixture binding is therefore captured up front and restored after the
+    teardown reload.
     """
-    import importlib
 
+    def __init__(self, monkeypatch, main_module):
+        self._monkeypatch = monkeypatch
+        self._main = main_module
+        self._original_enabled = app_settings.mcp_enabled
+        self._original_db = main_module.db
+        self._built = False
+
+    def __call__(self, enabled: bool):
+        self._built = True
+        self._monkeypatch.setattr(app_settings, "mcp_enabled", enabled)
+        importlib.reload(self._main)
+        return self._main.app
+
+    def close(self) -> None:
+        """Restore ``app.main`` under the original setting (idempotent)."""
+        if not self._built:
+            return
+        self._built = False
+        self._monkeypatch.setattr(app_settings, "mcp_enabled", self._original_enabled)
+        importlib.reload(self._main)
+        self._main.db = self._original_db
+
+
+@pytest.fixture
+def mcp_app(monkeypatch):
+    """Freshly rebuilt ``app.main`` under a forced MCP_ENABLED setting.
+
+    Yields a factory (see :class:`_McpAppFactory`); teardown always restores
+    the module, so tests that import ``app.main`` later in the session see the
+    default (mount absent) with a working ``db`` binding. Tests may call
+    ``mcp_app.close()`` early to assert the restored state mid-test.
+    """
     import app.main as main_module
 
-    original = app_settings.mcp_enabled
-    built = False
-
-    def _build(enabled: bool):
-        nonlocal built
-        built = True
-        monkeypatch.setattr(app_settings, "mcp_enabled", enabled)
-        importlib.reload(main_module)
-        return main_module.app
-
+    factory = _McpAppFactory(monkeypatch, main_module)
     try:
-        yield _build
+        yield factory
     finally:
-        if built:
-            monkeypatch.setattr(app_settings, "mcp_enabled", original)
-            importlib.reload(main_module)
+        factory.close()
 
 
 @pytest.fixture

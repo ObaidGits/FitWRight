@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import logging
+
 from fastmcp.server.auth import AccessToken, TokenVerifier
 
 from app.auth.mcp_tokens import get_mcp_token_service
+
+logger = logging.getLogger(__name__)
 
 
 class FitWrightTokenVerifier(TokenVerifier):
@@ -19,7 +23,15 @@ class FitWrightTokenVerifier(TokenVerifier):
     """
 
     async def verify_token(self, token: str) -> AccessToken | None:
-        row = await get_mcp_token_service().verify(token)
+        try:
+            row = await get_mcp_token_service().verify(token)
+        except Exception:
+            # Fail closed: the TokenVerifier contract treats None as
+            # unauthorized, so an infra outage surfaces as 401 - never a raw
+            # 500, and certainly never a bypass. The raw token is deliberately
+            # absent from the log line (only the exception traceback is kept).
+            logger.exception("MCP token verification failed; rejecting request")
+            return None
         if row is None:
             return None
         return AccessToken(
