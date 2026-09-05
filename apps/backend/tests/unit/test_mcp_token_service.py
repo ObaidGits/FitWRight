@@ -91,3 +91,16 @@ async def test_touch_throttled_to_once_per_minute(svc, users):
     await svc.touch(rec["id"])
     second = (await svc.list_for_user(user_id))[0]["last_used_at"]
     assert second == first
+
+
+async def test_verify_succeeds_when_touch_raises(svc, users, monkeypatch, caplog):
+    """Telemetry must never take a valid auth down: a failing last_used_at
+    stamp (DB hiccup) leaves verify() returning the token row."""
+    user_id, _ = users
+    _rec, raw = await svc.issue(user_id, "x", ttl_days=0)
+
+    async def _boom(token_id: str) -> None:
+        raise RuntimeError("last_used_at write failed")
+
+    monkeypatch.setattr(svc, "touch", _boom)
+    assert await svc.verify(raw) is not None

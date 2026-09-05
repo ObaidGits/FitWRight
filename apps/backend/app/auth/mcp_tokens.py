@@ -8,12 +8,15 @@ only in the client's config; the DB keeps sha256 only.
 from __future__ import annotations
 
 import hashlib
+import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select, update
 
 from app.models import McpToken
+
+logger = logging.getLogger(__name__)
 
 
 def _hash(raw: str) -> str:
@@ -60,7 +63,13 @@ class McpTokenService:
                 return None
             if row.expires_at and row.expires_at <= _now_iso():
                 return None
-        await self.touch(row.id)
+        # Telemetry must never take a valid auth down (Task 4 routes every MCP
+        # request through verify()): a failed last_used_at write is logged and
+        # swallowed, and the token still authenticates.
+        try:
+            await self.touch(row.id)
+        except Exception:
+            logger.debug("mcp token last_used_at stamp failed", exc_info=True)
         return {"id": row.id, "user_id": row.user_id, "label": row.label}
 
     async def revoke(self, user_id: str, token_id: str) -> bool:
