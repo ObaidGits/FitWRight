@@ -96,7 +96,7 @@ export function absoluteUrl(path = '/'): string {
 export const VERIFICATION = {
   google:
     process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION ||
-    'lV_LMnwVarz4ws2OxJ3XcNj9dqHPlNS7SXBB1M96meI',
+    'Ktr1dvDAUtlyg8bqeh0Ql-xetUW8FGrAjLTroH3ihns',
   bing: process.env.NEXT_PUBLIC_BING_SITE_VERIFICATION || undefined,
   yandex: process.env.NEXT_PUBLIC_YANDEX_SITE_VERIFICATION || undefined,
 } as const;
