@@ -34,14 +34,17 @@ import { toMessage } from '@/lib/api/errors';
 import type { McpTokenCreated, McpTokenRecord } from '@/lib/api/mcp';
 import { useMcpTokens, useCreateMcpToken, useRevokeMcpToken } from '@/features/settings/hooks';
 
-function formatDate(iso: string | null): string {
+/** Format an ISO timestamp in the active UI language (pattern:
+ * cover-letter-preview.tsx), falling back to the raw string if unparseable. */
+function formatDate(iso: string | null, locale: string): string {
   if (!iso) return '';
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString();
+  if (Number.isNaN(d.getTime())) return iso;
+  return new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(d);
 }
 
 export function McpTokensSection() {
-  const { t } = useTranslations();
+  const { t, locale } = useTranslations();
   const tokens = useMcpTokens();
   const create = useCreateMcpToken();
   const revoke = useRevokeMcpToken();
@@ -55,8 +58,13 @@ export function McpTokensSection() {
   const [revokeTarget, setRevokeTarget] = React.useState<McpTokenRecord | null>(null);
 
   // Hidden while the probe is in flight (no flash of an empty section) and
-  // hidden entirely when MCP is disabled (404) - see useMcpTokens.
-  if (tokens.isPending || !tokens.data?.enabled) return null;
+  // hidden entirely when MCP is disabled (404) - see useMcpTokens. A non-404
+  // probe failure (backend down, 500) also renders nothing: the same
+  // silent-degrade convention the rest of the Settings page uses when its
+  // config fetches fail (e.g. AiSection falls back to defaults) - a
+  // half-loaded Account tab with an error-only card would be worse, and the
+  // query is retried/refetched by react-query on the next visit.
+  if (tokens.isPending || tokens.isError || !tokens.data?.enabled) return null;
 
   function resetCreateDialog() {
     setCreateOpen(false);
@@ -140,10 +148,12 @@ export function McpTokensSection() {
                   {tok.revoked_at && <Badge variant="danger">{t('settings.mcp.revoked')}</Badge>}
                 </p>
                 <p className="text-xs text-[var(--muted-foreground)]">
-                  {t('settings.mcp.created')} {formatDate(tok.created_at)}
+                  {t('settings.mcp.created')} {formatDate(tok.created_at, locale)}
                   {' · '}
                   {t('settings.mcp.lastUsed')}{' '}
-                  {tok.last_used_at ? formatDate(tok.last_used_at) : t('settings.mcp.never')}
+                  {tok.last_used_at
+                    ? formatDate(tok.last_used_at, locale)
+                    : t('settings.mcp.never')}
                 </p>
               </div>
               {!tok.revoked_at && (

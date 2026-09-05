@@ -89,13 +89,14 @@ function token(over: Record<string, unknown> = {}) {
 
 function renderSettings() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
+  const utils = render(
     <QueryClientProvider client={qc}>
       <ToastProvider>
         <SettingsPage />
       </ToastProvider>
     </QueryClientProvider>
   );
+  return { ...utils, qc };
 }
 
 /** Open the Account tab, where the MCP / API access section lives.
@@ -144,11 +145,14 @@ describe('Settings > MCP / API access (token management)', () => {
       new ApiError('not_found', 'Not found', 404) as never
     );
 
-    renderSettings();
+    const { qc } = renderSettings();
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'Account' }), { button: 0 });
-    await waitFor(() => expect(fetchMcpTokens).toHaveBeenCalled());
-    // Give the 404-turned-"disabled" state a beat to settle, then: no section.
-    await waitFor(() => expect(screen.queryByText('MCP / API access')).not.toBeInTheDocument());
+    // Wait for the probe to actually RESOLVE (not just be called), so the
+    // absence below means "hidden because disabled", never "still pending".
+    await waitFor(() =>
+      expect(qc.getQueryState(['mcp', 'tokens'])?.data).toEqual({ enabled: false, items: [] })
+    );
+    expect(screen.queryByText('MCP / API access')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Create token' })).not.toBeInTheDocument();
   });
 
@@ -185,6 +189,34 @@ describe('Settings > MCP / API access (token management)', () => {
     within(dialog).getByRole('button', { name: 'Done' }).click();
     await waitFor(() => expect(screen.queryByText('fw_secret_raw_value')).not.toBeInTheDocument());
     expect(screen.getByText('Test client')).toBeInTheDocument();
+  });
+
+  it('does not retain the raw token in the mutation cache after leaving Settings', async () => {
+    vi.mocked(fetchMcpTokens)
+      .mockResolvedValueOnce({ items: [] } as never)
+      .mockResolvedValue({ items: [token({ id: 'tok-2', label: 'Test client' })] } as never);
+    vi.mocked(createMcpToken).mockResolvedValue(
+      token({ id: 'tok-2', label: 'Test client', token: 'fw_secret_raw_value' }) as never
+    );
+
+    const { qc, unmount } = renderSettings();
+    await openAccountTab();
+
+    screen.getByRole('button', { name: 'Create token' }).click();
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText(/token name/i), {
+      target: { value: 'Test client' },
+    });
+    within(dialog).getByRole('button', { name: 'Create' }).click();
+    expect(await within(dialog).findByText('fw_secret_raw_value')).toBeInTheDocument();
+    within(dialog).getByRole('button', { name: 'Done' }).click();
+
+    // Leaving Settings unsubscribes the mutation's last observer; with
+    // gcTime: 0 (vs the 5-min default) the MutationCache entry - whose
+    // `data` holds the raw token - must be dropped, not parked in memory.
+    unmount();
+    await waitFor(() => expect(qc.getMutationCache().getAll()).toHaveLength(0));
+    expect(JSON.stringify(qc.getMutationCache().getAll())).not.toContain('fw_secret_raw_value');
   });
 
   it('revoking asks for confirmation, then calls DELETE with the token id', async () => {

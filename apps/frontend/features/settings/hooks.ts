@@ -136,11 +136,18 @@ export function useMcpTokens() {
 /**
  * Create an MCP token. The raw token travels ONLY in the mutation result -
  * it is the caller's (one-time reveal) responsibility, never cache state.
+ *
+ * `gcTime: 0` (vs the 5-minute default): the mutation's cached `data` would
+ * otherwise keep the raw token in react-query's MutationCache long after the
+ * reveal dialog is dismissed and the Settings page unmounts. With 0, the
+ * cache entry is dropped as soon as its last observer unsubscribes, so the
+ * only copy of the token is the component's in-memory reveal state.
  */
 export function useCreateMcpToken() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (label: string) => createMcpToken(label),
+    gcTime: 0,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['mcp', 'tokens'] });
     },
