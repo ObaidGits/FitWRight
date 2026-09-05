@@ -6,10 +6,13 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from app.applications.manual import (
+    ManualApplicationCreateError,
+    create_manual_application,
+)
 from app.applications import submissions
 from app.auth import get_effective_user_id
 from app.database import db
-from app.services.improver import extract_job_keywords
 from app.schemas import (
     APPLICATION_STATUS_ORDER,
     ApplicationActionResponse,
@@ -64,47 +67,22 @@ async def create_application(
 ) -> ApplicationResponse:
     """Manually add a card from a pasted job description.
 
-    Creates the job, runs a best-effort company/role extraction when not
-    provided, then creates the application. If application creation fails the
-    just-created job is cleaned up (no orphan jobs / retry drift); caching
-    company/role on the job is best-effort and never fails the request.
+    Delegates to :func:`app.applications.manual.create_manual_application`
+    (the shared seam also used by the MCP tool): job creation, best-effort
+    company/role extraction, application creation with orphan-job cleanup.
     """
-    job = await db.create_job(
-        user_id, content=request.job_description, resume_id=request.resume_id
-    )
-
-    company = request.company
-    role = request.role
-    if not company or not role:
-        extracted = await _extract_company_role(request.job_description)
-        company = company or extracted.get("company")
-        role = role or extracted.get("role")
-
     try:
-        application = await db.create_application(
+        application = await create_manual_application(
             user_id,
-            job_id=job["job_id"],
-            resume_id=request.resume_id,
-            status=request.status.value,
-            company=company,
-            role=role,
+            request.job_description,
+            request.resume_id,
+            company=request.company,
+            role=request.role,
             notes=request.notes,
+            status=request.status.value,
         )
-    except Exception as e:
-        logger.error("Failed to create application: %s", e)
-        try:
-            await db.delete_job(user_id, job["job_id"])
-        except Exception as cleanup_error:
-            logger.warning("Failed to clean up orphan job %s: %s", job["job_id"], cleanup_error)
+    except ManualApplicationCreateError:
         raise HTTPException(status_code=500, detail="Failed to create application. Please try again.")
-
-    # Best-effort: cache company/role on the job for later reuse - never 500.
-    if company or role:
-        try:
-            await db.update_job(user_id, job["job_id"], {"company": company, "role": role})
-        except Exception as e:
-            logger.warning("Failed to cache company/role on job %s: %s", job["job_id"], e)
-
     return ApplicationResponse(**application)
 
 
@@ -359,23 +337,3 @@ async def bulk_delete_applications(
         logger.error("Failed to bulk-delete applications: %s", e)
         raise HTTPException(status_code=500, detail="Failed to delete applications. Please try again.")
     return ApplicationActionResponse(message=f"Deleted {deleted} application(s)", affected=deleted)
-
-
-async def _extract_company_role(job_description: str) -> dict[str, str | None]:
-    """Best-effort company/role extraction for the manual-add path.
-
-    Reuses the cached keyword-extraction pass; falls back to blank (editable)
-    on any failure so a flaky LLM never blocks card creation. LLM output isn't
-    guaranteed to be a string, so values are type-guarded before ``.strip()``.
-    """
-    try:
-        keywords = await extract_job_keywords(job_description)
-        raw_company = keywords.get("company")
-        raw_role = keywords.get("role")
-        return {
-            "company": (raw_company.strip() if isinstance(raw_company, str) else "") or None,
-            "role": (raw_role.strip() if isinstance(raw_role, str) else "") or None,
-        }
-    except Exception as e:
-        logger.warning("Company/role extraction failed (manual add): %s", e)
-        return {}

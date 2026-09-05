@@ -229,7 +229,7 @@ class TestAddApplication:
             return {"company": "Globex", "role": "Platform Engineer"}
 
         monkeypatch.setattr(
-            "app.routers.applications._extract_company_role", fake_extract
+            "app.applications.manual._extract_company_role", fake_extract
         )
 
         payload = _ok(

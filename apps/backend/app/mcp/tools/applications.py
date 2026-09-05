@@ -2,8 +2,9 @@
 
 Read tools cover the board (list/detail), the apply queue, and the
 duplicate-application check. Write tools (``add_application``,
-``update_application_status``) mirror the REST manual-add and PATCH handlers
-in ``app/routers/applications.py`` by calling the exact same service sequence,
+``update_application_status``) go through the same seams the REST handlers
+use - manual add via the shared service function in
+``app/applications/manual.py``, status moves via ``db.update_application`` -
 so behavior (extraction, orphan cleanup, dedupe) can never drift.
 """
 
@@ -126,8 +127,6 @@ async def add_application(
     from list_resumes.
     """
     user_id = current_user_id(token)
-    from app.database import db
-    from app.routers.applications import _extract_company_role
     from app.schemas import ManualApplicationCreate
 
     # Same bounds as the REST body (ManualApplicationCreate): a non-empty
@@ -147,50 +146,30 @@ async def add_application(
     except ValidationError as exc:
         raise _first_validation_error(exc) from None
 
-    # Mirror of the REST create_application handler (app/routers/
-    # applications.py): create the job, extract company/role when missing,
-    # then create the application with orphan-job cleanup on failure and a
-    # best-effort company/role cache on the job.
-    job = await db.create_job(
-        user_id, content=request.job_description, resume_id=request.resume_id
+    # Mirror of the REST create_application handler: the shared seam in
+    # app/applications/manual.py owns the orchestration (job creation,
+    # best-effort company/role extraction, orphan-job cleanup, company/role
+    # cache) so REST and MCP can never drift apart.
+    from app.applications.manual import (
+        ManualApplicationCreateError,
+        create_manual_application,
     )
 
-    final_company = request.company
-    final_role = request.role
-    if not final_company or not final_role:
-        extracted = await _extract_company_role(request.job_description)
-        final_company = final_company or extracted.get("company")
-        final_role = final_role or extracted.get("role")
-
     try:
-        application = await db.create_application(
+        application = await create_manual_application(
             user_id,
-            job_id=job["job_id"],
-            resume_id=request.resume_id,
-            status=request.status.value,
-            company=final_company,
-            role=final_role,
+            request.job_description,
+            request.resume_id,
+            company=request.company,
+            role=request.role,
             notes=request.notes,
+            status=request.status.value,
         )
-    except Exception:
-        # No orphan jobs / retry drift - cleanup is best-effort, never raises.
-        try:
-            await db.delete_job(user_id, job["job_id"])
-        except Exception:
-            pass
+    except ManualApplicationCreateError:
         raise ValueError(
             "application_create_failed: Failed to create application. "
             "Please try again."
         ) from None
-
-    if final_company or final_role:
-        # Best-effort cache on the job for later reuse - never fails.
-        try:
-            await db.update_job(
-                user_id, job["job_id"], {"company": final_company, "role": final_role}
-            )
-        except Exception:
-            pass
 
     return application
 

@@ -1,1 +1,1 @@
-"""Application tracker internals: submission records and the apply queue."""
+"""Application tracker internals: manual add, submission records, apply queue."""

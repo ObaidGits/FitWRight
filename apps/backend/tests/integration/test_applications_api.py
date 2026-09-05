@@ -42,7 +42,7 @@ class TestListAndGroup:
 class TestManualAdd:
     async def test_manual_add_extracts_company_role(self, isolated_db):
         with patch(
-            "app.routers.applications.extract_job_keywords",
+            "app.applications.manual.extract_job_keywords",
             new_callable=AsyncMock,
             return_value={"company": "Acme Corp", "role": "Staff Engineer"},
         ):
@@ -62,7 +62,7 @@ class TestManualAdd:
 
     async def test_manual_add_respects_explicit_fields_without_llm(self, isolated_db):
         with patch(
-            "app.routers.applications.extract_job_keywords",
+            "app.applications.manual.extract_job_keywords",
             new_callable=AsyncMock,
         ) as mock_extract:
             async with _client() as client:
@@ -83,6 +83,32 @@ class TestManualAdd:
         assert body["company"] == "Given Co"
         assert body["status"] == "saved"
         assert body["applied_at"] is None  # saved is not applied yet
+
+    async def test_manual_add_cleans_up_orphan_job_on_failure(
+        self, isolated_db, owner_id, monkeypatch
+    ):
+        """Application creation fails -> the just-created job is deleted (no
+        orphan jobs / retry drift). Covers the shared seam
+        (app/applications/manual.py) through the REST endpoint."""
+
+        async def boom(*args, **kwargs):
+            raise RuntimeError("db down")
+
+        monkeypatch.setattr(isolated_db, "create_application", boom)
+        async with _client() as client:
+            resp = await client.post(
+                "/api/v1/applications",
+                json={
+                    "resume_id": "res-1",
+                    "job_description": "JD text",
+                    "company": "Acme",
+                    "role": "SRE",
+                },
+            )
+        assert resp.status_code == 500
+        assert resp.json()["detail"] == "Failed to create application. Please try again."
+        # The job created moments before the failure is gone.
+        assert await isolated_db.list_jobs(owner_id) == []
 
 
 class TestDetail:
