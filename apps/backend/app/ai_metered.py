@@ -20,12 +20,17 @@ in its teardown, so:
 
 The user's own key is checked here too: someone on their own credentials is metered
 for observability and charged nothing.
+
+The billing logic itself lives in :func:`metered_ai_call`, an async context manager
+the dependency enters on the route's behalf. MCP tools (no FastAPI DI) enter the
+same context manager directly, so REST and MCP bill through literally one function.
 """
 
 from __future__ import annotations
 
 import logging
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import Depends
 
@@ -35,7 +40,7 @@ from app.auth.principal import get_effective_user_id
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["ai_metered", "user_has_own_key"]
+__all__ = ["ai_metered", "metered_ai_call", "user_has_own_key"]
 
 #: Providers that legitimately run without a key. A user pointing FitWright at
 #: their own Ollama or self-hosted endpoint is supplying their own compute, which
@@ -79,6 +84,56 @@ def user_has_own_key(user_id: str) -> bool:
     return False
 
 
+@asynccontextmanager
+async def metered_ai_call(
+    user_id: str, feature: str, *, blocking: bool = True
+) -> AsyncIterator[None]:
+    """The billing context behind ``Depends(ai_metered(...))`` - shared with MCP tools.
+
+    REST routes get this via the route dependency; MCP tools (which have no
+    FastAPI dependency injection) enter it directly around the handler call.
+    ONE function means the two paths literally cannot drift: same feature
+    name, same refusal ordering, same metering.
+
+    Entering can raise 402 / 403 / 429 BEFORE the caller's body runs - that is
+    the point: the refusal arrives before any partial work exists.
+    """
+    bypass_billing = user_has_own_key(user_id)
+
+    if not bypass_billing and not blocking:
+        decision = await check_can_spend(user_id, feature)
+        # Only a SHORT BALANCE degrades. `blocked` and `disabled_globally` fall
+        # through to ai_spend, which refuses them - an operator who turned a
+        # user off must not be overridden by an endpoint's leniency.
+        if not decision.allowed and decision.reason == "insufficient":
+            bypass_billing = True
+
+    async with ai_spend(user_id, feature=feature, has_own_key=bypass_billing) as spend:
+        # Publishing the feature here is what lets llm.py pick an operator
+        # channel: the provider call is several frames below this point and has
+        # no other way to know which feature it is serving.
+        usage, token = start_metering(
+            feature=feature, user_id=user_id, has_own_key=bypass_billing
+        )
+        try:
+            yield
+        finally:
+            stop_metering(token)
+            # Recorded even on the failure path, where it settles nothing and
+            # the release writes a zero-charge row - so "we did not bill for
+            # this" stays provable rather than merely absent.
+            spend.record(
+                total_tokens=usage.total_tokens,
+                prompt_tokens=usage.prompt_tokens,
+                completion_tokens=usage.completion_tokens,
+                estimated=usage.estimated,
+                channel_id=usage.channel_id,
+                model=usage.model,
+                provider=usage.provider,
+                latency_ms=usage.latency_ms,
+            )
+
+
 def ai_metered(feature: str, *, blocking: bool = True):
     """Build the route dependency that charges ``feature`` to the calling user.
 
@@ -103,42 +158,8 @@ def ai_metered(feature: str, *, blocking: bool = True):
     """
 
     async def dependency(user_id: str = Depends(get_effective_user_id)) -> AsyncIterator[None]:
-        bypass_billing = user_has_own_key(user_id)
-
-        if not bypass_billing and not blocking:
-            decision = await check_can_spend(user_id, feature)
-            # Only a SHORT BALANCE degrades. `blocked` and `disabled_globally` fall
-            # through to ai_spend, which refuses them - an operator who turned a
-            # user off must not be overridden by an endpoint's leniency.
-            if not decision.allowed and decision.reason == "insufficient":
-                bypass_billing = True
-
-        # Entering ai_spend can raise 402 / 403 / 429 BEFORE the handler runs. That
-        # is the point: the refusal arrives before any partial work exists.
-        async with ai_spend(user_id, feature=feature, has_own_key=bypass_billing) as spend:
-            # Publishing the feature here is what lets llm.py pick an operator
-            # channel: the provider call is several frames below this point and has
-            # no other way to know which feature it is serving.
-            usage, token = start_metering(
-                feature=feature, user_id=user_id, has_own_key=bypass_billing
-            )
-            try:
-                yield
-            finally:
-                stop_metering(token)
-                # Recorded even on the failure path, where it settles nothing and
-                # the release writes a zero-charge row - so "we did not bill for
-                # this" stays provable rather than merely absent.
-                spend.record(
-                    total_tokens=usage.total_tokens,
-                    prompt_tokens=usage.prompt_tokens,
-                    completion_tokens=usage.completion_tokens,
-                    estimated=usage.estimated,
-                    channel_id=usage.channel_id,
-                    model=usage.model,
-                    provider=usage.provider,
-                    latency_ms=usage.latency_ms,
-                )
+        async with metered_ai_call(user_id, feature, blocking=blocking):
+            yield
 
     # Lets the architecture ratchet DETECT that a route is metered instead of
     # trusting a hand-maintained list. A list drifts silently the moment someone
