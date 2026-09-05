@@ -32,6 +32,7 @@ from app.routers.versions import router as versions_router
 from app.routers.discovery import router as discovery_router
 from app.routers.extension import router as extension_router
 from app.routers.application_fields import router as application_fields_router
+from app.routers.mcp_tokens import router as mcp_tokens_router
 
 __all__ = [
     "resumes_router",
@@ -66,4 +67,5 @@ __all__ = [
     "discovery_router",
     "extension_router",
     "application_fields_router",
+    "mcp_tokens_router",
 ]

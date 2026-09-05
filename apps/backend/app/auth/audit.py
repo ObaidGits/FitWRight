@@ -132,6 +132,12 @@ class AuditEvent:
     # customers keep.
     ADMIN_SETTINGS_CHANGED = "admin.settings_changed"
     ADMIN_INVITE_REDEEMED = "admin.invite_redeemed"
+    # MCP access-token lifecycle (mcp-integration Task 3). Creating a token
+    # grants a non-browser client full access to the user's data, and revoking
+    # one is the emergency stop - both are exactly "who did this, and when"
+    # questions the audit trail exists to answer.
+    MCP_TOKEN_CREATED = "mcp_token.created"
+    MCP_TOKEN_REVOKED = "mcp_token.revoked"
 
 
 def sanitize_log_value(value: Any, *, max_length: int = _MAX_VALUE_LENGTH) -> Any:

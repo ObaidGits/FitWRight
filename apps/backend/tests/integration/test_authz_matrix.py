@@ -244,6 +244,13 @@ OWNED_ENDPOINTS: list[tuple[str, str]] = [
     # tests/integration/test_ai_razorpay.py instead.
     ("POST", "/api/v1/credits/purchase"),
     ("POST", "/api/v1/credits/purchase/confirm"),
+    # MCP token lifecycle (mcp-integration Task 3): creating a token grants a
+    # non-browser client the user's data, so every route is user-scoped. Like
+    # the extension surface these sit behind a kill-switch (MCP_ENABLED), so an
+    # anonymous caller gets 404-when-disabled / 401-when-enabled - both valid.
+    ("POST", "/api/v1/mcp/tokens"),
+    ("GET", "/api/v1/mcp/tokens"),
+    ("DELETE", "/api/v1/mcp/tokens/{token_id}"),
 ]
 
 # Provider-cost actions gated behind email verification (R5.6). These must 403

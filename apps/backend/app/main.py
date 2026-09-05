@@ -56,6 +56,7 @@ from app.routers import (
     discovery_router,
     application_fields_router,
     extension_router,
+    mcp_tokens_router,
 )
 
 
@@ -421,16 +422,6 @@ app.add_middleware(AdminMetricsMiddleware)
 # ADR-7 error envelope for the versioned surface (opt-in via ApiError).
 install_error_handlers(app)
 
-# MCP mount (kill-switched). The FastMCP app needs its lifespan (session
-# manager) merged with ours, or the streamable-HTTP transport never boots.
-# When MCP_ENABLED is false the mount simply does not exist, so the whole MCP
-# surface 404s and a disabled deployment leaks nothing about it.
-if settings.mcp_enabled:
-    from app.mcp.server import build_mcp_app
-
-    _mcp_app = build_mcp_app()
-    app.mount("/api/v1/mcp", _mcp_app)
-
 # Include routers
 app.include_router(auth_csrf_router, prefix="/api/v1")
 app.include_router(auth_router, prefix="/api/v1")
@@ -465,6 +456,25 @@ app.include_router(public_profile_router, prefix="/api/v1")
 app.include_router(discovery_router, prefix="/api/v1")
 app.include_router(extension_router, prefix="/api/v1")
 app.include_router(application_fields_router, prefix="/api/v1")
+# MCP token lifecycle (browser-authenticated). Shares the MCP_ENABLED
+# kill-switch with the mount below, so the two read as one feature.
+app.include_router(mcp_tokens_router, prefix="/api/v1")
+
+# MCP mount (kill-switched). The FastMCP app needs its lifespan (session
+# manager) merged with ours, or the streamable-HTTP transport never boots.
+# When MCP_ENABLED is false the mount simply does not exist, so the whole MCP
+# surface 404s and a disabled deployment leaks nothing about it.
+#
+# Deliberately mounted AFTER the routers: Starlette matches routes in
+# registration order, and this prefix-mount would otherwise swallow the
+# browser-authenticated /api/v1/mcp/tokens REST routes above (they 404ed inside
+# the FastMCP app). The specific API routes win; anything else under
+# /api/v1/mcp falls through to the mount.
+if settings.mcp_enabled:
+    from app.mcp.server import build_mcp_app
+
+    _mcp_app = build_mcp_app()
+    app.mount("/api/v1/mcp", _mcp_app)
 
 
 @app.get("/")
