@@ -15,7 +15,7 @@ from fastmcp.server.auth import AccessToken
 from pydantic import ValidationError
 
 from app.mcp.server import get_mcp_instance
-from app.mcp.tools._context import current_user_id
+from app.mcp.tools._context import current_user_id, display_value
 
 mcp = get_mcp_instance()
 
@@ -74,8 +74,8 @@ async def get_application(
     detail = await db.get_application_detail(user_id, application_id)
     if detail is None:
         raise ValueError(
-            f"application_not_found: {application_id}. Call list_applications "
-            "to get valid application ids."
+            f"application_not_found: {display_value(application_id)}. "
+            "Call list_applications to get valid application ids."
         )
     return detail
 
@@ -194,7 +194,7 @@ async def update_application_status(
         status_value = ApplicationStatus(status).value
     except ValueError:
         raise ValueError(
-            f"invalid_status: {status!r}. Valid statuses: "
+            f"invalid_status: {display_value(status)!r}. Valid statuses: "
             f"{', '.join(APPLICATION_STATUS_ORDER)}."
         ) from None
 
@@ -210,7 +210,7 @@ async def update_application_status(
 
     if updated is None:
         raise ValueError(
-            f"application_not_found: {application_id}. Call list_applications "
-            "to get valid application ids."
+            f"application_not_found: {display_value(application_id)}. "
+            "Call list_applications to get valid application ids."
         )
     return updated

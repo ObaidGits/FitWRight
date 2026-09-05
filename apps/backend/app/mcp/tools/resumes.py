@@ -11,7 +11,7 @@ from fastmcp.dependencies import CurrentAccessToken
 from fastmcp.server.auth import AccessToken
 
 from app.mcp.server import get_mcp_instance
-from app.mcp.tools._context import current_user_id
+from app.mcp.tools._context import current_user_id, display_value
 
 mcp = get_mcp_instance()
 
@@ -46,6 +46,7 @@ async def get_resume(resume_id: str, token: AccessToken = CurrentAccessToken()) 
     resume = await db.get_resume(user_id, resume_id)
     if resume is None:
         raise ValueError(
-            f"resume_not_found: {resume_id}. Call list_resumes to get valid resume ids."
+            f"resume_not_found: {display_value(resume_id)}. "
+            "Call list_resumes to get valid resume ids."
         )
     return resume

@@ -14,7 +14,7 @@ from fastmcp.server.auth import AccessToken
 from pydantic import ValidationError
 
 from app.mcp.server import get_mcp_instance
-from app.mcp.tools._context import current_user_id
+from app.mcp.tools._context import current_user_id, display_value
 
 mcp = get_mcp_instance()
 
@@ -43,8 +43,8 @@ def _reminder_error(application_id: str, exc: Exception) -> ValueError:
     code = getattr(exc, "code", "invalid")
     if code == "not_found":
         return ValueError(
-            f"application_not_found: {application_id}. Call list_applications "
-            "to get valid application ids."
+            f"application_not_found: {display_value(application_id)}. "
+            "Call list_applications to get valid application ids."
         )
     if code == "limit":
         return ValueError(f"reminder_limit_reached: {exc}")
