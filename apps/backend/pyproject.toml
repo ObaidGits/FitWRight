@@ -34,6 +34,9 @@ dependencies = [
     # present transitively via litellm, but a payment path must not rest on another
     # package's dependency choices.
     "httpx>=0.28.0",
+    # MCP server (Model Context Protocol, spec rev 2026-07-28). Streamable HTTP,
+    # sessionless; mounted inside the FastAPI app behind MCP_ENABLED.
+    "fastmcp==4.0.3",
 ]
 
 [project.scripts]
@@ -111,7 +114,16 @@ markers = [
 # incompatible with the base app's markitdown -> magika requirement of
 # `numpy>=2.1.0`. jobspy only touches numpy transitively via pandas and runs
 # fine on numpy 2.x, so we relax that over-strict pin here.
-override-dependencies = ["numpy>=2.1.0,<3"]
+override-dependencies = [
+    "numpy>=2.1.0,<3",
+    # fastmcp 4.0.3's metadata (fastmcp-slim[client,server]) demands
+    # starlette>=1.0.1, which fastapi==0.128.4 forbids (<1.0.0). The MCP
+    # surface we use (http_app streamable-HTTP transport, TokenVerifier,
+    # combine_lifespans) runs correctly on starlette 0.52.x - verified by
+    # initialize/tools/list round-trips through the TestClient - so the
+    # metadata pin is over-strict for this deployment, same call as numpy.
+    "starlette>=0.52.1,<1.0.0",
+]
 
 
 [tool.ruff]

@@ -641,6 +641,15 @@ class Settings(BaseSettings):
     # fail-fast requirements for the real secrets below (R14.3).
     single_user_mode: bool = True
 
+    # MCP (Model Context Protocol) integration. Kill-switch pattern like
+    # JOB_DISCOVERY: when False the whole MCP surface (token management and the
+    # mounted server) 404s, so a disabled deployment leaks nothing about it.
+    mcp_enabled: bool = False
+    # Bearer-token lifetime in days for MCP access tokens. 0 = no expiry
+    # (revocation is then the only kill path, same trust model as the session
+    # ``remember_me`` cap absent). Positive values set ``expires_at`` at issue.
+    mcp_token_ttl_days: int = 0
+
     # Explicit deployment profile (ARCHITECTURE §3/§4; IMPLEMENTATION_PLAN Phase
     # 1). Declared intent - ``desktop``/``saas``/``enterprise``/``self_hosted``/
     # ``development``/``test``/``ci``. Blank -> derived from ``single_user_mode``

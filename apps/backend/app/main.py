@@ -102,7 +102,7 @@ def _format_db_connect_error(exc: Exception) -> str:
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def _core_lifespan(app: FastAPI):
     """Application lifespan manager."""
     # Startup
     # Structured JSON logs (request_id + user_id correlation, no secrets/PII -
@@ -305,11 +305,30 @@ async def lifespan(app: FastAPI):
         logger.error(f"Error closing database: {e}")
 
 
+def _final_lifespan():
+    """Core lifespan, combined with the FastMCP session-manager lifespan when
+    the MCP mount is enabled.
+
+    The FastMCP streamable-HTTP transport only boots inside its own lifespan
+    (it starts/stops the session manager). Without merging it into ours the
+    mount would accept connections whose transport never started. Both the
+    mount below and this lifespan share the memoized FastMCP instance/ASGI app
+    from ``app.mcp.server`` - building either twice is not supported.
+    """
+    if settings.mcp_enabled:
+        from fastmcp.utilities.lifespan import combine_lifespans
+
+        from app.mcp.server import build_mcp_app
+
+        return combine_lifespans(_core_lifespan, build_mcp_app().lifespan)
+    return _core_lifespan
+
+
 app = FastAPI(
     title="FitWright API",
     description="AI-powered resume tailoring for job descriptions",
     version=__version__,
-    lifespan=lifespan,
+    lifespan=_final_lifespan(),
 )
 
 # Maintenance mode is a conservative product-traffic gate, not an operator
@@ -401,6 +420,16 @@ app.add_middleware(AdminMetricsMiddleware)
 
 # ADR-7 error envelope for the versioned surface (opt-in via ApiError).
 install_error_handlers(app)
+
+# MCP mount (kill-switched). The FastMCP app needs its lifespan (session
+# manager) merged with ours, or the streamable-HTTP transport never boots.
+# When MCP_ENABLED is false the mount simply does not exist, so the whole MCP
+# surface 404s and a disabled deployment leaks nothing about it.
+if settings.mcp_enabled:
+    from app.mcp.server import build_mcp_app
+
+    _mcp_app = build_mcp_app()
+    app.mount("/api/v1/mcp", _mcp_app)
 
 # Include routers
 app.include_router(auth_csrf_router, prefix="/api/v1")
