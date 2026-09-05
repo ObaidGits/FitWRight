@@ -776,6 +776,36 @@ class EmailChangeToken(Base):
     )
 
 
+class McpToken(Base):
+    """A bearer token for the MCP (Model Context Protocol) mount.
+
+    Same trust model as :class:`Session` but for non-browser callers: only
+    ``sha256(raw)`` is stored (``token_hash``), revocation is a non-null
+    ``revoked_at``, and ``expires_at`` is optional (0-day TTL = no expiry, the
+    documented default). ``label`` is the user-chosen name of the client
+    ("Claude Desktop"). ``last_used_at`` is written at most once a minute so a
+    busy agent does not turn every tool call into a DB write.
+    """
+
+    __tablename__ = "mcp_tokens"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_new_uuid)
+    token_hash: Mapped[str] = mapped_column(String, nullable=False)
+    user_id: Mapped[str] = mapped_column(
+        String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    label: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[str] = mapped_column(String, default=_utcnow_iso)
+    last_used_at: Mapped[str | None] = mapped_column(String, nullable=True)
+    expires_at: Mapped[str | None] = mapped_column(String, nullable=True)
+    revoked_at: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    __table_args__ = (
+        Index("ux_mcp_tokens_token_hash", "token_hash", unique=True),
+        Index("ix_mcp_tokens_user_revoked", "user_id", "revoked_at"),
+    )
+
+
 class AdminInvite(Base):
     """A hashed, single-use, TTL-bound invitation to create an ADMIN account.
 
