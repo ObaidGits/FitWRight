@@ -10,4 +10,4 @@ New tool groups (Tasks 6-8): add the module here, following the
 
 from __future__ import annotations
 
-from app.mcp.tools import applications, resumes  # noqa: F401  (import = registration)
+from app.mcp.tools import applications, reminders, resumes  # noqa: F401  (import = registration)
