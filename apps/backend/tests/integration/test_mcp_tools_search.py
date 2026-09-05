@@ -93,7 +93,15 @@ def _clean_search_state():
 
 @pytest.fixture
 async def mcp_client(auth_env, mcp_app, mcp_token, isolated_db, monkeypatch):
-    """A live MCP-mounted TestClient plus ``(client, owner_token, db)``."""
+    """A live MCP-mounted TestClient plus ``(client, owner_token, db)``.
+
+    JOB_DISCOVERY is flipped ON here (it ships OFF) because these tests
+    exercise the happy path of the search tools; the kill-switch regression
+    lives in ``TestKillSwitch`` and flips it back off.
+    """
+    from app.config import settings as app_settings
+
+    monkeypatch.setattr(app_settings, "JOB_DISCOVERY", True)
     app = mcp_app(True)
     with TestClient(app) as client:
         yield client, mcp_token["raw"]
@@ -132,6 +140,7 @@ def _gate_the_scrape(monkeypatch) -> dict:
         state["loop"] = asyncio.get_running_loop()
         state["event"] = asyncio.Event()
         await state["event"].wait()
+        assert job is not None
         job.saved = 3
 
     monkeypatch.setattr(discovery, "_execute_manual_search", fake_work)
@@ -148,6 +157,7 @@ def _finish_the_scrape(monkeypatch, saved: int = 3) -> None:
 
     async def fake_work(payload, user_id, db, config, job=None):
         await asyncio.sleep(0)
+        assert job is not None
         job.saved = saved
 
     monkeypatch.setattr(discovery, "_execute_manual_search", fake_work)
@@ -155,6 +165,7 @@ def _finish_the_scrape(monkeypatch, saved: int = 3) -> None:
 
 def _poll_until_done(client: TestClient, token: str, search_id: str) -> dict:
     """Poll the status tool until the (fake) work reports done, 5s ceiling."""
+    state: dict = {}
     deadline = time.time() + 5
     while time.time() < deadline:
         state = _ok(_call(client, token, "get_job_search_status", {"search_id": search_id}))
@@ -251,6 +262,9 @@ class TestSingleFlightAndLimits:
         first = _ok(_call(client, token, "start_job_search", {"query": "python"}))
         assert first["already_running"] is False
         used_after_first = await _searches_used_today(isolated_db, owner_id)
+        # The first start DID charge the cap (guards ran, the search started) -
+        # pinned so a skip-the-cap-entirely regression can't pass this test.
+        assert used_after_first == 1
 
         # The 10s cooldown is a separate, EARLIER guard than single-flight;
         # simulating "10s later" isolates the one-at-a-time rule under test.
@@ -285,7 +299,7 @@ class TestSingleFlightAndLimits:
         self, mcp_client, isolated_db, owner_id, monkeypatch
     ):
         """Today's searches used up -> refusal names the plan ceiling, not credits."""
-        from app.ai_plans import consume_search, resolve_account_plan
+        from app.ai_plans import SearchAllowance, consume_search, resolve_account_plan
 
         client, token = mcp_client
         _finish_the_scrape(monkeypatch)
@@ -293,6 +307,9 @@ class TestSingleFlightAndLimits:
         account = await isolated_db.get_or_create_credit_account(owner_id)
         plan = await resolve_account_plan(isolated_db, account)
         assert plan.search_daily_limit is not None  # uncapped plans can't be tested this way
+        allowance = SearchAllowance(
+            allowed=True, used=0, limit=plan.search_daily_limit, plan_label=plan.label
+        )
         for _ in range(plan.search_daily_limit + 1):
             allowance = await consume_search(isolated_db, owner_id, plan)
             if not allowance.allowed:
@@ -310,6 +327,42 @@ class TestSingleFlightAndLimits:
 # ---------------------------------------------------------------------------
 # 3. ownership
 # ---------------------------------------------------------------------------
+
+
+class TestKillSwitch:
+    async def test_job_discovery_disabled_refuses_both_tools_without_side_effects(
+        self, mcp_client, isolated_db, owner_id, monkeypatch
+    ):
+        """The JOB_DISCOVERY kill-switch gates the tool surface too.
+
+        On REST the gate is a router-level dependency, so calling the handlers
+        directly (as the tools do) bypasses it - without this check, a
+        deployment with the feature off would still run real board scrapes
+        through MCP. The refusal must come before ANY work: no search job, no
+        rate-limit timestamp, no cap charge.
+        """
+        from app.config import settings as app_settings
+        from app.job_discovery import search_jobs
+        from app.routers import discovery
+
+        client, token = mcp_client
+        monkeypatch.setattr(app_settings, "JOB_DISCOVERY", False)  # ships off
+
+        message = _error_text(
+            _call(client, token, "start_job_search", {"query": "python"})
+        )
+        assert "job_discovery_disabled" in message
+
+        # Refused before any guard ran or any work was registered.
+        assert search_jobs.running_for(owner_id) is None
+        assert discovery._search_timestamps == {}
+        assert await _searches_used_today(isolated_db, owner_id) == 0
+
+        # The status tool is behind the same gate.
+        status_message = _error_text(
+            _call(client, token, "get_job_search_status", {"search_id": "any"})
+        )
+        assert "job_discovery_disabled" in status_message
 
 
 class TestSearchOwnership:

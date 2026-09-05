@@ -26,6 +26,24 @@ from app.mcp.tools.ai import _tool_error
 mcp = get_mcp_instance()
 
 
+def _require_job_discovery_enabled() -> None:
+    """The JOB_DISCOVERY kill-switch (Req 10.1/10.2), for the tool surface.
+
+    On REST this gate is a router-level dependency
+    (``require_job_discovery_enabled``): every discovery route 404s when the
+    feature is off. The MCP tools call the handlers directly, bypassing the
+    router, so the same setting is checked here - without it, a deployment
+    with the feature disabled would still run real board scrapes through MCP.
+    """
+    from app.config import settings
+
+    if not settings.JOB_DISCOVERY:
+        raise ValueError(
+            "job_discovery_disabled: The job-discovery feature is turned off "
+            "on this deployment."
+        )
+
+
 @mcp.tool
 async def start_job_search(
     query: str,
@@ -48,6 +66,9 @@ async def start_job_search(
     """
 
     user_id = current_user_id(token)
+    # Kill-switch first, mirroring the router-level gate's outermost position.
+    _require_job_discovery_enabled()
+
     # Same bounds as the REST body (ManualSearchRequest): a real search term.
     if not (query or "").strip():
         raise ValueError(
@@ -82,6 +103,9 @@ async def get_job_search_status(
     plan ceiling is separate.
     """
     user_id = current_user_id(token)
+    # Kill-switch first, mirroring the router-level gate's outermost position.
+    _require_job_discovery_enabled()
+
     from app.routers.discovery import manual_search_progress
 
     # Ownership is enforced on read inside search_jobs.get: a foreign or
