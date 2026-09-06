@@ -23,6 +23,27 @@ mcp = get_mcp_instance()
 logger = logging.getLogger(__name__)
 
 
+#: Exactly the fields the REST ``ReminderResponse`` model exposes (what the
+#: browser sees). The repo serializer also returns the internal ``user_id``
+#: and the scheduler's ``fired_at`` bookkeeping - an MCP client gets the same
+#: public shape as the web app, never the internals.
+_PUBLIC_REMINDER_FIELDS = (
+    "id",
+    "application_id",
+    "due_at",
+    "tz",
+    "note",
+    "recurrence",
+    "status",
+    "created_at",
+    "updated_at",
+)
+
+
+def _public_reminder(row: dict) -> dict:
+    return {field: row.get(field) for field in _PUBLIC_REMINDER_FIELDS}
+
+
 async def _reminders_service():
     """The scheduling service, gated exactly like the REST reminders routes.
 
@@ -75,7 +96,7 @@ async def list_reminders(
             raise _reminder_error(application_id, exc) from None
         raise
 
-    return {"reminders": rows, "total": len(rows)}
+    return {"reminders": [_public_reminder(r) for r in rows], "total": len(rows)}
 
 
 @mcp.tool
@@ -121,4 +142,4 @@ async def create_reminder(
             raise _reminder_error(application_id, exc) from None
         raise
 
-    return created
+    return _public_reminder(created)
