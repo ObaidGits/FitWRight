@@ -16,7 +16,7 @@ import pytest
 from fastapi import Depends, FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from app.ai_metered import ai_metered
+from app.ai_metered import ai_metered, mark_unbilled, metered_ai_call
 from app.ai_usage_meter import note_call
 from app.auth.principal import get_effective_user_id
 from app.errors import ApiError, install_error_handlers
@@ -193,3 +193,32 @@ class TestMeteredEndpoint:
         rows = await db.list_usage(uid, limit=10)
         assert rows, "no usage row written while metering with the flag off"
         assert rows[0]["credits_charged"] == 0
+
+    async def test_a_stale_unbilled_flag_cannot_zero_the_next_call(
+        self, isolated_db, credits_on
+    ):
+        """Two metered calls in ONE task (the MCP shape, and any future REST
+        refactor that batches them): the first served stored content and marked
+        itself unbilled; the second did real provider work and must settle at
+        the full price. The unbilled flag is task-scoped, so without clearing
+        it at entry the second call inherited the first's "no billable work"
+        and settled zero - a silent undercharge."""
+        from app.database import db
+
+        uid = f"u-{uuid4().hex[:8]}"
+        await _fund(db, uid, allowance=500)
+
+        async with metered_ai_call(uid, "cover_letter"):
+            mark_unbilled()  # served a saved deliverable: free pass intended HERE
+
+        first = await db.get_or_create_credit_account(uid)
+        assert first["lifetime_spent"] == 0, "the unbilled call itself stays free"
+
+        async with metered_ai_call(uid, "cover_letter"):
+            note_call(total_tokens=5000)  # real provider work this time
+
+        second = await db.get_or_create_credit_account(uid)
+        assert second["lifetime_spent"] > 0, (
+            "stale unbilled flag settled the second call at zero"
+        )
+        assert second["reserved_credits"] == 0, "hold fully resolved either way"

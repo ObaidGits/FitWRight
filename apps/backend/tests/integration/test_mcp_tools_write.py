@@ -476,6 +476,22 @@ class TestListReminders:
         assert payload == {"reminders": [], "total": 0}
 
 
+class TestReminderFieldParity:
+    def test_public_reminder_fields_match_the_rest_schema(self):
+        """``_PUBLIC_REMINDER_FIELDS`` is a hand-maintained allowlist, so it can
+        silently drift the moment the REST ``ReminderResponse`` schema gains a
+        field - an MCP client would just never see the new field, with no error
+        anywhere. Assert parity with the schema (no runtime coupling; this is
+        the tripwire that turns silent drift into a failing test)."""
+        from app.mcp.tools.reminders import _PUBLIC_REMINDER_FIELDS
+        from app.schemas.scheduling import ReminderResponse
+
+        assert set(_PUBLIC_REMINDER_FIELDS) == set(ReminderResponse.model_fields), (
+            "update _PUBLIC_REMINDER_FIELDS in app/mcp/tools/reminders.py to "
+            "match ReminderResponse"
+        )
+
+
 # ---------------------------------------------------------------------------
 # 4. Tool schemas
 # ---------------------------------------------------------------------------

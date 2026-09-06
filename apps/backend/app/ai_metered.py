@@ -137,6 +137,12 @@ async def metered_ai_call(
         usage, token = start_metering(
             feature=feature, user_id=user_id, has_own_key=bypass_billing
         )
+        # Each metered call starts clean. ``mark_unbilled`` sets a task-scoped
+        # flag that this teardown reads; if an earlier metered call in the SAME
+        # task left it set, the stale flag would settle this call at zero - a
+        # silent undercharge. Cleared at entry, restored after teardown, so the
+        # signal cannot outlive the call it was meant for.
+        unbilled_token = _unbilled_reason.set(None)
         try:
             yield
         finally:
@@ -144,6 +150,13 @@ async def metered_ai_call(
             # A handler that served stored content marks itself unbilled; the
             # hold is then released instead of settled (zero-charge row).
             unbilled = _unbilled_reason.get()
+            try:
+                _unbilled_reason.reset(unbilled_token)
+            except ValueError:
+                # Teardown ran outside the context that set the token (possible
+                # when an async generator is finalized from another task). The
+                # flag was already cleared at entry, so no stale leak either way.
+                pass
             if unbilled is not None:
                 spend.mark_free(unbilled)
             # Recorded even on the failure path, where it settles nothing and
