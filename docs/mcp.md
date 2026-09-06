@@ -71,8 +71,11 @@ error, exactly like the REST discovery routes 404.
 MCP access is by **personal bearer token**, created in the web app:
 
 1. **Create** — Settings → *MCP / API access* → enter a client name (e.g.
-   "Claude Desktop") → *Create*. The raw token (it starts with `fw_`) is shown
-   **exactly once**. Copy it now; it is never displayed again.
+   "Claude Desktop") → *Create*. Creating a token requires a recent
+   re-authentication (the same step-up that guards password change), so a
+   stolen session alone cannot mint a persistent credential. The raw token
+   (it starts with `fw_`) is shown **exactly once**. Copy it now; it is never
+   displayed again.
 2. **Store** — paste it into your MCP client's config (examples below).
    Tokens are long-lived, revocable, and (if `MCP_TOKEN_TTL_DAYS` is set on the
    server, or the deployment's default applies) may expire.
@@ -86,6 +89,9 @@ Notes:
   means creating a new token — there is no recovery path, on purpose.
 - Token management (`/api/v1/mcp/tokens`) is browser-authenticated (session +
   CSRF), not bearer-authenticated. A bearer token cannot mint more tokens.
+- A user may hold at most `MCP_MAX_TOKENS_PER_USER` non-revoked tokens
+  (default 10). Creating another past the cap is refused with an actionable
+  error; revoking a token frees a slot.
 - Token creation and revocation are written to the admin audit log
   (`mcp_token.created` / `mcp_token.revoked`).
 
@@ -150,30 +156,33 @@ produces valid ids.
 
 | Tool | Params | Cost |
 |---|---|---|
-| `list_resumes` | — | free |
+| `list_resumes` | `limit` (optional, default 50, max 200) | free |
 | `get_resume` | `resume_id` (required) | free |
 
 `list_resumes` returns lightweight summaries (id, filename, title, ATS score,
-status, updated date) — never resume content. `get_resume` returns one
-resume's full content, parsed data, and any generated deliverables.
+status, updated date) — never resume content — newest-first, capped by
+`limit`. `get_resume` returns one resume's full content, parsed data, and any
+generated deliverables. The pre-tailor markdown is not included (it is a
+near-duplicate of `content`).
 
 ### Job applications
 
 | Tool | Params | Cost |
 |---|---|---|
-| `list_applications` | — | free |
+| `list_applications` | `limit` (optional, default 50, max 200) | free |
 | `get_application` | `application_id` (required) | free |
 | `get_apply_queue` | — | free |
 | `check_duplicate` | `company`, `role` (both required) | free |
-| `add_application` | `job_description` (required), `company`, `role`, `resume_id` | free |
+| `add_application` | `job_description`, `resume_id` (both required), `company`, `role` | free |
 | `update_application_status` | `application_id`, `status` (both required) | free |
 
 - `list_applications` groups cards into the seven status columns (saved,
   applied, no_response, response, interview, accepted, rejected); every column
-  is always present.
+  is always present. `limit` caps how many cards come back.
 - `check_duplicate` is **advisory**: it reports whether a live application to
-  the same company AND role exists (case-insensitive, within the cool-off
-  window). `add_application` never blocks on it — same as the web app.
+  the same company AND role exists (case-insensitive, within the 90-day
+  cool-off window). `add_application` never blocks on it — same as the web
+  app.
 - `add_application` creates a tracker card from a pasted job description in the
   "applied" column. `resume_id` is required; `company`/`role` fall back to a
   best-effort extraction from the description when omitted.
@@ -270,6 +279,14 @@ reminders feature is disabled on the deployment, both tools refuse with
   flow are not supported; use a bridge like `mcp-remote` with a header token.
 - **Single deployment URL.** One server per deployment; the client config
   points at one origin.
+- **Trailing slash required.** The endpoint is served at `/api/v1/mcp/` only.
+  The slash-less `/api/v1/mcp` does not match the mount and is redirected with
+  a 307 (bridges like `mcp-remote` follow it automatically; plain `curl`
+  needs `-L`).
+- **No SSE streams.** The transport is `json_response` mode: every response is
+  a single JSON body. Clients whose `Accept` header excludes `application/json`
+  are refused with 406, and clients that require a GET SSE stream cannot use
+  this server. A `GET` on the endpoint returns 405 (no SSE channel exists).
 - **Sessionless transport.** Each POST is a complete JSON-RPC round-trip —
   no `Mcp-Session-Id` sessions, so any state lives in the user's data, not the
   connection.
