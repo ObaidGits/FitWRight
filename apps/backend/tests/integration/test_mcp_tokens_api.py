@@ -85,13 +85,26 @@ async def _seed(db, email, *, verified=True):
     )
 
 
+async def _step_up(client: AsyncClient, *, password: str = STRONG_PW):
+    """Open the sudo window via the real ``/auth/step-up`` endpoint."""
+    csrf = client.cookies.get("csrf")
+    return await client.post(
+        "/api/v1/auth/step-up",
+        json={"password": password},
+        headers={"X-CSRF-Token": csrf} if csrf else {},
+    )
+
+
 @asynccontextmanager
-async def _user_client(db, email):
-    """Yield ``(client, user)`` - logged in, CSRF header set."""
+async def _user_client(db, email, *, stepped_up=True):
+    """Yield ``(client, user)`` - logged in, CSRF header set, optionally with a
+    fresh step-up window (token creation requires one, hardening F2)."""
     user = await _seed(db, email)
     async with _client() as client:
         await _login(client, email)
         client.headers["X-CSRF-Token"] = client.cookies.get("csrf")
+        if stepped_up:
+            assert (await _step_up(client)).status_code == 200
         yield client, user
 
 
@@ -274,6 +287,110 @@ class TestLabelValidation:
         async with _user_client(mcp_env, "a@example.com") as (client, _user):
             resp = await client.post(TOKENS, json={"label": "x" * 100})
         assert resp.status_code == 201
+
+    async def test_whitespace_only_label_is_400_with_actionable_code(
+        self, mcp_env, hosted
+    ):
+        """Hardening F10: a whitespace-only label used to pass min_length=1 and
+        mint a blank-named row; it must be refused with a 4xx the UI can show."""
+        async with _user_client(mcp_env, "a@example.com") as (client, _user):
+            resp = await client.post(TOKENS, json={"label": "   "})
+        assert resp.status_code == 400, resp.text
+        assert resp.json()["error"]["code"] == "invalid_label"
+
+    async def test_label_is_trimmed_on_store(self, mcp_env, hosted):
+        """Surrounding whitespace never reaches the DB or the audit trail."""
+        async with _user_client(mcp_env, "a@example.com") as (client, _user):
+            resp = await client.post(TOKENS, json={"label": "  Claude Desktop  "})
+            assert resp.status_code == 201, resp.text
+            assert resp.json()["label"] == "Claude Desktop"
+            listed = (await client.get(TOKENS)).json()["items"]
+            assert [i["label"] for i in listed] == ["Claude Desktop"]
+
+
+# ---------------------------------------------------------------------------
+# 6b) Step-up gate: minting a token needs a recent re-auth (hardening F2)
+# ---------------------------------------------------------------------------
+
+
+class TestStepUpGate:
+    async def test_create_without_step_up_is_401_step_up_required(
+        self, mcp_env, hosted
+    ):
+        """A valid, verified, CSRF-carrying session that has NOT re-authorized
+        recently cannot mint a long-lived bearer (R9.1, same gate as password
+        change)."""
+        async with _user_client(
+            mcp_env, "su-gate@example.com", stepped_up=False
+        ) as (client, _user):
+            resp = await client.post(TOKENS, json={"label": "No sudo"})
+        assert resp.status_code == 401, resp.text
+        assert resp.json()["error"]["code"] == "step_up_required"
+
+    async def test_create_with_recent_step_up_is_201(self, mcp_env, hosted):
+        async with _user_client(
+            mcp_env, "su-ok@example.com", stepped_up=True
+        ) as (client, _user):
+            resp = await client.post(TOKENS, json={"label": "With sudo"})
+        assert resp.status_code == 201, resp.text
+        assert resp.json()["token"].startswith("fw_")
+
+    async def test_create_401_again_once_window_lapses(
+        self, mcp_env, hosted, monkeypatch
+    ):
+        async with _user_client(
+            mcp_env, "su-lapse@example.com", stepped_up=True
+        ) as (client, _user):
+            # Force the sudo window to have lapsed (same trick as the
+            # password-change gate tests).
+            monkeypatch.setattr(app_settings, "step_up_window", -1)
+            resp = await client.post(TOKENS, json={"label": "Stale sudo"})
+        assert resp.status_code == 401
+        assert resp.json()["error"]["code"] == "step_up_required"
+
+
+# ---------------------------------------------------------------------------
+# 6c) Per-user active-token cap (hardening F3)
+# ---------------------------------------------------------------------------
+
+
+class TestTokenCap:
+    async def test_eleventh_token_is_refused_with_actionable_error(
+        self, mcp_env, hosted
+    ):
+        """Default cap is 10 non-revoked tokens; the 11th is refused 4xx with
+        a message that says what to do, and nothing is minted."""
+        async with _user_client(mcp_env, "cap@example.com") as (client, _user):
+            for i in range(10):
+                resp = await client.post(TOKENS, json={"label": f"t{i}"})
+                assert resp.status_code == 201, (i, resp.text)
+
+            resp = await client.post(TOKENS, json={"label": "one-too-many"})
+            assert resp.status_code == 409, resp.text
+            body = resp.json()
+            assert body["error"]["code"] == "token_limit_reached"
+            assert "Revoke" in body["error"]["message"]  # actionable
+
+            listed = (await client.get(TOKENS)).json()["items"]
+            assert len([i for i in listed if i["revoked_at"] is None]) == 10
+
+    async def test_revoking_one_frees_a_slot(self, mcp_env, hosted):
+        async with _user_client(mcp_env, "cap-free@example.com") as (client, _user):
+            created = []
+            for i in range(10):
+                created.append(
+                    (await client.post(TOKENS, json={"label": f"t{i}"})).json()
+                )
+            assert (
+                await client.post(TOKENS, json={"label": "over"})
+            ).status_code == 409
+
+            assert (
+                await client.delete(f"{TOKENS}/{created[0]['id']}")
+            ).status_code == 200
+            resp = await client.post(TOKENS, json={"label": "replacement"})
+            assert resp.status_code == 201, resp.text
+            assert resp.json()["token"].startswith("fw_")
 
 
 # ---------------------------------------------------------------------------

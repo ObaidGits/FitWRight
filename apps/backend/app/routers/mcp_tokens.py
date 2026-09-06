@@ -1,9 +1,10 @@
 """MCP access-token management (browser-authenticated).
 
 Creating a token is the act of granting a non-browser client full access to
-the user's FitWright data, so these routes require a verified session and sit
-behind the same MCP_ENABLED kill-switch as the mount itself. The raw token is
-returned exactly once at creation - the DB keeps only sha256.
+the user's FitWright data, so these routes require a verified session (and,
+for creation, a recent step-up re-auth), and sit behind the same MCP_ENABLED
+kill-switch as the mount itself. The raw token is returned exactly once at
+creation - the DB keeps only sha256.
 """
 
 from __future__ import annotations
@@ -11,11 +12,15 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
-from app.auth import require_verified_user_id
+from app.auth import Principal, require_verified_user_id
 from app.auth.audit import AuditEvent, get_audit_service
-from app.auth.mcp_tokens import get_mcp_token_service
+from app.auth.mcp_tokens import (
+    McpTokenLimitError,
+    get_mcp_token_service,
+)
 from app.config import Settings, settings
 from app.errors import ApiError
+from app.routers._auth_deps import require_stepped_up_session
 
 
 class TokenCreateRequest(BaseModel):
@@ -49,18 +54,33 @@ router = APIRouter(
 @router.post("", status_code=201)
 async def create_token(
     body: TokenCreateRequest,
+    stepped_up: Principal = Depends(require_stepped_up_session),
     user_id: str = Depends(require_verified_user_id),
 ) -> dict:
-    """Mint a token. The raw value appears in this response and nowhere else."""
+    """Mint a token. The raw value appears in this response and nowhere else.
+
+    Requires a recent step-up (sudo window, R9.1): minting a long-lived
+    credential that bypasses browser auth is at least as sensitive as a
+    password change, so a merely-hijacked session cannot do it (401
+    ``step_up_required`` without a recent re-auth).
+    """
+    label = body.label.strip()
+    if not label:
+        raise ApiError(
+            400, "invalid_label", "Label must contain at least one non-whitespace character."
+        )
     svc = get_mcp_token_service()
     ttl = body.ttl_days if body.ttl_days is not None else settings.mcp_token_ttl_days
-    rec, raw = await svc.issue(user_id, body.label, ttl_days=ttl)
+    try:
+        rec, raw = await svc.issue(user_id, label, ttl_days=ttl)
+    except McpTokenLimitError as exc:
+        raise ApiError(409, "token_limit_reached", str(exc)) from None
     # Meta keys are deliberately ``id``/``label``: sanitize_meta drops any key
     # containing "token" wholesale, and no fragment of the raw secret belongs
     # in the audit trail anyway (only sha256 is ever persisted elsewhere).
     await get_audit_service().record(
         AuditEvent.MCP_TOKEN_CREATED, actor_user_id=user_id,
-        meta={"id": rec["id"], "label": body.label},
+        meta={"id": rec["id"], "label": label},
     )
     return {"token": raw, **rec}
 
