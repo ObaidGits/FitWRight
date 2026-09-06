@@ -649,6 +649,11 @@ class Settings(BaseSettings):
     # (revocation is then the only kill path, same trust model as the session
     # ``remember_me`` cap absent). Positive values set ``expires_at`` at issue.
     mcp_token_ttl_days: int = 0
+    # Maximum non-revoked MCP tokens one user may hold (MCP_MAX_TOKENS_PER_USER).
+    # Minting beyond the cap is refused with an actionable 4xx; revoking a
+    # token frees a slot. Bounds both the verification table and the Settings
+    # token list, which have no other pagination/pruning path.
+    mcp_max_tokens_per_user: int = 10
 
     # Explicit deployment profile (ARCHITECTURE §3/§4; IMPLEMENTATION_PLAN Phase
     # 1). Declared intent - ``desktop``/``saas``/``enterprise``/``self_hosted``/

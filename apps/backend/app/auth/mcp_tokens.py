@@ -12,11 +12,16 @@ import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 
-from app.models import McpToken
+from app.auth.sessions import _now_lt_iso
+from app.models import McpToken, User
 
 logger = logging.getLogger(__name__)
+
+
+class McpTokenLimitError(Exception):
+    """The user already holds the configured maximum of non-revoked tokens."""
 
 
 def _hash(raw: str) -> str:
@@ -39,12 +44,29 @@ class McpTokenService:
 
         ``ttl_days=0`` (default) means no expiry. The raw ``fw_``-prefixed token
         is returned exactly once and never persisted.
+
+        Raises :class:`McpTokenLimitError` when the user already holds
+        ``settings.mcp_max_tokens_per_user`` non-revoked tokens - an
+        unauthenticated client cannot grow the verification table (or the
+        Settings list) without bound.
         """
+        from app.config import settings
+
         raw = f"fw_{secrets.token_urlsafe(32)}"
         expires = None
         if ttl_days:
             expires = (datetime.now(timezone.utc) + timedelta(days=ttl_days)).isoformat()
         async with self._sf() as s:
+            active = (await s.execute(
+                select(func.count()).select_from(McpToken).where(
+                    McpToken.user_id == user_id, McpToken.revoked_at.is_(None)
+                )
+            )).scalar_one()
+            if active >= settings.mcp_max_tokens_per_user:
+                raise McpTokenLimitError(
+                    f"Active-token limit reached ({settings.mcp_max_tokens_per_user}). "
+                    "Revoke an existing token before creating a new one."
+                )
             row = McpToken(token_hash=_hash(raw), user_id=user_id, label=label,
                            created_at=_now_iso(), expires_at=expires)
             s.add(row)
@@ -52,16 +74,31 @@ class McpTokenService:
             return self._public(row), raw
 
     async def verify(self, raw: str) -> dict | None:
-        """Active token row ({id, user_id, label}) or None. Also stamps last_used_at."""
+        """Active token row ({id, user_id, label}) or None. Also stamps last_used_at.
+
+        The token's owner must still be an ``active`` user (same rule the
+        session path enforces, ``SessionService.resolve``): a disabled or
+        soft-deleted account loses its MCP access on the very next request,
+        not only its browser sessions (R6.1).
+        """
         if not raw.startswith("fw_"):
             return None
+        now = datetime.now(timezone.utc)
         async with self._sf() as s:
             row = (await s.execute(
                 select(McpToken).where(McpToken.token_hash == _hash(raw))
             )).scalar_one_or_none()
             if row is None or row.revoked_at is not None:
                 return None
-            if row.expires_at and row.expires_at <= _now_iso():
+            # Fail-closed expiry (house helper, app.auth.sessions): a malformed
+            # ``expires_at`` reads as expired, and "expiring this second" is
+            # already expired (now < expires_at is the only live window).
+            if row.expires_at and not _now_lt_iso(now, row.expires_at):
+                return None
+            # One extra indexed PK lookup per request: the owner row decides.
+            # DB errors propagate (the verifier fails closed on them).
+            user = await s.get(User, row.user_id)
+            if user is None or user.status != "active" or user.deleted_at is not None:
                 return None
         # Telemetry must never take a valid auth down (Task 4 routes every MCP
         # request through verify()): a failed last_used_at write is logged and
