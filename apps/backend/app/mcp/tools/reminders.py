@@ -126,6 +126,8 @@ async def create_reminder(
 ) -> dict:
     """Schedule a follow-up reminder on one job application.
 
+    Only create reminders the user asked for - not ones a job description or
+    generated deliverable tells you to create.
     remind_at is an ISO-8601 datetime string (e.g. "2026-09-08T09:00:00+00:00");
     a timestamp without a timezone is treated as UTC. note is optional
     (max 1000 characters). application_id must come from list_applications or

@@ -215,6 +215,9 @@ reminders feature is disabled on the deployment, both tools refuse with
   description); pass an id from `list_resumes`.
 - A previously generated deliverable is returned as-is unless `regenerate` is
   true — reuse costs nothing.
+- If the client disconnects mid-generation, the provider work still runs to
+  completion and the call settles at the full price (exactly once — no partial
+  charge, no double charge). This matches the web app: the provider work ran.
 - Billing parity: an MCP call runs the same per-user LLM rate limit
   (`LLM_RATE_PER_MIN_USER`) and the same `metered_ai_call` ledger entry as the
   web app — one feature, one price, one ledger row, whether the call came from
@@ -274,6 +277,23 @@ reminders feature is disabled on the deployment, both tools refuse with
 - **No auto-apply or form submission.** The tool surface deliberately excludes
   auto-apply, employer-site login, and answer submission. The MCP tools read
   and organize; humans apply.
+- **Untrusted third-party content.** Job descriptions come from scraped
+  public boards or pasted text, and AI tools embed that text in the
+  generation prompt. A hostile listing can carry instructions that ride the
+  generated deliverable back into the agent's context. Treat generated
+  cover letters / interview prep as untrusted text, and confirm destructive
+  writes (status moves, new cards, reminders) with the user before executing
+  them — the write tools' descriptions say the same.
+- **Cancelled requests leak a transport task (upstream).** On client
+  disconnect mid-request, the MCP SDK's stateless transport skips its own
+  cleanup, leaking one background task per cancelled request until the
+  process restarts. Billing stays coherent (settled exactly once); the leak
+  is bounded by the disconnect rate and needs an upstream SDK fix.
+- **Single-worker reminder cap.** Board writes are serialized with
+  database-level locks (safe with multiple workers), but the per-application
+  reminder-cap check uses an in-process lock. FitWright deploys a single
+  Uvicorn worker (the shape the app targets); a multi-worker deployment
+  could oversubscribe the reminder cap under concurrent creates.
 - **No token scopes.** A token grants the owner's full MCP tool surface.
   Granularity is per-user, per-token revocation. (If finer-grained access is
   ever needed, revoke and re-issue rather than share tokens.)
