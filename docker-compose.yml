@@ -34,6 +34,11 @@ services:
       LLM_API_BASE: ${LLM_API_BASE:-}
       JOB_DISCOVERY: "true"
       CF_BYPASS_URL: "http://cf-bypass:8000"
+      # MCP (Model Context Protocol) server. Off unless explicitly enabled -
+      # the same kill-switch the backend reads (see docs/mcp.md).
+      MCP_ENABLED: ${MCP_ENABLED:-false}
+      MCP_TOKEN_TTL_DAYS: ${MCP_TOKEN_TTL_DAYS:-0}
+      MCP_MAX_TOKENS_PER_USER: ${MCP_MAX_TOKENS_PER_USER:-10}
     depends_on:
       - cf-bypass
     healthcheck:

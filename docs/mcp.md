@@ -49,6 +49,8 @@ The whole MCP surface ships **off** (`MCP_ENABLED=false`). Set:
 MCP_ENABLED=true
 # Optional: tokens expire after N days (0 = no expiry, the default)
 MCP_TOKEN_TTL_DAYS=0
+# Optional: max non-revoked tokens one user may hold (default 10)
+MCP_MAX_TOKENS_PER_USER=10
 ```
 
 When the flag is off, neither the token-management API nor the server mount
