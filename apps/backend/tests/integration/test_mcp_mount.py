@@ -14,13 +14,12 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
+from tests.integration.conftest import mcp_post
+
 
 def _tools_list(client: TestClient, token: str):
-    return client.post(
-        "/api/v1/mcp/",
-        json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
-        headers={"Authorization": f"Bearer {token}"},
-    )
+    """``tools/list``; the RAW response (status code is the assertion)."""
+    return mcp_post(client, {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, token)
 
 
 async def test_mcp_mount_absent_when_disabled(auth_env, mcp_app):

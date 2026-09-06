@@ -10,77 +10,28 @@ dependency overridden to the test user) and compare what each path charged.
 
 from __future__ import annotations
 
-import json
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
-from fastapi.testclient import TestClient
 
 from app.models import CreditAccount, User
+from tests.integration.conftest import (
+    mcp_call as _call,
+    mcp_error_text as _error_text,
+    mcp_ok as _ok,
+    mcp_tools_list as _tools_list,
+)
 
 pytestmark = pytest.mark.integration
 
-MCP = "/api/v1/mcp/"
-
 AI_TOOLS = {"generate_cover_letter", "generate_interview_prep"}
-
-
-def _call(client: TestClient, token: str, name: str, arguments: dict):
-    """One ``tools/call`` JSON-RPC round-trip; returns the parsed body."""
-    return client.post(
-        MCP,
-        json={
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "tools/call",
-            "params": {"name": name, "arguments": arguments},
-        },
-        headers={"Authorization": f"Bearer {token}"},
-    ).json()
-
-
-def _tools_list(client: TestClient, token: str):
-    return client.post(
-        MCP,
-        json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
-        headers={"Authorization": f"Bearer {token}"},
-    ).json()
-
-
-def _ok(result: dict) -> dict:
-    """Assert a successful tool result and return its payload."""
-    assert result.get("error") is None, result
-    res = result["result"]
-    assert res.get("isError") is not True, res
-    if "structuredContent" in res:
-        return res["structuredContent"]
-    return json.loads(res["content"][0]["text"])
-
-
-def _error_text(result: dict) -> str:
-    """Assert a tool-level error result and return its message."""
-    assert result.get("error") is None, result  # protocol-level, not tool-level
-    res = result["result"]
-    assert res.get("isError") is True, res
-    return res["content"][0]["text"]
 
 
 # ---------------------------------------------------------------------------
 # Fixtures and seeding
 # ---------------------------------------------------------------------------
-
-
-@pytest.fixture
-async def mcp_client(auth_env, mcp_app, mcp_token, isolated_db, monkeypatch):
-    """A live MCP-mounted TestClient plus ``(client, owner_token, db)``."""
-    from app.applications import submissions
-
-    monkeypatch.setattr(submissions, "db", isolated_db)
-    app = mcp_app(True)
-    with TestClient(app) as client:
-        yield client, mcp_token["raw"]
 
 
 @pytest.fixture
@@ -120,12 +71,6 @@ def llm_mocked(monkeypatch):
     monkeypatch.setattr(resumes_router, "generate_cover_letter", cover_letter)
     monkeypatch.setattr(resumes_router, "generate_interview_prep", interview_prep)
     monkeypatch.setattr("app.llm.litellm.acompletion", _no_real_provider)
-    try:
-        from app.llm import router as litellm_router
-
-        monkeypatch.setattr(litellm_router, "acompletion", _no_real_provider)
-    except Exception:
-        pass  # no router instance in this environment
     return {"cover_letter": cover_letter, "interview_prep": interview_prep}
 
 

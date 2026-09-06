@@ -31,10 +31,15 @@ from fastapi.testclient import TestClient
 
 from app.config import settings as app_settings
 from app.models import User
+from tests.integration.conftest import (
+    MCP_ENDPOINT as MCP,
+    mcp_call as _call,
+    mcp_error_text as _error_text,
+    mcp_ok as _ok,
+    mcp_post as _post,
+)
 
 pytestmark = pytest.mark.integration
-
-MCP = "/api/v1/mcp/"
 
 ALL_TOOL_NAMES = {
     "list_resumes",
@@ -54,50 +59,6 @@ ALL_TOOL_NAMES = {
 }
 
 
-def _post(client: TestClient, body: dict, token: str | None = None):
-    """One MCP JSON-RPC POST; returns the raw response (status code matters)."""
-    headers = {"Authorization": f"Bearer {token}"} if token is not None else {}
-    return client.post(MCP, json=body, headers=headers)
-
-
-def _call(client: TestClient, token: str, name: str, arguments):
-    """One ``tools/call`` round-trip (arguments may be deliberately hostile)."""
-    return _post(
-        client,
-        {
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "tools/call",
-            "params": {"name": name, "arguments": arguments},
-        },
-        token,
-    ).json()
-
-
-def _tools_list(client: TestClient, token: str):
-    return _post(
-        client, {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, token
-    ).json()
-
-
-def _ok(result: dict) -> dict:
-    """Assert a successful tool result and return its payload."""
-    assert result.get("error") is None, result
-    res = result["result"]
-    assert res.get("isError") is not True, res
-    if "structuredContent" in res:
-        return res["structuredContent"]
-    return json.loads(res["content"][0]["text"])
-
-
-def _error_text(result: dict) -> str:
-    """Assert a tool-level error result and return its message."""
-    assert result.get("error") is None, result  # protocol-level, not tool-level
-    res = result["result"]
-    assert res.get("isError") is True, res
-    return res["content"][0]["text"]
-
-
 def _refused(result: dict) -> str:
     """A hostile call refused at EITHER layer (protocol or tool), as text.
 
@@ -115,17 +76,6 @@ def _refused(result: dict) -> str:
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
-
-
-@pytest.fixture
-async def mcp_client(auth_env, mcp_app, mcp_token, isolated_db, monkeypatch):
-    """A live MCP-mounted TestClient plus ``(client, owner_token, db)``."""
-    from app.applications import submissions
-
-    monkeypatch.setattr(submissions, "db", isolated_db)
-    app = mcp_app(True)
-    with TestClient(app) as client:
-        yield client, mcp_token["raw"]
 
 
 @pytest.fixture(autouse=True)

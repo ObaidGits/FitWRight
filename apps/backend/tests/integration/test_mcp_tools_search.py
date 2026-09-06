@@ -16,7 +16,6 @@ burn a cap charge), not reimplement them.
 from __future__ import annotations
 
 import asyncio
-import json
 import time
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -25,52 +24,16 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.models import User
+from tests.integration.conftest import (
+    mcp_call as _call,
+    mcp_error_text as _error_text,
+    mcp_ok as _ok,
+    mcp_tools_list as _tools_list,
+)
 
 pytestmark = pytest.mark.integration
 
-MCP = "/api/v1/mcp/"
-
 SEARCH_TOOLS = {"start_job_search", "get_job_search_status"}
-
-
-def _call(client: TestClient, token: str, name: str, arguments: dict):
-    """One ``tools/call`` JSON-RPC round-trip; returns the parsed body."""
-    return client.post(
-        MCP,
-        json={
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "tools/call",
-            "params": {"name": name, "arguments": arguments},
-        },
-        headers={"Authorization": f"Bearer {token}"},
-    ).json()
-
-
-def _tools_list(client: TestClient, token: str):
-    return client.post(
-        MCP,
-        json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
-        headers={"Authorization": f"Bearer {token}"},
-    ).json()
-
-
-def _ok(result: dict) -> dict:
-    """Assert a successful tool result and return its payload."""
-    assert result.get("error") is None, result
-    res = result["result"]
-    assert res.get("isError") is not True, res
-    if "structuredContent" in res:
-        return res["structuredContent"]
-    return json.loads(res["content"][0]["text"])
-
-
-def _error_text(result: dict) -> str:
-    """Assert a tool-level error result and return its message."""
-    assert result.get("error") is None, result  # protocol-level, not tool-level
-    res = result["result"]
-    assert res.get("isError") is True, res
-    return res["content"][0]["text"]
 
 
 @pytest.fixture(autouse=True)

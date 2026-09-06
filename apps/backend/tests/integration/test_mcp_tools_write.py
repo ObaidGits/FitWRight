@@ -13,13 +13,16 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
-from fastapi.testclient import TestClient
 
 from app.models import User
+from tests.integration.conftest import (
+    mcp_call as _call,
+    mcp_error_text as _error_text,
+    mcp_ok as _ok,
+    mcp_tools_list as _tools_list,
+)
 
 pytestmark = pytest.mark.integration
-
-MCP = "/api/v1/mcp/"
 
 WRITE_TOOLS = {
     "add_application",
@@ -27,61 +30,6 @@ WRITE_TOOLS = {
     "list_reminders",
     "create_reminder",
 }
-
-
-def _call(client: TestClient, token: str, name: str, arguments: dict):
-    """One ``tools/call`` JSON-RPC round-trip; returns the parsed body."""
-    return client.post(
-        MCP,
-        json={
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "tools/call",
-            "params": {"name": name, "arguments": arguments},
-        },
-        headers={"Authorization": f"Bearer {token}"},
-    ).json()
-
-
-def _tools_list(client: TestClient, token: str):
-    return client.post(
-        MCP,
-        json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
-        headers={"Authorization": f"Bearer {token}"},
-    ).json()
-
-
-def _ok(result: dict) -> dict:
-    """Assert a successful tool result and return its payload."""
-    assert result.get("error") is None, result
-    res = result["result"]
-    assert res.get("isError") is not True, res
-    if "structuredContent" in res:
-        return res["structuredContent"]
-    return json.loads(res["content"][0]["text"])
-
-
-def _error_text(result: dict) -> str:
-    """Assert a tool-level error result and return its message."""
-    assert result.get("error") is None, result  # protocol-level, not tool-level
-    res = result["result"]
-    assert res.get("isError") is True, res
-    return res["content"][0]["text"]
-
-
-@pytest.fixture
-async def mcp_client(auth_env, mcp_app, mcp_token, isolated_db, monkeypatch):
-    """A live MCP-mounted TestClient plus ``(client, owner_token, db)``.
-
-    Same pattern as ``test_mcp_tools_read.py``: ``submissions`` captured ``db``
-    at import time and is re-pointed at this test's isolated DB.
-    """
-    from app.applications import submissions
-
-    monkeypatch.setattr(submissions, "db", isolated_db)
-    app = mcp_app(True)
-    with TestClient(app) as client:
-        yield client, mcp_token["raw"]
 
 
 async def _seed_resume(db, user_id: str, **kwargs) -> dict:

@@ -44,7 +44,11 @@ app = "app.main:main"
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.0.0",
+    # Pinned: pytest 9.1.1 regresses collection (pytest issues #14635/#14645 -
+    # the root-file collected between integration files re-creates Directory
+    # nodes and breaks fixture matching, e.g. isolated_db). 9.0.3 is the last
+    # known-good release.
+    "pytest==9.0.3",
     "ruff>=0.9.0",
     "pytest-asyncio>=0.24.0",
     "pytest-timeout>=2.3.0",

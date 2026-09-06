@@ -107,8 +107,14 @@ class _McpAppFactory:
             return
         self._built = False
         self._monkeypatch.setattr(app_settings, "mcp_enabled", self._original_enabled)
-        importlib.reload(self._main)
-        self._main.db = self._original_db
+        try:
+            importlib.reload(self._main)
+        finally:
+            # Always restore the pre-fixture db binding: if the reload above
+            # raised, ``app.main.db`` would otherwise stay pointed at the
+            # closing temp DB (dead engine) for every later test that imports
+            # the module.
+            self._main.db = self._original_db
 
 
 @pytest.fixture
@@ -149,3 +155,86 @@ async def mcp_token(auth_env, owner_id):
         yield {"raw": raw, "id": rec["id"], "user_id": owner_id}
     finally:
         reset_mcp_token_service()
+
+
+# ---------------------------------------------------------------------------
+# Shared MCP JSON-RPC helpers (dedup across the test_mcp_* suites)
+# ---------------------------------------------------------------------------
+# One canonical copy of the ``tools/call`` / ``tools/list`` / result-assertion
+# helpers that every ``test_mcp_tools_*`` / ``test_mcp_redteam`` suite needs.
+# Test files alias them back to their historical local names (``_call`` etc.)
+# so call sites stay untouched; suites with genuine variance (mount/auth need
+# the RAW response for status-code asserts; search flips JOB_DISCOVERY on)
+# keep a thin local wrapper instead of a divergent copy.
+
+import json as _json
+
+from fastapi.testclient import TestClient as _TestClient
+
+MCP_ENDPOINT = "/api/v1/mcp/"
+
+
+def mcp_post(client: _TestClient, body: dict, token: str | None = None):
+    """One MCP JSON-RPC POST; returns the RAW response (status code matters)."""
+    headers = {"Authorization": f"Bearer {token}"} if token is not None else {}
+    return client.post(MCP_ENDPOINT, json=body, headers=headers)
+
+
+def mcp_tools_list(client: _TestClient, token: str) -> dict:
+    """``tools/list`` round-trip; returns the parsed body."""
+    return mcp_post(
+        client, {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, token
+    ).json()
+
+
+def mcp_call(client: _TestClient, token: str, name: str, arguments) -> dict:
+    """One ``tools/call`` JSON-RPC round-trip; returns the parsed body."""
+    return mcp_post(
+        client,
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": name, "arguments": arguments},
+        },
+        token,
+    ).json()
+
+
+def mcp_ok(result: dict) -> dict:
+    """Assert a successful tool result and return its payload.
+
+    FastMCP returns the dict either as ``structuredContent`` (MCP spec) or as
+    JSON text content, depending on client capabilities - accept both.
+    """
+    assert result.get("error") is None, result
+    res = result["result"]
+    assert res.get("isError") is not True, res
+    if "structuredContent" in res:
+        return res["structuredContent"]
+    return _json.loads(res["content"][0]["text"])
+
+
+def mcp_error_text(result: dict) -> str:
+    """Assert a tool-level error result and return its message."""
+    assert result.get("error") is None, result  # protocol-level, not tool-level
+    res = result["result"]
+    assert res.get("isError") is True, res
+    return res["content"][0]["text"]
+
+
+@pytest.fixture
+async def mcp_client(auth_env, mcp_app, mcp_token, isolated_db, monkeypatch):
+    """A live MCP-mounted TestClient as ``(client, owner_token)``.
+
+    ``app.applications.submissions`` captured ``db`` at import time, so it is
+    re-pointed at this test's isolated DB (same pattern as
+    ``test_application_submissions``); the tool modules themselves resolve
+    ``app.database.db`` at call time and need no patching.
+    """
+    from app.applications import submissions
+
+    monkeypatch.setattr(submissions, "db", isolated_db)
+    app = mcp_app(True)
+    with _TestClient(app) as client:
+        yield client, mcp_token["raw"]

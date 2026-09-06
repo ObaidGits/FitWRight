@@ -12,18 +12,17 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.config import settings as app_settings
+from tests.integration.conftest import mcp_post
 
 pytestmark = pytest.mark.integration
 
 
 def _tools_list(client: TestClient, token: str | None = None):
-    """Cheapest full MCP round-trip (no tool args, so no Task-5 tools needed)."""
-    headers = {"Authorization": f"Bearer {token}"} if token is not None else {}
-    return client.post(
-        "/api/v1/mcp/",
-        json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
-        headers=headers,
-    )
+    """Cheapest full MCP round-trip (no tool args, so no Task-5 tools needed).
+
+    Returns the RAW response - these tests assert on the status code.
+    """
+    return mcp_post(client, {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, token)
 
 
 async def test_missing_token_401(auth_env, mcp_app):
