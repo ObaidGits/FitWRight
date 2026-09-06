@@ -9,10 +9,10 @@ creation - the DB keeps only sha256.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
-from app.auth import Principal, require_verified_user_id
+from app.auth import Principal, get_optional_principal, require_verified_user_id
 from app.auth.audit import AuditEvent, get_audit_service
 from app.auth.mcp_tokens import (
     McpTokenLimitError,
@@ -44,6 +44,26 @@ def _require_mcp_enabled(config: Settings = Depends(lambda: settings)) -> None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="not_found")
 
 
+def _step_up_for_token_mint(request: Request) -> Principal | None:
+    """F2: minting requires a recent step-up - with the local carve-out.
+
+    Hosted: :func:`require_stepped_up_session` verbatim (401
+    ``step_up_required`` without a recent re-auth; 401 ``unauthorized`` for an
+    anonymous caller).
+
+    Single-user local mode: there are no sessions at all (implicit owner,
+    zero-config), so there is no hijackable session to re-auth against - the
+    same carve-out ``require_verified_user_id`` applies. Without it, local
+    deployments could never mint the token the docs tell them to configure.
+    """
+    principal = get_optional_principal(request)
+    if principal is None:
+        if settings.single_user_mode:
+            return None
+        raise ApiError(401, "unauthorized", "Authentication required")
+    return require_stepped_up_session(principal=principal)
+
+
 router = APIRouter(
     prefix="/mcp/tokens",
     tags=["MCP"],
@@ -54,7 +74,7 @@ router = APIRouter(
 @router.post("", status_code=201)
 async def create_token(
     body: TokenCreateRequest,
-    stepped_up: Principal = Depends(require_stepped_up_session),
+    stepped_up: Principal | None = Depends(_step_up_for_token_mint),
     user_id: str = Depends(require_verified_user_id),
 ) -> dict:
     """Mint a token. The raw value appears in this response and nowhere else.

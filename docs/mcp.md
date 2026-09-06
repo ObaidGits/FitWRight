@@ -71,9 +71,10 @@ error, exactly like the REST discovery routes 404.
 MCP access is by **personal bearer token**, created in the web app:
 
 1. **Create** — Settings → *MCP / API access* → enter a client name (e.g.
-   "Claude Desktop") → *Create*. Creating a token requires a recent
-   re-authentication (the same step-up that guards password change), so a
-   stolen session alone cannot mint a persistent credential. The raw token
+   "Claude Desktop") → *Create*. On hosted deployments creating a token
+   requires a recent re-authentication (the same step-up that guards password
+   change), so a stolen session alone cannot mint a persistent credential.
+   Local single-user mode has no login sessions and is exempt. The raw token
    (it starts with `fw_`) is shown **exactly once**. Copy it now; it is never
    displayed again.
 2. **Store** — paste it into your MCP client's config (examples below).

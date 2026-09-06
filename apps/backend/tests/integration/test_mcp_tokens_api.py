@@ -348,6 +348,16 @@ class TestStepUpGate:
         assert resp.status_code == 401
         assert resp.json()["error"]["code"] == "step_up_required"
 
+    async def test_single_user_local_mode_is_exempt(self, mcp_env):
+        """Local zero-config mode has no sessions (implicit owner), so there is
+        no hijackable session to re-auth against - the same carve-out
+        require_verified_user_id applies. Without it, a local deployment could
+        never mint the token the docs tell it to configure."""
+        async with _client() as client:  # no login, no step-up
+            resp = await client.post(TOKENS, json={"label": "Local CLI"})
+        assert resp.status_code == 201, resp.text
+        assert resp.json()["token"].startswith("fw_")
+
 
 # ---------------------------------------------------------------------------
 # 6c) Per-user active-token cap (hardening F3)
