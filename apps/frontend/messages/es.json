@@ -766,6 +766,7 @@
       "createdWarning": "Copia este token ahora. Por seguridad, no volverá a mostrarse.",
       "copy": "Copiar",
       "copied": "Copiado",
+      "copyFailed": "No se pudo copiar. Selecciona el texto del token de arriba y cópialo manualmente.",
       "done": "Listo",
       "empty": "Todavía no hay tokens de acceso.",
       "created": "Creado",

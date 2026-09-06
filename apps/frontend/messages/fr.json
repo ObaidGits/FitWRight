@@ -766,6 +766,7 @@
       "createdWarning": "Copiez ce jeton maintenant. Pour des raisons de sécurité, il ne sera plus jamais affiché.",
       "copy": "Copier",
       "copied": "Copié",
+      "copyFailed": "Échec de la copie. Sélectionnez le texte du jeton ci-dessus et copiez-le manuellement.",
       "done": "Terminé",
       "empty": "Aucun jeton d'accès pour le moment.",
       "created": "Créé le",

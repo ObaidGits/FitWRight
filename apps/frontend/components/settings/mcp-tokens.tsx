@@ -29,6 +29,7 @@ import {
   DialogClose,
 } from '@/components/atelier/dialog';
 import { useToast } from '@/components/atelier/toast';
+import { useStepUp } from '@/components/auth/step-up-modal';
 import { useTranslations } from '@/lib/i18n';
 import { toMessage } from '@/lib/api/errors';
 import type { McpTokenCreated, McpTokenRecord } from '@/lib/api/mcp';
@@ -49,12 +50,20 @@ export function McpTokensSection() {
   const create = useCreateMcpToken();
   const revoke = useRevokeMcpToken();
   const { toast } = useToast();
+  // Token creation is a sensitive action: on hosted deployments the backend
+  // answers 401 step_up_required unless the session has a recent re-auth.
+  // `run` reuses the shared re-auth modal (same flow as password change) and
+  // transparently retries the creation after a successful step-up.
+  const { run } = useStepUp();
 
   const [createOpen, setCreateOpen] = React.useState(false);
   const [label, setLabel] = React.useState('');
   // The one-time reveal. In-memory ONLY; cleared on dialog close for good.
   const [created, setCreated] = React.useState<McpTokenCreated | null>(null);
   const [copied, setCopied] = React.useState(false);
+  // True only when the clipboard write actually failed: the user must NOT
+  // close the reveal believing the token is copied (it is never shown again).
+  const [copyFailed, setCopyFailed] = React.useState(false);
   const [revokeTarget, setRevokeTarget] = React.useState<McpTokenRecord | null>(null);
 
   // Hidden while the probe is in flight (no flash of an empty section) and
@@ -71,17 +80,21 @@ export function McpTokensSection() {
     setLabel('');
     setCreated(null);
     setCopied(false);
+    setCopyFailed(false);
   }
 
   async function onCreate() {
     const trimmed = label.trim();
     if (!trimmed) return;
     try {
-      const res = await create.mutateAsync(trimmed);
+      const res = await run(() => create.mutateAsync(trimmed));
       // Keep the dialog open, but swap the form for the one-time reveal.
       setCreated(res);
       setCopied(false);
+      setCopyFailed(false);
     } catch (err) {
+      // The user dismissed the re-auth modal - not an error to report.
+      if ((err as { code?: string }).code === 'step_up_cancelled') return;
       toast({
         title: t('settings.mcp.createFailed'),
         description: toMessage(err),
@@ -92,10 +105,19 @@ export function McpTokensSection() {
 
   async function onCopy() {
     if (!created) return;
-    // Clipboard API can be absent (insecure context / test env); the token is
-    // still selectable text, so a failed copy is not a dead end.
-    await navigator.clipboard?.writeText(created.token).catch(() => undefined);
-    setCopied(true);
+    // "Copied" may only ever be shown after a real success: closing the
+    // reveal destroys the only copy of the token, so a swallowed clipboard
+    // failure would make it unrecoverable. On failure the reveal stays open
+    // with a manual-copy hint instead.
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
+      await navigator.clipboard.writeText(created.token);
+      setCopied(true);
+      setCopyFailed(false);
+    } catch {
+      setCopied(false);
+      setCopyFailed(true);
+    }
   }
 
   async function onRevoke() {
@@ -189,6 +211,11 @@ export function McpTokensSection() {
                     {copied ? t('settings.mcp.copied') : t('settings.mcp.copy')}
                   </Button>
                 </div>
+                {copyFailed && (
+                  <p className="text-xs text-[var(--destructive)]" role="alert">
+                    {t('settings.mcp.copyFailed')}
+                  </p>
+                )}
               </div>
               <DialogFooter>
                 {/* Closing the reveal destroys the only in-memory copy. */}

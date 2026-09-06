@@ -766,6 +766,7 @@
       "createdWarning": "Copy this token now. For security, it will never be shown again.",
       "copy": "Copy",
       "copied": "Copied",
+      "copyFailed": "Copy failed. Select the token text above and copy it manually.",
       "done": "Done",
       "empty": "No access tokens yet.",
       "created": "Created",

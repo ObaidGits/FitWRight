@@ -61,7 +61,16 @@ vi.mock('@/lib/api/credits', async () => {
   return { ...actual, getMyCredits: vi.fn(), getMyUsage: vi.fn().mockResolvedValue({ items: [] }) };
 });
 
-vi.mock('@/lib/api/auth', () => ({ updateProfile: vi.fn() }));
+vi.mock('@/lib/api/auth', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/api/auth')>('@/lib/api/auth');
+  return {
+    ...actual,
+    updateProfile: vi.fn(),
+    // The step-up modal's re-auth call - mocked so the MCP create flow can be
+    // driven through a (fake) successful or failed step-up.
+    authApi: { ...actual.authApi, stepUp: (...a: unknown[]) => stepUpMock(...a) },
+  };
+});
 
 vi.mock('@/lib/api/mcp', () => ({
   fetchMcpTokens: vi.fn(),
@@ -73,7 +82,10 @@ const { fetchMcpTokens, createMcpToken, revokeMcpToken } = await import('@/lib/a
 const { getMyCredits } = await import('@/lib/api/credits');
 const { fetchLlmConfig, fetchApiKeyStatus } = await import('@/lib/api/config');
 const { ApiError } = await import('@/lib/api/errors');
+const { StepUpProvider } = await import('@/components/auth/step-up-modal');
 const SettingsPage = (await import('@/app/(app)/settings/page')).default;
+
+const stepUpMock = vi.fn();
 
 function token(over: Record<string, unknown> = {}) {
   return {
@@ -92,7 +104,11 @@ function renderSettings() {
   const utils = render(
     <QueryClientProvider client={qc}>
       <ToastProvider>
-        <SettingsPage />
+        {/* Same provider stack the app uses: token creation goes through the
+            shared step-up flow (useStepUp) for hosted deployments. */}
+        <StepUpProvider>
+          <SettingsPage />
+        </StepUpProvider>
       </ToastProvider>
     </QueryClientProvider>
   );
@@ -247,5 +263,123 @@ describe('Settings > MCP / API access (token management)', () => {
 
     expect(await screen.findByText('Revoked')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Revoke' })).not.toBeInTheDocument();
+  });
+
+  it('copy failure never claims "Copied": hint shown, reveal stays open, retry works', async () => {
+    // The one-time reveal is the ONLY copy of the token - if the clipboard
+    // write fails, "Copied" must NOT appear (the user would close the reveal
+    // and lose the token forever). Instead: error hint + still-open reveal.
+    vi.mocked(fetchMcpTokens).mockResolvedValue({ items: [] } as never);
+    vi.mocked(createMcpToken).mockResolvedValue(
+      token({ id: 'tok-2', label: 'Test client', token: 'fw_secret_raw_value' }) as never
+    );
+
+    const originalClipboard = navigator.clipboard;
+    const writeText = vi.fn().mockRejectedValue(new Error('clipboard denied'));
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    });
+
+    try {
+      renderSettings();
+      await openAccountTab();
+
+      screen.getByRole('button', { name: 'Create token' }).click();
+      const dialog = await screen.findByRole('dialog');
+      fireEvent.change(within(dialog).getByLabelText(/token name/i), {
+        target: { value: 'Test client' },
+      });
+      within(dialog).getByRole('button', { name: 'Create' }).click();
+
+      expect(await within(dialog).findByText('fw_secret_raw_value')).toBeInTheDocument();
+
+      // Clipboard rejects: no copied state, an error hint, reveal still open.
+      within(dialog).getByRole('button', { name: 'Copy' }).click();
+      await waitFor(() =>
+        expect(within(dialog).getByRole('alert')).toHaveTextContent(/copy failed/i)
+      );
+      expect(within(dialog).queryByRole('button', { name: 'Copied' })).not.toBeInTheDocument();
+      expect(within(dialog).getByText('fw_secret_raw_value')).toBeInTheDocument();
+
+      // The user can retry: once the clipboard works, copied state appears.
+      writeText.mockResolvedValue(undefined);
+      within(dialog).getByRole('button', { name: 'Copy' }).click();
+      await waitFor(() =>
+        expect(within(dialog).getByRole('button', { name: 'Copied' })).toBeInTheDocument()
+      );
+      expect(within(dialog).queryByRole('alert')).not.toBeInTheDocument();
+      expect(writeText).toHaveBeenCalledWith('fw_secret_raw_value');
+    } finally {
+      Object.defineProperty(navigator, 'clipboard', {
+        value: originalClipboard,
+        configurable: true,
+      });
+    }
+  });
+
+  it('token creation challenges for step-up, then succeeds after re-auth', async () => {
+    // Hosted mode: the first POST /mcp/tokens answers 401 step_up_required
+    // (no recent re-auth). The shared re-auth modal opens, and after a
+    // successful step-up the ORIGINAL creation is retried transparently.
+    vi.mocked(fetchMcpTokens).mockResolvedValue({ items: [] } as never);
+    vi.mocked(createMcpToken)
+      .mockRejectedValueOnce(
+        new ApiError('step_up_required', 'Re-authentication required', 401) as never
+      )
+      .mockResolvedValueOnce(
+        token({ id: 'tok-2', label: 'Test client', token: 'fw_secret_raw_value' }) as never
+      );
+    stepUpMock.mockResolvedValue({ id: 'u1' });
+
+    renderSettings();
+    await openAccountTab();
+
+    screen.getByRole('button', { name: 'Create token' }).click();
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText(/token name/i), {
+      target: { value: 'Test client' },
+    });
+    within(dialog).getByRole('button', { name: 'Create' }).click();
+
+    // The shared step-up modal (not the create dialog) asks for the password.
+    expect(await screen.findByText(/confirm it's you/i)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'hunter2hunt' } });
+    screen.getByRole('button', { name: 'Confirm' }).click();
+    // Step-up done -> the retried creation resolves and the reveal appears.
+    expect(await screen.findByText('fw_secret_raw_value')).toBeInTheDocument();
+    expect(createMcpToken).toHaveBeenCalledTimes(2);
+    expect(stepUpMock).toHaveBeenCalledWith('hunter2hunt');
+  });
+
+  it('cancelling the step-up modal creates no token and shows no error toast', async () => {
+    vi.mocked(fetchMcpTokens).mockResolvedValue({ items: [] } as never);
+    vi.mocked(createMcpToken).mockRejectedValue(
+      new ApiError('step_up_required', 'Re-authentication required', 401) as never
+    );
+
+    renderSettings();
+    await openAccountTab();
+
+    screen.getByRole('button', { name: 'Create token' }).click();
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText(/token name/i), {
+      target: { value: 'Test client' },
+    });
+    within(dialog).getByRole('button', { name: 'Create' }).click();
+
+    expect(await screen.findByText(/confirm it's you/i)).toBeInTheDocument();
+    // Two dialogs are open (create form + step-up): cancel the STEP-UP one.
+    const stepUpDialog = screen.getByRole('dialog', { name: /confirm it's you/i });
+    within(stepUpDialog).getByRole('button', { name: 'Cancel' }).click();
+
+    // No token created, no reveal, no "failed to create" toast - the user
+    // simply backed out of the re-auth.
+    await waitFor(() =>
+      expect(screen.queryByText(/confirm it's you/i)).not.toBeInTheDocument()
+    );
+    expect(createMcpToken).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('fw_secret_raw_value')).not.toBeInTheDocument();
+    expect(screen.queryByText(/failed to create/i)).not.toBeInTheDocument();
   });
 });

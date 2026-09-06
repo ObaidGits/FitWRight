@@ -23,10 +23,16 @@ import { Label } from '@/components/atelier/label';
 import { PasswordField } from '@/components/auth/password-field';
 import { ErrorBanner, describeAuthError } from '@/components/auth/error-banner';
 import { authApi, AuthApiError } from '@/lib/api/auth';
+import { ApiError } from '@/lib/api/errors';
 
-/** True when an error is the backend asking for a fresh step-up. */
+/** True when an error is the backend asking for a fresh step-up.
+ *
+ * Matches both error shapes the app throws: `AuthApiError` (the auth client)
+ * and `ApiError` (the shared `parseError` envelope, used by e.g. the MCP
+ * token client - whose creation endpoint also demands a step-up). */
 export function isStepUpRequired(err: unknown): boolean {
-  return err instanceof AuthApiError && err.code === 'step_up_required';
+  const code = err instanceof AuthApiError || err instanceof ApiError ? err.code : undefined;
+  return code === 'step_up_required';
 }
 
 interface PendingAction<T = unknown> {
