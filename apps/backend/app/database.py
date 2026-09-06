@@ -2400,50 +2400,61 @@ class Database:
 
         If a card for the same job+resume already exists for this user it is
         returned as-is (survives double-submit / retried confirms).
-        """
-        async with self._session() as session:
-            existing = await session.execute(
-                Repo.scoped(
-                    select(Application).where(
-                        Application.job_id == job_id,
-                        Application.resume_id == resume_id,
-                    ),
-                    Application,
-                    user_id,
-                )
-            )
-            found = existing.scalars().first()
-            if found is not None:
-                return self._application_to_dict(found)
 
-            now = _now()
-            if applied_at is None and status != "saved":
-                applied_at = now
-            position = await self._next_position(session, user_id, status)
-            row = Application(
-                application_id=str(uuid4()),
-                user_id=user_id,
-                job_id=job_id,
-                resume_id=resume_id,
-                master_resume_id=master_resume_id,
-                status=status,
-                company=company,
-                role=role,
-                applied_at=applied_at,
-                notes=notes,
-                position=position,
-                created_at=now,
-                updated_at=now,
-            )
-            session.add(row)
-            await self._adjust_user_counter(session, user_id, "application_count", +1)
-            self._emit_search_event(session, "application.upserted", user_id, row.application_id)
-            try:
-                await session.commit()
-            except IntegrityError:
-                # A concurrent create won the (job_id, resume_id) unique
-                # constraint - return the existing card instead of duplicating.
-                await session.rollback()
+        The whole check-then-insert runs under ``_master_transaction``: it takes
+        the per-user storage lock BEFORE the duplicate select, so two concurrent
+        creates (REST double-submit, parallel MCP tool calls) serialize instead
+        of racing. Without it both writers read the same column count and both
+        insert at the same ``position`` - the board's contiguous 0..n-1 column
+        invariant breaks, and the (job, resume) dedupe degenerates to
+        catch-the-IntegrityError. The constraint stays as the belt for any path
+        the lock cannot see (future multi-process deployments).
+        """
+        try:
+            async with self._master_transaction(user_id) as session:
+                existing = await session.execute(
+                    Repo.scoped(
+                        select(Application).where(
+                            Application.job_id == job_id,
+                            Application.resume_id == resume_id,
+                        ),
+                        Application,
+                        user_id,
+                    )
+                )
+                found = existing.scalars().first()
+                if found is not None:
+                    return self._application_to_dict(found)
+
+                now = _now()
+                if applied_at is None and status != "saved":
+                    applied_at = now
+                position = await self._next_position(session, user_id, status)
+                row = Application(
+                    application_id=str(uuid4()),
+                    user_id=user_id,
+                    job_id=job_id,
+                    resume_id=resume_id,
+                    master_resume_id=master_resume_id,
+                    status=status,
+                    company=company,
+                    role=role,
+                    applied_at=applied_at,
+                    notes=notes,
+                    position=position,
+                    created_at=now,
+                    updated_at=now,
+                )
+                session.add(row)
+                await self._adjust_user_counter(session, user_id, "application_count", +1)
+                self._emit_search_event(session, "application.upserted", user_id, row.application_id)
+                # The context manager commits (or rolls back); reaching here
+                # means the card is durably created.
+        except IntegrityError:
+            # A concurrent create won the (job_id, resume_id) unique constraint
+            # anyway (e.g. a path the per-user lock cannot serialize) - return
+            # the existing card instead of duplicating.
+            async with self._session() as session:
                 dup = await session.execute(
                     Repo.scoped(
                         select(Application).where(
@@ -2463,7 +2474,7 @@ class Database:
                     )
                     return self._application_to_dict(found)
                 raise
-            return self._application_to_dict(row)
+        return self._application_to_dict(row)
 
     async def list_applications(
         self, user_id: str, status: str | None = None, *, limit: int | None = None
@@ -2551,8 +2562,15 @@ class Database:
         ``position`` is interpreted as the desired index within the (possibly
         new) ``status`` column; siblings are renumbered server-side so the
         column stays a contiguous 0..n-1 sequence.
+
+        Runs under ``_master_transaction`` (same rationale as
+        ``create_application``): the park-renumber-reinsert sequence reads
+        sibling rows and rewrites their positions, so two racing moves on one
+        user's board would otherwise renumber from stale snapshots and can
+        leave gaps/duplicates. The per-user storage lock serializes REST and
+        MCP moves alike - last writer wins, columns stay contiguous.
         """
-        async with self._session() as session:
+        async with self._master_transaction(user_id) as session:
             row = await self._get_owned_application(session, user_id, application_id)
             if row is None:
                 return None
@@ -2595,7 +2613,7 @@ class Database:
 
             row.updated_at = _now()
             self._emit_search_event(session, "application.upserted", user_id, application_id)
-            await session.commit()
+            # The context manager commits; reaching here means the move is durable.
             return self._application_to_dict(row)
 
     async def bulk_update_applications(

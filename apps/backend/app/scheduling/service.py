@@ -9,7 +9,9 @@ goes through the user-scoped :class:`~app.scheduling.repo.SchedulingRepo`.
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import weakref
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -25,6 +27,27 @@ _MAX_LEAD_MINUTES = 60 * 24 * 14  # 14 days
 _MAX_DURATION_MIN = 60 * 24  # 24h
 _VALID_KINDS = {"screen", "technical", "onsite", "behavioral", "final", "other"}
 _IDEMPOTENCY_TTL = 60 * 60 * 24
+
+# Per-user in-process locks around the cap check + insert (the same
+# self-evicting pattern as ``Database._master_locks``). The reminder cap is a
+# check-then-insert across two sessions, so N concurrent creates (parallel MCP
+# tool calls, a double-firing browser) each read "499 of 500" and all proceed.
+# The deployment runs a single uvicorn worker (see app/job_discovery/
+# search_jobs.py), so an in-process lock closes the realistic window; weak
+# values keep the map from growing with historical user ids.
+_CREATE_LOCKS: "weakref.WeakValueDictionary[str, asyncio.Lock]" = (
+    weakref.WeakValueDictionary()
+)
+_CREATE_LOCKS_GUARD = asyncio.Lock()
+
+
+async def _user_create_lock(user_id: str) -> asyncio.Lock:
+    async with _CREATE_LOCKS_GUARD:
+        lock = _CREATE_LOCKS.get(user_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            _CREATE_LOCKS[user_id] = lock
+        return lock
 
 
 class SchedulingError(Exception):
@@ -124,13 +147,18 @@ class SchedulingService:
             raise SchedulingError("invalid", "Invalid recurrence rule.")
         from app.config import settings
 
-        if await self._repo.count_active_reminders(user_id) >= settings.max_reminders_per_user:
-            raise SchedulingError("limit", "Reminder limit reached.")
-        created = await self._repo.create_reminder(
-            user_id, application_id, due_at=due_dt.isoformat(), tz=tz,
-            note=(note or None), recurrence=(recurrence or None),
-        )
-        await self._remember_idempotent(user_id, idempotency_key, created["id"])
+        # Cap check + insert under one per-user lock: without it, N concurrent
+        # creates each observe a count below the cap and all insert, blowing it
+        # by up to N (an abuse guard that races is no guard). Validation stays
+        # outside the lock so a bad request never queues behind a good one.
+        async with await _user_create_lock(user_id):
+            if await self._repo.count_active_reminders(user_id) >= settings.max_reminders_per_user:
+                raise SchedulingError("limit", "Reminder limit reached.")
+            created = await self._repo.create_reminder(
+                user_id, application_id, due_at=due_dt.isoformat(), tz=tz,
+                note=(note or None), recurrence=(recurrence or None),
+            )
+            await self._remember_idempotent(user_id, idempotency_key, created["id"])
         return created
 
     async def update_reminder(
