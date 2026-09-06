@@ -44,21 +44,24 @@ def _require_mcp_enabled(config: Settings = Depends(lambda: settings)) -> None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="not_found")
 
 
-def _step_up_for_token_mint(request: Request) -> Principal | None:
-    """F2: minting requires a recent step-up - with the local carve-out.
+async def _step_up_for_token_mint(request: Request) -> Principal | None:
+    """F2: minting requires a recent step-up - local single-user exempt.
 
     Hosted: :func:`require_stepped_up_session` verbatim (401
     ``step_up_required`` without a recent re-auth; 401 ``unauthorized`` for an
     anonymous caller).
 
-    Single-user local mode: there are no sessions at all (implicit owner,
-    zero-config), so there is no hijackable session to re-auth against - the
-    same carve-out ``require_verified_user_id`` applies. Without it, local
-    deployments could never mint the token the docs tell them to configure.
+    Local single-user deployments have no login sessions (implicit owner,
+    zero-config), so there is no session to re-auth against - the same
+    carve-out ``require_verified_user_id`` applies. The decision comes from
+    the composition root's identity provider (``resolve_owner_fallback``),
+    not a deployment-mode read here (ARCHITECTURE §18.5).
     """
     principal = get_optional_principal(request)
     if principal is None:
-        if settings.single_user_mode:
+        from app.platform import get_container
+
+        if await get_container().identity_provider().resolve_owner_fallback() is not None:
             return None
         raise ApiError(401, "unauthorized", "Authentication required")
     return require_stepped_up_session(principal=principal)
