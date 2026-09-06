@@ -25,7 +25,7 @@ from fastmcp.server.auth import AccessToken
 
 from app.errors import ApiError
 from app.mcp.server import get_mcp_instance
-from app.mcp.tools._context import current_user_id
+from app.mcp.tools._context import current_user_id, db_fail_closed
 
 mcp = get_mcp_instance()
 
@@ -78,6 +78,7 @@ async def _billed_generation(
 
 
 @mcp.tool
+@db_fail_closed
 async def generate_cover_letter(
     resume_id: str,
     regenerate: bool = False,
@@ -104,6 +105,7 @@ async def generate_cover_letter(
 
 
 @mcp.tool
+@db_fail_closed
 async def generate_interview_prep(
     resume_id: str,
     regenerate: bool = False,

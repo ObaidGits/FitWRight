@@ -20,7 +20,7 @@ from fastmcp.server.auth import AccessToken
 
 from app.errors import ApiError
 from app.mcp.server import get_mcp_instance
-from app.mcp.tools._context import current_user_id
+from app.mcp.tools._context import current_user_id, db_fail_closed
 from app.mcp.tools.ai import _tool_error
 
 mcp = get_mcp_instance()
@@ -45,6 +45,7 @@ def _require_job_discovery_enabled() -> None:
 
 
 @mcp.tool
+@db_fail_closed
 async def start_job_search(
     query: str,
     sites: list[str] | None = None,
@@ -103,6 +104,7 @@ async def start_job_search(
 
 
 @mcp.tool
+@db_fail_closed
 async def get_job_search_status(
     search_id: str, token: AccessToken = CurrentAccessToken()
 ) -> dict:

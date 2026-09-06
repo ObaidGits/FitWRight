@@ -20,6 +20,7 @@ from app.mcp.server import get_mcp_instance
 from app.mcp.tools._context import (
     DEFAULT_LIST_LIMIT,
     current_user_id,
+    db_fail_closed,
     display_value,
     validated_limit,
 )
@@ -41,6 +42,7 @@ def _first_validation_error(exc: ValidationError) -> ValueError:
 
 
 @mcp.tool
+@db_fail_closed
 async def list_applications(
     limit: int = DEFAULT_LIST_LIMIT, token: AccessToken = CurrentAccessToken()
 ) -> dict:
@@ -73,6 +75,7 @@ async def list_applications(
 
 
 @mcp.tool
+@db_fail_closed
 async def get_application(
     application_id: str, token: AccessToken = CurrentAccessToken()
 ) -> dict:
@@ -95,6 +98,7 @@ async def get_application(
 
 
 @mcp.tool
+@db_fail_closed
 async def get_apply_queue(token: AccessToken = CurrentAccessToken()) -> dict:
     """The user's apply queue: saved-but-not-yet-applied jobs in the order to
     work through them (queue position order)."""
@@ -106,6 +110,7 @@ async def get_apply_queue(token: AccessToken = CurrentAccessToken()) -> dict:
 
 
 @mcp.tool
+@db_fail_closed
 async def check_duplicate(
     company: str, role: str, token: AccessToken = CurrentAccessToken()
 ) -> dict:
@@ -127,6 +132,7 @@ async def check_duplicate(
 
 
 @mcp.tool
+@db_fail_closed
 async def add_application(
     job_description: str,
     resume_id: str,
@@ -193,6 +199,7 @@ async def add_application(
 
 
 @mcp.tool
+@db_fail_closed
 async def update_application_status(
     application_id: str, status: str, token: AccessToken = CurrentAccessToken()
 ) -> dict:

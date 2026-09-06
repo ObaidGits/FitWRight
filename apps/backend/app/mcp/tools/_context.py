@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import functools
+import logging
+
 from fastmcp.server.auth import AccessToken
+from sqlalchemy.exc import SQLAlchemyError
 
 #: How much of a client-supplied value an error message may echo back.
 _MAX_ECHO = 64
@@ -11,6 +15,36 @@ _MAX_ECHO = 64
 #: Listing tools return at most this many rows unless the client asks for more.
 DEFAULT_LIST_LIMIT = 50
 MAX_LIST_LIMIT = 200
+
+logger = logging.getLogger(__name__)
+
+
+def db_fail_closed(fn):
+    """Render a DB-layer failure as one coherent, actionable tool error.
+
+    Without this, an infrastructure outage (OperationalError et al.) reaches
+    FastMCP's generic handler and the AI client receives the raw SQLAlchemy
+    rendering - statement text, driver internals, a docs URL - noise it cannot
+    act on, and internals the client has no business seeing. The tool layer's
+    contract is a stable machine-readable code plus a remedy, so DB-layer
+    exceptions become ``storage_unavailable``; the full traceback still lands
+    in the server log (once, via ``logger.exception``) for the operator.
+    ``ValueError`` (the tools' own refusal contract) passes through untouched,
+    as does everything that is not a SQLAlchemy error.
+    """
+
+    @functools.wraps(fn)
+    async def wrapper(*args, **kwargs):
+        try:
+            return await fn(*args, **kwargs)
+        except SQLAlchemyError:
+            logger.exception("Database failure while running tool %s", fn.__name__)
+            raise ValueError(
+                "storage_unavailable: The database is temporarily unavailable. "
+                "Please retry in a moment."
+            ) from None
+
+    return wrapper
 
 
 def current_user_id(token: AccessToken) -> str:

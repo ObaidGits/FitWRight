@@ -14,6 +14,7 @@ from app.mcp.server import get_mcp_instance
 from app.mcp.tools._context import (
     DEFAULT_LIST_LIMIT,
     current_user_id,
+    db_fail_closed,
     display_value,
     validated_limit,
 )
@@ -22,6 +23,7 @@ mcp = get_mcp_instance()
 
 
 @mcp.tool
+@db_fail_closed
 async def list_resumes(
     limit: int = DEFAULT_LIST_LIMIT, token: AccessToken = CurrentAccessToken()
 ) -> dict:
@@ -44,6 +46,7 @@ async def list_resumes(
 
 
 @mcp.tool
+@db_fail_closed
 async def get_resume(resume_id: str, token: AccessToken = CurrentAccessToken()) -> dict:
     """Get one resume's full content by id, including its parsed data.
 

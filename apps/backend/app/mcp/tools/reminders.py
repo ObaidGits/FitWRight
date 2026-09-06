@@ -16,7 +16,7 @@ from fastmcp.server.auth import AccessToken
 from pydantic import ValidationError
 
 from app.mcp.server import get_mcp_instance
-from app.mcp.tools._context import current_user_id, display_value
+from app.mcp.tools._context import current_user_id, db_fail_closed, display_value
 
 mcp = get_mcp_instance()
 
@@ -76,7 +76,23 @@ def _reminder_error(application_id: str, exc: Exception) -> ValueError:
     return ValueError(f"invalid_reminder: {exc}")
 
 
+def _as_scheduling_error(exc: Exception):
+    """A SchedulingError, or None.
+
+    Duck-typing on ``exc.code`` is not enough here: ``SQLAlchemyError`` also
+    carries a ``code`` attribute, so a database outage inside the service used
+    to render as ``invalid_reminder: <sqlalchemy internals>`` - an incoherent
+    error that leaks driver internals. Only real SchedulingErrors (expected
+    refusals) are mapped; everything else propagates to the fail-closed
+    handler.
+    """
+    from app.scheduling.service import SchedulingError
+
+    return exc if isinstance(exc, SchedulingError) else None
+
+
 @mcp.tool
+@db_fail_closed
 async def list_reminders(
     application_id: str, token: AccessToken = CurrentAccessToken()
 ) -> dict:
@@ -91,15 +107,17 @@ async def list_reminders(
     try:
         rows = await svc.list_reminders(user_id, application_id)
     except Exception as exc:
-        if getattr(exc, "code", None):  # SchedulingError (expected refusal)
-            logger.debug("list_reminders refused: %s", exc)
-            raise _reminder_error(application_id, exc) from None
+        scheduling = _as_scheduling_error(exc)
+        if scheduling is not None:  # expected refusal (not_found / invalid)
+            logger.debug("list_reminders refused: %s", scheduling)
+            raise _reminder_error(application_id, scheduling) from None
         raise
 
     return {"reminders": [_public_reminder(r) for r in rows], "total": len(rows)}
 
 
 @mcp.tool
+@db_fail_closed
 async def create_reminder(
     application_id: str,
     remind_at: str,
@@ -137,9 +155,10 @@ async def create_reminder(
             user_id, application_id, due_at=remind_at, note=note
         )
     except Exception as exc:
-        if getattr(exc, "code", None):  # SchedulingError (expected refusal)
-            logger.debug("create_reminder refused: %s", exc)
-            raise _reminder_error(application_id, exc) from None
+        scheduling = _as_scheduling_error(exc)
+        if scheduling is not None:  # expected refusal (not_found / limit / invalid)
+            logger.debug("create_reminder refused: %s", scheduling)
+            raise _reminder_error(application_id, scheduling) from None
         raise
 
     return _public_reminder(created)
