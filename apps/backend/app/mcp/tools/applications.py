@@ -10,14 +10,23 @@ so behavior (extraction, orphan cleanup, dedupe) can never drift.
 
 from __future__ import annotations
 
+import logging
+
 from fastmcp.dependencies import CurrentAccessToken
 from fastmcp.server.auth import AccessToken
 from pydantic import ValidationError
 
 from app.mcp.server import get_mcp_instance
-from app.mcp.tools._context import current_user_id, display_value
+from app.mcp.tools._context import (
+    DEFAULT_LIST_LIMIT,
+    current_user_id,
+    display_value,
+    validated_limit,
+)
 
 mcp = get_mcp_instance()
+
+logger = logging.getLogger(__name__)
 
 
 def _first_validation_error(exc: ValidationError) -> ValueError:
@@ -32,21 +41,26 @@ def _first_validation_error(exc: ValidationError) -> ValueError:
 
 
 @mcp.tool
-async def list_applications(token: AccessToken = CurrentAccessToken()) -> dict:
-    """List all the user's job applications, grouped into the seven status
+async def list_applications(
+    limit: int = DEFAULT_LIST_LIMIT, token: AccessToken = CurrentAccessToken()
+) -> dict:
+    """List the user's job applications, grouped into the seven status
     columns: saved, applied, no_response, response, interview, accepted,
     rejected.
 
-    Every column is ALWAYS present (an empty list when that status has no
-    cards), so the shape is stable regardless of the data. Each card carries
-    company, role, status, and position. Use get_application with an
-    application_id for a single application's detail.
+    limit (default 50, max 200) caps how many cards come back; the board's
+    usual (status, position) ordering decides which cards those are. Every
+    column is ALWAYS present (an empty list when that status has no cards), so
+    the shape is stable regardless of the data. Each card carries company,
+    role, status, and position. Use get_application with an application_id
+    for a single application's detail.
     """
     user_id = current_user_id(token)
+    bounded = validated_limit(limit)
     from app.database import db
     from app.schemas import APPLICATION_STATUS_ORDER
 
-    apps = await db.list_applications(user_id)
+    apps = await db.list_applications(user_id, limit=bounded)
     # Same grouping as the REST board (app/routers/applications.py
     # _group_by_status): all seven columns always present; a row with an
     # unknown status cannot be placed in a column and is skipped.
@@ -100,8 +114,10 @@ async def check_duplicate(
 
     Matching is case/whitespace-insensitive on both fields; a recent
     application to the same company for a different role is NOT a duplicate.
-    Returns is_duplicate true with the existing application, or
-    {"is_duplicate": false, "application": null}.
+    Only applications inside the 90-day cool-off window count as duplicates
+    (same window as the web app): a role re-posted later than that is a new
+    opportunity, not a repeat. Returns is_duplicate true with the existing
+    application, or {"is_duplicate": false, "application": null}.
     """
     user_id = current_user_id(token)
     from app.applications import submissions
@@ -113,9 +129,9 @@ async def check_duplicate(
 @mcp.tool
 async def add_application(
     job_description: str,
+    resume_id: str,
     company: str | None = None,
     role: str | None = None,
-    resume_id: str | None = None,
     token: AccessToken = CurrentAccessToken(),
 ) -> dict:
     """Manually add a job-application tracker card from a pasted job
@@ -123,14 +139,16 @@ async def add_application(
 
     company/role are optional overrides; when omitted, a best-effort
     extraction from the job description fills them in (same as the manual-add
-    REST endpoint). resume_id is the resume the card is attached to - get one
-    from list_resumes.
+    REST endpoint). resume_id (required) is the resume the card is attached
+    to - get one from list_resumes.
     """
     user_id = current_user_id(token)
     from app.schemas import ManualApplicationCreate
 
     # Same bounds as the REST body (ManualApplicationCreate): a non-empty
-    # job_description, and the resume the card attaches to.
+    # job_description, and the resume the card attaches to. The signature
+    # already advertises resume_id as required; the check stays as a backstop
+    # with a friendlier message for an empty string.
     if not resume_id:
         raise ValueError(
             "resume_id_required: add_application needs the resume to attach "
@@ -203,6 +221,13 @@ async def update_application_status(
             user_id, application_id, {"status": status_value}
         )
     except Exception:
+        # Swallowing silently made a code bug indistinguishable from a DB
+        # hiccup; the traceback goes to the server log, the client still gets
+        # the one-line actionable error (never the exception text, never a 500).
+        logger.exception(
+            "update_application_status failed for application %s (status %s)",
+            display_value(application_id), display_value(status_value),
+        )
         raise ValueError(
             "application_update_failed: Failed to update application. "
             "Please try again."

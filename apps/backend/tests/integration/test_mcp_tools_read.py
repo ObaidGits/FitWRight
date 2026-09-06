@@ -145,6 +145,55 @@ class TestListResumes:
         payload = _ok(_call(client, token, "list_resumes", {}))
         assert payload == {"resumes": []}
 
+    async def test_limit_caps_the_newest_resumes_first(
+        self, mcp_client, isolated_db, owner_id
+    ):
+        """Hardening F4: the listing is bounded (default 50 / max 200) and a
+        small limit keeps the NEWEST-updated resumes, never stale ones."""
+        client, token = mcp_client
+        older = await _seed_resume(isolated_db, owner_id, filename="old.md")
+        newer = await _seed_resume(isolated_db, owner_id, filename="new.md")
+        # Make the ordering deterministic: bump `older`'s updated_at last.
+        await isolated_db.update_resume(
+            owner_id, older["resume_id"], {"title": "bumped-last"}
+        )
+
+        payload = _ok(_call(client, token, "list_resumes", {"limit": 1}))
+
+        assert [r["resume_id"] for r in payload["resumes"]] == [older["resume_id"]]
+        # Default call still returns everything (both rows).
+        assert len(_ok(_call(client, token, "list_resumes", {}))["resumes"]) == 2
+
+    @pytest.mark.parametrize("bad_limit", [0, -1, 201, 1000])
+    async def test_limit_out_of_range_is_actionable_error(
+        self, mcp_client, bad_limit
+    ):
+        client, token = mcp_client
+        text = _error_text(_call(client, token, "list_resumes", {"limit": bad_limit}))
+        assert "invalid_argument" in text
+        assert "limit" in text
+        assert "Traceback" not in text
+
+    @pytest.mark.parametrize("bad_limit", ["ten", 1.5, None, [50]])
+    async def test_limit_wrong_type_is_refused_never_500(
+        self, mcp_client, bad_limit
+    ):
+        """Non-integer limits are refused at the schema layer (FastMCP's call
+        validation) - the contract is only that it is a tool error naming the
+        field, never a 500."""
+        client, token = mcp_client
+        result = _call(client, token, "list_resumes", {"limit": bad_limit})
+        assert result.get("error") is not None or (
+            result["result"].get("isError") is True
+        )
+        assert "limit" in json.dumps(result)
+        assert "Traceback" not in json.dumps(result)
+
+    async def test_limit_200_is_accepted(self, mcp_client):
+        client, token = mcp_client
+        payload = _ok(_call(client, token, "list_resumes", {"limit": 200}))
+        assert payload == {"resumes": []}
+
 
 # ---------------------------------------------------------------------------
 # 2. get_resume
@@ -166,6 +215,26 @@ class TestGetResume:
         assert payload["resume_id"] == seeded["resume_id"]
         assert payload["content"] == "# Jane Doe"
         assert payload["processed_data"] == {"skills": ["kubernetes"]}
+
+    async def test_original_markdown_near_duplicate_is_not_shipped(
+        self, mcp_client, isolated_db, owner_id
+    ):
+        """Hardening F4 (deferred T5): the pre-tailor markdown is ~a second
+        copy of the resume text; content already carries the current text, so
+        the tool must not double the payload."""
+        client, token = mcp_client
+        seeded = await _seed_resume(
+            isolated_db, owner_id,
+            content="# Tailored",
+            original_markdown="# Original master text",
+        )
+
+        payload = _ok(_call(client, token, "get_resume", {"resume_id": seeded["resume_id"]}))
+        assert payload["content"] == "# Tailored"
+        assert "original_markdown" not in payload
+        # Sanity: the row really has one, the tool is what drops it.
+        stored = await isolated_db.get_resume(owner_id, seeded["resume_id"])
+        assert stored["original_markdown"] == "# Original master text"
 
     async def test_unknown_id_is_actionable_tool_error(self, mcp_client):
         client, token = mcp_client
@@ -209,6 +278,48 @@ class TestListApplications:
             status: [] for status in APPLICATION_STATUS_ORDER
         }
         assert payload["total"] == 0
+
+    async def test_limit_caps_the_board(self, mcp_client, isolated_db, owner_id):
+        """Hardening F4: list_applications is bounded too (default 50 / max 200)."""
+        client, token = mcp_client
+        await isolated_db.create_application(
+            owner_id, job_id="j1", resume_id="r1", status="applied",
+            company="Acme", role="SRE",
+        )
+        await isolated_db.create_application(
+            owner_id, job_id="j2", resume_id="r2", status="saved",
+            company="Beta", role="Dev",
+        )
+
+        payload = _ok(_call(client, token, "list_applications", {"limit": 1}))
+
+        assert payload["total"] == 1
+        cards = [c for col in payload["columns"].values() for c in col]
+        assert len(cards) == 1
+        # All seven columns are still present under a limit.
+        assert set(payload["columns"]) == set(APPLICATION_STATUS_ORDER)
+
+    @pytest.mark.parametrize("bad_limit", [0, -1, 201])
+    async def test_limit_out_of_range_is_actionable_error(
+        self, mcp_client, bad_limit
+    ):
+        client, token = mcp_client
+        text = _error_text(
+            _call(client, token, "list_applications", {"limit": bad_limit})
+        )
+        assert "invalid_argument" in text
+        assert "limit" in text
+
+    @pytest.mark.parametrize("bad_limit", ["many", None])
+    async def test_limit_wrong_type_is_refused_never_500(
+        self, mcp_client, bad_limit
+    ):
+        client, token = mcp_client
+        result = _call(client, token, "list_applications", {"limit": bad_limit})
+        assert result.get("error") is not None or (
+            result["result"].get("isError") is True
+        )
+        assert "limit" in json.dumps(result)
 
 
 # ---------------------------------------------------------------------------

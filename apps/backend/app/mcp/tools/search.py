@@ -58,22 +58,35 @@ async def start_job_search(
     continues in the background. Poll get_job_search_status with the search_id
     until status is done or failed.
 
-    query is raw search terms, e.g. "Backend Engineer Python". sites optionally
-    picks the boards (e.g. ["indeed", "linkedin", "glassdoor", "naukri"]); when
-    omitted the app's configured boards are used. Only one search runs per user
+    query is raw search terms, e.g. "Backend Engineer Python" (max 256
+    characters, same bound as the REST body). sites optionally picks the
+    boards (e.g. ["indeed", "linkedin", "glassdoor", "naukri"]); when omitted
+    the app's configured boards are used. Only one search runs per user
     at a time - starting another while one is in flight returns that search's
     id with already_running true (and does not use up a daily search).
+
+    Refusal codes (one-line tool errors, same rules as REST):
+    ``http_429`` (10-second cooldown between searches), ``search_limit_reached``
+    (daily plan ceiling, resets at midnight UTC), and
+    ``job_discovery_disabled`` (the deployment turned job discovery off).
     """
 
     user_id = current_user_id(token)
     # Kill-switch first, mirroring the router-level gate's outermost position.
     _require_job_discovery_enabled()
 
-    # Same bounds as the REST body (ManualSearchRequest): a real search term.
+    # Same bounds as the REST body (ManualSearchRequest): a real search term
+    # within the shared 256-character cap (a 1MB query otherwise echoes back
+    # through the error path at ~2x).
     if not (query or "").strip():
         raise ValueError(
             "invalid_argument: query must be a non-empty search term, e.g. "
             "'Backend Engineer Python'."
+        )
+    if len(query) > 256:
+        raise ValueError(
+            "invalid_argument: query must be at most 256 characters "
+            f"(got {len(query)})."
         )
 
     # Resolved inside the body (same rule as the other tool modules): the

@@ -234,6 +234,38 @@ class TestStartJobSearch:
         # FastMCP prefixes the message; the machine code is what must travel.
         assert "invalid_argument: query" in message
 
+    async def test_oversized_query_is_rejected_before_any_work(
+        self, mcp_client, isolated_db, owner_id
+    ):
+        """Hardening F9 (T10 M1): the shared 256-char bound (ManualSearchRequest)
+        must refuse a hostile 1MB query BEFORE any work - a boundless query
+        used to echo back through the error path at ~2x."""
+        from app.job_discovery import search_jobs
+        from app.routers import discovery
+
+        client, token = mcp_client
+        message = _error_text(
+            _call(client, token, "start_job_search", {"query": "x" * 1_048_576})
+        )
+        assert "invalid_argument: query" in message
+        assert "256" in message
+
+        # Refused before any guard ran or any work was registered.
+        assert search_jobs.running_for(owner_id) is None
+        assert discovery._search_timestamps == {}
+
+    async def test_query_at_exactly_256_chars_is_accepted(
+        self, mcp_client, isolated_db, owner_id, monkeypatch
+    ):
+        """The bound is inclusive: a real (if long) search term still starts."""
+        client, token = mcp_client
+        _finish_the_scrape(monkeypatch)
+
+        result = _ok(
+            _call(client, token, "start_job_search", {"query": "e" * 256})
+        )
+        assert result["status"] == "running"
+
     async def test_sites_default_to_the_configured_boards_when_omitted(
         self, mcp_client, isolated_db, owner_id, monkeypatch
     ):

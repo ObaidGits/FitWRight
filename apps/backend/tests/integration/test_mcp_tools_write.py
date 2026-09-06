@@ -189,13 +189,29 @@ class TestAddApplication:
         assert detail["job_content"] == big_jd
 
     async def test_missing_resume_id_is_actionable_error(self, mcp_client):
+        """resume_id is a required tool parameter (hardening F5): omitting it is
+        caught by schema validation, and an empty string by the tool's own
+        backstop - both as one-line actionable errors, never a 500."""
         client, token = mcp_client
+
+        # Omitted: FastMCP's call validation refuses it (the generated JSON
+        # schema now says required, so clients avoid this in the first place).
+        omitted = _call(
+            client, token, "add_application",
+            {"job_description": "JD", "company": "Acme", "role": "SRE"},
+        )
+        assert omitted["result"].get("isError") is True
+        assert "resume_id" in omitted["result"]["content"][0]["text"]
+        assert "Traceback" not in json.dumps(omitted)
+
+        # Empty string: the tool's own backstop, with the friendly message.
         text = _error_text(
             _call(
                 client,
                 token,
                 "add_application",
-                {"job_description": "JD", "company": "Acme", "role": "SRE"},
+                {"job_description": "JD", "company": "Acme", "role": "SRE",
+                 "resume_id": ""},
             )
         )
         assert "resume_id_required" in text
@@ -326,6 +342,61 @@ class TestUpdateApplicationStatus:
         assert "application_not_found" in text
         assert "list_applications" in text
         assert "Traceback" not in text
+
+    async def test_update_failure_is_logged_and_converted(
+        self, mcp_client, isolated_db, owner_id, monkeypatch, caplog
+    ):
+        """Hardening F7 (maintainability H3): an unexpected failure inside the
+        update is logged server-side with the traceback AND converted to the
+        one-line client error - a code bug is no longer indistinguishable from
+        silence, and the client never sees the exception text."""
+        import logging
+
+        client, token = mcp_client
+        card = await _seed_card(isolated_db, owner_id)
+
+        real_db = isolated_db
+
+        class _ExplodingDb:
+            """Delegates everything to the isolated DB except the update."""
+            def __getattr__(self, name):
+                return getattr(real_db, name)
+
+            async def update_application(self, *a, **k):
+                raise TypeError("simulated programming bug")
+
+        # The tool resolves ``from app.database import db`` inside its body,
+        # so swapping the module attribute swaps the tool's db.
+        import app.database as database_module
+        monkeypatch.setattr(database_module, "db", _ExplodingDb())
+
+        import contextlib
+        with caplog.at_level(logging.ERROR, logger="app.mcp.tools.applications"):
+            text = _error_text(
+                _call(
+                    client,
+                    token,
+                    "update_application_status",
+                    {"application_id": card["application_id"], "status": "interview"},
+                )
+            )
+
+        assert "application_update_failed" in text
+        assert "TypeError" not in text
+        assert "Traceback" not in text
+        import traceback as _tb
+
+        failures = [
+            r for r in caplog.records
+            if r.name == "app.mcp.tools.applications" and r.levelno == logging.ERROR
+        ]
+        assert failures, "the swallowed exception must be logged"
+        record = failures[0]
+        assert "update_application_status failed" in record.getMessage()
+        assert record.exc_info, "logged with its traceback (logger.exception)"
+        assert "simulated programming bug" in "".join(
+            _tb.format_exception(*record.exc_info)
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -473,7 +544,13 @@ class TestToolSchemas:
 
         # Params the client MUST supply are marked required; auth params never
         # leak into the schema (the token arrives via the Authorization header).
-        assert tools["add_application"]["inputSchema"]["required"] == ["job_description"]
+        # add_application advertises resume_id as required too (hardening F5) -
+        # the runtime resume_id_required backstop stays, but the schema no
+        # longer lies about the parameter being optional.
+        assert set(tools["add_application"]["inputSchema"]["required"]) == {
+            "job_description",
+            "resume_id",
+        }
         assert set(tools["update_application_status"]["inputSchema"]["required"]) == {
             "application_id",
             "status",

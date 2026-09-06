@@ -714,9 +714,13 @@ class Database:
             return [self._resume_to_dict(row) for row in result.scalars().all()]
 
     async def list_resume_summaries(
-        self, user_id: str, *, include_master: bool = False
+        self, user_id: str, *, include_master: bool = False, limit: int | None = None
     ) -> list[dict[str, Any]]:
-        """List only fields required by the resume picker/list response."""
+        """List only fields required by the resume picker/list response.
+
+        ``limit`` (optional) caps the number of newest-updated summaries; the
+        default (None) keeps the historical unbounded behavior for REST.
+        """
         stmt = Repo.scoped(
             select(
                 Resume.resume_id,
@@ -737,8 +741,11 @@ class Database:
         )
         if not include_master:
             stmt = stmt.where(Resume.is_master.is_(False))
+        stmt = stmt.order_by(Resume.updated_at.desc())
+        if limit is not None:
+            stmt = stmt.limit(limit)
         async with self._session() as session:
-            result = await session.execute(stmt.order_by(Resume.updated_at.desc()))
+            result = await session.execute(stmt)
             return [dict(row) for row in result.mappings().all()]
 
     async def list_resume_ids(self, user_id: str) -> list[str]:
@@ -2459,14 +2466,20 @@ class Database:
             return self._application_to_dict(row)
 
     async def list_applications(
-        self, user_id: str, status: str | None = None
+        self, user_id: str, status: str | None = None, *, limit: int | None = None
     ) -> list[dict[str, Any]]:
-        """List a user's applications ordered by (status, position)."""
+        """List a user's applications ordered by (status, position).
+
+        ``limit`` (optional) caps the row count; the default (None) keeps the
+        historical unbounded behavior for REST callers.
+        """
         async with self._session() as session:
             stmt = Repo.scoped(select(Application), Application, user_id)
             if status is not None:
                 stmt = stmt.where(Application.status == status)
             stmt = stmt.order_by(Application.status, Application.position)
+            if limit is not None:
+                stmt = stmt.limit(limit)
             result = await session.execute(stmt)
             return [self._application_to_dict(row) for row in result.scalars().all()]
 

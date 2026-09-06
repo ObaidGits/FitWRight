@@ -9,6 +9,8 @@ validation stay identical.
 
 from __future__ import annotations
 
+import logging
+
 from fastmcp.dependencies import CurrentAccessToken
 from fastmcp.server.auth import AccessToken
 from pydantic import ValidationError
@@ -17,6 +19,8 @@ from app.mcp.server import get_mcp_instance
 from app.mcp.tools._context import current_user_id, display_value
 
 mcp = get_mcp_instance()
+
+logger = logging.getLogger(__name__)
 
 
 async def _reminders_service():
@@ -66,7 +70,8 @@ async def list_reminders(
     try:
         rows = await svc.list_reminders(user_id, application_id)
     except Exception as exc:
-        if getattr(exc, "code", None):  # SchedulingError
+        if getattr(exc, "code", None):  # SchedulingError (expected refusal)
+            logger.debug("list_reminders refused: %s", exc)
             raise _reminder_error(application_id, exc) from None
         raise
 
@@ -111,7 +116,8 @@ async def create_reminder(
             user_id, application_id, due_at=remind_at, note=note
         )
     except Exception as exc:
-        if getattr(exc, "code", None):  # SchedulingError
+        if getattr(exc, "code", None):  # SchedulingError (expected refusal)
+            logger.debug("create_reminder refused: %s", exc)
             raise _reminder_error(application_id, exc) from None
         raise
 

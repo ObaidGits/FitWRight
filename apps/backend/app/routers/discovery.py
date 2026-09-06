@@ -677,7 +677,11 @@ async def toggle_discovery_schedule(
 class ManualSearchRequest(BaseModel):
     """Direct job search without resume — accepts raw query terms."""
 
-    query: str  # e.g. "Backend Engineer Python"
+    # Shared REST+MCP bound (T10 M1): boards take one short search term, so a
+    # longer query is never a better query - and without the cap a hostile 1MB
+    # query echoes back through error paths at ~2x. 256 chars covers any real
+    # job title + location combo.
+    query: str = Field(max_length=256)  # e.g. "Backend Engineer Python"
     #: Additional titles to search in the SAME run, e.g. ["Backend Engineer", "SDE"].
     #: Each is scraped separately because boards take one search term per request -
     #: joining them into one string returns worse results than either alone. Capped
