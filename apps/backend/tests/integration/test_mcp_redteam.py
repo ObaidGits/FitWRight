@@ -331,6 +331,27 @@ class TestCrossUser:
         for row in await isolated_db.list_usage(user_b):
             assert row["credits_charged"] == 0
 
+    async def test_interview_prep_with_victims_resume_id_is_refused(
+        self, mcp_client, isolated_db, owner_id, monkeypatch
+    ):
+        """Hardening F11a: the one AI path the cover_letter cross-user test did
+        not cover. Charging attacker B to prep against victim A's resume must
+        be refused at the ownership check - B pays nothing, A's data stays put."""
+        client, _ = mcp_client
+        monkeypatch.setattr(app_settings, "ai_credits_enabled", True)
+        monkeypatch.setattr("app.ai_metered.user_has_own_key", lambda _uid: False)
+        resume = await _seed_resume(isolated_db, owner_id)
+        token_b = await _other_users_token(isolated_db)
+
+        text = _error_text(
+            _call(client, token_b, "generate_interview_prep", {"resume_id": resume["resume_id"]})
+        )
+        assert "404" in text
+        assert "Traceback" not in text
+        user_b = await _victim_of(token_b, isolated_db)
+        for row in await isolated_db.list_usage(user_b):
+            assert row["credits_charged"] == 0
+
     async def test_search_status_with_victims_search_id_is_expired(
         self, mcp_client, isolated_db, owner_id, monkeypatch
     ):
@@ -452,6 +473,46 @@ class TestTokenMisuse:
         res = _post(client, {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, token)
         assert res.status_code == 200
         assert await get_mcp_token_service().verify(token) is not None
+
+    async def test_disabled_users_token_is_401(self, mcp_client, isolated_db, owner_id):
+        """Hardening F1 (security H1): admin disables the account - sessions
+        die within one request cycle, and so must the pre-existing bearer.
+        The token must not outlive the ban."""
+        client, token = mcp_client
+        assert _post(
+            client, {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, token
+        ).status_code == 200  # sanity: live while the owner is active
+
+        async with isolated_db.session_factory() as s:
+            row = await s.get(User, owner_id)
+            row.status = "disabled"
+            await s.commit()
+
+        res = _post(client, {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, token)
+        assert res.status_code == 401, res.text
+
+    async def test_soft_deleted_users_token_is_401(
+        self, mcp_client, isolated_db, owner_id
+    ):
+        """Hardening F1: erasure request soft-deletes the account (deleted_at +
+        disabled) - the "deleted" user's data must not stay exfiltrable via MCP."""
+        client, token = mcp_client
+
+        async with isolated_db.session_factory() as s:
+            row = await s.get(User, owner_id)
+            row.status = "disabled"
+            row.deleted_at = datetime.now(timezone.utc).isoformat()
+            await s.commit()
+
+        res = _post(client, {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, token)
+        assert res.status_code == 401, res.text
+
+    async def test_active_users_token_still_works(self, mcp_client):
+        """The account-state check must not over-block: an active owner with a
+        valid token gets the normal 200."""
+        client, token = mcp_client
+        res = _post(client, {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, token)
+        assert res.status_code == 200
 
 
 # ---------------------------------------------------------------------------
@@ -814,7 +875,10 @@ class TestLeakage:
             ("update_application_status", {"application_id": "ghost", "status": "interview"}),
             ("list_reminders", {"application_id": "ghost"}),
             ("create_reminder", {"application_id": card["application_id"], "remind_at": "nope"}),
-            ("add_application", {"job_description": "JD"}),
+            # resume_id is a required parameter; the empty string exercises the
+            # tool's own one-line backstop (omission is caught by FastMCP's
+            # schema validation before the tool body runs).
+            ("add_application", {"job_description": "JD", "resume_id": ""}),
             ("generate_cover_letter", {"resume_id": resume["resume_id"]}),
             ("check_duplicate", {"company": "x", "role": "y"}),
         ]
