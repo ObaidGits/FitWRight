@@ -24,7 +24,7 @@ from app.config_cache import get_content_language, load_config as _load_config
 from app.database import db
 from app.errors import ApiError
 from app.pdf import render_resume_pdf, PDFRenderError
-from app.ai_metered import ai_metered
+from app.ai_metered import ai_metered, mark_unbilled
 from app.llm_ratelimit import llm_rate_limit_dep
 from app.config import settings
 from app.resilience import get_idempotency_cache, get_stream_registry
@@ -3205,6 +3205,9 @@ async def generate_cover_letter_endpoint(
     # Reuse the stored copy unless the user explicitly asks to regenerate.
     existing = resume.get("cover_letter")
     if existing and not regenerate:
+        # Serving stored content is free: no provider ran, so the hold the
+        # billing dependency took is released, not settled.
+        mark_unbilled()
         return GenerateContentResponse(
             content=existing,
             message="Loaded your saved cover letter",
@@ -3301,6 +3304,8 @@ async def generate_outreach_endpoint(
     # Reuse the stored copy unless the user explicitly asks to regenerate.
     existing = resume.get("outreach_message")
     if existing and not regenerate:
+        # Serving stored content is free (see generate_cover_letter_endpoint).
+        mark_unbilled()
         return GenerateContentResponse(
             content=existing,
             message="Loaded your saved outreach message",
@@ -3382,6 +3387,8 @@ async def generate_interview_prep_endpoint(
     # Reuse the stored copy unless the user explicitly asks to regenerate.
     existing_prep = _parse_interview_prep(resume.get("interview_prep"), resume_id=resume_id)
     if existing_prep is not None and not regenerate:
+        # Serving stored content is free (see generate_cover_letter_endpoint).
+        mark_unbilled()
         return GenerateInterviewPrepResponse(
             interview_prep=existing_prep,
             message="Loaded your saved interview preparation",

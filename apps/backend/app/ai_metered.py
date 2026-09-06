@@ -31,6 +31,7 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from contextvars import ContextVar
 
 from fastapi import Depends
 
@@ -40,7 +41,28 @@ from app.auth.principal import get_effective_user_id
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["ai_metered", "metered_ai_call", "user_has_own_key"]
+__all__ = ["ai_metered", "mark_unbilled", "metered_ai_call", "user_has_own_key"]
+
+#: Request-scoped signal from a metered handler to ``metered_ai_call``: "this
+#: call performed no billable work" (e.g. it returned a previously generated
+#: deliverable from storage). Set inside the handler; read in the billing
+#: context's teardown, which runs in the same request task - on REST via the
+#: route dependency's exit, on MCP directly around the handler call.
+_unbilled_reason: ContextVar[str | None] = ContextVar(
+    "ai_unbilled_reason", default=None
+)
+
+
+def mark_unbilled(outcome: str = "ok") -> None:
+    """Declare that the running metered AI call did no billable work.
+
+    Call this right before returning a saved deliverable as-is (the
+    "Loaded your saved cover letter" path): the credit hold is released
+    instead of settled, and a zero-charge ledger row makes the free pass
+    provable. Without it, reuse of stored content re-charges the full
+    published price for zero provider work.
+    """
+    _unbilled_reason.set(outcome)
 
 #: Providers that legitimately run without a key. A user pointing FitWright at
 #: their own Ollama or self-hosted endpoint is supplying their own compute, which
@@ -119,6 +141,11 @@ async def metered_ai_call(
             yield
         finally:
             stop_metering(token)
+            # A handler that served stored content marks itself unbilled; the
+            # hold is then released instead of settled (zero-charge row).
+            unbilled = _unbilled_reason.get()
+            if unbilled is not None:
+                spend.mark_free(unbilled)
             # Recorded even on the failure path, where it settles nothing and
             # the release writes a zero-charge row - so "we did not bill for
             # this" stays provable rather than merely absent.

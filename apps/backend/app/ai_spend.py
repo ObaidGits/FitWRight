@@ -80,6 +80,19 @@ class SpendHandle:
     #: Needed to price the call - the rate table is keyed on provider and model.
     _provider: str | None = field(default=None, repr=False)
     _latency_ms: int = field(default=0, repr=False)
+    #: Set when the metered body did no billable work (e.g. it served a
+    #: previously generated deliverable from storage): the hold is released
+    #: instead of settled, with a zero-charge ledger row so the free pass is
+    #: provable. ``None`` means "bill normally".
+    _free_outcome: str | None = field(default=None, repr=False)
+
+    def mark_free(self, outcome: str = "ok") -> None:
+        """No billable work happened - release the hold, settle nothing.
+
+        ``outcome`` keeps the zero-charge ledger row out of the failure counts
+        (default "ok": the request succeeded, it just reused stored content).
+        """
+        self._free_outcome = outcome
 
     def record(
         self,
@@ -238,7 +251,13 @@ async def ai_spend(
     settled = False
     try:
         yield handle
-        if handle.reservation_id and handle._recorded:
+        if (
+            handle.reservation_id
+            and handle._recorded
+            # ``mark_free``: the body served stored content (no provider work),
+            # so settling the full published price would charge for nothing.
+            and handle._free_outcome is None
+        ):
             await db.settle_reservation(
                 handle.reservation_id,
                 # The PUBLISHED price, not what the tokens came to. The user was shown
@@ -254,7 +273,9 @@ async def ai_spend(
         # failure is the fastest way to lose a user's trust.
         if handle.reservation_id and not settled:
             await db.release_reservation(handle.reservation_id)
-            await _record_unbilled(handle, outcome="failed")
+            await _record_unbilled(
+                handle, outcome=handle._free_outcome or "failed"
+            )
 
 
 def _ledger_fields(handle: SpendHandle, *, outcome: str) -> dict:
